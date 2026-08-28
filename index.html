@@ -77,6 +77,11 @@
             <div class="hero-pnl" id="acctPnl">+$0</div>
             <div class="hero-pnl-sub" id="acctPnlSub">Total P&L</div>
           </div>
+          <div class="alloc">
+            <div class="alloc-lbl">Allocation</div>
+            <div class="alloc-chart"><canvas id="sectorChart" role="img" aria-label="Share of the account held in each sector">Sector allocation.</canvas></div>
+            <div class="alloc-legend" id="sectorLegend"></div>
+          </div>
           <div class="tf-row" id="tfRow">
             <div class="tf" data-tf="1W">1W</div>
             <div class="tf" data-tf="1M">1M</div>
@@ -148,6 +153,7 @@
               <div class="dir-opt" id="dirShort" onclick="setDir('Short')">Short</div>
             </div>
           </div>
+          <div class="fg"><label>Sector</label><select id="f-sector"><option value="">Auto — from ticker</option></select></div>
           <div class="fg"><label>Date opened</label><input type="date" id="f-date"></div>
           <div class="fg"><label>Entry price ($)</label><input type="number" id="f-entry" step="any" placeholder="0.00"></div>
           <div class="fg"><label>Amount invested ($)</label><input type="number" id="f-amount" step="any" placeholder="1000"></div>

@@ -3,10 +3,11 @@ import { state } from '../../core/store.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
+  sectorBreakdown,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
-import { renderCurve } from '../charts.js';
+import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -85,6 +86,25 @@ function renderDailyMove(totals) {
   amtEl.style.color = clr(move.dollars);
 }
 
+/**
+ * Sector allocation: the doughnut plus its legend.
+ *
+ * Every sector is listed even when its wedge is too thin to carry a label, so
+ * the small holdings are still readable somewhere.
+ */
+function renderAllocation() {
+  const rows = sectorBreakdown(state.positions, state.cash);
+  renderSectorChart(rows);
+
+  const legend = document.getElementById('sectorLegend');
+  if (!legend) return;
+  legend.innerHTML = rows.map((r) => `<div class="alloc-row">
+      <span class="alloc-dot" style="background:${r.colour}"></span>
+      <span class="alloc-name">${escapeHtml(r.name)}</span>
+      <span class="alloc-pct">${r.pct.toFixed(1)}%</span>
+    </div>`).join('');
+}
+
 /** The live/partial pill shown on both the home and positions pages. */
 export function updateLivePill() {
   const hasUnkeyedStock = state.positions.some((p) => p.status === 'Open' && p.cls !== 'Crypto') && !state.apiKey;
@@ -135,6 +155,8 @@ export function renderHome() {
       ? LIST_HEADER + sortPositions(totals.open, ui.homeSort).map(miniRow).join('')
       : '<div class="empty">No open positions</div>';
   }
+
+  renderAllocation();
 
   // The "N-month return" KPI is the return of the drawn curve, not of the whole
   // book, so it is filled in from the series the chart actually plotted.

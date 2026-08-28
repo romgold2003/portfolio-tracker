@@ -2,6 +2,7 @@
 import { ui } from '../uiState.js';
 import { fmtPrice } from '../format.js';
 import { todayStr } from '../../core/portfolio.js';
+import { SECTOR_NAMES } from '../../config/sectors.js';
 
 const field = (id) => document.getElementById(id);
 
@@ -23,6 +24,8 @@ export function readTradeForm() {
     entry: parseFloat(field('f-entry').value),
     amount: parseFloat(field('f-amount').value),
     reason: field('f-reason').value.trim(),
+    // Empty means "work it out from the ticker".
+    sector: field('f-sector')?.value || null,
   };
 }
 
@@ -33,6 +36,7 @@ export function clearTradeForm() {
   });
   setTickerStatus('', 'muted');
   field('f-date').value = todayStr();
+  if (field('f-sector')) field('f-sector').value = '';
   setDirection('Long');
 }
 
@@ -51,8 +55,25 @@ export function applyTickerLookup(ticker, price) {
   if (entry) entry.value = entry.value || price;
 }
 
+/**
+ * Fill the sector dropdown once.
+ *
+ * It defaults to Auto, which lets the ticker lookup decide — right for anything
+ * well known. The list is there for symbols the lookup has never heard of, and
+ * for disagreeing with it.
+ */
+function fillSectorOptions() {
+  const select = field('f-sector');
+  if (!select || select.options.length > 1) return;
+  select.insertAdjacentHTML(
+    'beforeend',
+    SECTOR_NAMES.map((s) => `<option value="${s}">${s}</option>`).join(''),
+  );
+}
+
 /** Set today's date and the greeting that depends on the time of day. */
 export function initFormDefaults() {
+  fillSectorOptions();
   const date = field('f-date');
   if (date) date.value = todayStr();
   const hour = new Date().getHours();

@@ -38,7 +38,7 @@ function spendCash(amount) {
   saveCash();
 }
 
-export function addPosition({ ticker, cls, dir, open, entry, amount, reason }) {
+export function addPosition({ ticker, cls, dir, open, entry, amount, reason, sector }) {
   const position = {
     id: newId(),
     ticker,
@@ -53,6 +53,8 @@ export function addPosition({ ticker, cls, dir, open, entry, amount, reason }) {
     status: 'Open',
     reason: reason || null,
   };
+  // Absent means the ticker lookup decides, so an unset sector is not stored.
+  if (sector) position.sector = sector;
   state.positions.unshift(position);
   spendCash(amount);
   savePositions();

@@ -194,3 +194,20 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 /* Signed-in identity and sign out, in the sidebar footer. */
 .account-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .account-email{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Sector allocation, top right of the hero. Sits beside the timeframe row. */
+.alloc{display:flex;flex-direction:column;align-items:center;gap:6px;margin-left:auto;padding-left:18px}
+.alloc-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;align-self:flex-start}
+.alloc-chart{position:relative;width:150px;height:150px}
+.alloc-legend{display:flex;flex-direction:column;gap:3px;width:100%;max-width:190px}
+.alloc-row{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text2);line-height:1.4}
+.alloc-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.alloc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alloc-pct{margin-left:auto;color:var(--text3);font-variant-numeric:tabular-nums;flex-shrink:0}
+/* Below the hero's wrap point the chart would squash the value, so it drops down. */
+@media (max-width:1100px){
+  .alloc{margin-left:0;padding-left:0;width:100%;align-items:flex-start}
+  .alloc-legend{max-width:none;flex-direction:row;flex-wrap:wrap;gap:4px 14px}
+  .alloc-row{width:auto}
+  .alloc-pct{margin-left:4px}
+}

@@ -4,6 +4,7 @@
  * below readable and testable.
  */
 import { BETA } from '../config/constants.js';
+import { sectorOf, sectorColour, CASH_COLOUR } from '../config/sectors.js';
 
 /** Today as YYYY-MM-DD, the key format used throughout the app. */
 export function todayStr() {
@@ -190,6 +191,37 @@ export function accountTotals(positions, cash) {
     losses: closed.length - wins,
     winRate: closed.length ? Math.round((wins / closed.length) * 100) : 0,
   };
+}
+
+/**
+ * How the account is split across sectors, largest first.
+ *
+ * Cash is included as a wedge of its own. The question the chart answers is
+ * "where is my money", and idle cash is a real answer to that — a book that is
+ * 40% cash is positioned very differently from one that is fully invested, and
+ * a chart of only the invested part hides that entirely.
+ *
+ * Shorts contribute their absolute size: a short is exposure to a sector, not
+ * negative space in a pie, and a negative wedge cannot be drawn.
+ */
+export function sectorBreakdown(positions, cash = 0) {
+  const buckets = new Map();
+
+  positions.filter((p) => p.status === 'Open').forEach((p) => {
+    const name = sectorOf(p);
+    const bucket = buckets.get(name) ?? { name, value: 0, holdings: [], colour: sectorColour(name) };
+    bucket.value += Math.abs(posValue(p));
+    bucket.holdings.push(p.ticker);
+    buckets.set(name, bucket);
+  });
+
+  const rows = [...buckets.values()].sort((a, b) => b.value - a.value);
+  if (cash > 0) {
+    rows.push({ name: 'Cash', value: cash, holdings: [], colour: CASH_COLOUR, isCash: true });
+  }
+
+  const total = rows.reduce((sum, r) => sum + r.value, 0);
+  return rows.map((r) => ({ ...r, pct: total ? (r.value / total) * 100 : 0 }));
 }
 
 /**

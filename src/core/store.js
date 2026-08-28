@@ -8,6 +8,7 @@
  * This module never touches the DOM.
  */
 import { STORAGE_KEYS, ASSET_CLASSES } from '../config/constants.js';
+import { SECTOR_NAMES } from '../config/sectors.js';
 
 export const state = {
   /** @type {Position[]} every trade, open and closed */
@@ -103,6 +104,10 @@ function sanitizePosition(raw) {
     amount: num(raw.amount) ?? entry * qty,
     reason: text(raw.reason),
   };
+
+  // A sector chosen by hand overrides the ticker lookup, so it is carried
+  // through, but only when it names a sector the app actually knows.
+  if (raw.sector && SECTOR_NAMES.includes(raw.sector)) clean.sector = raw.sector;
 
   // Optional fields are only carried over when they hold a usable value, so a
   // missing one stays absent rather than becoming a misleading zero.
