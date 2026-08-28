@@ -10,6 +10,7 @@
  * people email to themselves, and a secret should not ride along.
  */
 import { STORAGE_KEYS } from '../config/constants.js';
+import { sanitizePositions } from '../core/store.js';
 
 const BACKUP_FORMAT = 1;
 
@@ -62,15 +63,22 @@ export function parseBackup(text) {
     throw new Error('That is not valid JSON.');
   }
 
-  if (Array.isArray(parsed)) {
-    return { positions: parsed, cash: 0, snapshots: [], priceLog: {} };
-  }
-  const data = parsed?.data ?? parsed;
+  const data = Array.isArray(parsed) ? { positions: parsed } : (parsed?.data ?? parsed);
   if (!data || !Array.isArray(data.positions)) {
     throw new Error('No positions found in that file.');
   }
+
+  // A backup file is untrusted input: it may have been edited, corrupted, or
+  // handed over by someone else. Sanitize here as well as on load, so the count
+  // shown in the confirmation is the count that will actually be imported.
+  const positions = sanitizePositions(data.positions);
+  if (!positions.length) {
+    throw new Error('That file has no usable positions in it.');
+  }
+
   return {
-    positions: data.positions,
+    positions,
+    dropped: data.positions.length - positions.length,
     cash: Number(data.cash) || 0,
     snapshots: Array.isArray(data.snapshots) ? data.snapshots : [],
     priceLog: data.priceLog && typeof data.priceLog === 'object' ? data.priceLog : {},
@@ -81,9 +89,12 @@ export function parseBackup(text) {
 export function describeBackup(data) {
   const open = data.positions.filter((p) => p.status === 'Open').length;
   const closed = data.positions.filter((p) => p.status === 'Closed').length;
+  const dropped = data.dropped
+    ? ` · ${data.dropped} unreadable row${data.dropped === 1 ? '' : 's'} skipped`
+    : '';
   return `${data.positions.length} position${data.positions.length === 1 ? '' : 's'} `
     + `(${open} open, ${closed} closed) · cash $${data.cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} `
-    + `· ${data.snapshots.length} daily snapshot${data.snapshots.length === 1 ? '' : 's'}`;
+    + `· ${data.snapshots.length} daily snapshot${data.snapshots.length === 1 ? '' : 's'}${dropped}`;
 }
 
 /**

@@ -136,7 +136,7 @@ function exitBreakdown(p, pnl, retPct) {
           const sliceCost = p.entry * e.qty;
           const sliceRet = sliceCost ? (e.pnl / sliceCost) * 100 : 0;
           return `<tr>
-            <td style="color:var(--text3);font-size:12px">${e.d}</td>
+            <td style="color:var(--text3);font-size:12px">${escapeHtml(e.d)}</td>
             <td style="font-weight:600;color:var(--amber)">${slicePct.toFixed(1)}%</td>
             <td style="font-size:12px">${fmtQty(e.qty)}</td>
             <td style="font-size:12px">$${fmtPrice(e.price)}</td>
@@ -169,10 +169,10 @@ function tradeRow(p) {
   const expanded = ui.expandedMonthTradeId === p.id;
 
   const row = `<tr style="cursor:pointer" onclick="toggleMonthTrade(${p.id})">
-    <td style="font-weight:600"><span style="color:${expanded ? 'var(--blue)' : 'var(--text3)'};font-size:10px;display:inline-block;width:10px">${expanded ? '▼' : '▶'}</span> ${escapeHtml(p.ticker)}${exitCount > 1 ? ` <span class="badge" style="background:var(--amber-bg);color:var(--amber);font-size:9px">${exitCount} exits</span>` : ''}<div style="font-size:10px;color:var(--text4);font-weight:400;margin-left:14px">bought ${p.open}</div></td>
+    <td style="font-weight:600"><span style="color:${expanded ? 'var(--blue)' : 'var(--text3)'};font-size:10px;display:inline-block;width:10px">${expanded ? '▼' : '▶'}</span> ${escapeHtml(p.ticker)}${exitCount > 1 ? ` <span class="badge" style="background:var(--amber-bg);color:var(--amber);font-size:9px">${exitCount} exits</span>` : ''}<div style="font-size:10px;color:var(--text4);font-weight:400;margin-left:14px">bought ${escapeHtml(p.open)}</div></td>
     <td><span class="badge b-${p.dir.toLowerCase()}">${p.dir}</span></td>
-    <td style="color:var(--text3);font-size:12px">${p.open}</td>
-    <td style="color:var(--text3);font-size:12px">${p.close}${p.firstExit && p.firstExit !== p.close ? `<div style="font-size:10px;color:var(--text4)">from ${p.firstExit}</div>` : ''}</td>
+    <td style="color:var(--text3);font-size:12px">${escapeHtml(p.open)}</td>
+    <td style="color:var(--text3);font-size:12px">${escapeHtml(p.close)}${p.firstExit && p.firstExit !== p.close ? `<div style="font-size:10px;color:var(--text4)">from ${escapeHtml(p.firstExit)}</div>` : ''}</td>
     <td style="font-size:12px">$${fmtPrice(p.entry)}</td>
     <td style="font-size:12px">$${fmtPrice(p.cur)}${exitCount > 1 ? '<div style="font-size:10px;color:var(--text4)">avg</div>' : ''}</td>
     <td>${$u(costOf(p))}</td>

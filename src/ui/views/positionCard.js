@@ -31,7 +31,7 @@ function exitsBlock(p) {
   return `<div style="background:var(--panel2);border:0.5px solid var(--border2);border-radius:7px;padding:10px 13px;margin-bottom:14px">
     <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:6px">Exits — ${p.exits.length}${p.status === 'Open' ? ' so far · not yet in Monthly' : ''}</span>
     ${p.exits.map((e) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:0.5px solid var(--hover)">
-      <span style="color:var(--text3)">${e.d} · ${fmtQty(e.qty)} @ $${fmtPrice(e.price)}</span>
+      <span style="color:var(--text3)">${escapeHtml(e.d)} · ${fmtQty(e.qty)} @ $${fmtPrice(e.price)}</span>
       <span style="color:${clr(e.pnl)};font-weight:500">${$s(+e.pnl.toFixed(2))}</span>
     </div>`).join('')}
     <div style="display:flex;justify-content:space-between;font-size:12px;padding-top:7px;margin-top:4px;border-top:0.5px solid var(--border2)">
@@ -69,8 +69,8 @@ function editFields(p, { includeExit }) {
     <div class="dca-field"><label>Direction</label>
       <select id="ed-dir-${p.id}">${['Long', 'Short'].map((d) => opt(d, p.dir === d)).join('')}</select>
     </div>
-    <div class="dca-field"><label>Date opened</label><input type="date" id="ed-date-${p.id}" value="${p.open}"></div>
-    ${includeExit ? `<div class="dca-field"><label>Date closed</label><input type="date" id="ed-close-${p.id}" value="${p.close || ''}"></div>` : ''}
+    <div class="dca-field"><label>Date opened</label><input type="date" id="ed-date-${p.id}" value="${escapeHtml(p.open)}"></div>
+    ${includeExit ? `<div class="dca-field"><label>Date closed</label><input type="date" id="ed-close-${p.id}" value="${escapeHtml(p.close || '')}"></div>` : ''}
     <div class="dca-field"><label>Entry price ($)</label><input type="number" step="any" id="ed-entry-${p.id}" value="${p.entry}"></div>
     ${includeExit ? `<div class="dca-field"><label>Exit price ($)</label><input type="number" step="any" id="ed-exit-${p.id}" value="${p.cur}"></div>` : ''}
     <div class="dca-field"><label>Amount invested ($)</label><input type="number" step="any" id="ed-amount-${p.id}" value="${costOf(p).toFixed(2)}"></div>
@@ -154,7 +154,7 @@ function openBody(p) {
 }
 
 function closedBody(p, retPct) {
-  return `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Opened ${p.open} · Closed ${p.close} · Realised ${$u(realized(p))} · ${fp(retPct)}</div>
+  return `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Opened ${escapeHtml(p.open)} · Closed ${escapeHtml(p.close)} · Realised ${$u(realized(p))} · ${fp(retPct)}</div>
     ${reasonBlock(p)}
     ${exitsBlock(p)}
     <div class="pos-btns">
