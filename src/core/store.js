@@ -32,20 +32,23 @@ function readRaw(key) {
  */
 let storageFailureReported = false;
 
+function reportStorageFailure() {
+  if (storageFailureReported) return;
+  storageFailureReported = true;
+  // Deliberately blocking: carrying on as if the trade were saved is worse.
+  alert('This browser refused to save your journal.\n\n'
+    + 'Changes you make now will be lost when you reload. This usually means '
+    + 'private browsing, blocked site data, or a full storage quota.\n\n'
+    + 'Export a backup from Live price settings before closing this tab.');
+}
+
 function writeRaw(key, value) {
   try {
     localStorage.setItem(key, value);
     return true;
   } catch (err) {
     console.error(`Could not save "${key}" to localStorage:`, err);
-    if (!storageFailureReported) {
-      storageFailureReported = true;
-      // Deliberately blocking: carrying on as if the trade were saved is worse.
-      alert('This browser refused to save your journal.\n\n'
-        + 'Changes you make now will be lost when you reload. This usually means '
-        + 'private browsing, blocked site data, or a full storage quota.\n\n'
-        + 'Export a backup from Live price settings before closing this tab.');
-    }
+    reportStorageFailure();
     return false;
   }
 }
@@ -150,34 +153,104 @@ export function sanitizePositions(list) {
   return list.map(sanitizePosition).filter(Boolean);
 }
 
-export function loadState() {
+/**
+ * The journal as it sits on disk when no password has been set.
+ * Returns null when this browser has never held one.
+ */
+export function readPlaintextJournal() {
   const stored = readJson(STORAGE_KEYS.positions, null);
-  // Only an absent key seeds the demo book — an empty array means the user
-  // deleted everything, and must stay empty. Everything that comes off disk is
-  // sanitized, since a previous import may have written junk.
-  state.positions = Array.isArray(stored) ? sanitizePositions(stored) : seedDemo();
-  state.apiKey = readRaw(STORAGE_KEYS.apiKey) || '';
-  state.snapshots = readJson(STORAGE_KEYS.snapshots, []);
-  state.cash = parseFloat(readRaw(STORAGE_KEYS.cash)) || 0;
+  if (stored == null) return null;
+  return {
+    // An empty array means the user deleted everything, and must stay empty.
+    // Everything off disk is sanitized: a past import may have written junk.
+    positions: sanitizePositions(Array.isArray(stored) ? stored : []),
+    cash: parseFloat(readRaw(STORAGE_KEYS.cash)) || 0,
+    snapshots: readJson(STORAGE_KEYS.snapshots, []),
+    apiKey: readRaw(STORAGE_KEYS.apiKey) || '',
+  };
 }
 
-export function savePositions() {
-  writeRaw(STORAGE_KEYS.positions, JSON.stringify(state.positions));
+/** The default persistence: straight to localStorage, no encryption. */
+export function savePlaintextJournal(journal) {
+  writeRaw(STORAGE_KEYS.positions, JSON.stringify(journal.positions));
+  writeRaw(STORAGE_KEYS.snapshots, JSON.stringify(journal.snapshots));
+  writeRaw(STORAGE_KEYS.cash, String(journal.cash));
+  writeRaw(STORAGE_KEYS.apiKey, journal.apiKey || '');
 }
-export function saveSnapshots() {
-  writeRaw(STORAGE_KEYS.snapshots, JSON.stringify(state.snapshots));
+
+/** Erase the readable copy, once the journal is safely inside a vault. */
+export function clearPlaintextJournal() {
+  [STORAGE_KEYS.positions, STORAGE_KEYS.cash, STORAGE_KEYS.snapshots, STORAGE_KEYS.apiKey]
+    .forEach((key) => { try { localStorage.removeItem(key); } catch { /* already gone */ } });
 }
-export function saveCash() {
-  writeRaw(STORAGE_KEYS.cash, String(state.cash));
+
+/** A brand-new browser gets the sample book, so the app is not four empty pages. */
+export function firstRunJournal() {
+  return { positions: seedDemo(), cash: 0, snapshots: [], apiKey: '' };
 }
+
+export function loadState(journal) {
+  const source = journal ?? {};
+  state.positions = sanitizePositions(source.positions ?? []);
+  state.cash = Number(source.cash) || 0;
+  state.snapshots = Array.isArray(source.snapshots) ? source.snapshots : [];
+  state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
+}
+
+/** Everything worth persisting, in one object. */
+export function journalSnapshot() {
+  return {
+    positions: state.positions,
+    cash: state.cash,
+    snapshots: state.snapshots,
+    apiKey: state.apiKey,
+  };
+}
+
+/**
+ * Where a save goes is decided at boot: straight to localStorage normally, or
+ * through the encrypted vault once a password is set.
+ *
+ * Encrypting is asynchronous while the twenty-odd callers of savePositions()
+ * are not, so a save marks the journal dirty and a flush writes it shortly
+ * after, coalescing a burst of edits into one write. The window is small, and a
+ * flush is forced when the tab is hidden or closed.
+ */
+const FLUSH_DELAY_MS = 150;
+let flushTimer = null;
+let persist = savePlaintextJournal;
+
+export function setPersistHandler(fn) { persist = fn || savePlaintextJournal; }
+
+function scheduleFlush() {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => { flushTimer = null; flushNow(); }, FLUSH_DELAY_MS);
+}
+
+/** Force an immediate write. Safe when nothing is pending. */
+export async function flushNow() {
+  clearTimeout(flushTimer);
+  flushTimer = null;
+  try {
+    await persist(journalSnapshot());
+  } catch (err) {
+    console.error('Could not save the journal:', err);
+    reportStorageFailure();
+  }
+}
+
+// The four entry points all write the same journal; they stay separate so the
+// call sites keep reading as what they mean.
+export function savePositions() { scheduleFlush(); }
+export function saveSnapshots() { scheduleFlush(); }
+export function saveCash() { scheduleFlush(); }
 export function saveApiKey(key) {
   state.apiKey = key;
-  writeRaw(STORAGE_KEYS.apiKey, key);
+  scheduleFlush();
 }
 
-/** The key is re-read on every quote so a change in another tab takes effect. */
 export function currentApiKey() {
-  return readRaw(STORAGE_KEYS.apiKey) || state.apiKey;
+  return state.apiKey;
 }
 
 export function openPositions() {

@@ -16,6 +16,8 @@
 <link rel="stylesheet" href="styles/components.css">
 </head>
 <body>
+<div class="lock-screen" id="lockScreen"></div>
+
 <div class="shell">
   <aside class="sidebar">
     <div class="logo-area">
@@ -35,6 +37,10 @@
       <button class="settings-btn" id="themeBtn" onclick="toggleTheme()" style="margin-top:6px">
         <span id="themeIcon">☀</span> <span id="themeLabel">Light mode</span>
       </button>
+      <div id="lockRow" style="margin-top:6px;display:none">
+        <button class="settings-btn" id="lockToggleBtn" onclick="toggleLock()">🔓 Set a password</button>
+        <button class="lock-link" id="lockRemoveBtn" onclick="unsetPassword()" style="display:none;margin-top:6px">Remove password</button>
+      </div>
       <div id="sideStat" style="margin-top:8px">Local only · no cloud</div>
     </div>
   </aside>
