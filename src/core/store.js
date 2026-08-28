@@ -24,8 +24,30 @@ export const state = {
 function readRaw(key) {
   try { return localStorage.getItem(key); } catch { return null; }
 }
+/**
+ * A failed write means the journal on screen is not the journal on disk, and
+ * the next reload silently loses the trade. That is the one storage failure the
+ * user has to hear about, so it is reported once per session rather than
+ * swallowed. Everything else (theme, price log) degrades quietly on purpose.
+ */
+let storageFailureReported = false;
+
 function writeRaw(key, value) {
-  try { localStorage.setItem(key, value); } catch { /* storage unavailable — stay in memory */ }
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (err) {
+    console.error(`Could not save "${key}" to localStorage:`, err);
+    if (!storageFailureReported) {
+      storageFailureReported = true;
+      // Deliberately blocking: carrying on as if the trade were saved is worse.
+      alert('This browser refused to save your journal.\n\n'
+        + 'Changes you make now will be lost when you reload. This usually means '
+        + 'private browsing, blocked site data, or a full storage quota.\n\n'
+        + 'Export a backup from Live price settings before closing this tab.');
+    }
+    return false;
+  }
 }
 function readJson(key, fallback) {
   const raw = readRaw(key);

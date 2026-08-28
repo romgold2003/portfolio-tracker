@@ -45,11 +45,28 @@ const numberIn = (id) => parseFloat(el(id)?.value);
 
 // ─── Prices ──────────────────────────────────────────────────────
 
+/**
+ * Re-quote every open position.
+ *
+ * Quotes are fetched one at a time, so a book of fifteen positions against a
+ * slow or rate-limited feed can take longer than the refresh interval. Without
+ * this guard a second pass would start on top of the first, doubling the
+ * request rate against an API that is already struggling — which makes the
+ * rate limiting worse rather than better.
+ */
+let refreshInFlight = false;
+
 export async function refreshPrices() {
-  await refreshOpenPositions();
-  savePositions();
-  renderAll();
-  updateLivePill();
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+  try {
+    await refreshOpenPositions();
+    savePositions();
+    renderAll();
+    updateLivePill();
+  } finally {
+    refreshInFlight = false;
+  }
 }
 
 /** Live lookup as the user types a ticker into the new-trade form. */
