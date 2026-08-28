@@ -1,0 +1,22 @@
+{
+  "name": "portfolio-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A local-first trading journal: positions, partial exits, live prices and monthly P&L.",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/dev-server.mjs",
+    "dev": "node scripts/dev-server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "trading",
+    "journal",
+    "portfolio",
+    "pnl",
+    "vanilla-js"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build and tooling output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment / secrets
+.env
+.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Claude Code — shared project settings are tracked, personal overrides are not
+.claude/settings.local.json
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.recovered/
