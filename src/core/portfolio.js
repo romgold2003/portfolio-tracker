@@ -38,12 +38,30 @@ export function posValue(p) { return costOf(p) + unreal(p); }
 /**
  * Today's P&L in dollars for one position.
  *
- * Must be based on the PREVIOUS CLOSE, not on current value and not on entry:
+ * The day starts at whichever price you actually owned the shares from:
+ *
+ *   held since before today  ->  yesterday's close
+ *   bought today             ->  the price you paid
+ *
+ * Yesterday's close is not stored, so it is recovered from the quoted change:
  *   dailyChg% = (cur - prevClose) / prevClose  =>  prevClose = cur / (1 + chg/100)
- *   dollar move = (cur - prevClose) * qty
- * Returns null when no daily change has been quoted yet.
+ *
+ * Returns null when the starting price cannot be established, which for a
+ * position held from before today means no quote has arrived yet.
  */
-export function dailyDollar(p) {
+export function dailyDollar(p, today = todayStr()) {
+  // Shares bought today were not owned at yesterday's close, so their day
+  // starts at the price paid, not at the previous close. Counting the whole
+  // day's move for them credits the portfolio with a gain it never had, and the
+  // daily figure then fails to reconcile with the account value.
+  //
+  // This case needs no quote at all: the entry price and the current price are
+  // both already known.
+  if (p.open === today) {
+    const move = (p.cur - p.entry) * p.qty;
+    return p.dir === 'Long' ? move : -move;
+  }
+
   if (p.dailyChg == null || !Number.isFinite(p.dailyChg)) return null;
   const factor = 1 + p.dailyChg / 100;
   if (factor <= 0) return null;
@@ -59,23 +77,30 @@ export function dailyDollar(p) {
  */
 export function dailyDollarExits(p, today = todayStr()) {
   if (!p.exits || !p.exits.length) return 0;
+  // Shares bought and sold on the same day started at the price paid, so their
+  // move is knowable even when no quote was ever recorded for them.
+  const boughtToday = p.open === today;
+
   return p.exits.reduce((sum, e) => {
     if (e.d !== today) return sum;
-    if (e.prevClose == null || !Number.isFinite(e.prevClose) || e.prevClose <= 0) return sum;
-    const move = (e.price - e.prevClose) * e.qty;
+    const validPrevClose = e.prevClose != null && Number.isFinite(e.prevClose) && e.prevClose > 0;
+    const from = boughtToday ? p.entry : (validPrevClose ? e.prevClose : null);
+    // Without a starting price there is nothing honest to attribute to today.
+    if (from == null) return sum;
+    const move = (e.price - from) * e.qty;
     return sum + (p.dir === 'Long' ? move : -move);
   }, 0);
 }
 
 /** Everything one position contributed today: the part still held, plus anything sold today. */
 export function dailyDollarTotal(p, today = todayStr()) {
-  const held = p.status === 'Open' ? (dailyDollar(p) || 0) : 0;
+  const held = p.status === 'Open' ? (dailyDollar(p, today) || 0) : 0;
   return held + dailyDollarExits(p, today);
 }
 
 /** True when a position has no daily figure at all — neither held nor sold today. */
 export function hasDailyFigure(p, today = todayStr()) {
-  return dailyDollar(p) != null || dailyDollarExits(p, today) !== 0;
+  return dailyDollar(p, today) != null || dailyDollarExits(p, today) !== 0;
 }
 
 function betaOf(ticker, cls) {
@@ -175,8 +200,8 @@ export function accountTotals(positions, cash) {
  */
 export function dailyPortfolioMove(positions, account, today = todayStr()) {
   const open = positions.filter((p) => p.status === 'Open');
-  const quoted = open.filter((p) => dailyDollar(p) != null);
-  const held = quoted.reduce((sum, p) => sum + dailyDollar(p), 0);
+  const quoted = open.filter((p) => dailyDollar(p, today) != null);
+  const held = quoted.reduce((sum, p) => sum + dailyDollar(p, today), 0);
   const sold = positions.reduce((sum, p) => sum + dailyDollarExits(p, today), 0);
   const dollars = held + sold;
   const prevNLV = account - dollars;
