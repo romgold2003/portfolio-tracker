@@ -23,6 +23,11 @@ function save() {
   catch { /* storage unavailable — history simply will not persist */ }
 }
 
+/** The stored history, for callers that need to derive returns from it. */
+export function priceHistory(ticker) {
+  return log[ticker] ?? [];
+}
+
 /** Record today's price for a ticker, keeping at most PRICE_LOG_DAYS entries. */
 export function logPrice(ticker, price) {
   if (!price || !Number.isFinite(price)) return;

@@ -49,7 +49,11 @@
 
     <div id="home" class="page active">
       <div class="topbar">
-        <div class="greeting" id="greetTxt">Overview</div>
+        <div class="bench">
+          <div class="bench-row"><span class="bench-name" id="benchName">S&amp;P 500</span><span class="bench-val" id="benchVal">—</span></div>
+          <div class="bench-row"><span class="bench-name">You</span><span class="bench-val" id="benchMine">—</span></div>
+          <div class="bench-note" id="benchNote">Add a market data key to compare</div>
+        </div>
         <div class="topbar-right">
           <div class="live-pill" id="livePill"><span class="live-dot"></span><span id="livePillTxt">Live prices on</span></div>
           <button class="topbar-btn" onclick="show('add')">+ New trade</button>
@@ -216,6 +220,10 @@
     <div class="modal-field">
       <label>Finnhub API key (for stocks / ETFs)</label>
       <input type="text" id="apiKeyInput" placeholder="Paste your key here">
+    </div>
+    <div class="modal-field">
+      <label>Alpha Vantage key — for the S&amp;P 500 comparison and measured beta</label>
+      <input type="text" id="benchKeyInput" placeholder="Optional. Free at alphavantage.co">
     </div>
     <div class="btn-row">
       <button class="btn" onclick="closeSettings()">Cancel</button>

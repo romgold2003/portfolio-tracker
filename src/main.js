@@ -26,6 +26,7 @@ import { TIMERS } from './config/constants.js';
 import { initTheme, setThemeChangeHandler } from './ui/theme.js';
 import { setPageEnterHandler, show } from './ui/router.js';
 import { renderAll, renderOnPageEnter, renderOnThemeChange } from './ui/render.js';
+import { refreshMeasuredBetas } from './ui/views/positions.js';
 import { initFormDefaults } from './ui/views/addTrade.js';
 import { showLockScreen } from './ui/views/lockScreen.js';
 import { initVoice } from './features/voice.js';
@@ -94,6 +95,8 @@ async function startSession() {
   renderAll();
   recordDailySnapshot();
   checkForRecoveredJournal();
+  // Needs the network, so it lands after the first paint and re-renders.
+  refreshMeasuredBetas();
 
   refreshPrices();
   timers = [

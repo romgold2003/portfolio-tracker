@@ -45,6 +45,8 @@ export const STORAGE_KEYS = {
   priceLog: 'pt_plog',
   theme: 'pt_theme',
   ibkrUrl: 'pt_ibkr_url',
+  benchmarkKey: 'pt_bench_key',
+  benchmark: 'pt_bench',
 };
 
 export const TIMEFRAME_DAYS = {
@@ -59,6 +61,8 @@ export const API = {
   coingeckoPrice: 'https://api.coingecko.com/api/v3/simple/price',
   finnhubQuote: 'https://finnhub.io/api/v1/quote',
   ibkrDefaultGateway: 'https://localhost:5000',
+  // Free tier allows cross-origin reads, which Stooq and Yahoo do not.
+  alphaVantage: 'https://www.alphavantage.co/query',
 };
 
 export const TIMERS = {
@@ -70,8 +74,14 @@ export const TIMERS = {
   ibkrSyncMs: 60_000,
 };
 
-/** Days of daily closes kept per ticker to compute a true rolling 7-day change. */
-export const PRICE_LOG_DAYS = 20;
+/**
+ * Days of daily closes kept per ticker.
+ *
+ * Twenty was enough for a rolling seven-day change. Beta needs far more: a
+ * slope from a handful of days is noise, so the log now holds roughly two
+ * trading years. At one number per ticker per day this stays tiny.
+ */
+export const PRICE_LOG_DAYS = 500;
 
 /** How far back the year pickers reach, and how far ahead. */
 export const YEAR_PICKER = { back: 5, forward: 1 };

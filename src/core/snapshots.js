@@ -17,7 +17,7 @@ export function recordDailySnapshot() {
   saveSnapshots();
 }
 
-function daysForTimeframe(tf) {
+export function daysForTimeframe(tf) {
   return TIMEFRAME_DAYS[tf] ?? TIMEFRAME_DAYS['3M'];
 }
 

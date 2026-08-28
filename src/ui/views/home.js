@@ -8,6 +8,8 @@ import {
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
+import { benchmarkSeries, benchmarkReturn, benchmarkKey } from '../../services/benchmark.js';
+import { daysForTimeframe } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -105,6 +107,71 @@ function renderAllocation() {
     </div>`).join('');
 }
 
+/**
+ * Are you beating the market?
+ *
+ * Both figures are measured over the same window — whatever the timeframe
+ * buttons are showing — because a return is meaningless without the period it
+ * covers, and comparing two different periods would be worse than showing
+ * nothing. The window is clamped to the history actually recorded, so the label
+ * says "17 days" rather than claiming three months of data that does not exist.
+ */
+async function renderBenchmark(periodReturn) {
+  const valEl = document.getElementById('benchVal');
+  const mineEl = document.getElementById('benchMine');
+  const noteEl = document.getElementById('benchNote');
+  if (!valEl || !mineEl || !noteEl) return;
+
+  const span = trackedSpan();
+  mineEl.textContent = periodReturn == null ? '—' : fp(periodReturn);
+  mineEl.style.color = periodReturn == null ? 'var(--text3)' : clr(periodReturn);
+
+  const rows = await benchmarkSeries();
+  if (!rows || !span) {
+    valEl.textContent = '—';
+    valEl.style.color = 'var(--text3)';
+    noteEl.textContent = benchmarkKey()
+      ? 'Market data unavailable right now'
+      : 'Add a market data key in settings to compare';
+    return;
+  }
+
+  const marketReturn = benchmarkReturn(rows, span.from, span.to);
+  if (marketReturn == null) {
+    valEl.textContent = '—';
+    valEl.style.color = 'var(--text3)';
+    noteEl.textContent = 'No index data for this period';
+    return;
+  }
+
+  valEl.textContent = fp(marketReturn);
+  valEl.style.color = clr(marketReturn);
+
+  const edge = (periodReturn ?? 0) - marketReturn;
+  const verdict = edge >= 0 ? 'ahead of' : 'behind';
+  noteEl.textContent = `${fp(Math.abs(edge)).replace('+', '')} ${verdict} the market · ${span.days}d`;
+  noteEl.style.color = edge >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+/** The first and last day the account curve actually has data for. */
+function trackedSpan() {
+  const snaps = state.snapshots;
+  if (!snaps?.length) return null;
+  const days = daysForTimeframe(ui.timeframe);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const inWindow = snaps.filter((s) => new Date(s.date) >= cutoff);
+  const used = inWindow.length >= 2 ? inWindow : snaps;
+  if (used.length < 2) return null;
+  const from = used[0].date;
+  const to = used[used.length - 1].date;
+  return {
+    from,
+    to,
+    days: Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000)),
+  };
+}
+
 /** The live/partial pill shown on both the home and positions pages. */
 export function updateLivePill() {
   const hasUnkeyedStock = state.positions.some((p) => p.status === 'Open' && p.cls !== 'Crypto') && !state.apiKey;
@@ -163,6 +230,9 @@ export function renderHome() {
   const periodReturn = renderCurve(ui.timeframe);
   setText('kReturn', fp(periodReturn));
   setColor('kReturn', clr(periodReturn));
+
+  // Needs the network, so it settles in after the rest of the page is drawn.
+  renderBenchmark(periodReturn);
 
   updateLivePill();
 }

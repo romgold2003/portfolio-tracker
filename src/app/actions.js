@@ -21,10 +21,11 @@ import { baseQtyOf } from '../core/portfolio.js';
 import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
 import { renderHome } from '../ui/views/home.js';
-import { renderPositions } from '../ui/views/positions.js';
+import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
-import { openSettings, closeSettings, readApiKeyInput } from '../ui/views/settings.js';
+import { openSettings, closeSettings, readApiKeyInput, readBenchKeyInput } from '../ui/views/settings.js';
+import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
   setDirection, readTradeForm, clearTradeForm, setTickerStatus, applyTickerLookup,
 } from '../ui/views/addTrade.js';
@@ -91,8 +92,12 @@ export async function checkTicker() {
 
 export function saveApiKey() {
   persistApiKey(readApiKeyInput());
+  saveBenchmarkKey(readBenchKeyInput());
   closeSettings();
   refreshPrices();
+  // A new market-data key can change both the benchmark line and beta.
+  renderAll();
+  refreshMeasuredBetas();
 }
 
 // ─── Creating and editing trades ─────────────────────────────────

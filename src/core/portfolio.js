@@ -112,17 +112,74 @@ function betaOf(ticker, cls) {
   return BETA.DEFAULT_STOCK;
 }
 
-/** Size-weighted portfolio beta. Shorts contribute negatively. */
-export function portfolioBeta(open) {
+/**
+ * Beta of one return series against the market.
+ *
+ *   beta = Cov(asset, market) / Var(market)
+ *
+ * This is the slope of a regression of the asset's returns on the market's,
+ * which is what beta means: when the market moves 1%, this moves beta%.
+ *
+ * The other textbook form, rho * sigma_asset / sigma_market, is the same number
+ * — substitute rho = Cov / (sigma_a * sigma_m) and it reduces to this one. It
+ * is written this way because it needs one pass and no correlation term.
+ *
+ * Returns null below `minPoints` pairs: a beta from a handful of days is noise
+ * wearing a number's clothes, and reporting it would be worse than admitting
+ * there is not enough history.
+ */
+export function betaFromReturns(assetReturns, marketReturns, minPoints = 30) {
+  const n = Math.min(assetReturns.length, marketReturns.length);
+  if (n < minPoints) return null;
+
+  const a = assetReturns.slice(-n);
+  const m = marketReturns.slice(-n);
+  const meanA = a.reduce((s, x) => s + x, 0) / n;
+  const meanM = m.reduce((s, x) => s + x, 0) / n;
+
+  let cov = 0;
+  let varM = 0;
+  for (let i = 0; i < n; i++) {
+    cov += (a[i] - meanA) * (m[i] - meanM);
+    varM += (m[i] - meanM) ** 2;
+  }
+  // A market that never moved has no slope to measure against.
+  if (varM === 0) return null;
+  return cov / varM;
+}
+
+/**
+ * Size-weighted portfolio beta.
+ *
+ * Each position contributes in proportion to its exposure, and a short
+ * contributes negatively: being short a high-beta name reduces how much the
+ * book moves with the market.
+ *
+ * `measured` maps a ticker to a beta computed from real returns. Anything
+ * missing falls back to the published assumption, so the figure degrades from
+ * measured to estimated one position at a time rather than all at once.
+ */
+export function portfolioBeta(open, measured = new Map()) {
   let weighted = 0;
   let total = 0;
+  let measuredWeight = 0;
+
   open.forEach((p) => {
     const w = Math.abs(curValOf(p));
     const sign = p.dir === 'Long' ? 1 : -1;
-    weighted += betaOf(p.ticker, p.cls) * w * sign;
+    const real = measured.get(p.ticker.toUpperCase());
+    const beta = Number.isFinite(real) ? real : betaOf(p.ticker, p.cls);
+    if (Number.isFinite(real)) measuredWeight += w;
+    weighted += beta * w * sign;
     total += w;
   });
-  return total ? weighted / total : null;
+
+  if (!total) return null;
+  return {
+    beta: weighted / total,
+    /** Share of the book whose beta was measured rather than assumed. */
+    measuredPct: (measuredWeight / total) * 100,
+  };
 }
 
 /** The original position size, before any partial exits. */
