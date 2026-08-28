@@ -1,0 +1,33 @@
+/* Design tokens — every colour in the app resolves through these.
+   Dark is the default; `body.light` overrides the same names, so no
+   component stylesheet ever needs a light-mode branch. */
+:root{
+  --bg:#0f0f0f; --panel:#131313; --panel2:#0d0d0d;
+  --border:#1e1e1e; --border2:#252525; --border-blue:#2a4a6a;
+  --text:#f0f0f0; --text2:#999; --text3:#555; --text4:#444;
+  --green:#3dba6a; --green-bg:#0a2010; --green-br:#1a4a2a;
+  --red:#e34948; --red-bg:#1f0a0a; --red-br:#4a2020;
+  --amber:#e8a43a; --blue:#4a9ae8; --blue-bg:#1a2a3a;
+  --input:#1a1a1a; --hover:#161616; --hover2:#222; --textmid:#c3c2b7;
+  --edit-bg:#1a2a1a; --edit-br:#2a4a2a; --amber-bg:#1a1508; --amber-br:#3a2810;
+  --danger-br:#3a1a1a; --close-bg:#2a1414; --blue-hover:#1f3346;
+  --ok-bg:#0a1a0f; --ok-br:#1a3d20; --neutral-bg:#141414; --neutral-br:#242424;
+  --grid:#1a1a1a; --beta-bg:#12121a; --beta-br:#2a2a3a; --ibkr-bg:#0a1a2a;
+  --listen-bg:#1a0a0a; --live-bg:#0e1f12; --live-br:#1a3d20; --chartbox:#0a0a0a;
+  --shadow:rgba(0,0,0,0.45);
+}
+body.light{
+  --bg:#f6f6f4; --panel:#ffffff; --panel2:#fafaf8;
+  --border:#e4e3df; --border2:#d6d5d0; --border-blue:#a9c9ec;
+  --text:#16171a; --text2:#5c5f66; --text3:#8b8e95; --text4:#a9acb2;
+  --green:#12945c; --green-bg:#e4f6ed; --green-br:#a9dcc2;
+  --red:#cf3b3a; --red-bg:#fdeceb; --red-br:#f0b6b4;
+  --amber:#a86a05; --blue:#1f6fd0; --blue-bg:#e8f1fc;
+  --input:#ffffff; --hover:#f2f2ef; --hover2:#ebebe7; --textmid:#3d4045;
+  --edit-bg:#e7f6ec; --edit-br:#b3ddc0; --amber-bg:#fdf3e0; --amber-br:#e8cd97;
+  --danger-br:#eec4c2; --close-bg:#fdeceb; --blue-hover:#d9e8fa;
+  --ok-bg:#e9f8f0; --ok-br:#a9dcc2; --neutral-bg:#f4f4f1; --neutral-br:#e2e1dd;
+  --grid:#e8e7e3; --beta-bg:#f3f3f8; --beta-br:#dedde6; --ibkr-bg:#e8f1fc;
+  --listen-bg:#fdeceb; --live-bg:#e4f6ed; --live-br:#a9dcc2; --chartbox:#fbfbf9;
+  --shadow:rgba(0,0,0,0.12);
+}
