@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recover journal</title>
+<style>
+  :root{
+    --bg:#0f0f0f; --panel:#131313; --panel2:#0a0a0a; --border:#1e1e1e; --border2:#252525;
+    --text:#f0f0f0; --text2:#999; --text3:#555; --green:#3dba6a; --green-bg:#0a2010;
+    --green-br:#1a4a2a; --amber:#e8a43a; --amber-bg:#1a1508; --amber-br:#3a2810;
+    --blue:#4a9ae8; --blue-bg:#1a2a3a; --border-blue:#2a4a6a; --input:#1a1a1a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f6f6f4; --panel:#ffffff; --panel2:#fafaf8; --border:#e4e3df; --border2:#d6d5d0;
+      --text:#16171a; --text2:#5c5f66; --text3:#8b8e95; --green:#12945c; --green-bg:#e4f6ed;
+      --green-br:#a9dcc2; --amber:#a86a05; --amber-bg:#fdf3e0; --amber-br:#e8cd97;
+      --blue:#1f6fd0; --blue-bg:#e8f1fc; --border-blue:#a9c9ec; --input:#ffffff;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+  body{background:var(--bg);color:var(--text);font-size:14px;padding:40px 20px;line-height:1.5}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px}
+  .sub{color:var(--text3);font-size:13px;margin-bottom:26px}
+  .card{background:var(--panel);border:0.5px solid var(--border);border-radius:12px;padding:22px 24px;margin-bottom:14px}
+  .found{border-color:var(--green-br);background:var(--green-bg)}
+  .missing{border-color:var(--amber-br);background:var(--amber-bg)}
+  .lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:10px}
+  .big{font-size:28px;font-weight:700;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+  .row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:13px}
+  .row:last-child{border-bottom:none}
+  .row span:first-child{color:var(--text2)}
+  .row span:last-child{font-weight:600;font-variant-numeric:tabular-nums}
+  .btns{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+  button{border:0.5px solid var(--border-blue);border-radius:7px;padding:11px 20px;font-size:13px;
+    background:var(--blue-bg);color:var(--blue);cursor:pointer;font-family:inherit;font-weight:500}
+  button:hover{filter:brightness(1.15)}
+  button.ghost{background:var(--input);border-color:var(--border2);color:var(--text2)}
+  ol{margin:12px 0 0 20px;font-size:13px;color:var(--text2)}
+  ol li{margin-bottom:9px}
+  code{background:var(--input);border:0.5px solid var(--border2);border-radius:4px;padding:2px 6px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--green)}
+  pre{background:var(--panel2);border:0.5px solid var(--border2);border-radius:8px;padding:14px;
+    overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;
+    color:var(--text2);white-space:pre-wrap;word-break:break-all;max-height:180px;margin-top:12px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--input);
+    border:0.5px solid var(--green-br);color:var(--green);border-radius:8px;padding:11px 20px;
+    font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .tickers{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}
+  .tk{background:var(--input);border:0.5px solid var(--border2);border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Recover your journal</h1>
+  <div class="sub">Reads the trading journal stored by the original single-file version, so it can be imported into the restructured app. This page only reads &mdash; it changes nothing.</div>
+  <div id="out"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// The keys the original single-file version wrote.
+var KEYS = { positions:'pt_pos', cash:'pt_cash', snapshots:'pt_snaps', priceLog:'pt_plog' };
+
+// Fallback for when this page cannot see the journal: the same read, to be run
+// in the console of the app page itself.
+var SNIPPET = "(function(){var g=function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}};var b={app:'portfolio-tracker',format:1,exportedAt:new Date().toISOString(),data:{positions:g('pt_pos',[]),cash:parseFloat(localStorage.getItem('pt_cash'))||0,snapshots:g('pt_snaps',[]),priceLog:g('pt_plog',{})}};var t=JSON.stringify(b,null,2);try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='portfolio-backup.json';a.click()}catch(e){}console.log('Positions found:',b.data.positions.length,'| Cash:',b.data.cash);return t})()";
+
+function read(key, fallback){
+  try { var raw = localStorage.getItem(key); return raw == null ? fallback : JSON.parse(raw); }
+  catch(e){ return fallback; }
+}
+
+function buildBackup(){
+  return {
+    app:'portfolio-tracker', format:1, exportedAt:new Date().toISOString(),
+    data:{
+      positions: read(KEYS.positions, []),
+      cash: parseFloat(localStorage.getItem(KEYS.cash)) || 0,
+      snapshots: read(KEYS.snapshots, []),
+      priceLog: read(KEYS.priceLog, {})
+    }
+  };
+}
+
+function money(n){
+  return '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function toast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show';
+  setTimeout(function(){ t.className = 'toast'; }, 2200);
+}
+
+var backup = buildBackup();
+var json = JSON.stringify(backup, null, 2);
+var d = backup.data;
+var openPos = d.positions.filter(function(p){ return p.status === 'Open'; });
+var closedPos = d.positions.filter(function(p){ return p.status === 'Closed'; });
+
+// Net liquidation value, matching the app: open position value + cash.
+var value = openPos.reduce(function(sum, p){
+  var cost = p.entry * p.qty, cur = p.cur * p.qty;
+  return sum + cost + (p.dir === 'Long' ? cur - cost : cost - cur);
+}, 0) + d.cash;
+
+var out = document.getElementById('out');
+
+if (d.positions.length) {
+  out.innerHTML =
+    '<div class="card found">' +
+      '<div class="lbl">Journal found</div>' +
+      '<div class="big">' + money(value) + '</div>' +
+      '<div class="tickers">' + openPos.map(function(p){
+        return '<span class="tk">' + p.ticker + '</span>';
+      }).join('') + '</div>' +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="row"><span>Open positions</span><span>' + openPos.length + '</span></div>' +
+      '<div class="row"><span>Closed trades</span><span>' + closedPos.length + '</span></div>' +
+      '<div class="row"><span>Cash</span><span>' + money(d.cash) + '</span></div>' +
+      '<div class="row"><span>Daily snapshots</span><span>' + d.snapshots.length + '</span></div>' +
+      '<div id="sendState" style="font-size:13px;margin-top:16px;color:var(--text2)">Sending to the app&hellip;</div>' +
+      '<div class="btns">' +
+        '<button onclick="doDownload()">&darr; Download backup file</button>' +
+        '<button class="ghost" onclick="doCopy()">Copy JSON to clipboard</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card" id="nextCard">' +
+      '<div class="lbl">Next</div>' +
+      '<div id="nextBody"></div>' +
+    '</div>';
+  sendToApp();
+} else {
+  out.innerHTML =
+    '<div class="card missing">' +
+      '<div class="lbl">Nothing found here</div>' +
+      '<div style="font-size:13px;color:var(--text2)">This page cannot see the journal. Chrome does not always share storage between different <code>file://</code> pages, so the data has to be read from the app page itself.</div>' +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="lbl">Do this instead</div>' +
+      '<ol>' +
+        '<li>Open <code>portfolio_tracker_pro.html</code> the way you normally do, and check your positions are on screen.</li>' +
+        '<li>Press <strong>F12</strong> &rarr; <strong>Console</strong> tab.</li>' +
+        '<li>Click the button below to copy the snippet, paste it into the console, press Enter.</li>' +
+        '<li>It downloads <code>portfolio-backup.json</code> and prints how many positions it found.</li>' +
+      '</ol>' +
+      '<div class="btns"><button onclick="copySnippet()">Copy the console snippet</button></div>' +
+      '<pre id="snippet"></pre>' +
+    '</div>';
+  document.getElementById('snippet').textContent = SNIPPET;
+}
+
+function doDownload(){
+  var blob = new Blob([json], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'portfolio-backup-' + backup.exportedAt.slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Saved to your Downloads folder');
+}
+
+function copyText(text, msg){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function(){ toast(msg); }, fallback);
+  } else { fallback(); }
+  function fallback(){
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast(msg); }
+    catch(e){ toast('Could not copy — select the text manually'); }
+    document.body.removeChild(ta);
+  }
+}
+
+// Hand the journal straight to the dev server, so the app can offer to import
+// it without the user shuttling a file around. Falls back to the manual route
+// whenever the server is not running.
+var SERVER = 'http://localhost:4173';
+
+function manualSteps(){
+  return '<ol>' +
+    '<li>Click <strong>&darr; Download backup file</strong> above.</li>' +
+    '<li>Start the app: <code>npm start</code>, then open <code>' + SERVER + '</code></li>' +
+    '<li>Sidebar &rarr; <strong>&#9881; Live price settings</strong> &rarr; <strong>&uarr; Import backup</strong></li>' +
+    '<li>Choose the downloaded file, check the green line matches the numbers above, then <strong>Replace journal</strong>.</li>' +
+  '</ol>';
+}
+
+function sendToApp(){
+  var state = document.getElementById('sendState');
+  var next = document.getElementById('nextBody');
+
+  fetch(SERVER + '/__recover', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: json
+  }).then(function(r){
+    if (!r.ok) throw new Error('server returned ' + r.status);
+    return r.json();
+  }).then(function(result){
+    state.innerHTML = '<span style="color:var(--green);font-weight:600">&#10003; Sent ' +
+      result.positions + ' positions to the app.</span>';
+    next.innerHTML = '<ol>' +
+      '<li>Open <code>' + SERVER + '</code> (reload it if it is already open).</li>' +
+      '<li>A banner at the top will offer to import this journal &mdash; click <strong>Import</strong>.</li>' +
+      '<li>Check the figures match the ones above.</li>' +
+    '</ol>';
+  }).catch(function(err){
+    state.innerHTML = '<span style="color:var(--amber)">Could not reach the app at ' + SERVER +
+      ' (' + err.message + '). Use the manual route below &mdash; it works just as well.</span>';
+    next.innerHTML = manualSteps();
+  });
+}
+
+function doCopy(){ copyText(json, 'JSON copied'); }
+function copySnippet(){ copyText(SNIPPET, 'Snippet copied — paste it in the console'); }
+</script>
+</body>
+</html>
