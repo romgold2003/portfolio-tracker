@@ -478,7 +478,7 @@ export const voiceActions = {
  * If you add an inline handler to the markup, add it here too.
 
  */
-export function installActions() {
+export function installActions(extra = {}) {
   Object.assign(window, {
     // navigation & chrome
     show, toggleTheme, toggleVoice,
@@ -501,5 +501,6 @@ export function installActions() {
     openIbkr, closeIbkr, disconnectIbkr,
     connectIbkr: () => connectIbkr(renderAll),
     syncIbkr: () => syncIbkr(renderAll),
+    ...extra,
   });
 }
