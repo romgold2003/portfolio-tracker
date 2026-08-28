@@ -44,6 +44,20 @@ Then open <http://localhost:4173>.
 > load over `file://`. `npm start` runs a ~60-line static server from
 > `scripts/dev-server.mjs`; any other static server works just as well.
 
+### Or build a single file you can just double-click
+
+```bash
+npm run build
+```
+
+Writes `dist/portfolio-tracker.html`: one self-contained file, about 350 KB,
+with every module, stylesheet and Chart.js inlined. No server, no install, no
+network except live prices. Copy it anywhere and open it.
+
+Note that a journal is tied to where the app is opened from, so the standalone
+file and the served version keep separate books. Move one to the other with
+Export backup and Import backup.
+
 To use a different port:
 
 ```bash

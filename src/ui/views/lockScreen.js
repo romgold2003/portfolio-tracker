@@ -12,6 +12,7 @@ import {
   listProfiles, findByEmail, createProfile, unlockWithPassword,
   unlockWithRecoveryKey, setPassword, looksLikeEmail,
 } from '../../core/profiles.js';
+import { cryptoAvailable } from '../../core/crypto.js';
 import { escapeHtml } from '../format.js';
 
 const HOST_ID = 'lockScreen';
@@ -146,9 +147,39 @@ function recoveryKeyScreen() {
     <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Continue">Continue</button>`;
 }
 
+/**
+ * Encryption needs a secure context. Chrome treats file:// as trustworthy, so
+ * the standalone build works, but some browsers and some ways of opening a file
+ * do not — and finding that out only after typing a password twice is a waste
+ * of the user's time. Say so up front instead.
+ */
+function unsupportedScreen() {
+  return `
+    <h1 class="lock-title">This browser cannot encrypt here</h1>
+    <p class="lock-sub">Accounts need the Web Crypto API, which this page does not have access to.</p>
+    <div class="lock-note lock-note-warn">
+      <strong>Your data is safe</strong> — nothing has been changed or deleted.
+    </div>
+    <div class="lock-note">
+      This usually means the page was opened in a way the browser does not treat
+      as secure. Two things that fix it:
+      <br><br>
+      1. Open the file directly from your computer in Chrome, rather than from
+      inside another app or a preview pane.
+      <br>
+      2. Or run the served version: <code>npm start</code>, then open
+      <code>http://localhost:4173</code>.
+    </div>`;
+}
+
 function render() {
   const container = host();
   if (!container) return;
+  if (!cryptoAvailable()) {
+    container.innerHTML = `<div class="lock-card">${unsupportedScreen()}</div>`;
+    container.style.display = 'flex';
+    return;
+  }
   const body = mode === 'create' ? createForm()
     : mode === 'recover' ? recoverForm()
       : mode === 'recoveryKey' ? recoveryKeyScreen()
