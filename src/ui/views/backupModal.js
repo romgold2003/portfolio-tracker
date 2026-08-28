@@ -17,6 +17,7 @@ export function openImport() {
   if (file) file.value = '';
   setStatus('', '');
   setReady(false);
+  showLegacySnippet();
   el('importModal')?.classList.add('show');
 }
 
@@ -75,4 +76,43 @@ export function readImportFile(input) {
 
 export function stagedBackup() {
   return staged;
+}
+
+/**
+ * Reads the four keys the pre-accounts version wrote and saves them as a backup
+ * file. It has to run in the console of the old page itself: storage belongs to
+ * the origin that wrote it, and no other page — not even another local file —
+ * can reach it.
+ *
+ * Read-only by design, so it is safe to run repeatedly and leaves the old
+ * journal untouched.
+ */
+export const LEGACY_SNIPPET = "(function(){var g=function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}};var b={app:'portfolio-tracker',format:1,exportedAt:new Date().toISOString(),data:{positions:g('pt_pos',[]),cash:parseFloat(localStorage.getItem('pt_cash'))||0,snapshots:g('pt_snaps',[]),priceLog:g('pt_plog',{})}};var t=JSON.stringify(b,null,2);try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='portfolio-backup.json';a.click()}catch(e){}console.log('Positions found:',b.data.positions.length,'| Cash:',b.data.cash);return t})()";
+
+/** Fill in the snippet once, the first time the help section is opened. */
+export function showLegacySnippet() {
+  const box = el('legacySnippet');
+  if (box && !box.textContent) box.textContent = LEGACY_SNIPPET;
+}
+
+export function copyLegacySnippet() {
+  showLegacySnippet();
+  const note = el('legacyCopied');
+  const done = (message) => { if (note) { note.textContent = message; setTimeout(() => { note.textContent = ''; }, 2500); } };
+
+  const fallback = () => {
+    const area = document.createElement('textarea');
+    area.value = LEGACY_SNIPPET;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand('copy'); done('Copied'); }
+    catch { done('Could not copy — select the text below instead'); }
+    document.body.removeChild(area);
+  };
+
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(LEGACY_SNIPPET).then(() => done('Copied'), fallback);
+  } else {
+    fallback();
+  }
 }

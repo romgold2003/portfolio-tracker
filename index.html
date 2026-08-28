@@ -241,6 +241,25 @@
         style="min-height:110px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:9px 11px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);width:100%;outline:none"></textarea>
     </div>
     <div id="importStatus" style="font-size:12px;margin-bottom:12px;min-height:18px"></div>
+
+    <details class="legacy-help">
+      <summary>Coming from the old single-file version? Your trades are still there.</summary>
+      <p>Storage belongs to the exact address a page was opened from, so a journal
+      written by the old file is invisible here. Nothing is lost — it just has to be
+      handed over. It takes a minute:</p>
+      <ol>
+        <li>Open your old <code>portfolio_tracker_pro.html</code> the way you always did, and check your positions are on screen.</li>
+        <li>Press <strong>F12</strong>, then click the <strong>Console</strong> tab.</li>
+        <li>Press the button below to copy the line, paste it into the console, and press Enter.</li>
+        <li>It saves <code>portfolio-backup.json</code> to your Downloads and prints how many positions it found.</li>
+        <li>Come back here, choose that file above, and check the green line matches.</li>
+      </ol>
+      <button class="btn" id="copyLegacySnippet" onclick="copyLegacySnippet()">Copy the line</button>
+      <span id="legacyCopied" class="legacy-copied"></span>
+      <pre id="legacySnippet"></pre>
+      <p class="legacy-note">The line only reads. It changes nothing, so the old page is left exactly as it was.</p>
+    </details>
+
     <div class="btn-row">
       <button class="btn" onclick="closeImport()">Cancel</button>
       <button class="btn btn-blue" id="importConfirmBtn" onclick="confirmImport()" disabled style="opacity:0.4;cursor:not-allowed">Replace journal</button>

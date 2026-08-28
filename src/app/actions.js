@@ -37,7 +37,7 @@ import { openIbkr, closeIbkr, connectIbkr, syncIbkr, disconnectIbkr } from '../f
 import { toggleVoice } from '../features/voice.js';
 import { exportBackup, restoreBackup, describeBackup } from '../features/backup.js';
 import {
-  openImport, closeImport, previewImport, readImportFile, stagedBackup,
+  openImport, closeImport, previewImport, readImportFile, stagedBackup, copyLegacySnippet,
 } from '../ui/views/backupModal.js';
 
 const el = (id) => document.getElementById(id);
@@ -499,6 +499,7 @@ export function installActions(extra = {}) {
     selectMonth, toggleMonthTrade,
     // backup & restore
     exportBackup, openImport, closeImport, previewImport, readImportFile, confirmImport,
+    copyLegacySnippet,
     // ibkr
     openIbkr, closeIbkr, disconnectIbkr,
     connectIbkr: () => connectIbkr(renderAll),
