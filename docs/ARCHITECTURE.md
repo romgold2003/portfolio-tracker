@@ -140,3 +140,52 @@ app is fully usable with stale prices, and with no API key at all.
 - The account curve is synthesised until two real daily snapshots exist, so a
   fresh install shows an illustrative line rather than history.
 - Fees, taxes and multi-currency are not modelled.
+
+## Accounts and encryption
+
+Several people can share one copy of the app on one machine. An account is an
+email, two wrapped copies of a data key, and an encrypted blob — all in this
+browser's storage. There is no server and no network call.
+
+The email is an identifier only. Nothing is sent to it and it is not verified,
+which is also why a forgotten password is recovered with a key rather than a
+reset link: a local app has no way to send mail.
+
+### Envelope encryption
+
+```
+journal    encrypted with   a random 256-bit data key
+data key   wrapped by       a key derived from the password
+data key   wrapped by       a key derived from the recovery key
+```
+
+Either wrapper opens the same data key, so a forgotten password is survivable.
+Changing the password rewraps the data key rather than re-encrypting the
+journal, so it is instant at any size. The data key exists only in memory, and
+only while an account is unlocked.
+
+PBKDF2-HMAC-SHA256 at 310,000 iterations, then AES-GCM, which authenticates as
+well as encrypts — a tampered vault is rejected rather than decrypted to
+garbage. Recovery keys are 130 bits in Crockford base32, which omits I, L, O and
+U so nothing is misread when copied off a screen.
+
+### Saving is asynchronous, callers are not
+
+Web Crypto has no synchronous API, but `savePositions()` is called from about
+twenty places that are not async. Rather than make all of them async, a save
+marks the vault dirty and a flush encrypts 150ms later, coalescing a burst of
+changes into one write. A flush is forced on `pagehide` and when the tab is
+hidden, so at most the last fraction of a second of an edit is at risk.
+
+### What is not encrypted
+
+The rolling price log. It is public market data — "AMD closed at $474" is not a
+secret — and keeping it outside the vault means one shared copy rather than one
+per account, which means fewer API calls.
+
+### Migrating a pre-accounts journal
+
+A journal written before accounts existed is offered to the first account
+created. The plaintext copy is removed only after the encrypted vault has been
+read back successfully; deleting it any earlier means a failure in between
+destroys the only copy.

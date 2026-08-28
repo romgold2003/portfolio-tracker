@@ -1,0 +1,120 @@
+/**
+ * Builds a single self-contained HTML file that runs from a double-click.
+ *
+ *   npm run build
+ *
+ * The app is normally served over HTTP because browsers refuse to load ES
+ * modules from `file://`. Bundling every module into one classic script removes
+ * the module loader from the picture entirely, so the result needs no server,
+ * no install, and no network except for live prices.
+ *
+ * esbuild is fetched on demand by npx and is a build-time tool only. The file
+ * it produces still has zero runtime dependencies, which is the promise that
+ * matters.
+ */
+import { execFileSync } from 'node:child_process';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = resolve(fileURLToPath(new URL('../', import.meta.url)));
+const OUT_DIR = join(ROOT, 'dist');
+const OUT_FILE = join(OUT_DIR, 'portfolio-tracker.html');
+const TMP_BUNDLE = join(OUT_DIR, '.bundle.js');
+
+const CHART_URL = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+
+const read = (relative) => readFile(join(ROOT, relative), 'utf8');
+
+/**
+ * Chart.js is pulled in at build time so the finished file works offline.
+ * If it cannot be fetched, fall back to the CDN tag rather than failing the
+ * build — charts then need a connection, everything else still works.
+ */
+async function inlineChartJs() {
+  try {
+    const res = await fetch(CHART_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const source = await res.text();
+    console.log(`  Chart.js inlined (${Math.round(source.length / 1024)} KB)`);
+    return `<script>${source}</script>`;
+  } catch (err) {
+    console.warn(`  Chart.js could not be fetched (${err.message}) — leaving the CDN tag`);
+    return `<script src="${CHART_URL}"></script>`;
+  }
+}
+
+async function bundleApp() {
+  await mkdir(OUT_DIR, { recursive: true });
+  // Node refuses to spawn a .cmd without a shell on Windows, and npx is a .cmd
+  // there. Quoting the paths keeps a space in the project folder from splitting
+  // into two arguments once the shell gets involved.
+  const isWindows = process.platform === 'win32';
+  const quote = (value) => (isWindows ? `"${value}"` : value);
+  execFileSync(
+    'npx',
+    ['--yes', 'esbuild', quote(join(ROOT, 'src/main.js')),
+      '--bundle', '--format=iife', '--target=es2022', `--outfile=${quote(TMP_BUNDLE)}`],
+    { stdio: ['ignore', 'ignore', 'inherit'], shell: isWindows },
+  );
+  const code = await readFile(TMP_BUNDLE, 'utf8');
+  await rm(TMP_BUNDLE, { force: true });
+  console.log(`  app bundled (${Math.round(code.length / 1024)} KB)`);
+  return code;
+}
+
+/** Everything the four stylesheets hold, in the order the page links them. */
+async function inlineStyles() {
+  const sheets = ['tokens', 'base', 'layout', 'components'];
+  const parts = await Promise.all(sheets.map((name) => read(`styles/${name}.css`)));
+  return parts.join('\n');
+}
+
+async function build() {
+  console.log('Building standalone file…');
+
+  const [html, css, chartTag, appCode] = await Promise.all([
+    read('index.html'),
+    inlineStyles(),
+    inlineChartJs(),
+    bundleApp(),
+  ]);
+
+  const out = html
+    // The four <link> tags become one inline stylesheet.
+    .replace(
+      /<!-- Stylesheets[\s\S]*?<link rel="stylesheet" href="styles\/components\.css">/,
+      `<style>\n${css}\n</style>`,
+    )
+    // The CDN script tag becomes the library itself.
+    .replace(
+      /<!-- Charting[\s\S]*?<script src="https:\/\/cdnjs[^>]*><\/script>/,
+      chartTag,
+    )
+    // The module entry point becomes the whole bundled app.
+    .replace(
+      /<!-- The app boots[\s\S]*?<script type="module" src="src\/main\.js"><\/script>/,
+      `<script>\n${appCode}\n</script>`,
+    );
+
+  // A missed replacement would ship a file that silently does nothing.
+  const leftovers = [
+    [/<link rel="stylesheet"/, 'a stylesheet link'],
+    [/<script type="module"/, 'the module script tag'],
+    [/src="src\/main\.js"/, 'the app entry point'],
+  ].filter(([pattern]) => pattern.test(out));
+  if (leftovers.length) {
+    throw new Error(`Inlining missed: ${leftovers.map(([, what]) => what).join(', ')}`);
+  }
+
+  await mkdir(dirname(OUT_FILE), { recursive: true });
+  await writeFile(OUT_FILE, out, 'utf8');
+  console.log(`\nWrote ${OUT_FILE}`);
+  console.log(`  ${Math.round(out.length / 1024)} KB, self-contained`);
+  console.log('  Double-click it. No server, no install.');
+}
+
+build().catch((err) => {
+  console.error(`Build failed: ${err.message}`);
+  process.exit(1);
+});

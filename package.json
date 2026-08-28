@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/dev-server.mjs",
-    "dev": "node scripts/dev-server.mjs"
+    "dev": "node scripts/dev-server.mjs",
+    "build": "node scripts/build-standalone.mjs"
   },
   "engines": {
     "node": ">=18"
