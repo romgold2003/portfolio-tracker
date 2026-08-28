@@ -32,26 +32,6 @@ function readRaw(key) {
  */
 let storageFailureReported = false;
 
-function reportStorageFailure() {
-  if (storageFailureReported) return;
-  storageFailureReported = true;
-  // Deliberately blocking: carrying on as if the trade were saved is worse.
-  alert('This browser refused to save your journal.\n\n'
-    + 'Changes you make now will be lost when you reload. This usually means '
-    + 'private browsing, blocked site data, or a full storage quota.\n\n'
-    + 'Export a backup from Live price settings before closing this tab.');
-}
-
-function writeRaw(key, value) {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch (err) {
-    console.error(`Could not save "${key}" to localStorage:`, err);
-    reportStorageFailure();
-    return false;
-  }
-}
 function readJson(key, fallback) {
   const raw = readRaw(key);
   if (raw == null) return fallback;
@@ -154,41 +134,27 @@ export function sanitizePositions(list) {
 }
 
 /**
- * The journal as it sits on disk when no password has been set.
- * Returns null when this browser has never held one.
+ * Read the plaintext journal written by every version before accounts existed.
+ * Returns null when there is nothing to migrate.
  */
-export function readPlaintextJournal() {
+export function readLegacyJournal() {
   const stored = readJson(STORAGE_KEYS.positions, null);
-  if (stored == null) return null;
+  if (!Array.isArray(stored) || !stored.length) return null;
   return {
-    // An empty array means the user deleted everything, and must stay empty.
-    // Everything off disk is sanitized: a past import may have written junk.
-    positions: sanitizePositions(Array.isArray(stored) ? stored : []),
+    positions: sanitizePositions(stored),
     cash: parseFloat(readRaw(STORAGE_KEYS.cash)) || 0,
     snapshots: readJson(STORAGE_KEYS.snapshots, []),
     apiKey: readRaw(STORAGE_KEYS.apiKey) || '',
   };
 }
 
-/** The default persistence: straight to localStorage, no encryption. */
-export function savePlaintextJournal(journal) {
-  writeRaw(STORAGE_KEYS.positions, JSON.stringify(journal.positions));
-  writeRaw(STORAGE_KEYS.snapshots, JSON.stringify(journal.snapshots));
-  writeRaw(STORAGE_KEYS.cash, String(journal.cash));
-  writeRaw(STORAGE_KEYS.apiKey, journal.apiKey || '');
-}
-
-/** Erase the readable copy, once the journal is safely inside a vault. */
-export function clearPlaintextJournal() {
+/** Remove the plaintext copy once it is safely inside an encrypted vault. */
+export function clearLegacyJournal() {
   [STORAGE_KEYS.positions, STORAGE_KEYS.cash, STORAGE_KEYS.snapshots, STORAGE_KEYS.apiKey]
     .forEach((key) => { try { localStorage.removeItem(key); } catch { /* already gone */ } });
 }
 
-/** A brand-new browser gets the sample book, so the app is not four empty pages. */
-export function firstRunJournal() {
-  return { positions: seedDemo(), cash: 0, snapshots: [], apiKey: '' };
-}
-
+/** Populate `state` from a decrypted vault. */
 export function loadState(journal) {
   const source = journal ?? {};
   state.positions = sanitizePositions(source.positions ?? []);
@@ -197,7 +163,7 @@ export function loadState(journal) {
   state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
 }
 
-/** Everything worth persisting, in one object. */
+/** Everything the vault holds, ready to be encrypted. */
 export function journalSnapshot() {
   return {
     positions: state.positions,
@@ -207,40 +173,57 @@ export function journalSnapshot() {
   };
 }
 
+/** Drop everything in memory. Called on sign out. */
+export function clearState() {
+  state.positions = [];
+  state.cash = 0;
+  state.snapshots = [];
+  state.apiKey = '';
+}
+
 /**
- * Where a save goes is decided at boot: straight to localStorage normally, or
- * through the encrypted vault once a password is set.
+ * Encryption is asynchronous, but the twenty-odd callers of savePositions() are
+ * not, and making them async would ripple through the whole action layer for no
+ * benefit. Instead a save marks the vault dirty and a flush encrypts shortly
+ * after, coalescing a burst of changes into one write.
  *
- * Encrypting is asynchronous while the twenty-odd callers of savePositions()
- * are not, so a save marks the journal dirty and a flush writes it shortly
- * after, coalescing a burst of edits into one write. The window is small, and a
- * flush is forced when the tab is hidden or closed.
+ * The window is deliberately small, and a flush is forced when the tab is
+ * hidden or closed, so the amount that can be lost is a few hundred milliseconds
+ * of the very last edit.
  */
 const FLUSH_DELAY_MS = 150;
 let flushTimer = null;
-let persist = savePlaintextJournal;
+let persist = null;
 
-export function setPersistHandler(fn) { persist = fn || savePlaintextJournal; }
+/** Wired at boot by the profile layer. Until then, saves are no-ops. */
+export function setPersistHandler(fn) { persist = fn; }
 
 function scheduleFlush() {
-  if (flushTimer) return;
+  if (!persist || flushTimer) return;
   flushTimer = setTimeout(() => { flushTimer = null; flushNow(); }, FLUSH_DELAY_MS);
 }
 
-/** Force an immediate write. Safe when nothing is pending. */
+/** Force an immediate encrypted write. Safe to call when nothing is pending. */
 export async function flushNow() {
+  if (!persist) return;
   clearTimeout(flushTimer);
   flushTimer = null;
   try {
     await persist(journalSnapshot());
   } catch (err) {
-    console.error('Could not save the journal:', err);
-    reportStorageFailure();
+    console.error('Could not save the encrypted journal:', err);
+    if (!storageFailureReported) {
+      storageFailureReported = true;
+      alert('This browser refused to save your journal.\n\n'
+        + 'Changes you make now will be lost when you reload. This usually means '
+        + 'private browsing, blocked site data, or a full storage quota.\n\n'
+        + 'Export a backup from Live price settings before closing this tab.');
+    }
   }
 }
 
-// The four entry points all write the same journal; they stay separate so the
-// call sites keep reading as what they mean.
+// All four save entry points write the same vault; they stay separate only so
+// the call sites keep reading as what they mean.
 export function savePositions() { scheduleFlush(); }
 export function saveSnapshots() { scheduleFlush(); }
 export function saveCash() { scheduleFlush(); }
@@ -263,21 +246,3 @@ export function findPosition(id) {
   return state.positions.find((p) => p.id === id);
 }
 
-/**
- * First-run sample book, so a brand-new install has something to look at
- * instead of four empty pages.
- */
-function seedDemo() {
-  const today = new Date();
-  const daysAgo = (n) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - n);
-    return d.toISOString().split('T')[0];
-  };
-  return [
-    { id: 1, ticker: 'BTC', cls: 'Crypto', dir: 'Long', open: daysAgo(120), close: null, entry: 82000, cur: 105000, qty: 0.05, amount: 4100, status: 'Open' },
-    { id: 2, ticker: 'IAU', cls: 'Commodities', dir: 'Long', open: daysAgo(28), close: null, entry: 50, cur: 53, qty: 20, amount: 1000, status: 'Open' },
-    { id: 3, ticker: 'MSFT', cls: 'Stocks', dir: 'Short', open: daysAgo(95), close: daysAgo(30), entry: 430, cur: 390, qty: 5, amount: 2150, status: 'Closed' },
-    { id: 4, ticker: 'IBM', cls: 'Stocks', dir: 'Long', open: daysAgo(70), close: daysAgo(45), entry: 210, cur: 195, qty: 10, amount: 2100, status: 'Closed' },
-  ];
-}

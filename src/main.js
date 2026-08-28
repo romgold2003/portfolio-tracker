@@ -1,25 +1,24 @@
 /**
  * Application entry point.
  *
- * The journal may or may not be password-protected — both are first-class. If a
- * password has been set in this browser, nothing renders until it is entered.
- * If not, the app opens straight to the journal and offers a password once,
- * which can be declined.
+ * Nothing renders until a profile is unlocked. The lock screen owns the first
+ * paint; the app boots only once a data key exists, because until then there is
+ * no journal to draw.
  *
  * Boot order matters:
  *   1. theme, so the first paint is not a flash of the wrong palette
- *   2. wiring (global bridge, listeners, injected handlers)
- *   3. unlock, or read the readable journal
- *   4. migrations, so the first render sees the final shape
+ *   2. lock screen, which either signs in or adopts a pre-accounts journal
+ *   3. decrypted data + migrations, so the first render sees the final shape
+ *   4. wiring (global bridge, listeners, injected handlers)
  *   5. first render, then background refresh loops
  */
 import {
-  loadState, setPersistHandler, flushNow, journalSnapshot,
-  readPlaintextJournal, savePlaintextJournal, clearPlaintextJournal, firstRunJournal,
+  loadState, clearState, setPersistHandler, flushNow,
+  readLegacyJournal, clearLegacyJournal,
 } from './core/store.js';
 import {
-  isLocked, isUnlocked, readVault, saveVault, lock, removeLock,
-} from './core/vault.js';
+  readVault, saveVault, lock, currentProfile, isUnlocked,
+} from './core/profiles.js';
 import { runMigrations } from './core/migrations.js';
 import { recordDailySnapshot } from './core/snapshots.js';
 import { loadPriceLog } from './services/priceLog.js';
@@ -33,10 +32,7 @@ import { initVoice } from './features/voice.js';
 import { checkForRecoveredJournal } from './features/recoveryBanner.js';
 import { installActions, voiceActions, refreshPrices, setTimeframe } from './app/actions.js';
 
-/** Remembers that the password offer was declined, so it is made only once. */
-const SKIP_KEY = 'pt_lock_declined';
-
-/** Background loops, so they can be stopped when the journal is locked again. */
+/** Background loops, so they can be stopped on sign out. */
 let timers = [];
 
 function wireTimeframeButtons() {
@@ -48,119 +44,94 @@ function wireTimeframeButtons() {
   });
 }
 
-function showLockControls() {
-  const row = document.getElementById('lockRow');
-  const button = document.getElementById('lockToggleBtn');
-  const remove = document.getElementById('lockRemoveBtn');
-  if (!row || !button) return;
-  row.style.display = 'block';
-  button.textContent = isLocked() ? '🔒 Lock now' : '🔓 Set a password';
-  if (remove) remove.style.display = isLocked() ? '' : 'none';
+function showAccount() {
+  const profile = currentProfile();
+  const row = document.getElementById('accountRow');
+  const label = document.getElementById('accountEmail');
+  if (!row || !label || !profile) return;
+  label.textContent = profile.email;
+  label.title = profile.email;
+  row.style.display = 'flex';
 }
 
-/** Start the app with a journal in hand, however it was obtained. */
-function startApp(journal, persist) {
+/**
+ * Sign out: drop the key, wipe what is in memory, stop the loops, and put the
+ * lock screen back. Everything on disk stays encrypted.
+ */
+export async function signOut() {
+  await flushNow();
+  timers.forEach(clearInterval);
+  timers = [];
+  lock();
+  clearState();
+  setPersistHandler(null);
+  document.getElementById('accountRow')?.style.setProperty('display', 'none');
+  show('home');
+  showLockScreen({ onUnlock: startSession });
+}
+
+/**
+ * Runs once a profile is unlocked and its data key is in memory.
+ * Returns false when the vault could not be read, so the caller knows not to
+ * treat the account as usable.
+ */
+async function startSession() {
+  const journal = await readVault();
+  if (journal === null) {
+    alert('That account\'s journal could not be decrypted. It may be corrupt.\n\n'
+      + 'Sign in again, or restore from a backup file.');
+    lock();
+    showLockScreen({ onUnlock: startSession });
+    return false;
+  }
+
   loadState(journal);
   loadPriceLog();
   runMigrations();
-  setPersistHandler(persist);
+  setPersistHandler(saveVault);
 
-  showLockControls();
+  showAccount();
   renderAll();
   recordDailySnapshot();
   checkForRecoveredJournal();
 
   refreshPrices();
-  timers.forEach(clearInterval);
   timers = [
     setInterval(refreshPrices, TIMERS.priceRefreshMs),
     setInterval(recordDailySnapshot, TIMERS.snapshotMs),
   ];
-}
-
-/** Runs after the password screen hands control back. */
-async function afterUnlock() {
-  if (isUnlocked()) {
-    const journal = await readVault();
-    if (journal === null) {
-      alert('This journal could not be decrypted. It may be damaged.\n\n'
-        + 'Try again, or restore from a backup file.');
-      lock();
-      showLockScreen({ onUnlock: afterUnlock });
-      return;
-    }
-    // The password is set, so the readable copy must not linger beside the
-    // vault — it would defeat the whole point.
-    clearPlaintextJournal();
-    startApp(journal, saveVault);
-    return;
-  }
-
-  // No password: either declined just now, or never offered.
-  try { localStorage.setItem(SKIP_KEY, '1'); } catch { /* ignore */ }
-  startApp(readPlaintextJournal() ?? firstRunJournal(), savePlaintextJournal);
-}
-
-/** Sidebar button: set a password, or lock a journal that already has one. */
-export async function toggleLock() {
-  await flushNow();
-  if (isLocked()) {
-    timers.forEach(clearInterval);
-    timers = [];
-    lock();
-    show('home');
-    showLockScreen({ onUnlock: afterUnlock });
-    return;
-  }
-  // Hand over the journal in memory, so that is what gets encrypted.
-  showLockScreen({ forceSetup: true, journal: journalSnapshot(), onUnlock: afterUnlock });
-}
-
-/** Sidebar button: give up the password and go back to a readable journal. */
-export async function unsetPassword() {
-  if (!isLocked() || !isUnlocked()) return;
-  if (!confirm('Remove the password?\n\nYour journal stays on this device but will no longer be encrypted, and anyone using this browser can read it.')) return;
-  const journal = await removeLock();
-  savePlaintextJournal(journal ?? journalSnapshot());
-  setPersistHandler(savePlaintextJournal);
-  showLockControls();
-  alert('Password removed. The journal is readable again on this device.');
+  return true;
 }
 
 function boot() {
   initTheme();
 
-  installActions({ toggleLock, unsetPassword });
+  installActions({ signOut });
   initVoice(voiceActions);
   setPageEnterHandler(renderOnPageEnter);
   setThemeChangeHandler(renderOnThemeChange);
   initFormDefaults();
   wireTimeframeButtons();
 
-  // Encrypting is asynchronous, so a pending save has to be forced out before
+  // Encryption is asynchronous, so a pending save has to be forced out before
   // the tab goes away. `pagehide` fires in cases `beforeunload` misses.
-  window.addEventListener('pagehide', () => flushNow());
+  window.addEventListener('pagehide', () => { if (isUnlocked()) flushNow(); });
   window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushNow();
+    if (document.visibilityState === 'hidden' && isUnlocked()) flushNow();
   });
 
-  if (isLocked()) {
-    showLockScreen({ onUnlock: afterUnlock });
-    return;
-  }
-
-  const existing = readPlaintextJournal();
-  let declined = false;
-  try { declined = localStorage.getItem(SKIP_KEY) === '1'; } catch { /* ignore */ }
-
-  // Offer a password once, on a first visit, before any trades exist. After
-  // that the sidebar button is the way in — nobody wants to be asked daily.
-  if (!declined && existing === null) {
-    showLockScreen({ journal: firstRunJournal(), onUnlock: afterUnlock });
-    return;
-  }
-
-  startApp(existing ?? firstRunJournal(), savePlaintextJournal);
+  // A journal written before accounts existed is offered to the first account
+  // created. The plaintext copy is only removed once the encrypted vault has
+  // been read back successfully — deleting it any earlier means a failure
+  // anywhere in between destroys the only copy.
+  const legacy = readLegacyJournal();
+  showLockScreen({
+    legacy,
+    onUnlock: async () => {
+      const ok = await startSession();
+      if (ok && legacy) clearLegacyJournal();
+    },
+  });
 }
 
 boot();

@@ -476,7 +476,10 @@ export const voiceActions = {
 /**
  * Publish the names the inline `onclick` attributes in index.html reference.
  * If you add an inline handler to the markup, add it here too.
-
+ *
+ * `extra` exists for handlers that belong to the boot layer rather than here —
+ * sign out has to stop the background timers, which only main.js knows about.
+ * Passing them in keeps this the single place that writes to `window`.
  */
 export function installActions(extra = {}) {
   Object.assign(window, {
