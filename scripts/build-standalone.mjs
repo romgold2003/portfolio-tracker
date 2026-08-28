@@ -22,6 +22,9 @@ const OUT_DIR = join(ROOT, 'dist');
 const OUT_FILE = join(OUT_DIR, 'portfolio-tracker.html');
 const TMP_BUNDLE = join(OUT_DIR, '.bundle.js');
 
+/** Pinned, so a new esbuild release can never change what this produces. */
+const ESBUILD_VERSION = 'esbuild@0.24.0';
+
 const CHART_URL = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
 
 const read = (relative) => readFile(join(ROOT, relative), 'utf8');
@@ -53,7 +56,7 @@ async function bundleApp() {
   const quote = (value) => (isWindows ? `"${value}"` : value);
   execFileSync(
     'npx',
-    ['--yes', 'esbuild', quote(join(ROOT, 'src/main.js')),
+    ['--yes', ESBUILD_VERSION, quote(join(ROOT, 'src/main.js')),
       '--bundle', '--format=iife', '--target=es2022', `--outfile=${quote(TMP_BUNDLE)}`],
     { stdio: ['ignore', 'ignore', 'inherit'], shell: isWindows },
   );

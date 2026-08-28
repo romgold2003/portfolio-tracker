@@ -1,0 +1,75 @@
+# Builds the single-file app and publishes it to GitHub Pages on every push.
+#
+# The site deliberately serves one bundled file rather than the twenty-odd
+# source modules. Each file is cached independently by the browser, so serving
+# them separately lets someone refresh at the wrong moment and get new HTML with
+# old JavaScript — a mix that can break the app until the cache expires. One
+# file cannot half-update: you have the old version or the new one.
+#
+# Positions are untouched by any of this. They live in each visitor's own
+# browser storage, which a code deploy cannot reach.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Lets a deploy be re-run by hand from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race. A queued one supersedes an older queued one, but
+# an in-flight deploy is allowed to finish rather than being cancelled halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build the single-file app
+        run: npm run build
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          # The bundled file becomes the site's index, so the URL serves exactly
+          # one resource.
+          cp dist/portfolio-tracker.html _site/index.html
+          # Offer the same file as a download for anyone who wants it offline.
+          cp dist/portfolio-tracker.html _site/portfolio-tracker.html
+          # Tell Pages not to run the files through Jekyll.
+          touch _site/.nojekyll
+
+      - name: Fail if the build produced something broken
+        run: |
+          test -s _site/index.html || { echo "index.html is empty"; exit 1; }
+          grep -q 'id="homePositions"' _site/index.html || { echo "app markup missing"; exit 1; }
+          grep -q 'sanitizePosition' _site/index.html || { echo "app code missing"; exit 1; }
+          if grep -q 'type="module"' _site/index.html; then echo "bundling did not inline the modules"; exit 1; fi
+          if grep -q 'cdnjs' _site/index.html; then echo "Chart.js was not inlined"; exit 1; fi
+          echo "OK: $(wc -c < _site/index.html) bytes, self-contained"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
