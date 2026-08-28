@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A local-first trading journal: positions, partial exits, live prices and monthly P&amp;L.">
+<title>Portfolio Tracker</title>
+
+<!-- Charting. Pinned to an exact version so a CDN release can never change the app. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" defer></script>
+
+<!-- Stylesheets are ordered by specificity: tokens, then base, layout, components. -->
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/layout.css">
+<link rel="stylesheet" href="styles/components.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="logo-area">
+      <div class="logo-name">Portfolio</div>
+      <div class="logo-tag">Trading journal</div>
+    </div>
+    <nav class="nav-links">
+      <button class="nl active" onclick="show('home')"><span class="nl-icon">⌂</span> Home</button>
+      <button class="nl" onclick="show('positions')"><span class="nl-icon">◈</span> Positions</button>
+      <button class="nl" onclick="show('add')"><span class="nl-icon">＋</span> New trade</button>
+      <button class="nl" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
+    </nav>
+    <div class="sidebar-bot">
+      <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
+      <button class="voice-btn" id="ibkrBtn" onclick="openIbkr()" style="margin-bottom:0"><span class="voice-icon">🏦</span><span id="ibkrBtnTxt">IBKR Connect</span></button>
+      <button class="settings-btn" onclick="openSettings()" style="margin-top:8px">⚙ Live price settings</button>
+      <button class="settings-btn" id="themeBtn" onclick="toggleTheme()" style="margin-top:6px">
+        <span id="themeIcon">☀</span> <span id="themeLabel">Light mode</span>
+      </button>
+      <div id="sideStat" style="margin-top:8px">Local only · no cloud</div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <div id="home" class="page active">
+      <div class="topbar">
+        <div class="greeting" id="greetTxt">Overview</div>
+        <div class="topbar-right">
+          <div class="live-pill" id="livePill"><span class="live-dot"></span><span id="livePillTxt">Live prices on</span></div>
+          <button class="topbar-btn" onclick="show('add')">+ New trade</button>
+        </div>
+      </div>
+      <div class="hero">
+        <div class="hero-top">
+          <div>
+            <div class="hero-label">Account value</div>
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <div class="hero-value" id="acctValue">$0</div>
+              <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Cash</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span id="cashDisplay" style="font-size:16px;font-weight:600;color:var(--text)">$0</span>
+                  <button onclick="editCash()" style="background:var(--blue-bg);border:0.5px solid var(--border-blue);border-radius:5px;padding:3px 9px;font-size:11px;color:var(--blue);cursor:pointer;font-family:inherit">Edit</button>
+                </div>
+              </div>
+              <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Today</div>
+                <div style="font-size:16px;font-weight:600" id="portfolioDailyPct">—</div>
+                <div style="font-size:12px;margin-top:2px" id="portfolioDailyAmt">—</div>
+              </div>
+            </div>
+            <div class="hero-pnl" id="acctPnl">+$0</div>
+            <div class="hero-pnl-sub" id="acctPnlSub">Total P&L</div>
+          </div>
+          <div class="tf-row" id="tfRow">
+            <div class="tf" data-tf="1W">1W</div>
+            <div class="tf" data-tf="1M">1M</div>
+            <div class="tf active" data-tf="3M">3M</div>
+            <div class="tf" data-tf="6M">6M</div>
+            <div class="tf" data-tf="1Y">1Y</div>
+            <div class="tf" data-tf="All">All</div>
+          </div>
+        </div>
+        <div class="curve-wrap"><canvas id="curve" role="img" aria-label="Account value over time">Account value curve.</canvas></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-lbl">Unrealised P&L</div><div class="kpi-val" id="kUnreal">+$0</div><div class="kpi-chg" id="kUnrealSub">0 open positions</div></div>
+        <div class="kpi"><div class="kpi-lbl"><span id="kRetLbl">3M</span> return</div><div class="kpi-val" id="kReturn">+0%</div><div class="kpi-chg">vs start of period</div></div>
+        <div class="kpi"><div class="kpi-lbl">Win rate</div><div class="kpi-val" id="kWinRate">0%</div><div class="kpi-chg" id="kWinSub">0W · 0L closed</div></div>
+      </div>
+      <div class="card">
+        <div class="card-lbl"><span>Open positions</span><span class="green" style="text-transform:none;letter-spacing:0">● updating live</span></div>
+        <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">
+          <button class="sort-btn active" id="sort-pnl" onclick="setSort('pnl')">P&L ↕</button>
+          <button class="sort-btn" id="sort-size" onclick="setSort('size')">Size ↓</button>
+          <button class="sort-btn" id="sort-dUp" onclick="setSort('dUp')">D% ↑ Best</button>
+          <button class="sort-btn" id="sort-dDown" onclick="setSort('dDown')">D% ↓ Worst</button>
+        </div>
+        <div id="homePositions"></div>
+      </div>
+    </div>
+
+    <div id="positions" class="page">
+      <div class="topbar">
+        <div class="greeting">Positions</div>
+        <div class="topbar-right">
+          <div class="live-pill" id="livePill2"><span class="live-dot"></span><span id="livePill2Txt">Live</span></div>
+          <button class="topbar-btn" onclick="refreshPrices()">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="summary-row">
+        <div class="sum"><div class="sum-lbl">Open P&L</div><div class="sum-val" id="sOpenPnl">+$0</div></div>
+        <div class="sum"><div class="sum-lbl">Open positions</div><div class="sum-val" id="sOpenCount">0</div></div>
+        <div class="sum"><div class="sum-lbl">Deployed</div><div class="sum-val" id="sDeployed">$0</div></div>
+        <div class="sum sum-beta"><div class="sum-lbl">Portfolio β</div><div class="sum-val amber" id="sBeta">—</div><div class="sum-sub">size-weighted</div></div>
+      </div>
+      <div class="section-title">Open — tap a row to expand</div>
+      <div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="sort-btn active" id="psort-pnl" onclick="setPosSort('pnl')">P&L ↕</button>
+        <button class="sort-btn" id="psort-size" onclick="setPosSort('size')">Size ↓</button>
+        <button class="sort-btn" id="psort-dUp" onclick="setPosSort('dUp')">D% ↑ Best</button>
+        <button class="sort-btn" id="psort-dDown" onclick="setPosSort('dDown')">D% ↓ Worst</button>
+      </div>
+      <div id="openPositions"></div>
+      <div class="section-title" style="margin-top:20px">Closed</div>
+      <div id="closedPositions"></div>
+    </div>
+
+    <div id="add" class="page">
+      <div class="topbar"><div class="greeting">New trade</div></div>
+      <div class="card form-card">
+        <div class="form-grid">
+          <div class="fg">
+            <label>Ticker</label>
+            <input type="text" id="f-ticker" placeholder="BTC, MSFT, GLD" oninput="checkTicker()">
+            <div class="ticker-status muted" id="tickerStatus"></div>
+          </div>
+          <div class="fg"><label>Asset class</label><select id="f-class"><option>Crypto</option><option>Stocks</option><option>Commodities</option></select></div>
+          <div class="fg">
+            <label>Direction</label>
+            <div class="dir-toggle">
+              <div class="dir-opt long-on" id="dirLong" onclick="setDir('Long')">Long</div>
+              <div class="dir-opt" id="dirShort" onclick="setDir('Short')">Short</div>
+            </div>
+          </div>
+          <div class="fg"><label>Date opened</label><input type="date" id="f-date"></div>
+          <div class="fg"><label>Entry price ($)</label><input type="number" id="f-entry" step="any" placeholder="0.00"></div>
+          <div class="fg"><label>Amount invested ($)</label><input type="number" id="f-amount" step="any" placeholder="1000"></div>
+          <div class="fg" style="grid-column:1/-1">
+            <label>Reason for entry</label>
+            <textarea id="f-reason" placeholder="Why are you entering this trade? Setup, thesis, key levels…" style="min-height:80px;resize:vertical;font-size:13px;padding:9px 11px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);font-family:inherit;width:100%;outline:none"></textarea>
+          </div>
+        </div>
+        <div class="hint">Quantity is calculated from amount ÷ entry price. Current price auto-fills live from the feed once saved.</div>
+        <div class="btn-row">
+          <button class="btn" onclick="clearForm()">Clear</button>
+          <button class="btn btn-blue" onclick="addPos()">Save trade</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="monthly" class="page">
+      <div class="topbar"><div class="greeting">Monthly P&L</div></div>
+
+      <!-- Chart card with year selector -->
+      <div class="card chart-card">
+        <div class="card-lbl">
+          <span>Realised P&L — all 12 months</span>
+          <select id="chartYear" onchange="renderMonthly()" style="width:auto;font-size:12px;padding:5px 8px;background:var(--input);border:0.5px solid var(--border2);border-radius:5px;color:var(--text)"></select>
+        </div>
+        <div class="chart-wrap2"><canvas id="monthChart" role="img" aria-label="Monthly realised profit and loss">Monthly P&L.</canvas></div>
+      </div>
+
+      <!-- Summary table -->
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+        <table>
+          <thead><tr><th>Month</th><th>Realised</th><th>Unrealised</th><th>Total P&L</th><th>Return %</th><th>Trades</th></tr></thead>
+          <tbody id="monthTable"></tbody>
+        </table>
+      </div>
+
+      <!-- History detail picker -->
+      <div class="card">
+        <div class="card-lbl" style="margin-bottom:14px">
+          <span>Trade history</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <select id="pickYear" onchange="populateMonthPicker();renderMonthDetail()" style="width:auto;font-size:12px;padding:5px 8px">
+            </select>
+            <select id="pickMonth" onchange="renderMonthDetail()" style="width:auto;font-size:12px;padding:5px 8px">
+              <option value="">— Select month —</option>
+            </select>
+          </div>
+        </div>
+        <div id="monthDetail"><div class="empty">Select a year and month above to see its trades</div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h3>Live price settings</h3>
+    <p>Crypto updates automatically with no key. For stocks and gold ETFs, paste your free Finnhub API key. It is stored only on this device and never sent anywhere except Finnhub.</p>
+    <div class="modal-field">
+      <label>Finnhub API key (for stocks / ETFs)</label>
+      <input type="text" id="apiKeyInput" placeholder="Paste your key here">
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-blue" onclick="saveApiKey()">Save key</button>
+    </div>
+
+    <div class="modal-section">
+      <label>Your journal</label>
+      <p style="margin-bottom:10px">Everything is stored in this browser only. Export a backup before clearing browser data, or to move the journal to another machine.</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="exportBackup()">↓ Export backup</button>
+        <button class="btn" onclick="openImport()">↑ Import backup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="importModal">
+  <div class="modal" style="width:520px">
+    <h3>Import a backup</h3>
+    <p>Choose a backup file, or paste its contents below. This <strong>replaces</strong> the journal currently in this browser, so export a backup first if there is anything here worth keeping.</p>
+    <div class="modal-field">
+      <label>Backup file</label>
+      <input type="file" id="importFile" accept="application/json,.json" onchange="readImportFile(this)">
+    </div>
+    <div class="modal-field">
+      <label>…or paste the JSON</label>
+      <textarea id="importText" placeholder='{"app":"portfolio-tracker", …}' oninput="previewImport()"
+        style="min-height:110px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:9px 11px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);width:100%;outline:none"></textarea>
+    </div>
+    <div id="importStatus" style="font-size:12px;margin-bottom:12px;min-height:18px"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeImport()">Cancel</button>
+      <button class="btn btn-blue" id="importConfirmBtn" onclick="confirmImport()" disabled style="opacity:0.4;cursor:not-allowed">Replace journal</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-bg" id="ibkrModal">
+  <div class="modal" style="width:520px">
+    <h3>🏦 Interactive Brokers — Read-only sync</h3>
+    <p>This connects to IBKR's Client Portal Gateway running locally on your computer. The app can only READ your positions — it cannot place orders, move money, or interact with your account in any way.</p>
+    <div id="ibkrSetupSteps" style="background:var(--panel2);border:0.5px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;line-height:1.8;color:var(--textmid)">
+      <div style="font-weight:600;color:var(--text);margin-bottom:8px">Setup (one time only):</div>
+      <div>1. Download the Client Portal Gateway from IBKR:<br>
+      <a href="https://www.interactivebrokers.com/en/trading/ib-api.php" target="_blank" style="color:var(--blue)">interactivebrokers.com → Trading → IBKR APIs → Client Portal</a></div>
+      <div style="margin-top:6px">2. Unzip and run: <code style="background:var(--input);padding:2px 6px;border-radius:3px;color:var(--green)">bin/run.sh</code> (Mac/Linux) or <code style="background:var(--input);padding:2px 6px;border-radius:3px;color:var(--green)">bin/run.bat</code> (Windows)</div>
+      <div style="margin-top:6px">3. Open <a href="https://localhost:5000" target="_blank" style="color:var(--blue)">https://localhost:5000</a> in Chrome → log in with your IBKR credentials</div>
+      <div style="margin-top:6px">4. Come back here and click Connect below</div>
+      <div style="margin-top:8px;padding:8px;background:var(--listen-bg);border:0.5px solid var(--amber-br);border-radius:6px;color:var(--amber);font-size:11px">⚠ When IBKR asks for permissions — select Read Only. Never grant order placement to a journaling app.</div>
+    </div>
+    <div class="modal-field">
+      <label>Gateway URL (default: https://localhost:5000)</label>
+      <input type="text" id="ibkrUrl" value="https://localhost:5000">
+    </div>
+    <div id="ibkrStatus" style="font-size:12px;margin-bottom:12px;min-height:18px"></div>
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-blue" onclick="connectIbkr()">Connect</button>
+        <button class="btn" onclick="disconnectIbkr()" id="ibkrDisconnectBtn" style="display:none">Disconnect</button>
+        <button class="btn" onclick="syncIbkr()" id="ibkrSyncBtn" style="display:none">↻ Sync now</button>
+      </div>
+      <button class="btn" onclick="closeIbkr()">Close</button>
+    </div>
+  </div>
+</div>
+<div class="voice-toast" id="voiceToast"></div>
+
+<!-- The app boots from one ES module; everything else is imported from there.
+     `defer` on Chart.js above guarantees it is defined before this runs. -->
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
