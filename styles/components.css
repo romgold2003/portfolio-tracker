@@ -150,3 +150,32 @@
 .recovery-warn{font-size:11px;color:var(--amber);margin-top:5px}
 .recovery-actions{display:flex;gap:8px;flex-shrink:0}
 body:has(.recovery-banner) .shell{padding-top:74px}
+
+/* Sign-in screen. Covers the app entirely until a profile is unlocked. */
+.lock-screen{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;
+  background:var(--bg);padding:24px;overflow-y:auto}
+.lock-card{background:var(--panel);border:0.5px solid var(--border);border-radius:14px;
+  padding:32px 34px;width:100%;max-width:420px;box-shadow:0 8px 40px var(--shadow)}
+.lock-title{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px}
+.lock-sub{font-size:13px;color:var(--text3);line-height:1.5;margin-bottom:22px}
+.lock-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.lock-field label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
+.lock-submit{width:100%;margin-top:6px;padding:12px;font-size:14px}
+.lock-submit:disabled{opacity:.6;cursor:wait}
+.lock-error{display:none;font-size:12px;color:var(--red);background:var(--red-bg);
+  border:0.5px solid var(--red-br);border-radius:6px;padding:9px 11px;margin-bottom:12px}
+.lock-links{display:flex;gap:14px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.lock-link{background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer;
+  font-family:inherit;padding:0;text-decoration:underline}
+.lock-note{font-size:12px;color:var(--textmid);background:var(--blue-bg);
+  border:0.5px solid var(--border-blue);border-radius:7px;padding:11px 13px;margin-bottom:18px;line-height:1.5}
+.lock-note-warn{background:var(--amber-bg);border-color:var(--amber-br);color:var(--amber)}
+.lock-key{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px;font-weight:600;
+  letter-spacing:0.06em;text-align:center;color:var(--green);background:var(--panel2);
+  border:0.5px solid var(--green-br);border-radius:8px;padding:16px 12px;word-break:break-all;line-height:1.6}
+.lock-check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--textmid);margin:16px 0 4px;cursor:pointer}
+.lock-check input{width:auto;margin:0}
+
+/* Signed-in identity + sign out, in the sidebar footer. */
+.account-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.account-email{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

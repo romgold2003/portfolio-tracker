@@ -3,12 +3,15 @@
  *
  * Several people can share one copy of the app on one machine, each with their
  * own journal that the others cannot read. There is no server and no network
- * call: a profile is a name, two wrapped copies of a data key, and an encrypted
- * blob, all in this browser's storage.
+ * call: an account is an email, two wrapped copies of a data key, and an
+ * encrypted blob, all in this browser's storage.
  *
- * The profile list itself is deliberately readable — names and salts are not
- * secrets, and the login screen has to show who exists before anyone has
- * proved anything.
+ * The email is an identifier only. Nothing is ever sent to it, and it is not
+ * verified — a local app has no way to send mail, which is also why a forgotten
+ * password is recovered with a recovery key rather than a reset link.
+ *
+ * The account list itself is deliberately readable: addresses and salts are not
+ * secrets, and the login screen has to work before anyone has proved anything.
  */
 import {
   generateDataKey, wrapDataKey, unwrapDataKey, encryptJson, decryptJson,
@@ -34,15 +37,32 @@ function writeJson(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+/**
+ * Emails are compared case-insensitively and without surrounding space, so
+ * "Romy@Example.com " and "romy@example.com" are the same account.
+ */
+export function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+/**
+ * Deliberately permissive. The address is an identifier here, not a channel —
+ * nothing is ever sent to it — so the only job is to catch a typo like a
+ * missing @, not to adjudicate what a valid address is.
+ */
+export function looksLikeEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
+}
+
 /** Public metadata for every profile. Contains nothing secret. */
 export function listProfiles() {
   const list = readJson(PROFILES_KEY, []);
   return Array.isArray(list) ? list : [];
 }
 
-export function profileExists(name) {
-  const wanted = String(name || '').trim().toLowerCase();
-  return listProfiles().some((p) => p.name.toLowerCase() === wanted);
+export function profileExists(email) {
+  const wanted = normalizeEmail(email);
+  return listProfiles().some((p) => p.email === wanted);
 }
 
 export function anyProfiles() {
@@ -61,11 +81,12 @@ function saveProfiles(list) {
  * password means the journal is unrecoverable, which is the price of having no
  * server to appeal to.
  */
-export async function createProfile(name, password, initialJournal = null) {
+export async function createProfile(email, password, initialJournal = null) {
   if (!cryptoAvailable()) throw new Error('This browser cannot encrypt (needs a secure context).');
-  const trimmed = String(name || '').trim();
-  if (!trimmed) throw new Error('Pick a name for the profile.');
-  if (profileExists(trimmed)) throw new Error('A profile with that name already exists.');
+  const address = normalizeEmail(email);
+  if (!address) throw new Error('Enter an email address.');
+  if (!looksLikeEmail(address)) throw new Error('That does not look like an email address.');
+  if (profileExists(address)) throw new Error('An account already exists for that email on this computer.');
   if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
 
   const recoveryKey = generateRecoveryKey();
@@ -73,16 +94,26 @@ export async function createProfile(name, password, initialJournal = null) {
 
   const profile = {
     id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
-    name: trimmed,
+    email: address,
     createdAt: new Date().toISOString(),
     password: await wrapDataKey(dataKey, password),
     recovery: await wrapDataKey(dataKey, normalizeRecoveryKey(recoveryKey)),
   };
 
   saveProfiles([...listProfiles(), profile]);
-  // A brand-new profile still needs a vault, so the app has something to load.
+  // A brand-new account still needs a vault, so the app has something to load.
   await writeVault(profile.id, dataKey, initialJournal ?? emptyJournal());
+
+  // Signing up signs you in. Without this the caller holds a profile it has no
+  // key for, and the very next readVault() reports the journal as corrupt.
+  session = { profile, dataKey };
   return { profile, recoveryKey };
+}
+
+/** Find an account by the address someone typed at the login screen. */
+export function findByEmail(email) {
+  const wanted = normalizeEmail(email);
+  return listProfiles().find((p) => p.email === wanted) ?? null;
 }
 
 export function emptyJournal() {
