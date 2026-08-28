@@ -10,30 +10,32 @@
  * people email to themselves, and a secret should not ride along.
  */
 import { STORAGE_KEYS } from '../config/constants.js';
-import { sanitizePositions } from '../core/store.js';
+import { sanitizePositions, loadState, flushNow, state } from '../core/store.js';
 
 const BACKUP_FORMAT = 1;
 
-/** Snapshot of every persisted key, read straight from storage. */
+/**
+ * Snapshot of the journal as the app currently holds it.
+ *
+ * Taken from memory rather than from storage: when the journal is encrypted,
+ * the plaintext keys this used to read are empty, and the export was a file
+ * with nothing in it.
+ */
 export function buildBackup() {
-  const read = (key, fallback) => {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw == null ? fallback : JSON.parse(raw);
-    } catch {
-      return fallback;
-    }
-  };
+  let priceLog = {};
+  try {
+    priceLog = JSON.parse(localStorage.getItem(STORAGE_KEYS.priceLog)) ?? {};
+  } catch { /* no history yet */ }
 
   return {
     app: 'portfolio-tracker',
     format: BACKUP_FORMAT,
     exportedAt: new Date().toISOString(),
     data: {
-      positions: read(STORAGE_KEYS.positions, []),
-      cash: parseFloat(localStorage.getItem(STORAGE_KEYS.cash)) || 0,
-      snapshots: read(STORAGE_KEYS.snapshots, []),
-      priceLog: read(STORAGE_KEYS.priceLog, {}),
+      positions: state.positions,
+      cash: state.cash,
+      snapshots: state.snapshots,
+      priceLog,
     },
   };
 }
@@ -98,15 +100,26 @@ export function describeBackup(data) {
 }
 
 /**
- * Overwrite the stored journal. The caller is responsible for confirming with
- * the user first — this replaces the book outright.
- *
- * Writes to storage rather than to the in-memory state so that the reload which
- * follows re-runs the normal boot path, including migrations.
+ * Overwrite the journal. The caller confirms with the user first — this
+ * replaces the book outright.
  */
-export function restoreBackup(data) {
-  localStorage.setItem(STORAGE_KEYS.positions, JSON.stringify(data.positions));
-  localStorage.setItem(STORAGE_KEYS.cash, String(data.cash));
-  localStorage.setItem(STORAGE_KEYS.snapshots, JSON.stringify(data.snapshots));
-  localStorage.setItem(STORAGE_KEYS.priceLog, JSON.stringify(data.priceLog));
+export async function restoreBackup(data) {
+  // The journal goes in through the same door as every other change, so it
+  // lands wherever the app is currently keeping it. Writing the plaintext keys
+  // directly, as this used to, put the import somewhere an encrypted session
+  // never reads: the app asked for a password again and then showed an empty
+  // book, with the imported data sitting unused beside the vault.
+  loadState({
+    positions: data.positions,
+    cash: data.cash,
+    snapshots: data.snapshots,
+    // A backup carries no API key on purpose, so keep the one already in use.
+    apiKey: state.apiKey,
+  });
+  await flushNow();
+
+  // The price log is public market data and lives outside the journal.
+  try {
+    localStorage.setItem(STORAGE_KEYS.priceLog, JSON.stringify(data.priceLog ?? {}));
+  } catch { /* history simply will not persist */ }
 }

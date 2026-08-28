@@ -29,7 +29,7 @@ import { renderAll, renderOnPageEnter, renderOnThemeChange } from './ui/render.j
 import { initFormDefaults } from './ui/views/addTrade.js';
 import { showLockScreen } from './ui/views/lockScreen.js';
 import { initVoice } from './features/voice.js';
-import { checkForRecoveredJournal } from './features/recoveryBanner.js';
+import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
 import { installActions, voiceActions, refreshPrices, setTimeframe } from './app/actions.js';
 
 /** Background loops, so they can be stopped on sign out. */
@@ -110,6 +110,7 @@ function boot() {
   initVoice(voiceActions);
   setPageEnterHandler(renderOnPageEnter);
   setThemeChangeHandler(renderOnThemeChange);
+  setRecoveryImportHandler(renderAll);
   initFormDefaults();
   wireTimeframeButtons();
 

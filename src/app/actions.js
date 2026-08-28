@@ -333,13 +333,18 @@ export function del(id) {
  * normal boot path — migrations included — instead of leaving the in-memory
  * state and storage briefly disagreeing.
  */
-export function confirmImport() {
+export async function confirmImport() {
   const data = stagedBackup();
   if (!data) return;
   if (!confirm(`Replace the journal in this browser with:\n\n${describeBackup(data)}\n\nThis cannot be undone.`)) return;
-  restoreBackup(data);
+
+  await restoreBackup(data);
   closeImport();
-  location.reload();
+  // Deliberately no reload. Reloading drops the key of an unlocked journal, so
+  // the import used to end at the sign-in screen and then an empty book.
+  renderAll();
+  updateLivePill();
+  alert(`Imported ${describeBackup(data)}`);
 }
 
 // ─── View state ──────────────────────────────────────────────────

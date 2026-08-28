@@ -12,6 +12,10 @@ import { parseBackup, describeBackup, restoreBackup } from './backup.js';
 import { state } from '../core/store.js';
 
 const ENDPOINT = '/__recover';
+
+/** Set at boot, so this module never has to import the render layer. */
+let onImported = () => {};
+export function setRecoveryImportHandler(fn) { onImported = fn; }
 /** Remembers which recovered backup was already taken, so it is offered once. */
 const SEEN_KEY = 'pt_recovered_seen';
 
@@ -66,11 +70,14 @@ function render(data, id) {
 
   document.body.prepend(banner);
 
-  document.getElementById('recoveryImport').addEventListener('click', () => {
+  document.getElementById('recoveryImport').addEventListener('click', async () => {
     if (!confirm(`Import this journal?\n\n${describeBackup(data)}\n\nThis replaces what is loaded here now.`)) return;
-    restoreBackup(data);
+    await restoreBackup(data);
     markImported(id);
-    location.reload();
+    dismiss();
+    // No reload: it would drop the key of an unlocked journal and land the user
+    // back at the sign-in screen looking at an empty book.
+    onImported();
   });
   document.getElementById('recoveryDismiss').addEventListener('click', dismiss);
 }
