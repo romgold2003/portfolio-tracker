@@ -219,6 +219,8 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 .bench-note{font-size:10px;color:var(--text4);margin-top:3px}
 
 /* Hide/show the money figures, beside the account value. */
+/* A button does not inherit `color`, so without this the glyph is painted black
+   — invisible on the dark theme. */
 .eye-btn{background:none;border:none;cursor:pointer;font-size:17px;line-height:1;padding:2px 4px;
-  opacity:.45;transition:opacity .15s;font-family:inherit;width:auto}
+  color:var(--text2);opacity:.45;transition:opacity .15s;font-family:inherit;width:auto}
 .eye-btn:hover{opacity:1}

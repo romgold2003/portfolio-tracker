@@ -18,7 +18,36 @@ export function recordDailySnapshot() {
 }
 
 export function daysForTimeframe(tf) {
+  if (tf === 'YTD') return daysSinceJanuaryFirst();
   return TIMEFRAME_DAYS[tf] ?? TIMEFRAME_DAYS['3M'];
+}
+
+function daysSinceJanuaryFirst() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  return Math.max(1, Math.round((now - start) / 86400000));
+}
+
+/**
+ * The date a timeframe begins.
+ *
+ * Every other window is "N days back from now". Year to date is a calendar
+ * boundary instead — the first of January, whatever that happens to be today —
+ * so counting days back would drift by one around midnight and around the turn
+ * of the year. The boundary is used directly.
+ *
+ * It is built in UTC because snapshot dates are plain `YYYY-MM-DD` strings,
+ * which `new Date()` parses as UTC midnight. A local-midnight boundary would sit
+ * a few hours *after* the 1st of January west of Greenwich, and quietly drop
+ * that day's point from the window.
+ */
+export function cutoffFor(timeframe) {
+  if (timeframe === 'YTD') {
+    return new Date(Date.UTC(new Date().getFullYear(), 0, 1));
+  }
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - daysForTimeframe(timeframe));
+  return cutoff;
 }
 
 /**
@@ -30,8 +59,7 @@ export function daysForTimeframe(tf) {
  */
 export function curveSeries(timeframe) {
   const days = daysForTimeframe(timeframe);
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
+  const cutoff = cutoffFor(timeframe);
 
   let points = state.snapshots.filter((s) => new Date(s.date) >= cutoff);
   const synthetic = points.length < 2;

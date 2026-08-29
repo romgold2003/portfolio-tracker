@@ -49,6 +49,7 @@ function commands() {
     timeframe(/\b(1m|one month|1 month|monthly chart)\b/, '1M'),
     timeframe(/\b(3m|three month|3 month)\b/, '3M'),
     timeframe(/\b(6m|six month|6 month)\b/, '6M'),
+    timeframe(/\b(ytd|year to date|this year)\b/, 'YTD'),
     timeframe(/\b(1y|one year|1 year|yearly|annual)\b/, '1Y'),
     timeframe(/\b(all|all time|full history)\b/, 'All'),
     { pattern: /\b(edit cash|update cash|set cash|change cash|cash balance)\b/, run: () => { app.show('home'); app.editCash(); } },

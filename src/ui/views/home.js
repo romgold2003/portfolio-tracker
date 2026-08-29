@@ -9,7 +9,7 @@ import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import { benchmarkSeries, benchmarkReturn, benchmarkKey } from '../../services/benchmark.js';
-import { daysForTimeframe } from '../../core/snapshots.js';
+import { cutoffFor } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -117,6 +117,14 @@ function renderDailyMove(totals) {
   pctEl.textContent = fp(move.percent);
   pctEl.style.color = clr(move.percent);
 
+  // Today's move in currency is masked with the rest: left visible it sits
+  // beside its own percentage, and the two together give the account size away.
+  if (hidden) {
+    amtEl.textContent = MASK;
+    amtEl.style.color = 'var(--text3)';
+    return;
+  }
+
   const notes = [];
   if (move.sold !== 0) notes.push(`incl. ${$s(+move.sold.toFixed(2))} sold`);
   if (move.pending > 0) notes.push(`${move.pending} pending`);
@@ -193,9 +201,7 @@ async function renderBenchmark(periodReturn) {
 function trackedSpan() {
   const snaps = state.snapshots;
   if (!snaps?.length) return null;
-  const days = daysForTimeframe(ui.timeframe);
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
+  const cutoff = cutoffFor(ui.timeframe);
   const inWindow = snaps.filter((s) => new Date(s.date) >= cutoff);
   const used = inWindow.length >= 2 ? inWindow : snaps;
   if (used.length < 2) return null;
