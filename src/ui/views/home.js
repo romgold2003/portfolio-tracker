@@ -218,41 +218,24 @@ function trackedSpan() {
  * The gain across the selected timeframe, under the account value.
  *
  * This follows the timeframe buttons rather than showing lifetime P&L, so
- * "1M" answers what the month did. Lifetime P&L has not gone anywhere — it
- * moved to the line beneath, where realised and unrealised already sat.
- *
- * The window is only as long as the history on file, so the label says what was
- * actually covered instead of implying a year of data that was never recorded.
+ * "1M" answers what the month did.
  */
-function renderPeriodGain(series, totals) {
+function renderPeriodGain(series) {
   const pnlEl = document.getElementById('acctPnl');
-  const subEl = document.getElementById('acctPnlSub');
-  if (!pnlEl || !subEl) return;
+  if (!pnlEl) return;
 
   if (!series) {
     pnlEl.textContent = '—';
     return;
   }
 
-  const { gain, returnPct, coveredDays, synthetic } = series;
+  const { gain, returnPct } = series;
   const arrow = gain >= 0 ? '▲ ' : '▼ ';
 
   pnlEl.innerHTML = hidden
     ? `<span style="color:var(--text3)">${MASK}</span>`
     : `${arrow}${$s(gain)} <span style="color:${clr(returnPct)}">(${fp(returnPct)})</span>`;
   pnlEl.style.color = hidden ? 'var(--text3)' : clr(gain);
-
-  // Say the true span when the requested window is longer than the record, and
-  // say so plainly when the curve is still the placeholder.
-  const requested = ui.timeframe;
-  const span = synthetic
-    ? 'not enough history yet — illustrative'
-    : `${requested} · ${coveredDays}d recorded`;
-
-  subEl.textContent = hidden
-    ? `${span} · Total P&L ${MASK} · Cash ${MASK}`
-    : `${span} · Total P&L ${$u(totals.total)} `
-      + `· Realised ${$u(totals.realised)} · Unrealised ${$u(totals.unrealised)} · Cash ${$u(state.cash)}`;
 }
 
 /** The live/partial pill shown on both the home and positions pages. */
@@ -305,7 +288,7 @@ export function renderHome() {
   setText('kReturn', fp(periodReturn));
   setColor('kReturn', clr(periodReturn));
 
-  renderPeriodGain(series, totals);
+  renderPeriodGain(series);
 
   // Needs the network, so it settles in after the rest of the page is drawn.
   renderBenchmark(periodReturn);
