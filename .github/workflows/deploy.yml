@@ -37,28 +37,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build the single-file app
-        run: npm run build
-
-      - name: Assemble the site
-        run: |
-          mkdir -p _site
-          # The bundled file becomes the site's index, so the URL serves exactly
-          # one resource.
-          cp dist/portfolio-tracker.html _site/index.html
-          # Offer the same file as a download for anyone who wants it offline.
-          cp dist/portfolio-tracker.html _site/portfolio-tracker.html
-          # Tell Pages not to run the files through Jekyll.
-          touch _site/.nojekyll
-
-      - name: Fail if the build produced something broken
-        run: |
-          test -s _site/index.html || { echo "index.html is empty"; exit 1; }
-          grep -q 'id="homePositions"' _site/index.html || { echo "app markup missing"; exit 1; }
-          grep -q 'sanitizePosition' _site/index.html || { echo "app code missing"; exit 1; }
-          if grep -q 'type="module"' _site/index.html; then echo "bundling did not inline the modules"; exit 1; fi
-          if grep -q 'cdnjs' _site/index.html; then echo "Chart.js was not inlined"; exit 1; fi
-          echo "OK: $(wc -c < _site/index.html) bytes, self-contained"
+      # Builds the bundle, then assembles and verifies _site. Vercel runs the
+      # very same command, so the two hosts cannot drift apart and a broken
+      # build fails identically on both.
+      - name: Build and assemble the site
+        run: npm run build:site
 
       - uses: actions/upload-pages-artifact@v3
         with:
