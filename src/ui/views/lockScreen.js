@@ -10,7 +10,7 @@
  */
 import {
   listProfiles, findByEmail, createProfile, unlockWithPassword,
-  unlockWithRecoveryKey, setPassword, looksLikeEmail,
+  unlockWithRecoveryKey, setPassword, looksLikeEmail, cloudMode,
 } from '../../core/profiles.js';
 import { cryptoAvailable } from '../../core/crypto.js';
 import { escapeHtml } from '../format.js';
@@ -57,7 +57,9 @@ function signinForm() {
   const accounts = listProfiles();
   return `
     <h1 class="lock-title">Sign in</h1>
-    <p class="lock-sub">Your journal is encrypted on this computer.</p>
+    <p class="lock-sub">${cloudMode()
+      ? 'Sign in from any device. Your journal is encrypted before it leaves this one.'
+      : 'Your journal is encrypted on this computer.'}</p>
     <div class="lock-field">
       <label for="lockEmail">Email</label>
       <input type="email" id="lockEmail" autocomplete="username" placeholder="you@example.com" value="${escapeHtml(pendingEmail)}">
@@ -70,14 +72,16 @@ function signinForm() {
     <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Sign in">Sign in</button>
     <div class="lock-links">
       <button class="lock-link" data-mode="create">Create an account</button>
-      ${accounts.length ? '<button class="lock-link" data-mode="recover">Forgot password</button>' : ''}
+      ${cloudMode() || accounts.length ? '<button class="lock-link" data-mode="recover">Forgot password</button>' : ''}
     </div>`;
 }
 
 function createForm() {
   return `
     <h1 class="lock-title">Create an account</h1>
-    <p class="lock-sub">Stays on this computer. Nothing is sent anywhere.</p>
+    <p class="lock-sub">${cloudMode()
+      ? 'Encrypted on this device before it is stored, so only your password opens it.'
+      : 'Stays on this computer. Nothing is sent anywhere.'}</p>
     ${migrationNotice()}
     <div class="lock-field">
       <label for="lockEmail">Email</label>
@@ -101,7 +105,9 @@ function createForm() {
 function recoverForm() {
   return `
     <h1 class="lock-title">Forgot password</h1>
-    <p class="lock-sub">There is no email reset — this app has no server. Use the recovery key you were given when you signed up.</p>
+    <p class="lock-sub">${cloudMode()
+      ? 'There is no email reset: the server cannot read your journal, so it cannot let you back in. Use the recovery key you saved at sign-up.'
+      : 'There is no email reset — this app has no server. Use the recovery key you were given when you signed up.'}</p>
     <div class="lock-field">
       <label for="lockEmail">Email</label>
       <input type="email" id="lockEmail" autocomplete="username" placeholder="you@example.com" value="${escapeHtml(pendingEmail)}">
@@ -284,7 +290,7 @@ async function doRecover() {
   const key = el('lockRecovery').value;
   const password = el('lockPassword').value;
   const profile = findByEmail(email);
-  if (!profile) throw new Error('No account on this computer for that email.');
+  if (!profile) throw new Error('Enter the email address on the account.');
   if (!password || password.length < 8) throw new Error('New password must be at least 8 characters.');
 
   busy(true, 'Checking key…');
@@ -313,8 +319,19 @@ async function finish() {
 export function showLockScreen({ onUnlock, legacy } = {}) {
   if (onUnlock) onUnlocked = onUnlock;
   legacyJournal = legacy ?? null;
-  // No accounts yet, or a journal waiting to be adopted: start on sign-up.
-  mode = (!listProfiles().length || legacyJournal) ? 'create' : 'signin';
+  /**
+   * No accounts yet, or a journal waiting to be adopted: start on sign-up.
+   *
+   * With a cloud behind the app, an empty browser says nothing about whether
+   * the person has an account — that lives on the server, and every new device
+   * starts out empty by definition. Defaulting to sign-up there would greet
+   * every returning user with a form for making a second account. So the only
+   * reason to open on sign-up in cloud mode is a local journal waiting to be
+   * taken over.
+   */
+  mode = (cloudMode() ? !!legacyJournal : (!listProfiles().length || legacyJournal))
+    ? 'create'
+    : 'signin';
   issuedRecoveryKey = null;
   render();
 }

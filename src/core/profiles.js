@@ -16,13 +16,54 @@
 import {
   generateDataKey, wrapDataKey, unwrapDataKey, encryptJson, decryptJson,
   generateRecoveryKey, normalizeRecoveryKey, cryptoAvailable,
+  generateAuthSalt, deriveAuthSecret, toBase64, fromBase64,
 } from './crypto.js';
+import * as cloud from '../services/cloud.js';
 
 const PROFILES_KEY = 'pt_profiles';
 const VAULT_PREFIX = 'pt_vault_';
 
 /** Set only while a profile is unlocked. Never persisted. */
 let session = null;
+
+/**
+ * When this deployment is cloud-backed, the journal lives on the server and the
+ * same account opens on any device. The functions below keep their signatures
+ * either way, so the sign-in screen and the boot sequence do not have to know
+ * which mode they are in — only this module does.
+ */
+function inCloud() {
+  return cloud.cloudEnabled();
+}
+
+/**
+ * The data key, held for the life of the tab.
+ *
+ * It cannot be recomputed without the password, so without this a refresh would
+ * throw the user back to the sign-in screen even though their session cookie is
+ * still perfectly valid. sessionStorage is the right shelf for it: cleared when
+ * the tab closes, never shared with another tab's origin, and never written to
+ * disk the way localStorage is. Closing the browser still means typing the
+ * password again, which is the intended trade.
+ */
+const KEY_CACHE = 'pt_session_key';
+
+function cacheDataKey(dataKey) {
+  try { sessionStorage.setItem(KEY_CACHE, toBase64(dataKey)); } catch { /* private mode */ }
+}
+
+function cachedDataKey() {
+  try {
+    const raw = sessionStorage.getItem(KEY_CACHE);
+    return raw ? fromBase64(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function dropCachedDataKey() {
+  try { sessionStorage.removeItem(KEY_CACHE); } catch { /* nothing to drop */ }
+}
 
 function readJson(key, fallback) {
   try {
@@ -86,8 +127,11 @@ export async function createProfile(email, password, initialJournal = null) {
   const address = normalizeEmail(email);
   if (!address) throw new Error('Enter an email address.');
   if (!looksLikeEmail(address)) throw new Error('That does not look like an email address.');
-  if (profileExists(address)) throw new Error('An account already exists for that email on this computer.');
   if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
+
+  if (inCloud()) return createCloudProfile(address, password, initialJournal);
+
+  if (profileExists(address)) throw new Error('An account already exists for that email on this computer.');
 
   const recoveryKey = generateRecoveryKey();
   const dataKey = generateDataKey();
@@ -110,10 +154,60 @@ export async function createProfile(email, password, initialJournal = null) {
   return { profile, recoveryKey };
 }
 
-/** Find an account by the address someone typed at the login screen. */
+/**
+ * Everything a cloud sign-up does, in the order it has to happen.
+ *
+ * The data key is generated here and wrapped here. What travels is two wrappers
+ * the server cannot open, two secrets derived under salts used for nothing else,
+ * and the journal already encrypted. If this function is ever changed to send
+ * the password or the data key, the encryption stops meaning anything.
+ */
+async function createCloudProfile(address, password, initialJournal) {
+  const recoveryKey = generateRecoveryKey();
+  const normalizedRecovery = normalizeRecoveryKey(recoveryKey);
+  const dataKey = generateDataKey();
+  const authSalt = generateAuthSalt();
+  const recoverySalt = generateAuthSalt();
+
+  let response;
+  try {
+    response = await cloud.signup({
+      email: address,
+      authSalt,
+      recoverySalt,
+      authSecret: await deriveAuthSecret(password, authSalt),
+      recoverySecret: await deriveAuthSecret(normalizedRecovery, recoverySalt),
+      passwordWrapper: await wrapDataKey(dataKey, password),
+      recoveryWrapper: await wrapDataKey(dataKey, normalizedRecovery),
+      vault: await encryptJson(initialJournal ?? emptyJournal(), dataKey),
+    });
+  } catch (err) {
+    throw new Error(err.status === 409
+      ? 'An account already exists for that email.'
+      : err.message);
+  }
+
+  session = { profile: response.user, dataKey, version: response.vaultVersion };
+  cacheDataKey(dataKey);
+  return { profile: response.user, recoveryKey };
+}
+
+/**
+ * Find an account by the address someone typed at the login screen.
+ *
+ * In cloud mode there is no local list to search and asking the server would
+ * leak which addresses have accounts, so a stub is returned and the address is
+ * proved or disproved by the sign-in attempt itself.
+ */
 export function findByEmail(email) {
   const wanted = normalizeEmail(email);
+  if (inCloud()) return wanted ? { id: wanted, email: wanted } : null;
   return listProfiles().find((p) => p.email === wanted) ?? null;
+}
+
+/** True when accounts live on a server rather than in this browser. */
+export function cloudMode() {
+  return inCloud();
 }
 
 export function emptyJournal() {
@@ -122,6 +216,7 @@ export function emptyJournal() {
 
 /** Try a password. Returns the profile and data key, or null. */
 export async function unlockWithPassword(id, password) {
+  if (inCloud()) return unlockFromCloud(id, password, 'password');
   const profile = listProfiles().find((p) => p.id === id);
   if (!profile) return null;
   const dataKey = await unwrapDataKey(profile.password, password);
@@ -132,11 +227,93 @@ export async function unlockWithPassword(id, password) {
 
 /** Try a recovery key. Accepts any spacing or casing the user typed. */
 export async function unlockWithRecoveryKey(id, recoveryKey) {
+  if (inCloud()) return unlockFromCloud(id, normalizeRecoveryKey(recoveryKey), 'recovery');
   const profile = listProfiles().find((p) => p.id === id);
   if (!profile) return null;
   const dataKey = await unwrapDataKey(profile.recovery, normalizeRecoveryKey(recoveryKey));
   if (!dataKey) return null;
   session = { profile, dataKey };
+  return session;
+}
+
+/**
+ * Sign in against the server, then open the vault here.
+ *
+ * Two steps, and the split is the interesting part. The server decides whether
+ * to hand over the ciphertext — that is what the derived secret proves — but it
+ * is this side, with the secret the user actually typed, that turns the wrapper
+ * into a data key. A server that answered "yes" to everything would still not
+ * be able to produce a readable journal.
+ *
+ * Returns null for a wrong secret, matching the local path, so the sign-in
+ * screen shows the same message however the app is deployed.
+ */
+async function unlockFromCloud(email, secret, kind) {
+  const salts = await cloud.begin(email);
+  const salt = kind === 'recovery' ? salts.recoverySalt : salts.authSalt;
+  const derived = await deriveAuthSecret(secret, salt);
+
+  let response;
+  try {
+    response = kind === 'recovery'
+      ? await cloud.recover(email, derived)
+      : await cloud.login(email, derived);
+  } catch (err) {
+    if (err.status === 401) return null;
+    throw err;
+  }
+
+  const wrapper = kind === 'recovery'
+    ? response.user.recoveryWrapper
+    : response.user.passwordWrapper;
+  const dataKey = await unwrapDataKey(wrapper, secret);
+  // The server accepted the secret but the wrapper will not open with it, which
+  // should be impossible. Failing closed beats loading an empty journal over a
+  // real one.
+  if (!dataKey) return null;
+
+  session = {
+    profile: response.user,
+    dataKey,
+    version: response.vaultVersion ?? 0,
+    blob: response.vault ?? null,
+  };
+  cacheDataKey(dataKey);
+  return session;
+}
+
+/**
+ * Pick up a session the cookie says is still valid.
+ *
+ * Called at boot. The cookie proves who you are but carries no data key, so
+ * this only succeeds while the tab's cached key is still around — otherwise the
+ * password is needed again, which is the correct outcome and not a bug.
+ */
+export async function resumeCloudSession() {
+  if (!inCloud()) return null;
+  const dataKey = cachedDataKey();
+  if (!dataKey) return null;
+
+  let response;
+  try {
+    response = await cloud.currentSession();
+  } catch {
+    return null;
+  }
+  if (!response?.user) { dropCachedDataKey(); return null; }
+
+  // Prove the cached key actually opens this vault before trusting it.
+  if (response.vault && !await decryptJson(response.vault, dataKey)) {
+    dropCachedDataKey();
+    return null;
+  }
+
+  session = {
+    profile: response.user,
+    dataKey,
+    version: response.vaultVersion ?? 0,
+    blob: response.vault ?? null,
+  };
   return session;
 }
 
@@ -147,6 +324,21 @@ export async function unlockWithRecoveryKey(id, recoveryKey) {
 export async function setPassword(newPassword) {
   if (!session) throw new Error('No profile is unlocked.');
   if (!newPassword || newPassword.length < 8) throw new Error('Password must be at least 8 characters.');
+
+  if (inCloud()) {
+    const authSalt = generateAuthSalt();
+    await cloud.changePassword({
+      authSalt,
+      authSecret: await deriveAuthSecret(newPassword, authSalt),
+      passwordWrapper: await wrapDataKey(session.dataKey, newPassword),
+    });
+    session.profile = {
+      ...session.profile,
+      passwordWrapper: await wrapDataKey(session.dataKey, newPassword),
+    };
+    return;
+  }
+
   const list = listProfiles();
   const profile = list.find((p) => p.id === session.profile.id);
   if (!profile) throw new Error('That profile no longer exists.');
@@ -174,14 +366,26 @@ export function isUnlocked() {
   return !!session;
 }
 
-/** Drop the data key. Everything on disk stays encrypted. */
+/**
+ * Drop the data key. Everything stored stays encrypted.
+ *
+ * In cloud mode the server session is ended too, and the cached key goes first
+ * — if the network call fails, the key must still be gone from this browser.
+ */
 export function lock() {
+  const wasCloud = inCloud() && session;
   session = null;
+  dropCachedDataKey();
+  if (wasCloud) cloud.logout().catch(() => { /* the local key is already gone */ });
 }
 
 /** Decrypt this profile's journal. Null means the vault is missing or corrupt. */
 export async function readVault() {
   if (!session) return null;
+  if (inCloud()) {
+    if (!session.blob) return emptyJournal();
+    return decryptJson(session.blob, session.dataKey);
+  }
   const sealed = readJson(VAULT_PREFIX + session.profile.id, null);
   if (!sealed) return emptyJournal();
   return decryptJson(sealed, session.dataKey);
@@ -195,8 +399,39 @@ async function writeVault(profileId, dataKey, journal) {
 /** Encrypt and persist the whole journal for the unlocked profile. */
 export async function saveVault(journal) {
   if (!session) return false;
+  if (inCloud()) return saveVaultToCloud(journal);
   await writeVault(session.profile.id, session.dataKey, journal);
   return true;
+}
+
+/**
+ * Push the journal to the server.
+ *
+ * A refused save means another device saved since this one loaded. The server
+ * cannot merge — it cannot read either version — so the choice is made here,
+ * and it is deliberately the cautious one: the newer version wins and this
+ * device reloads it, rather than this device's copy overwriting trades entered
+ * somewhere else. Throwing tells the caller the save did not happen.
+ */
+async function saveVaultToCloud(journal) {
+  const blob = await encryptJson(journal, session.dataKey);
+  const result = await cloud.putVault(blob, session.version);
+
+  if (result.ok) {
+    session.blob = blob;
+    session.version = result.version;
+    return true;
+  }
+
+  if (result.conflict) {
+    session.blob = result.vault;
+    session.version = result.version;
+    throw Object.assign(
+      new Error('Your journal was changed on another device. Reload to see the newer version.'),
+      { conflict: true },
+    );
+  }
+  return false;
 }
 
 /**

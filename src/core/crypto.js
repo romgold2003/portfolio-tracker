@@ -142,6 +142,50 @@ export async function decryptJson(sealed, dataKey) {
 }
 
 /**
+ * Proving who you are to a server that must never learn your password.
+ *
+ * The password does two unrelated jobs once there is a cloud involved: it opens
+ * the data key here on the device, and it convinces the server to hand over the
+ * ciphertext. Sending the password itself would collapse the two — the server
+ * would then hold everything needed to read the journal, and the encryption
+ * would be decoration.
+ *
+ * So a second value is derived from the same password under its own salt, and
+ * that is what travels. It is one-way: the auth secret cannot be turned back
+ * into the password, and knowing it does not help unwrap the data key, because
+ * that derivation used a different salt entirely. The server stores only a
+ * scrypt hash of it.
+ *
+ * Both derivations pay the full 310,000 iterations, so the work is doubled at
+ * sign-in — about two seconds. That is the price of the server being unable to
+ * read anything, and it is worth it.
+ */
+export function generateAuthSalt() {
+  return toBase64(randomBytes(SALT_BYTES));
+}
+
+export async function deriveAuthSecret(password, authSalt) {
+  const material = await subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: fromBase64(authSalt),
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    material,
+    256,
+  );
+  return toBase64(new Uint8Array(bits));
+}
+
+/**
  * A recovery key the user has to be able to copy off a screen and type back in.
  *
  * Crockford's base32 alphabet: no I, L, O or U, so there is no confusing 0 with

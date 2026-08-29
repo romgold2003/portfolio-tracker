@@ -30,3 +30,7 @@ desktop.ini
 
 # Assembled deploy output (built by npm run build:site)
 _site/
+.dev-cloud.db
+.dev-cloud.db-journal
+.env*.local
+.vercel

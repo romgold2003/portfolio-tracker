@@ -17,8 +17,9 @@ import {
   readLegacyJournal, clearLegacyJournal,
 } from './core/store.js';
 import {
-  readVault, saveVault, lock, currentProfile, isUnlocked,
+  readVault, saveVault, lock, currentProfile, isUnlocked, resumeCloudSession,
 } from './core/profiles.js';
+import { detectCloud } from './services/cloud.js';
 import { runMigrations } from './core/migrations.js';
 import { recordDailySnapshot } from './core/snapshots.js';
 import { loadPriceLog } from './services/priceLog.js';
@@ -106,7 +107,7 @@ async function startSession() {
   return true;
 }
 
-function boot() {
+async function boot() {
   initTheme();
 
   installActions({ signOut });
@@ -123,6 +124,17 @@ function boot() {
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && isUnlocked()) flushNow();
   });
+
+  // Is there a server behind this copy of the app? Asked once, before anything
+  // is drawn, because it decides whether accounts live on this machine or in
+  // the cloud — and the sign-in screen has to say which.
+  await detectCloud();
+
+  // A cookie from last time means the account is known; the data key is only
+  // still around if this is the same tab. When it is, skip the sign-in screen.
+  if (await resumeCloudSession()) {
+    if (await startSession()) return;
+  }
 
   // A journal written before accounts existed is offered to the first account
   // created. The plaintext copy is only removed once the encrypted vault has
