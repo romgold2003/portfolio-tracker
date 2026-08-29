@@ -185,6 +185,27 @@ async function run() {
   ok('and it is the right journal',
     (await decryptJson(recovered.body.vault, viaRecovery))?.cash === 999);
 
+  console.log('\nDELETE ACCOUNT');
+  const wrongPw = await phone.call('/api/account', {
+    method: 'POST',
+    body: { authSecret: await deriveAuthSecret('not the password', salts.body.authSalt) },
+  });
+  ok('wrong password will not delete (401)', wrongPw.status === 401, `got ${wrongPw.status}`);
+  ok('journal survived the attempt', (await phone.call('/api/vault')).status === 200);
+
+  const removed = await phone.call('/api/account', {
+    method: 'POST',
+    body: { authSecret: await deriveAuthSecret(PASSWORD, salts.body.authSalt) },
+  });
+  ok('right password deletes it (200)', removed.status === 200, `got ${removed.status}`);
+  ok('journal is gone (401)', (await phone.call('/api/vault')).status === 401);
+
+  const reused = await device('fresh').call('/api/auth/login', {
+    method: 'POST',
+    body: { email: EMAIL, authSecret: await deriveAuthSecret(PASSWORD, salts.body.authSalt) },
+  });
+  ok('the account no longer exists (401)', reused.status === 401, `got ${reused.status}`);
+
   console.log('\nCROSS-ORIGIN');
   const evil = await fetch(`${BASE}/api/vault`, {
     method: 'PUT',

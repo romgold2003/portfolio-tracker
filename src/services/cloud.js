@@ -93,6 +93,11 @@ export function currentSession() {
   return request('/auth/session');
 }
 
+/** Irreversible. The caller is responsible for having asked twice. */
+export function deleteAccount(authSecret) {
+  return request('/account', { method: 'POST', body: { authSecret } });
+}
+
 export function logout() {
   return request('/auth/logout', { method: 'POST' });
 }

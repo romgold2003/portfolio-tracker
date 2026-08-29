@@ -25,6 +25,7 @@ import vaultRoute from '../api/vault.js';
 import recover from '../api/auth/recover.js';
 import changePassword from '../api/auth/password.js';
 import config from '../api/config.js';
+import deleteAccount from '../api/account.js';
 
 import {
   generateDataKey, wrapDataKey, unwrapDataKey, encryptJson, decryptJson,
@@ -614,5 +615,117 @@ describe('a database that is present but broken', () => {
     const res = await makeClient().call(config, { method: 'GET' });
     assert.equal(res.body.cloud, false);
     assert.ok(calls > 0, 'the health check never ran a query at all');
+  });
+});
+
+describe('deleting an account', () => {
+  test('a live session alone is not enough', async () => {
+    const client = makeClient();
+    const { body } = await enrol('the real password');
+    await client_signup(client, 'romy@example.com', body);
+
+    // Signed in, but does not know the password — a borrowed laptop.
+    const res = await client.call(deleteAccount, {
+      method: 'POST',
+      body: { authSecret: await deriveAuthSecret('a guess', body.authSalt) },
+    });
+    assert.equal(res.status, 401, 'a wrong password must not delete anything');
+
+    const survived = await client.call(vaultRoute, { method: 'GET' });
+    assert.equal(survived.status, 200, 'the journal must still be there');
+  });
+
+  test('and neither is no password at all', async () => {
+    const client = makeClient();
+    const { body } = await enrol('pw');
+    await client_signup(client, 'romy@example.com', body);
+
+    const res = await client.call(deleteAccount, { method: 'POST', body: {} });
+    assert.equal(res.status, 400);
+    assert.equal((await client.call(vaultRoute, { method: 'GET' })).status, 200);
+  });
+
+  test('the right password erases the account, the journal and every session', async () => {
+    const password = 'the real password';
+    const laptop = makeClient();
+    const { body } = await enrol(password);
+    await client_signup(laptop, 'romy@example.com', body);
+
+    // A second device is signed in at the same time.
+    const phone = makeClient({ 'x-forwarded-for': '10.9.9.9' });
+    const salts = await phone.call(begin, { method: 'POST', body: { email: 'romy@example.com' } });
+    await phone.call(login, {
+      method: 'POST',
+      body: {
+        email: 'romy@example.com',
+        authSecret: await deriveAuthSecret(password, salts.body.authSalt),
+      },
+    });
+
+    const gone = await laptop.call(deleteAccount, {
+      method: 'POST',
+      body: { authSecret: await deriveAuthSecret(password, body.authSalt) },
+    });
+    assert.equal(gone.status, 200);
+    assert.equal(gone.body.deleted, true);
+
+    assert.equal((await db.query('SELECT * FROM users', [])).rows.length, 0, 'user row remains');
+    assert.equal((await db.query('SELECT * FROM vaults', [])).rows.length, 0, 'journal remains');
+    assert.equal((await db.query('SELECT * FROM sessions', [])).rows.length, 0, 'sessions remain');
+
+    // The other device must not still be able to read a deleted journal.
+    assert.equal((await phone.call(vaultRoute, { method: 'GET' })).status, 401);
+  });
+
+  test('the email can be used again afterwards', async () => {
+    const password = 'first time';
+    const client = makeClient();
+    const first = await enrol(password);
+    await client_signup(client, 'romy@example.com', first.body);
+    await client.call(deleteAccount, {
+      method: 'POST',
+      body: { authSecret: await deriveAuthSecret(password, first.body.authSalt) },
+    });
+
+    const second = await enrol('second time');
+    const res = await makeClient().call(signup, {
+      method: 'POST', body: { email: 'romy@example.com', ...second.body },
+    });
+    assert.equal(res.status, 201, 'a deleted address must be free again');
+  });
+
+  test('is refused when not signed in, and cross-origin', async () => {
+    const client = makeClient();
+    const { body } = await enrol('pw');
+    await client_signup(client, 'romy@example.com', body);
+    const secret = await deriveAuthSecret('pw', body.authSalt);
+
+    const anon = await makeClient().call(deleteAccount, {
+      method: 'POST', body: { authSecret: secret },
+    });
+    assert.equal(anon.status, 401);
+
+    const evil = await client.call(deleteAccount, {
+      method: 'POST',
+      body: { authSecret: secret },
+      headers: { origin: 'https://evil.example' },
+    });
+    assert.equal(evil.status, 403);
+
+    assert.equal((await client.call(vaultRoute, { method: 'GET' })).status, 200);
+  });
+
+  test('guessing the password through it is rate limited', async () => {
+    const client = makeClient();
+    const { body } = await enrol('right');
+    await client_signup(client, 'romy@example.com', body);
+    const wrong = await deriveAuthSecret('wrong', body.authSalt);
+
+    let sawLimit = false;
+    for (let i = 0; i < 9; i++) {
+      const res = await client.call(deleteAccount, { method: 'POST', body: { authSecret: wrong } });
+      if (res.status === 429) { sawLimit = true; break; }
+    }
+    assert.ok(sawLimit, 'deletion was an unlimited password oracle');
   });
 });

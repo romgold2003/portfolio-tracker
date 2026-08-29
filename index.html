@@ -232,10 +232,27 @@
 
     <div class="modal-section">
       <label>Your journal</label>
-      <p style="margin-bottom:10px">Everything is stored in this browser only. Export a backup before clearing browser data, or to move the journal to another machine.</p>
+      <p style="margin-bottom:10px" id="journalBlurb">Everything is stored in this browser only. Export a backup before clearing browser data, or to move the journal to another machine.</p>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="exportBackup()">↓ Export backup</button>
         <button class="btn" onclick="openImport()">↑ Import backup</button>
+      </div>
+    </div>
+
+    <div class="modal-field danger-zone">
+      <label>Delete this account</label>
+      <p id="deleteBlurb" style="margin-bottom:10px">Removes the account and everything in it. This cannot be undone.</p>
+      <button class="btn btn-danger" id="deleteAccountBtn" onclick="beginDeleteAccount()">Delete account</button>
+
+      <div id="deleteConfirm" style="display:none;margin-top:12px">
+        <p style="margin-bottom:10px"><strong>Export a backup first if you might want this journal again.</strong> Nobody can restore it afterwards — the journal is encrypted with a key derived from your password, and no readable copy exists anywhere.</p>
+        <label for="deletePassword">Type your password to confirm</label>
+        <input type="password" id="deletePassword" autocomplete="current-password" placeholder="Your password">
+        <div id="deleteError" class="lock-error"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn" onclick="cancelDeleteAccount()">Cancel</button>
+          <button class="btn btn-danger" id="deleteConfirmBtn" onclick="confirmDeleteAccount()">Delete it permanently</button>
+        </div>
       </div>
     </div>
   </div>

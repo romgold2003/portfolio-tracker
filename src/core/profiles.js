@@ -443,3 +443,40 @@ export function deleteProfile(id) {
   try { localStorage.removeItem(VAULT_PREFIX + id); } catch { /* already gone */ }
   if (session && session.profile.id === id) lock();
 }
+
+/**
+ * Delete the account that is currently open, wherever it lives.
+ *
+ * The password is required again rather than relying on the open session. This
+ * is the only action in the app that destroys data nothing can restore: there
+ * is no copy on the server that anyone can read, so a mistake here is final.
+ *
+ * Throws with a readable message on a wrong password, so the caller can say so
+ * without deleting anything.
+ */
+export async function deleteCurrentAccount(password) {
+  if (!session) throw new Error('No account is open.');
+  if (!password) throw new Error('Enter your password to confirm.');
+
+  if (inCloud()) {
+    const email = session.profile.email;
+    const { authSalt } = await cloud.begin(email);
+    try {
+      await cloud.deleteAccount(await deriveAuthSecret(password, authSalt));
+    } catch (err) {
+      throw new Error(err.status === 401 ? 'That password is not right.' : err.message);
+    }
+    session = null;
+    dropCachedDataKey();
+    return;
+  }
+
+  // Locally the password has to be checked here, since there is no server to
+  // ask — and it must be checked before anything is removed.
+  const profile = listProfiles().find((p) => p.id === session.profile.id);
+  if (!profile) throw new Error('That account no longer exists.');
+  if (!await unwrapDataKey(profile.password, password)) {
+    throw new Error('That password is not right.');
+  }
+  deleteProfile(profile.id);
+}

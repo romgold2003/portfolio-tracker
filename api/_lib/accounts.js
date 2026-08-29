@@ -205,6 +205,23 @@ export function endAllSessions(userId) {
   return query('DELETE FROM sessions WHERE user_id = $1', [userId]);
 }
 
+/**
+ * Erase an account and everything attached to it.
+ *
+ * Sessions go first. If the process dies halfway, the survivable state is an
+ * account nobody is signed into — not a deleted journal that live sessions are
+ * still writing to.
+ *
+ * There is no soft delete and no grace period. Someone asking to be forgotten
+ * by an app that holds their trading record means it, and a row marked
+ * `deleted = true` is still the row.
+ */
+export async function deleteUser(userId) {
+  await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+  await query('DELETE FROM vaults WHERE user_id = $1', [userId]);
+  await query('DELETE FROM users WHERE id = $1', [userId]);
+}
+
 export function readVault(userId) {
   return one('SELECT iv, ct, version, updated_at FROM vaults WHERE user_id = $1', [userId]);
 }

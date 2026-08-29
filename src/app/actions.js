@@ -25,6 +25,7 @@ import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js'
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
 import { openSettings, closeSettings, readApiKeyInput, readBenchKeyInput } from '../ui/views/settings.js';
+import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
   setDirection, readTradeForm, clearTradeForm, setTickerStatus, applyTickerLookup,
@@ -491,6 +492,7 @@ export const voiceActions = {
  * Passing them in keeps this the single place that writes to `window`.
  */
 export function installActions(extra = {}) {
+  if (extra.signOut) signOutAfterDelete = extra.signOut;
   Object.assign(window, {
     // navigation & chrome
     show, toggleTheme, toggleVoice, toggleAmounts,
@@ -509,6 +511,69 @@ export function installActions(extra = {}) {
     // backup & restore
     exportBackup, openImport, closeImport, previewImport, readImportFile, confirmImport,
     copyLegacySnippet,
+    // account deletion
+    beginDeleteAccount, cancelDeleteAccount, confirmDeleteAccount,
     ...extra,
   });
 }
+
+/**
+ * Deleting the account. Two steps on purpose.
+ *
+ * The button only reveals the confirmation; the destructive call needs the
+ * password typed in afterwards. Nothing here is recoverable, so a mis-click
+ * must not be enough on its own.
+ */
+export function beginDeleteAccount() {
+  const panel = document.getElementById('deleteConfirm');
+  const button = document.getElementById('deleteAccountBtn');
+  if (!panel || !button) return;
+  panel.style.display = 'block';
+  button.style.display = 'none';
+  const box = document.getElementById('deleteError');
+  if (box) { box.textContent = ''; box.style.display = 'none'; }
+  document.getElementById('deletePassword')?.focus();
+}
+
+export function cancelDeleteAccount() {
+  const panel = document.getElementById('deleteConfirm');
+  const button = document.getElementById('deleteAccountBtn');
+  if (panel) panel.style.display = 'none';
+  if (button) button.style.display = '';
+  const field = document.getElementById('deletePassword');
+  if (field) field.value = '';
+}
+
+export async function confirmDeleteAccount() {
+  const field = document.getElementById('deletePassword');
+  const box = document.getElementById('deleteError');
+  const button = document.getElementById('deleteConfirmBtn');
+  const showError = (message) => {
+    if (!box) return;
+    box.textContent = message;
+    box.style.display = message ? 'block' : 'none';
+  };
+
+  showError('');
+  if (!field?.value) { showError('Enter your password to confirm.'); return; }
+
+  if (button) { button.disabled = true; button.textContent = 'Deleting…'; }
+  try {
+    await deleteCurrentAccount(field.value);
+  } catch (err) {
+    showError(err.message || 'Could not delete the account.');
+    if (button) { button.disabled = false; button.textContent = 'Delete it permanently'; }
+    return;
+  }
+
+  // The account is gone. Everything still on screen belongs to it, so the app
+  // is torn down rather than left showing a journal that no longer exists.
+  field.value = '';
+  closeSettings();
+  cancelDeleteAccount();
+  if (button) { button.disabled = false; button.textContent = 'Delete it permanently'; }
+  await signOutAfterDelete();
+}
+
+/** Filled in by installActions(), because only main.js can stop the timers. */
+let signOutAfterDelete = async () => window.location.reload();

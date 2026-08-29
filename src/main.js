@@ -30,6 +30,7 @@ import { renderAll, renderOnPageEnter, renderOnThemeChange } from './ui/render.j
 import { refreshMeasuredBetas } from './ui/views/positions.js';
 import { initFormDefaults } from './ui/views/addTrade.js';
 import { showLockScreen } from './ui/views/lockScreen.js';
+import { describeStorageMode } from './ui/views/settings.js';
 import { initVoice } from './features/voice.js';
 import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
 import { installActions, voiceActions, refreshPrices, setTimeframe } from './app/actions.js';
@@ -93,6 +94,7 @@ async function startSession() {
   setPersistHandler(saveVault);
 
   showAccount();
+  describeStorageMode();
   renderAll();
   recordDailySnapshot();
   checkForRecoveredJournal();

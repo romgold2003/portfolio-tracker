@@ -223,3 +223,9 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 .eye-btn{background:none;border:none;cursor:pointer;font-size:17px;line-height:1;padding:2px 4px;
   color:var(--text2);opacity:.45;transition:opacity .15s;font-family:inherit;width:auto}
 .eye-btn:hover{opacity:1}
+
+/* Settings: the one action that destroys data, marked as such. */
+.danger-zone{border-top:0.5px solid var(--border);margin-top:18px;padding-top:16px}
+.danger-zone label{color:var(--red)}
+.btn-danger{background:var(--red-bg);border-color:var(--red-br);color:var(--red)}
+.btn-danger:hover{background:var(--red-bg);border-color:var(--red);color:var(--red)}
