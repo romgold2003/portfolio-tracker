@@ -4,9 +4,11 @@ A local-first trading journal. Track open and closed positions, log why you
 entered each trade, close in slices, and see what you actually made month by
 month — with live prices pulled straight from the browser.
 
-Everything lives in your browser's `localStorage`. There is no backend, no
-account, and no data leaves your machine except the price requests you can see
-in the network tab.
+It runs two ways. On its own — a file you double-click, or a static site — the
+journal lives in your browser and never goes anywhere. Deployed with a database
+behind it, the same app gives you an account that opens on any device, and the
+server still cannot read a thing: everything is encrypted here before it is
+sent. See [docs/CLOUD.md](docs/CLOUD.md).
 
 ## Features
 
@@ -26,6 +28,9 @@ in the network tab.
 - **Voice control** — hands-free navigation in Chrome ("go home", "expand BTC",
   "show March 2026").
 - **Light and dark themes**, following your OS by default.
+- **Accounts** — email and password, with the journal encrypted under a key
+  derived from the password. Optionally cloud-backed, in which case the same
+  login works on every device.
 
 ## Getting started
 
@@ -108,8 +113,9 @@ split and the domain rules it protects.
 
 | What | Where |
 | --- | --- |
-| Positions, cash, snapshots, price log | `localStorage`, this browser only |
-| Finnhub API key | `localStorage`, sent only to Finnhub |
+| Positions, cash, snapshots, price log | `localStorage`, this browser only — or, in cloud mode, an encrypted blob on the server |
+| Finnhub API key | inside the encrypted journal |
+| Your password | nowhere. What the server stores is derived from it and cannot be reversed |
 
 Storage is scoped per origin, so the journal belongs to the exact URL you opened
 it on. Clearing your browser data clears it.

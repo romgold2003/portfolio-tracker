@@ -11,13 +11,52 @@
  * has never seen and would need 310,000 PBKDF2 iterations per guess to attack.
  * Someone who walks off with the entire database has a pile of ciphertext.
  */
-import { query, one } from './db.js';
+import { query, one, driverGeneration } from './db.js';
 import {
   hashSecret, verifySecret, hashToken, randomToken, newId,
 } from './crypto.js';
 
 /** How long a login lasts before it has to be done again. */
 const SESSION_DAYS = 30;
+
+/**
+ * A secret that is stable for this deployment and known only to it.
+ *
+ * The decoy salts handed to unknown email addresses are derived from it. That
+ * only hides who has an account if the value cannot be guessed: with a
+ * hardcoded fallback, anyone could compute the decoy for an address themselves,
+ * compare it against what the server returned, and read off whether the account
+ * exists — which is the exact thing the decoy is there to prevent.
+ *
+ * So it is generated once, at random, and kept in the database. An operator can
+ * still set DECOY_SECRET to pin it. Cached after the first read, because it is
+ * needed on every sign-in.
+ */
+let cachedPepper = null;
+let cachedFor = -1;
+
+export async function serverPepper() {
+  if (process.env.DECOY_SECRET) return process.env.DECOY_SECRET;
+  if (cachedPepper && cachedFor === driverGeneration()) return cachedPepper;
+  cachedFor = driverGeneration();
+
+  const existing = await one('SELECT value FROM settings WHERE key = $1', ['decoy_pepper']);
+  if (existing) {
+    cachedPepper = existing.value;
+    return cachedPepper;
+  }
+
+  const fresh = randomToken(32);
+  try {
+    await query('INSERT INTO settings (key, value) VALUES ($1, $2)', ['decoy_pepper', fresh]);
+    cachedPepper = fresh;
+  } catch {
+    // Two cold functions raced to create it; whoever won is authoritative.
+    const row = await one('SELECT value FROM settings WHERE key = $1', ['decoy_pepper']);
+    cachedPepper = row ? row.value : fresh;
+  }
+  return cachedPepper;
+}
 
 export function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();

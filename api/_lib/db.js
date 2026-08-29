@@ -17,6 +17,16 @@
 /** @type {{query(text: string, params: unknown[]): Promise<{rows: any[]}>}|null} */
 let driver = null;
 let schemaReady = false;
+/**
+ * Bumped whenever the database is swapped. Anything caching a value that came
+ * out of the database checks this, so pointing at a different database cannot
+ * leave a stale value behind from the previous one.
+ */
+let generation = 0;
+
+export function driverGeneration() {
+  return generation;
+}
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -55,12 +65,18 @@ const SCHEMA = [
      at      TEXT NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS attempts_bucket ON attempts (bucket, at)`,
+  /** Deployment-wide values that have to be stable but must not be guessable. */
+  `CREATE TABLE IF NOT EXISTS settings (
+     key   TEXT PRIMARY KEY,
+     value TEXT NOT NULL
+   )`,
 ];
 
 /** Point the module at a driver. The test suite calls this with SQLite. */
 export function useDriver(next) {
   driver = next;
   schemaReady = false;
+  generation += 1;
 }
 
 /**

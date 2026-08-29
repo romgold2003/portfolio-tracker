@@ -86,8 +86,7 @@ export function hashToken(token) {
  * The subsequent login attempt fails, as it must. It just fails the same way a
  * wrong password does.
  */
-export function decoySalt(email) {
-  const pepper = process.env.DECOY_SECRET || 'decoy-pepper-fallback';
+export function decoySalt(email, pepper) {
   return createHash('sha256')
     .update(`${pepper}:${email}`)
     .digest('base64url')

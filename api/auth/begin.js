@@ -13,7 +13,9 @@
 import {
   send, fail, methodIs, readJson, rateLimit, clientIp,
 } from '../_lib/http.js';
-import { findUserByEmail, looksLikeEmail, normalizeEmail } from '../_lib/accounts.js';
+import {
+  findUserByEmail, looksLikeEmail, normalizeEmail, serverPepper,
+} from '../_lib/accounts.js';
 import { decoySalt } from '../_lib/crypto.js';
 
 export default async function handler(req, res) {
@@ -29,10 +31,11 @@ export default async function handler(req, res) {
   }
 
   const user = await findUserByEmail(email);
+  const pepper = await serverPepper();
   // Both salts, so the recovery screen does not need a second endpoint that
   // would itself have to be careful about revealing who has an account.
   send(res, 200, {
-    authSalt: user ? user.auth_salt : decoySalt(email),
-    recoverySalt: user ? user.rec_salt : decoySalt(`recovery:${email}`),
+    authSalt: user ? user.auth_salt : decoySalt(email, pepper),
+    recoverySalt: user ? user.rec_salt : decoySalt(`recovery:${email}`, pepper),
   });
 }

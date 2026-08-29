@@ -538,3 +538,46 @@ describe('forgetting the password', () => {
     assert.ok(sawLimit, 'recovery guessing was never rate limited');
   });
 });
+
+describe('the decoy salt', () => {
+  test('is not something an outsider could compute for themselves', async () => {
+    // Two deployments, same email. If the decoy were derived from a constant,
+    // both would answer identically and anyone could reproduce it offline to
+    // tell a real account from a fake one.
+    delete process.env.DECOY_SECRET;
+
+    const ask = async () => {
+      useDriver(sqliteDriver());
+      const res = await makeClient().call(begin, {
+        method: 'POST', body: { email: 'nobody@example.com' },
+      });
+      return res.body.authSalt;
+    };
+
+    const deploymentA = await ask();
+    const deploymentB = await ask();
+    assert.notEqual(
+      deploymentA, deploymentB,
+      'two deployments produced the same decoy, so it is guessable',
+    );
+  });
+
+  test('is still stable within one deployment', async () => {
+    delete process.env.DECOY_SECRET;
+    useDriver(sqliteDriver());
+    const client = makeClient();
+    const ask = async () => (await client.call(begin, {
+      method: 'POST', body: { email: 'nobody@example.com' },
+    })).body.authSalt;
+
+    assert.equal(await ask(), await ask());
+  });
+
+  test('and the two salts for one address differ', async () => {
+    useDriver(sqliteDriver());
+    const res = await makeClient().call(begin, {
+      method: 'POST', body: { email: 'nobody@example.com' },
+    });
+    assert.notEqual(res.body.authSalt, res.body.recoverySalt);
+  });
+});
