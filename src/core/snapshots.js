@@ -58,5 +58,23 @@ export function curveSeries(timeframe) {
   const data = points.map((s) => +s.value.toFixed(2));
   const first = data[0];
   const last = data[data.length - 1];
-  return { labels, data, synthetic, returnPct: first ? ((last - first) / first) * 100 : 0 };
+
+  // The requested window is often longer than the history on file. Reporting
+  // the span actually covered stops "1Y" from claiming a year of data that was
+  // never recorded.
+  const from = points[0].date;
+  const to = points[points.length - 1].date;
+  const coveredDays = Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000));
+
+  return {
+    labels,
+    data,
+    synthetic,
+    from,
+    to,
+    coveredDays,
+    /** What the account gained or lost across the window, in currency. */
+    gain: last - first,
+    returnPct: first ? ((last - first) / first) * 100 : 0,
+  };
 }

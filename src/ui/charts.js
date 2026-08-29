@@ -32,8 +32,9 @@ function chartColors() {
 /** Draws the account-value curve and returns the period return it implies. */
 export function renderCurve(timeframe) {
   const canvas = document.getElementById('curve');
-  if (!canvas) return 0;
-  const { labels, data, returnPct } = curveSeries(timeframe);
+  if (!canvas) return null;
+  const series = curveSeries(timeframe);
+  const { labels, data } = series;
   const c = chartColors();
 
   charts.curve?.destroy();
@@ -71,7 +72,7 @@ export function renderCurve(timeframe) {
       },
     },
   });
-  return returnPct;
+  return series;
 }
 
 /**

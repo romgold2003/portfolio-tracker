@@ -20,7 +20,7 @@ import {
 import { baseQtyOf } from '../core/portfolio.js';
 import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
-import { renderHome } from '../ui/views/home.js';
+import { renderHome, toggleAmounts } from '../ui/views/home.js';
 import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
@@ -493,7 +493,7 @@ export const voiceActions = {
 export function installActions(extra = {}) {
   Object.assign(window, {
     // navigation & chrome
-    show, toggleTheme, toggleVoice,
+    show, toggleTheme, toggleVoice, toggleAmounts,
     openSettings, closeSettings, saveApiKey,
     // trades
     addPos, clearForm, setDir, checkTicker, saveEdit, updatePrice, editCash, del, reopen,

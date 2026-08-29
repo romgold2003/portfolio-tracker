@@ -18,6 +18,42 @@ import {
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 const setColor = (id, color) => { const el = document.getElementById(id); if (el) el.style.color = color; };
 
+/**
+ * Hiding the figures, for when someone can see the screen.
+ *
+ * Only the amounts that reveal how much money is here are masked — the account
+ * value, cash, the gain and unrealised P&L. Percentages, tickers and the
+ * allocation stay visible, because they give away nothing about size and
+ * blanking them would leave an app you cannot use.
+ *
+ * The choice is remembered: someone who hid the numbers on a train wants them
+ * still hidden when they reopen the tab, not exposed by a reload.
+ */
+export const MASK = '••••••';
+const HIDDEN_KEY = 'pt_hide_amounts';
+
+let hidden = (() => {
+  try { return localStorage.getItem(HIDDEN_KEY) === '1'; } catch { return false; }
+})();
+
+export function amountsHidden() { return hidden; }
+
+export function toggleAmounts() {
+  hidden = !hidden;
+  try { localStorage.setItem(HIDDEN_KEY, hidden ? '1' : '0'); } catch { /* ignore */ }
+  renderHome();
+}
+
+/** Keep the eye in step with what it is currently doing. */
+function renderPrivacyToggle() {
+  const button = document.getElementById('hideAmounts');
+  if (!button) return;
+  button.textContent = hidden ? '🙈' : '👁';
+  button.title = hidden ? 'Show amounts' : 'Hide amounts';
+  button.setAttribute('aria-label', button.title);
+  button.setAttribute('aria-pressed', String(hidden));
+}
+
 /** Header row above the compact position list. */
 const LIST_HEADER = `<div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:0;margin-bottom:6px;padding:0 2px">
   <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em">Asset</div>
@@ -172,6 +208,47 @@ function trackedSpan() {
   };
 }
 
+/**
+ * The gain across the selected timeframe, under the account value.
+ *
+ * This follows the timeframe buttons rather than showing lifetime P&L, so
+ * "1M" answers what the month did. Lifetime P&L has not gone anywhere — it
+ * moved to the line beneath, where realised and unrealised already sat.
+ *
+ * The window is only as long as the history on file, so the label says what was
+ * actually covered instead of implying a year of data that was never recorded.
+ */
+function renderPeriodGain(series, totals) {
+  const pnlEl = document.getElementById('acctPnl');
+  const subEl = document.getElementById('acctPnlSub');
+  if (!pnlEl || !subEl) return;
+
+  if (!series) {
+    pnlEl.textContent = '—';
+    return;
+  }
+
+  const { gain, returnPct, coveredDays, synthetic } = series;
+  const arrow = gain >= 0 ? '▲ ' : '▼ ';
+
+  pnlEl.innerHTML = hidden
+    ? `<span style="color:var(--text3)">${MASK}</span>`
+    : `${arrow}${$s(gain)} <span style="color:${clr(returnPct)}">(${fp(returnPct)})</span>`;
+  pnlEl.style.color = hidden ? 'var(--text3)' : clr(gain);
+
+  // Say the true span when the requested window is longer than the record, and
+  // say so plainly when the curve is still the placeholder.
+  const requested = ui.timeframe;
+  const span = synthetic
+    ? 'not enough history yet — illustrative'
+    : `${requested} · ${coveredDays}d recorded`;
+
+  subEl.textContent = hidden
+    ? `${span} · Total P&L ${MASK} · Cash ${MASK}`
+    : `${span} · Total P&L ${$u(totals.total)} `
+      + `· Realised ${$u(totals.realised)} · Unrealised ${$u(totals.unrealised)} · Cash ${$u(state.cash)}`;
+}
+
 /** The live/partial pill shown on both the home and positions pages. */
 export function updateLivePill() {
   const hasUnkeyedStock = state.positions.some((p) => p.status === 'Open' && p.cls !== 'Crypto') && !state.apiKey;
@@ -191,25 +268,15 @@ export function updateLivePill() {
 export function renderHome() {
   const totals = accountTotals(state.positions, state.cash);
 
-  setText('acctValue', $u(totals.account).replace('.00', ''));
+  renderPrivacyToggle();
+  setText('acctValue', hidden ? MASK : $u(totals.account).replace('.00', ''));
 
-  // Total return is measured against the capital actually put in — the account
-  // value with every dollar of P&L stripped back out.
-  const netDeposits = totals.account - totals.total;
-  const returnBase = netDeposits > 0 ? netDeposits : (totals.invested + state.cash) || 1;
-  const pnlEl = document.getElementById('acctPnl');
-  if (pnlEl) {
-    pnlEl.innerHTML = (totals.total >= 0 ? '▲ ' : '▼ ') + $s(totals.total)
-      + ` <span style="color:${clr(totals.total)}">(${fp(pctD(totals.total, returnBase))})</span>`;
-    pnlEl.style.color = clr(totals.total);
-  }
-  setText('acctPnlSub', `Total P&L · Realised ${$u(totals.realised)} · Unrealised ${$u(totals.unrealised)} · Cash ${$u(state.cash)}`);
-  setText('cashDisplay', $u(state.cash));
+  setText('cashDisplay', hidden ? MASK : $u(state.cash));
 
   renderDailyMove(totals);
 
-  setText('kUnreal', $s(totals.unrealised));
-  setColor('kUnreal', clr(totals.unrealised));
+  setText('kUnreal', hidden ? MASK : $s(totals.unrealised));
+  setColor('kUnreal', hidden ? 'var(--text3)' : clr(totals.unrealised));
   setText('kUnrealSub', `${totals.open.length} open position${totals.open.length !== 1 ? 's' : ''}`);
   setText('kRetLbl', ui.timeframe);
   setText('kWinRate', `${totals.winRate}%`);
@@ -225,11 +292,14 @@ export function renderHome() {
 
   renderAllocation();
 
-  // The "N-month return" KPI is the return of the drawn curve, not of the whole
-  // book, so it is filled in from the series the chart actually plotted.
-  const periodReturn = renderCurve(ui.timeframe);
+  // The period figures come from the series the chart actually plotted, so the
+  // headline gain, the KPI and the benchmark all describe the same window.
+  const series = renderCurve(ui.timeframe);
+  const periodReturn = series ? series.returnPct : 0;
   setText('kReturn', fp(periodReturn));
   setColor('kReturn', clr(periodReturn));
+
+  renderPeriodGain(series, totals);
 
   // Needs the network, so it settles in after the rest of the page is drawn.
   renderBenchmark(periodReturn);
