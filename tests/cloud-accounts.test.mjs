@@ -581,3 +581,38 @@ describe('the decoy salt', () => {
     assert.notEqual(res.body.authSalt, res.body.recoverySalt);
   });
 });
+
+describe('a database that is present but broken', () => {
+  /**
+   * The failure this exists for: the driver was constructed fine, so the health
+   * check said the cloud was up, but every real query threw. The app then
+   * offered accounts it could not create, and the first person to sign in got
+   * a 500. Reporting health without running a query is not reporting health.
+   */
+  test('is reported as no cloud, not as a healthy one', async () => {
+    useDriver({
+      async query() { throw new Error('sql.query is not a function'); },
+    });
+
+    const res = await makeClient().call(config, { method: 'GET' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.cloud, false, 'a database that cannot answer must not report as available');
+  });
+
+  test('and a driver that only fails on real queries is caught too', async () => {
+    // Schema creation succeeds, the probe does not — the shape of a driver
+    // whose DDL is tolerated but whose parameterised queries are not.
+    let calls = 0;
+    useDriver({
+      async query(text) {
+        calls += 1;
+        if (/^\s*CREATE/i.test(text)) return { rows: [] };
+        throw new Error('parameterised queries unsupported');
+      },
+    });
+
+    const res = await makeClient().call(config, { method: 'GET' });
+    assert.equal(res.body.cloud, false);
+    assert.ok(calls > 0, 'the health check never ran a query at all');
+  });
+});

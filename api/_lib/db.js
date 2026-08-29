@@ -23,6 +23,8 @@ let schemaReady = false;
  * leave a stale value behind from the previous one.
  */
 let generation = 0;
+/** Set once a real query has succeeded. See databaseAvailable(). */
+let healthy = false;
 
 export function driverGeneration() {
   return generation;
@@ -76,6 +78,7 @@ const SCHEMA = [
 export function useDriver(next) {
   driver = next;
   schemaReady = false;
+  healthy = false;
   generation += 1;
 }
 
@@ -96,6 +99,21 @@ async function postgresDriver() {
 
   const { neon } = await import('@neondatabase/serverless');
   const sql = neon(url);
+
+  /**
+   * `neon()` returns a tagged-template function. The `.query(text, params)`
+   * method for plain parameterised SQL only exists from v1 — in 0.10 it was
+   * absent, and calling it threw on every request that touched the database
+   * while the health check, which never ran a query, went on reporting that
+   * all was well. Checked here so a wrong version fails immediately and says
+   * why, instead of surfacing as a 500 on sign-in.
+   */
+  if (typeof sql.query !== 'function') {
+    throw new Error(
+      'The installed @neondatabase/serverless has no sql.query(); v1 or later is required.',
+    );
+  }
+
   return {
     async query(text, params) {
       const rows = await sql.query(text, params);
@@ -109,9 +127,30 @@ async function activeDriver() {
   return driver;
 }
 
-/** True when a database is configured. The app runs local-only without one. */
+/**
+ * True when a database is configured *and answering*.
+ *
+ * This deliberately runs a real query rather than checking that a connection
+ * string exists. A version of this that only looked for the environment
+ * variable once reported a healthy cloud on a deployment where every actual
+ * query threw, so the app offered people accounts it could not create. A
+ * health check that cannot fail is not a health check.
+ *
+ * Cached once it succeeds, because it runs on every page load.
+ */
 export async function databaseAvailable() {
-  return !!(await activeDriver());
+  if (healthy) return true;
+  try {
+    const active = await activeDriver();
+    if (!active) return false;
+    await ensureSchema(active);
+    await active.query('SELECT 1', []);
+    healthy = true;
+    return true;
+  } catch (err) {
+    console.error('Database is configured but not usable:', err);
+    return false;
+  }
 }
 
 async function ensureSchema(active) {
