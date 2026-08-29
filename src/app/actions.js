@@ -34,7 +34,6 @@ import { show } from '../ui/router.js';
 import { ui } from '../ui/uiState.js';
 import { toggleTheme } from '../ui/theme.js';
 import { money as $u, signedMoney as $s, pctText as fp, pnlColor, fmtPrice } from '../ui/format.js';
-import { openIbkr, closeIbkr, connectIbkr, syncIbkr, disconnectIbkr } from '../features/ibkr.js';
 import { toggleVoice } from '../features/voice.js';
 import { exportBackup, restoreBackup, describeBackup } from '../features/backup.js';
 import {
@@ -510,10 +509,6 @@ export function installActions(extra = {}) {
     // backup & restore
     exportBackup, openImport, closeImport, previewImport, readImportFile, confirmImport,
     copyLegacySnippet,
-    // ibkr
-    openIbkr, closeIbkr, disconnectIbkr,
-    connectIbkr: () => connectIbkr(renderAll),
-    syncIbkr: () => syncIbkr(renderAll),
     ...extra,
   });
 }
