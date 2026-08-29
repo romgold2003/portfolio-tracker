@@ -1,11 +1,26 @@
 /**
- * Drives the deployed API exactly as a browser would, using the app's own
- * crypto module. Proves the SQL works on real Postgres, not just SQLite.
+ * A smoke test against a live deployment.
+ *
+ * The unit tests run against SQLite, which is what makes them fast and
+ * dependency-free — but it also means they cannot tell you that the SQL works
+ * on Postgres, or that the deployed functions have the environment they need.
+ * This closes that gap by driving the real endpoints over HTTPS with the app's
+ * own crypto module, exactly as a browser would.
+ *
+ * It is worth running after any deploy that touches the API. The bug it was
+ * written for got past 27 green unit tests: the Neon driver in production had
+ * no .query method, so every database call failed while the status endpoint
+ * still reported a healthy cloud.
+ *
+ *   npm run check:live -- https://your-app.vercel.app
+ *
+ * It creates one throwaway account per run, named livecheck+<timestamp>, and
+ * writes only to that account.
  */
 import {
   generateDataKey, wrapDataKey, unwrapDataKey, encryptJson, decryptJson,
   generateRecoveryKey, normalizeRecoveryKey, generateAuthSalt, deriveAuthSecret,
-} from './src/core/crypto.js';
+} from '../src/core/crypto.js';
 
 const BASE = process.argv[2];
 const EMAIL = `livecheck+${Date.now()}@example.com`;

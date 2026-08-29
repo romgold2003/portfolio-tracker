@@ -10,7 +10,8 @@
     "build": "node scripts/build-standalone.mjs",
     "build:site": "node scripts/build-standalone.mjs && node scripts/assemble-site.mjs",
     "dev:cloud": "node scripts/dev-cloud.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "check:live": "node scripts/live-check.mjs"
   },
   "engines": {
     "node": ">=18"
