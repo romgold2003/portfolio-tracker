@@ -25,8 +25,6 @@ in the network tab.
 - **Portfolio beta** — size-weighted, with shorts contributing negatively.
 - **Voice control** — hands-free navigation in Chrome ("go home", "expand BTC",
   "show March 2026").
-- **IBKR sync** — optional, read-only, via a Client Portal Gateway you run
-  yourself.
 - **Light and dark themes**, following your OS by default.
 
 ## Getting started
@@ -89,7 +87,7 @@ src/
     snapshots.js      the daily account-value curve
     migrations.js     one-way upgrades of stored data
   services/           the outside world: price feeds, rolling price log
-  features/           self-contained extras: voice, IBKR sync, backup/restore
+  features/           self-contained extras: voice control, backup/restore
   ui/                 rendering only — views return HTML strings
     views/            one module per screen
     render.js         the single entry point for redrawing
@@ -112,7 +110,6 @@ split and the domain rules it protects.
 | --- | --- |
 | Positions, cash, snapshots, price log | `localStorage`, this browser only |
 | Finnhub API key | `localStorage`, sent only to Finnhub |
-| IBKR credentials | never touched — you log into the gateway yourself |
 
 Storage is scoped per origin, so the journal belongs to the exact URL you opened
 it on. Clearing your browser data clears it.

@@ -44,7 +44,6 @@ export const STORAGE_KEYS = {
   cash: 'pt_cash',
   priceLog: 'pt_plog',
   theme: 'pt_theme',
-  ibkrUrl: 'pt_ibkr_url',
   benchmarkKey: 'pt_bench_key',
   benchmark: 'pt_bench',
 };
@@ -60,7 +59,6 @@ export const API = {
   coingeckoList: 'https://api.coingecko.com/api/v3/coins/list',
   coingeckoPrice: 'https://api.coingecko.com/api/v3/simple/price',
   finnhubQuote: 'https://finnhub.io/api/v1/quote',
-  ibkrDefaultGateway: 'https://localhost:5000',
   // Free tier allows cross-origin reads, which Stooq and Yahoo do not.
   alphaVantage: 'https://www.alphavantage.co/query',
 };
@@ -70,8 +68,6 @@ export const TIMERS = {
   priceRefreshMs: 30_000,
   /** How often the account-value curve records a point. */
   snapshotMs: 300_000,
-  /** How often a connected IBKR gateway is polled. */
-  ibkrSyncMs: 60_000,
 };
 
 /**

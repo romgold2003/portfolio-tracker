@@ -44,9 +44,9 @@ function readJson(key, fallback) {
  * guarantees.
  *
  * Positions do not only come from the New-trade form. They also arrive from an
- * imported backup file and from an IBKR sync, neither of which is under our
- * control, and every P&L rule and every template assumes the fields hold what
- * their names say. Two things go wrong without this:
+ * imported backup file, which is not under our control, and every P&L rule and
+ * every template assumes the fields hold what their names say. Two things go
+ * wrong without this:
  *
  *   - one row with a non-numeric `entry` or `qty` turns the whole account value
  *     into NaN, because the totals are a single reduce over every position
@@ -120,7 +120,6 @@ function sanitizePosition(raw) {
   if (weeklyChg != null) clean.weeklyChg = weeklyChg;
   const firstExit = date(raw.firstExit);
   if (firstExit) clean.firstExit = firstExit;
-  if (raw.ibkrId != null) clean.ibkrId = String(raw.ibkrId);
 
   return clean;
 }

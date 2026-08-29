@@ -31,8 +31,7 @@
       <button class="nl" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
     </nav>
     <div class="sidebar-bot">
-      <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
-      <button class="voice-btn" id="ibkrBtn" onclick="openIbkr()" style="margin-bottom:0"><span class="voice-icon">🏦</span><span id="ibkrBtnTxt">IBKR Connect</span></button>
+      <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" style="margin-bottom:0"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
       <button class="settings-btn" onclick="openSettings()" style="margin-top:8px">⚙ Live price settings</button>
       <button class="settings-btn" id="themeBtn" onclick="toggleTheme()" style="margin-top:6px">
         <span id="themeIcon">☀</span> <span id="themeLabel">Light mode</span>
@@ -282,34 +281,6 @@
 </div>
 
 
-<div class="modal-bg" id="ibkrModal">
-  <div class="modal" style="width:520px">
-    <h3>🏦 Interactive Brokers — Read-only sync</h3>
-    <p>This connects to IBKR's Client Portal Gateway running locally on your computer. The app can only READ your positions — it cannot place orders, move money, or interact with your account in any way.</p>
-    <div id="ibkrSetupSteps" style="background:var(--panel2);border:0.5px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;line-height:1.8;color:var(--textmid)">
-      <div style="font-weight:600;color:var(--text);margin-bottom:8px">Setup (one time only):</div>
-      <div>1. Download the Client Portal Gateway from IBKR:<br>
-      <a href="https://www.interactivebrokers.com/en/trading/ib-api.php" target="_blank" style="color:var(--blue)">interactivebrokers.com → Trading → IBKR APIs → Client Portal</a></div>
-      <div style="margin-top:6px">2. Unzip and run: <code style="background:var(--input);padding:2px 6px;border-radius:3px;color:var(--green)">bin/run.sh</code> (Mac/Linux) or <code style="background:var(--input);padding:2px 6px;border-radius:3px;color:var(--green)">bin/run.bat</code> (Windows)</div>
-      <div style="margin-top:6px">3. Open <a href="https://localhost:5000" target="_blank" style="color:var(--blue)">https://localhost:5000</a> in Chrome → log in with your IBKR credentials</div>
-      <div style="margin-top:6px">4. Come back here and click Connect below</div>
-      <div style="margin-top:8px;padding:8px;background:var(--listen-bg);border:0.5px solid var(--amber-br);border-radius:6px;color:var(--amber);font-size:11px">⚠ When IBKR asks for permissions — select Read Only. Never grant order placement to a journaling app.</div>
-    </div>
-    <div class="modal-field">
-      <label>Gateway URL (default: https://localhost:5000)</label>
-      <input type="text" id="ibkrUrl" value="https://localhost:5000">
-    </div>
-    <div id="ibkrStatus" style="font-size:12px;margin-bottom:12px;min-height:18px"></div>
-    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center">
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-blue" onclick="connectIbkr()">Connect</button>
-        <button class="btn" onclick="disconnectIbkr()" id="ibkrDisconnectBtn" style="display:none">Disconnect</button>
-        <button class="btn" onclick="syncIbkr()" id="ibkrSyncBtn" style="display:none">↻ Sync now</button>
-      </div>
-      <button class="btn" onclick="closeIbkr()">Close</button>
-    </div>
-  </div>
-</div>
 <div class="voice-toast" id="voiceToast"></div>
 
 <!-- The app boots from one ES module; everything else is imported from there.
