@@ -9,10 +9,10 @@ import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
-  benchmarkSeries, benchmarkReturn, benchmarkKey, benchmarkFailure,
+  benchmarkSeries, benchmarkKey, benchmarkFailure,
   benchmarkSpot, benchmarkYearToDate,
 } from '../../services/benchmark.js';
-import { periodStart } from '../../core/snapshots.js';
+import { periodStart, curveSeries } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -155,30 +155,38 @@ function renderAllocation() {
 }
 
 /**
- * Are you beating the market?
+ * The year, for the market and for you. Fixed.
  *
- * Both figures are measured over the same window — whatever the timeframe
- * buttons are showing — because a return is meaningless without the period it
- * covers, and comparing two different periods would be worse than showing
- * nothing. The window is clamped to the history actually recorded, so the label
- * says "17 days" rather than claiming three months of data that does not exist.
+ * This corner deliberately ignores the timeframe buttons. Those drive the chart
+ * and the KPIs below, and having the scoreboard flicker between a week and a
+ * year as you scrubbed through them made it useless as a reference — the thing
+ * you look up at is meant to be the one number that stays still.
+ *
+ * So both rows are the year: the index from 1 January, and your account from 1
+ * January or the day it opened, whichever is later. Those coincide from 2027,
+ * and until then yours is the honest window rather than a year you were not
+ * invested for.
  */
-async function renderBenchmark(periodReturn) {
+async function renderBenchmark() {
   const valEl = document.getElementById('benchVal');
   const mineEl = document.getElementById('benchMine');
   const noteEl = document.getElementById('benchNote');
   if (!valEl || !mineEl || !noteEl) return;
 
-  const span = trackedSpan();
-  mineEl.textContent = periodReturn == null ? '—' : fp(periodReturn);
-  mineEl.style.color = periodReturn == null ? 'var(--text3)' : clr(periodReturn);
+  const mine = yearToDateReturn();
+  mineEl.textContent = mine == null ? '—' : fp(mine);
+  mineEl.style.color = mine == null ? 'var(--text3)' : clr(mine);
+  mineEl.title = describeOwnYear();
+
+  const clear = () => { noteEl.textContent = ''; noteEl.title = ''; };
 
   const rows = await benchmarkSeries();
-  if (!rows || !span) {
+  if (!rows) {
     valEl.textContent = '—';
     valEl.style.color = 'var(--text3)';
-    // Say what actually went wrong. "Unavailable" left someone who had just
-    // pasted a key with no way to tell a typo from a spent daily quota.
+    // The note carries failures only. Saying what actually went wrong beats
+    // "unavailable" for anyone who has just pasted a key and is wondering
+    // whether they typed it wrong or spent the day's quota.
     noteEl.textContent = benchmarkKey()
       ? (benchmarkFailure() || 'Market data unavailable right now')
       : 'Add a market data key in settings to compare';
@@ -186,60 +194,55 @@ async function renderBenchmark(periodReturn) {
     return;
   }
 
-  // Live where the window runs to today, so both sides are measured at the
-  // same moment rather than yours now against the index's last close.
-  const spot = span.to === todayStr() ? benchmarkSpot() : null;
-  const marketReturn = benchmarkReturn(rows, span.from, span.to, spot);
+  // Live rather than last night's close, so the index is read at the same
+  // moment as the account it is being put beside.
+  const marketReturn = benchmarkYearToDate(rows, benchmarkSpot());
   if (marketReturn == null) {
     valEl.textContent = '—';
     valEl.style.color = 'var(--text3)';
-    noteEl.textContent = 'No index data for this period';
+    noteEl.textContent = 'No index data for this year';
+    noteEl.title = noteEl.textContent;
     return;
   }
 
   valEl.textContent = fp(marketReturn);
   valEl.style.color = clr(marketReturn);
-
-  const edge = (periodReturn ?? 0) - marketReturn;
-  const verdict = edge >= 0 ? 'ahead of' : 'behind';
-  const window = describeWindow(span);
-
-  // The market's own year is appended because it is the question people
-  // actually ask — "what has the S&P done this year" — and it cannot be read
-  // off the comparison above, which is deliberately clipped to your own window.
-  const ytd = benchmarkYearToDate(rows, benchmarkSpot());
-  const ytdNote = ytd == null ? '' : ` · S&P ${fp(ytd)} YTD`;
-
-  noteEl.textContent = `${fp(Math.abs(edge)).replace('+', '')} ${verdict} the market · ${window}${ytdNote}`;
-  noteEl.style.color = edge >= 0 ? 'var(--green)' : 'var(--red)';
+  valEl.title = `S&P 500 since 1 January ${new Date().getFullYear()}`;
+  clear();
 }
 
 /**
- * The window in words, rather than a day count.
+ * The account's own return for the year, whatever timeframe is on screen.
  *
- * "17d" said how long but not from when, which matters most on the timeframe
- * where the two differ: an account opened in August cannot show a year to date,
- * so YTD quietly means "since you started" until the calendar turns. Saying
- * "since 12 Aug" makes that visible instead of leaving someone to wonder why
- * their year is seventeen days long. Once a full year has been recorded the
- * same window really is the year, and it says so.
+ * Read off the same curve the chart is built from, just asked for the year
+ * rather than the selected window, so the two can never disagree about what
+ * happened.
  */
-function describeWindow(span) {
-  if (ui.timeframe !== 'YTD') return `${span.days}d`;
-  const janFirst = `${new Date().getFullYear()}-01-01`;
-  if (span.from <= janFirst) return 'year to date';
-  const started = new Date(span.from);
-  return `since ${started.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+function yearToDateReturn() {
+  if (!state.snapshots?.length) return null;
+  const series = curveSeries('YTD');
+  return series?.synthetic ? null : series.returnPct;
 }
 
-/** The first and last day the account curve actually has data for. */
+/** What window your own figure covers, for the tooltip. */
+function describeOwnYear() {
+  const span = trackedSpan();
+  if (!span) return '';
+  const janFirst = `${new Date().getFullYear()}-01-01`;
+  if (span.from <= janFirst) return `Your return since 1 January ${new Date().getFullYear()}`;
+  const started = new Date(span.from);
+  const when = started.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  return `Your return since ${when}, when this account started`;
+}
+
+/** The first and last day the year's curve actually has data for. */
 function trackedSpan() {
   const snaps = state.snapshots;
   if (!snaps?.length) return null;
   // Never reaches back past the day the account started, so a year-to-date on a
   // three-week-old account measures the three weeks rather than inventing the
   // months before it.
-  const cutoff = periodStart(ui.timeframe, snaps[0].date);
+  const cutoff = periodStart('YTD', snaps[0].date);
   const inWindow = snaps.filter((s) => new Date(s.date) >= cutoff);
   const used = inWindow.length >= 2 ? inWindow : snaps;
   if (used.length < 2) return null;
@@ -329,7 +332,7 @@ export function renderHome() {
   renderPeriodGain(series);
 
   // Needs the network, so it settles in after the rest of the page is drawn.
-  renderBenchmark(periodReturn);
+  renderBenchmark();
 
   updateLivePill();
 }
