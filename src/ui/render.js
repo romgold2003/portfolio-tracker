@@ -6,6 +6,7 @@
  * affect. Actions mutate, then call renderAll().
  */
 import { renderHome, updateLivePill } from './views/home.js';
+import { setOrbitBackdrop } from '../features/orbitBackdrop.js';
 import { renderPositions } from './views/positions.js';
 import { renderMonthly, renderMonthDetail } from './views/monthly.js';
 
@@ -22,6 +23,8 @@ export function renderAll() {
  * when it last rendered needs one redraw after it becomes active.
  */
 export function renderOnPageEnter(page) {
+  // The orbit scene belongs to New trade and runs only while it is on screen.
+  setOrbitBackdrop(page === 'add');
   if (page === 'home') setTimeout(renderHome, 50);
   if (page === 'monthly') setTimeout(renderMonthly, 50);
 }

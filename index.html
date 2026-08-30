@@ -17,16 +17,10 @@
 </head>
 <body>
 <!--
-  The sign-in backdrop: a particle globe with symbols orbiting it.
-
-  A sibling of the lock screen rather than a child, because the lock screen
-  replaces its own innerHTML on every state change and would wipe this out.
+  The sign-in scene: a trader at a desk, drawn rather than filmed.
   Purely decorative, so it is hidden from screen readers entirely.
 -->
-<div class="lock-backdrop" id="lockBackdrop" aria-hidden="true">
-  <canvas id="lockGlobe"></canvas>
-  <div class="orbit-field" id="orbitField"></div>
-</div>
+<canvas class="signin-scene" id="signinScene" aria-hidden="true"></canvas>
 
 <div class="lock-screen" id="lockScreen"></div>
 
@@ -174,6 +168,14 @@
     </div>
 
     <div id="add" class="page">
+      <!--
+        The particle globe and its orbiting symbols, behind the form. Scoped to
+        this page: it has the room for it, and the others are full of figures.
+      -->
+      <div class="orbit-backdrop" id="orbitBackdrop" aria-hidden="true">
+        <canvas id="orbitGlobe"></canvas>
+        <div class="orbit-field" id="orbitField"></div>
+      </div>
       <div class="topbar"><div class="greeting">New trade</div></div>
       <div class="card form-card">
         <div class="form-grid">

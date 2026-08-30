@@ -1,6 +1,10 @@
 /**
- * The sign-in backdrop: a rotating globe of particles, ringed by orbiting
+ * A rotating globe of particles behind the New trade form, ringed by orbiting
  * symbols of the things this app tracks.
+ *
+ * Scoped to that one page. It is the only screen with room to spare — the
+ * others are dense with figures, and a moving background under a column of
+ * numbers is a distraction rather than an atmosphere.
  *
  * Written against the platform rather than pulled in as a component. The
  * original was React, Tailwind and a shadcn install away, which for one
@@ -158,8 +162,8 @@ let stopGlobe = null;
  * requestAnimationFrame loop behind an opaque app is pure battery, and this
  * runs on phones.
  */
-export function setLockBackdrop(visible) {
-  const host = document.getElementById('lockBackdrop');
+export function setOrbitBackdrop(visible) {
+  const host = document.getElementById('orbitBackdrop');
   if (!host) return;
 
   host.style.display = visible ? 'block' : 'none';
@@ -171,6 +175,6 @@ export function setLockBackdrop(visible) {
 
   const field = document.getElementById('orbitField');
   if (field && !field.childElementCount) buildOrbits(field);
-  const canvas = document.getElementById('lockGlobe');
+  const canvas = document.getElementById('orbitGlobe');
   if (canvas) stopGlobe = startGlobe(canvas);
 }

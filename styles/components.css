@@ -255,16 +255,26 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 /* ── Sign-in backdrop: a particle globe ringed by orbiting symbols ──────────
    Sits behind the sign-in card and below it in the stack. Decorative only, so
    it never takes a pointer event and never blocks the form. */
-.lock-backdrop{position:fixed;inset:0;z-index:499;display:none;overflow:hidden;
-  pointer-events:none;background:var(--bg)}
+/* The orbit scene, scoped to the New trade page. Absolute within that page so
+   it scrolls with the form rather than sitting fixed behind everything. */
+.orbit-backdrop{position:absolute;inset:0;z-index:0;display:none;overflow:hidden;
+  pointer-events:none}
+#add{position:relative}
+#add > *:not(.orbit-backdrop){position:relative;z-index:1}
+/* The sign-in scene: full bleed, behind the card. */
+/* A canvas is a replaced element, so inset:0 alone does not size it: it lays
+   out at its bitmap size, which on a 2x screen is twice the viewport in each
+   direction, and only the top-left quarter is ever on screen. The explicit
+   width and height are what pin it to the window. */
+.signin-scene{position:fixed;inset:0;width:100%;height:100%;z-index:499;display:none;pointer-events:none}
 /* The whole arrangement hangs off a point below the bottom edge, so the rings
    arc up through the screen instead of sitting in a circle in the middle. */
-.lock-backdrop #lockGlobe,.orbit-ring{position:absolute;left:50%;bottom:0;
+.orbit-backdrop #orbitGlobe,.orbit-ring{position:absolute;left:50%;bottom:0;
   transform:translate(-50%,50%)}
-.lock-backdrop #lockGlobe{width:min(58vw,420px);height:min(58vw,420px)}
+.orbit-backdrop #orbitGlobe{width:min(46vw,340px);height:min(46vw,340px);opacity:.9}
 .orbit-field{position:absolute;inset:0}
-.orbit-ring{width:calc(min(190vw,1500px) * var(--scale));
-  height:calc(min(190vw,1500px) * var(--scale));
+.orbit-ring{width:calc(min(150vw,1100px) * var(--scale));
+  height:calc(min(150vw,1100px) * var(--scale));
   border:0.5px solid var(--border2);border-radius:50%;opacity:.75}
 
 /* An arm reaches from the ring's centre to its edge and spins; the badge on the
@@ -393,7 +403,7 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 
 /* The particle wave sits between the page background and the app. Panels above
    it are opaque, so it appears only where the layout leaves room. */
-.particle-wave{position:fixed;inset:0;z-index:0;pointer-events:none}
+.particle-wave{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 .shell{position:relative;z-index:1}
 /* How loud it is, per theme. Light backgrounds show a faint dot far more
    readily than dark ones, so the same alpha is not the same presence. */
