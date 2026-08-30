@@ -1,6 +1,8 @@
 /** The Positions page: summary tiles, then open and closed position cards. */
 import { state } from '../../core/store.js';
-import { unreal, costOf, portfolioBeta, sortPositions, realized } from '../../core/portfolio.js';
+import {
+  unreal, costOf, portfolioBeta, sortPositions, realized, accountTotals,
+} from '../../core/portfolio.js';
 import { measuredBetas } from '../../services/benchmark.js';
 import { ui } from '../uiState.js';
 import { positionCard } from './positionCard.js';
@@ -34,7 +36,9 @@ export function renderPositions() {
 
   const openPnl = open.reduce((sum, p) => sum + unreal(p), 0);
   const deployed = open.reduce((sum, p) => sum + costOf(p), 0);
-  const beta = portfolioBeta(open, measuredBetaCache);
+  // Beta is measured against total equity, so cash has to come with it.
+  const account = accountTotals(state.positions, state.cash).account;
+  const beta = portfolioBeta(open, measuredBetaCache, account);
 
   setText('sOpenPnl', $s(openPnl));
   const pnlEl = document.getElementById('sOpenPnl');
@@ -48,9 +52,13 @@ export function renderPositions() {
   const betaNote = document.querySelector('.sum-beta .sum-sub');
   if (betaNote) {
     if (beta == null) betaNote.textContent = 'size-weighted';
-    else if (beta.measuredPct >= 99) betaNote.textContent = 'measured vs S&P 500';
-    else if (beta.measuredPct < 1) betaNote.textContent = 'estimated · not yet measured';
-    else betaNote.textContent = `${Math.round(beta.measuredPct)}% measured`;
+    else {
+      const source = beta.measuredPct >= 99 ? 'measured vs S&P 500'
+        : beta.measuredPct < 1 ? 'estimated · not yet measured'
+          : `${Math.round(beta.measuredPct)}% measured`;
+      const drag = beta.cashDragPct >= 1 ? ` · ${Math.round(beta.cashDragPct)}% cash` : '';
+      betaNote.textContent = source + drag;
+    }
   }
 
   const openEl = document.getElementById('openPositions');

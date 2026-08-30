@@ -149,19 +149,31 @@ export function betaFromReturns(assetReturns, marketReturns, minPoints = 30) {
 }
 
 /**
- * Size-weighted portfolio beta.
+ * Portfolio beta: the weighted average of each holding's beta, over equity.
  *
- * Each position contributes in proportion to its exposure, and a short
- * contributes negatively: being short a high-beta name reduces how much the
- * book moves with the market.
+ *   beta_p = SUM( w_i * beta_i ),   w_i = signed market value / total equity
+ *
+ * Two things about that denominator are easy to get wrong, and both change the
+ * answer materially.
+ *
+ * It is *equity*, not the sum of the positions. Cash has a beta of zero, and
+ * holding it genuinely dampens how much the account moves with the market — a
+ * book that is half cash and half index has a beta of 0.5, not 1.0. Dividing by
+ * invested capital instead quietly reports the beta of the invested part and
+ * calls it the portfolio's. On a book holding 16% cash that overstated beta by
+ * a fifth, which is the difference between market-neutral-ish and not.
+ *
+ * And the weights are *signed*. Being short a high-beta name reduces the book's
+ * sensitivity, so it contributes negatively; summing absolute exposures would
+ * make a hedged book look like a leveraged one.
  *
  * `measured` maps a ticker to a beta computed from real returns. Anything
  * missing falls back to the published assumption, so the figure degrades from
  * measured to estimated one position at a time rather than all at once.
  */
-export function portfolioBeta(open, measured = new Map()) {
+export function portfolioBeta(open, measured = new Map(), equity = null) {
   let weighted = 0;
-  let total = 0;
+  let gross = 0;
   let measuredWeight = 0;
 
   open.forEach((p) => {
@@ -171,14 +183,19 @@ export function portfolioBeta(open, measured = new Map()) {
     const beta = Number.isFinite(real) ? real : betaOf(p.ticker, p.cls);
     if (Number.isFinite(real)) measuredWeight += w;
     weighted += beta * w * sign;
-    total += w;
+    gross += w;
   });
 
-  if (!total) return null;
+  if (!gross) return null;
+  // Falls back to gross exposure only when equity was not supplied, which is
+  // the same number for a fully invested long book.
+  const base = equity != null && equity > 0 ? equity : gross;
   return {
-    beta: weighted / total,
-    /** Share of the book whose beta was measured rather than assumed. */
-    measuredPct: (measuredWeight / total) * 100,
+    beta: weighted / base,
+    /** Share of the invested book whose beta was measured rather than assumed. */
+    measuredPct: (measuredWeight / gross) * 100,
+    /** How much of the account is not in the market at all. */
+    cashDragPct: equity != null && equity > 0 ? Math.max(0, (1 - gross / equity)) * 100 : 0,
   };
 }
 
