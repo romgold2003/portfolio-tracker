@@ -139,9 +139,33 @@ export function setCurrentPrice(id, price) {
  * what the ticker does now has nothing to do with what it made.
  */
 export function addClosedPosition({
-  ticker, cls, dir, open, close, entry, exit, amount, reason, sector,
+  ticker, cls, dir, open, close, pnl, pct, reason, sector,
 }) {
-  const qty = amount / entry;
+  /**
+   * What was staked, worked out from the result.
+   *
+   * Nobody remembers the entry and exit prices of a trade from six months ago,
+   * but everyone knows what it made and what percentage that was — a broker
+   * statement leads with exactly those two. And they are sufficient: a profit
+   * of 600 that represented 30% can only have come from 2,000 staked.
+   */
+  const cost = pnl / (pct / 100);
+  if (!Number.isFinite(cost) || cost <= 0) {
+    throw new Error('That amount and percentage do not describe a real trade.');
+  }
+
+  /**
+   * Stored as a single unit rather than a share count.
+   *
+   * The maths downstream is (cur - entry) * qty, and with no prices to work
+   * from there is no honest per-share figure to put in. One unit priced at what
+   * was staked keeps every total exactly right — cost, P&L, percentage — and
+   * invents nothing. `summary` marks it so the card can say "amount invested"
+   * instead of showing that figure as though it were a share price.
+   */
+  const qty = 1;
+  const ended = dir === 'Short' ? cost - pnl : cost + pnl;
+
   const position = {
     id: newId(),
     ticker,
@@ -149,20 +173,19 @@ export function addClosedPosition({
     dir,
     open,
     close,
-    entry,
-    // For a closed trade `cur` is the exit price — realized() reads it as the
-    // price the position ended at, not a live quote.
-    cur: exit,
+    entry: cost,
+    cur: ended,
     qty,
     origQty: qty,
-    amount,
+    amount: cost,
     status: 'Closed',
+    summary: true,
     reason: reason || null,
     exits: [{
       d: close,
-      qty: +qty.toFixed(10),
-      price: exit,
-      pnl: +((dir === 'Short' ? entry - exit : exit - entry) * qty).toFixed(6),
+      qty,
+      price: ended,
+      pnl: +pnl.toFixed(6),
       pct: 100,
       // No previous close: an exit months ago must not be pulled into today's
       // move, which is what a prevClose here would do.

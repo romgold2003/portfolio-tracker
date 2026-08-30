@@ -9,10 +9,10 @@
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { state } from '../src/core/store.js';
+import { state, sanitizePositions } from '../src/core/store.js';
 import { addPosition, addClosedPosition, closePosition } from '../src/core/positions.js';
 import {
-  realized, accountTotals, dailyDollarTotal, todayStr, unreal,
+  realized, accountTotals, dailyDollarTotal, todayStr, costOf, pctD,
 } from '../src/core/portfolio.js';
 
 const CASH_AT_START = 7356.44;
@@ -24,16 +24,19 @@ beforeEach(() => {
   state.cash = CASH_AT_START;
 });
 
-/** A winner from March: bought at 100, sold at 130, £2,000 in. */
+/**
+ * A winner from March, described the way a broker statement describes it: what
+ * it made and what percentage that was. No prices — that is the point.
+ * +600 at +30% implies 2,000 staked.
+ */
 const MARCH_WINNER = {
   ticker: 'VRT',
   cls: 'Stocks',
   dir: 'Long',
   open: '2026-03-03',
   close: '2026-04-18',
-  entry: 100,
-  exit: 130,
-  amount: 2000,
+  pnl: 600,
+  pct: 30,
   reason: 'breakout',
 };
 
@@ -45,8 +48,9 @@ describe('cash', () => {
 
   test('unlike the open-then-close path, which would count the profit twice', () => {
     // What entering it the ordinary way does, for contrast.
-    const p = addPosition({ ...MARCH_WINNER, close: null });
-    closePosition(p.id, MARCH_WINNER.exit, p.qty);
+    const p = addPosition({ ticker: 'VRT', cls: 'Stocks', dir: 'Long',
+      open: '2026-03-03', entry: 100, amount: 2000 });
+    closePosition(p.id, 130, p.qty);
 
     const gained = state.cash - CASH_AT_START;
     assert.ok(gained > 590 && gained < 610, `expected roughly +600 of double-counted profit, got ${gained}`);
@@ -82,7 +86,7 @@ describe('the profit', () => {
   });
 
   test('and a loser is booked as a loss, not quietly dropped', () => {
-    addClosedPosition({ ...MARCH_WINNER, ticker: 'IREN', exit: 80 });
+    addClosedPosition({ ...MARCH_WINNER, ticker: 'IREN', pnl: -240, pct: -12 });
     const totals = accountTotals(state.positions, state.cash);
     assert.ok(totals.realised < 0, 'a losing trade must reduce realised P&L');
     assert.equal(totals.losses, 1);
@@ -91,7 +95,7 @@ describe('the profit', () => {
 
   test('a short is the right way round', () => {
     // Sold at 100, bought back at 80 — a short makes money as the price falls.
-    const p = addClosedPosition({ ...MARCH_WINNER, dir: 'Short', exit: 80 });
+    const p = addClosedPosition({ ...MARCH_WINNER, dir: 'Short', pnl: 400, pct: 20 });
     assert.ok(realized(p) > 0, 'a short closed lower must be a profit');
     assert.ok(Math.abs(realized(p) - 400) < 0.01, `expected 400, got ${realized(p)}`);
   });
@@ -124,9 +128,10 @@ describe('the position itself', () => {
   test('is closed, with the exit price as its final price', () => {
     const p = addClosedPosition(MARCH_WINNER);
     assert.equal(p.status, 'Closed');
-    assert.equal(p.cur, 130);
-    assert.ok(Math.abs(p.qty - 20) < 1e-9);
-    assert.ok(Math.abs(p.origQty - 20) < 1e-9);
+    assert.ok(Math.abs(p.entry - 2000) < 1e-9, 'the stake should be derived as 2,000');
+    assert.ok(Math.abs(p.cur - 2600) < 1e-9, 'it ended worth 2,600');
+    assert.equal(p.qty, 1);
+    assert.equal(p.summary, true);
   });
 
   test('holds no unrealised P&L, being over', () => {
@@ -160,7 +165,7 @@ describe('the Monthly page', () => {
   test('files each trade under the month it actually closed', () => {
     addClosedPosition(MARCH_WINNER);
     addClosedPosition({
-      ...MARCH_WINNER, ticker: 'IREN', open: '2026-02-10', close: '2026-03-20', exit: 62,
+      ...MARCH_WINNER, ticker: 'IREN', open: '2026-02-10', close: '2026-03-20', pnl: 180, pct: 12,
     });
 
     const months = state.positions
@@ -177,5 +182,58 @@ describe('the Monthly page', () => {
     const distinct = new Set(state.positions.map(bucketOf));
     assert.equal(distinct.size, 5, 'closed trades collapsed into one month');
     assert.ok(!distinct.has(todayStr().slice(0, 7)), 'a past trade was filed under this month');
+  });
+});
+
+describe('the stake, worked out from the result', () => {
+  test('a gain and its percentage imply what was put in', () => {
+    for (const [pnl, pct, expected] of [
+      [600, 30, 2000],
+      [180, 12, 1500],
+      [50, 5, 1000],
+      [-240, -12, 2000],   // a loss implies a stake just as well
+      [-1000, -50, 2000],
+    ]) {
+      state.positions = [];
+      const p = addClosedPosition({ ...MARCH_WINNER, pnl, pct });
+      assert.ok(
+        Math.abs(costOf(p) - expected) < 0.01,
+        `${pnl} at ${pct}% should imply ${expected} staked, got ${costOf(p)}`,
+      );
+      assert.ok(Math.abs(realized(p) - pnl) < 0.01, 'the P&L must come back out unchanged');
+    }
+  });
+
+  test('the percentage it reports back matches the one given', () => {
+    const p = addClosedPosition({ ...MARCH_WINNER, pnl: 600, pct: 30 });
+    assert.ok(Math.abs(pctD(realized(p), costOf(p)) - 30) < 0.001);
+  });
+
+  test('nonsense is refused rather than stored', () => {
+    for (const bad of [
+      { pnl: 600, pct: 0 },      // no percentage, so no size
+      { pnl: 0, pct: 30 },       // no P&L
+      { pnl: 600, pct: -30 },    // a gain that was somehow a loss
+    ]) {
+      assert.throws(
+        () => addClosedPosition({ ...MARCH_WINNER, ...bad }),
+        /do not describe a real trade/,
+        `accepted ${JSON.stringify(bad)}`,
+      );
+    }
+  });
+
+  test('survives being saved and loaded back', () => {
+    state.positions = [];
+    const original = addClosedPosition({ ...MARCH_WINNER, pnl: 600, pct: 30 });
+
+    // What persistence does to it: through sanitizePosition and back.
+    const [restored] = sanitizePositions(JSON.parse(JSON.stringify([original])));
+
+    assert.equal(restored.status, 'Closed');
+    assert.equal(restored.summary, true, 'the flag was dropped, so the card would show a fake entry price');
+    assert.equal(restored.close, '2026-04-18');
+    assert.ok(Math.abs(realized(restored) - 600) < 0.01, 'the P&L changed across a save');
+    assert.ok(Math.abs(costOf(restored) - 2000) < 0.01);
   });
 });

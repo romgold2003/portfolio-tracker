@@ -106,24 +106,23 @@ export function saveApiKey() {
 export function addPos() {
   const form = readTradeForm();
   const ticker = normalizeTicker(form.ticker);
-  if (!ticker || !form.entry || !form.amount) {
-    alert('Ticker, entry price and amount are required.');
+  if (!ticker) {
+    alert('Enter a ticker.');
     return;
   }
 
+  // A finished trade is described by its result, an open one by its prices, so
+  // the two paths validate different things entirely.
   if (form.alreadyClosed) {
-    if (!form.close || !form.exit) {
-      alert('A closed trade needs the date you closed it and the exit price.');
-      return;
-    }
-    if (form.open && form.close < form.open) {
-      alert('The closing date is before the opening date.');
-      return;
-    }
-    addClosedPosition({ ...form, ticker });
+    if (!addClosedTrade(form, ticker)) return;
     renderAll();
     clearTradeForm();
     show('positions');
+    return;
+  }
+
+  if (!form.entry || !form.amount) {
+    alert('Entry price and amount invested are required.');
     return;
   }
 
@@ -139,6 +138,51 @@ export function addPos() {
   renderAll();
   clearTradeForm();
   show('positions');
+}
+
+/**
+ * Validate and record a trade that finished before the app saw it.
+ *
+ * Returns false when something was wrong, having already said so. The two
+ * numbers asked for are the two a broker statement leads with, and between them
+ * they fix everything else — a profit of 600 at 30% can only have come from
+ * 2,000 staked.
+ */
+function addClosedTrade(form, ticker) {
+  if (!form.close) {
+    alert('Enter the date you closed the trade, so it lands in the right month.');
+    return false;
+  }
+  if (form.open && form.close < form.open) {
+    alert('The closing date is before the opening date.');
+    return false;
+  }
+  if (!Number.isFinite(form.pnl) || form.pnl === 0) {
+    alert('Enter what the trade made, as a positive or negative amount.');
+    return false;
+  }
+  if (!Number.isFinite(form.pct) || form.pct === 0) {
+    alert('Enter the return as a percentage — it is what fixes the size of the trade.');
+    return false;
+  }
+  // A gain of +600 cannot have been a return of -12%. Catching the mismatch
+  // beats storing a position whose maths quietly contradicts itself.
+  if (Math.sign(form.pnl) !== Math.sign(form.pct)) {
+    alert('The amount and the percentage disagree: one is a gain and the other a loss.');
+    return false;
+  }
+  if (form.pct <= -100) {
+    alert('A loss cannot be more than 100% of what you put in.');
+    return false;
+  }
+
+  try {
+    addClosedPosition({ ...form, ticker });
+  } catch (err) {
+    alert(err.message);
+    return false;
+  }
+  return true;
 }
 
 export function saveEdit(id) {

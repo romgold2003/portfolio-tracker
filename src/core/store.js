@@ -109,6 +109,11 @@ function sanitizePosition(raw) {
   // through, but only when it names a sector the app actually knows.
   if (raw.sector && SECTOR_NAMES.includes(raw.sector)) clean.sector = raw.sector;
 
+  // Entered from a statement as a result rather than as prices. Carried through
+  // because the card reads it: without it a reload would start presenting the
+  // amount staked as though it were an entry price.
+  if (raw.summary === true) clean.summary = true;
+
   // Optional fields are only carried over when they hold a usable value, so a
   // missing one stays absent rather than becoming a misleading zero.
   if (exits && exits.length) clean.exits = exits;

@@ -31,7 +31,7 @@ function exitsBlock(p) {
   return `<div style="background:var(--panel2);border:0.5px solid var(--border2);border-radius:7px;padding:10px 13px;margin-bottom:14px">
     <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:6px">Exits — ${p.exits.length}${p.status === 'Open' ? ' so far · not yet in Monthly' : ''}</span>
     ${p.exits.map((e) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:0.5px solid var(--hover)">
-      <span style="color:var(--text3)">${escapeHtml(e.d)} · ${fmtQty(e.qty)} @ $${fmtPrice(e.price)}</span>
+      <span style="color:var(--text3)">${escapeHtml(e.d)}${p.summary ? '' : ` · ${fmtQty(e.qty)} @ $${fmtPrice(e.price)}`}</span>
       <span style="color:${clr(e.pnl)};font-weight:500">${$s(+e.pnl.toFixed(2))}</span>
     </div>`).join('')}
     <div style="display:flex;justify-content:space-between;font-size:12px;padding-top:7px;margin-top:4px;border-top:0.5px solid var(--border2)">
@@ -46,7 +46,11 @@ function detailGrid(p, pnl) {
   const today = todayStr();
   const soldToday = dailyDollarExits(p, today);
   return `<div class="dg">
-    <div class="dgi"><div class="dgi-k">Entry price</div><div class="dgi-v">$${fmtPrice(p.entry)}</div></div>
+    ${p.summary
+    // Entered from a statement as a result, with no prices behind it. Showing
+    // the stake in a box labelled "entry price" would be inventing one.
+    ? `<div class="dgi"><div class="dgi-k">Recorded as</div><div class="dgi-v" style="font-size:13px">Result only</div></div>`
+    : `<div class="dgi"><div class="dgi-k">Entry price</div><div class="dgi-v">$${fmtPrice(p.entry)}</div></div>`}
     <div class="dgi"><div class="dgi-k">Amount invested</div><div class="dgi-v">${$u(costOf(p))}</div></div>
     <div class="dgi"><div class="dgi-k">Current value</div><div class="dgi-v" style="color:${clr(pnl)}">${$u(curValOf(p))}</div></div>
     ${p.dailyChg != null ? `<div class="dgi"><div class="dgi-k">Today D%</div><div class="dgi-v" style="color:${clr(p.dailyChg)}">${fp(p.dailyChg)}</div></div>` : ''}
@@ -201,7 +205,12 @@ export function positionCard(p, isOpen) {
         <span class="chevron">▶</span>
         <span class="pos-ticker">${escapeHtml(p.ticker)}</span>${progressBadge(p)}
         <span class="pos-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
-        <span class="pos-liveprice" style="color:${priceColor}">$${fmtPrice(p.cur)} <span style="font-size:10px">${liveMark}</span></span>
+        ${p.summary
+    // A trade recorded from a statement has no share price, and the figure
+    // stored in its place is the whole stake. Printing that where a price goes
+    // would read as one.
+    ? `<span class="pos-liveprice" style="color:var(--text3)">${$u(costOf(p))} in</span>`
+    : `<span class="pos-liveprice" style="color:${priceColor}">$${fmtPrice(p.cur)} <span style="font-size:10px">${liveMark}</span></span>`}
       </div>
       <div><div class="pos-pnl" style="color:${clr(pnl)}">${$s(pnl)}</div><div class="pos-pct" style="color:${clr(retPct)}">${fp(retPct)}</div></div>
     </div>${body}

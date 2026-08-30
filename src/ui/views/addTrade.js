@@ -29,7 +29,8 @@ export function readTradeForm() {
     sector: field('f-sector')?.value || null,
     alreadyClosed,
     close: alreadyClosed ? field('f-close')?.value || '' : '',
-    exit: alreadyClosed ? parseFloat(field('f-exit')?.value) : NaN,
+    pnl: alreadyClosed ? parseFloat(field('f-pnl')?.value) : NaN,
+    pct: alreadyClosed ? parseFloat(field('f-pct')?.value) : NaN,
   };
 }
 
@@ -42,10 +43,18 @@ export function readTradeForm() {
  */
 export function toggleClosedTrade() {
   const on = !!field('f-closed')?.checked;
-  ['f-closedDateWrap', 'f-closedPriceWrap', 'f-closedNote'].forEach((id) => {
+
+  // A finished trade is described by what it made, not by prices nobody
+  // remembers — so the price fields are swapped out rather than added to.
+  ['f-closedDateWrap', 'f-pnlWrap', 'f-pctWrap', 'f-closedNote'].forEach((id) => {
     const el = field(id);
     if (el) el.style.display = on ? 'flex' : 'none';
   });
+  ['f-entryWrap', 'f-amountWrap'].forEach((id) => {
+    const el = field(id);
+    if (el) el.style.display = on ? 'none' : 'flex';
+  });
+
   // A sensible default beats an empty date picker: most people entering a
   // finished trade are working through a list and will change it anyway.
   const closeDate = field('f-close');
@@ -53,7 +62,7 @@ export function toggleClosedTrade() {
 }
 
 export function clearTradeForm() {
-  ['f-ticker', 'f-entry', 'f-amount', 'f-reason', 'f-exit'].forEach((id) => {
+  ['f-ticker', 'f-entry', 'f-amount', 'f-reason', 'f-pnl', 'f-pct'].forEach((id) => {
     const el = field(id);
     if (el) el.value = '';
   });

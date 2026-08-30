@@ -159,8 +159,8 @@
           </div>
           <div class="fg"><label>Sector</label><select id="f-sector"><option value="">Auto — from ticker</option></select></div>
           <div class="fg"><label>Date opened</label><input type="date" id="f-date"></div>
-          <div class="fg"><label>Entry price ($)</label><input type="number" id="f-entry" step="any" placeholder="0.00"></div>
-          <div class="fg"><label>Amount invested ($)</label><input type="number" id="f-amount" step="any" placeholder="1000"></div>
+          <div class="fg" id="f-entryWrap"><label>Entry price ($)</label><input type="number" id="f-entry" step="any" placeholder="0.00"></div>
+          <div class="fg" id="f-amountWrap"><label>Amount invested ($)</label><input type="number" id="f-amount" step="any" placeholder="1000"></div>
           <div class="fg" style="grid-column:1/-1">
             <label class="closed-check">
               <input type="checkbox" id="f-closed" onchange="toggleClosedTrade()">
@@ -168,9 +168,10 @@
             </label>
           </div>
           <div class="fg" id="f-closedDateWrap" style="display:none"><label>Date closed</label><input type="date" id="f-close"></div>
-          <div class="fg" id="f-closedPriceWrap" style="display:none"><label>Exit price ($)</label><input type="number" id="f-exit" step="any" placeholder="0.00"></div>
+          <div class="fg" id="f-pnlWrap" style="display:none"><label>Amount made ($)</label><input type="number" id="f-pnl" step="any" placeholder="600 · or -180 for a loss"></div>
+          <div class="fg" id="f-pctWrap" style="display:none"><label>Return (%)</label><input type="number" id="f-pct" step="any" placeholder="30 · or -12 for a loss"></div>
           <div class="fg" id="f-closedNote" style="grid-column:1/-1;display:none">
-            <div class="hint" style="margin:0">Your cash is left alone — the money from a trade you already closed is in your balance already. The exit is recorded on the date you give, so it lands in the right month.</div>
+            <div class="hint" style="margin:0">Just what it made and the percentage — the amount you staked is worked out from those, so you do not need the entry and exit prices. Your cash is left alone, since that money is already in your balance, and the trade is filed under the month you closed it.</div>
           </div>
           <div class="fg" style="grid-column:1/-1">
             <label>Reason for entry</label>
