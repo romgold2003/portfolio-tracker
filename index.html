@@ -16,6 +16,18 @@
 <link rel="stylesheet" href="styles/components.css">
 </head>
 <body>
+<!--
+  The sign-in backdrop: a particle globe with symbols orbiting it.
+
+  A sibling of the lock screen rather than a child, because the lock screen
+  replaces its own innerHTML on every state change and would wipe this out.
+  Purely decorative, so it is hidden from screen readers entirely.
+-->
+<div class="lock-backdrop" id="lockBackdrop" aria-hidden="true">
+  <canvas id="lockGlobe"></canvas>
+  <div class="orbit-field" id="orbitField"></div>
+</div>
+
 <div class="lock-screen" id="lockScreen"></div>
 
 <div class="shell">

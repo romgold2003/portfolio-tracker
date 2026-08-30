@@ -251,3 +251,47 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 .month-pnl{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .month-group.open .chevron{transform:rotate(90deg);color:var(--blue)}
 .month-body{border-top:0.5px solid var(--border);padding:10px 12px 2px;background:var(--panel2)}
+
+/* ── Sign-in backdrop: a particle globe ringed by orbiting symbols ──────────
+   Sits behind the sign-in card and below it in the stack. Decorative only, so
+   it never takes a pointer event and never blocks the form. */
+.lock-backdrop{position:fixed;inset:0;z-index:499;display:none;overflow:hidden;
+  pointer-events:none;background:var(--bg)}
+/* The whole arrangement hangs off a point below the bottom edge, so the rings
+   arc up through the screen instead of sitting in a circle in the middle. */
+.lock-backdrop #lockGlobe,.orbit-ring{position:absolute;left:50%;bottom:0;
+  transform:translate(-50%,50%)}
+.lock-backdrop #lockGlobe{width:min(58vw,420px);height:min(58vw,420px)}
+.orbit-field{position:absolute;inset:0}
+.orbit-ring{width:calc(min(190vw,1500px) * var(--scale));
+  height:calc(min(190vw,1500px) * var(--scale));
+  border:0.5px solid var(--border2);border-radius:50%;opacity:.75}
+
+/* An arm reaches from the ring's centre to its edge and spins; the badge on the
+   end spins back at the same rate, which is what keeps the icons upright
+   instead of tumbling as they go round. */
+.orbit-arm{position:absolute;top:0;left:50%;height:50%;width:0;
+  transform-origin:bottom center;animation:var(--dur) linear infinite}
+.orbit-badge{position:absolute;top:-19px;left:-19px;width:38px;height:38px;
+  display:flex;align-items:center;justify-content:center;border-radius:50%;
+  border:0.5px solid var(--border2);background:var(--panel);color:var(--text3);
+  animation:inherit;animation-name:inherit}
+.orbit-badge svg{width:18px;height:18px}
+@media (min-width:760px){
+  .orbit-badge{top:-24px;left:-24px;width:48px;height:48px}
+  .orbit-badge svg{width:22px;height:22px}
+}
+
+@keyframes orbit-cw{from{transform:rotate(var(--start))}to{transform:rotate(calc(var(--start) + 360deg))}}
+@keyframes orbit-ccw{from{transform:rotate(var(--start))}to{transform:rotate(calc(var(--start) - 360deg))}}
+@keyframes orbit-counter-cw{from{transform:rotate(var(--counter))}to{transform:rotate(calc(var(--counter) - 360deg))}}
+@keyframes orbit-counter-ccw{from{transform:rotate(var(--counter))}to{transform:rotate(calc(var(--counter) + 360deg))}}
+
+/* The card has to stay legible over all of it. */
+.lock-screen{background:transparent}
+.lock-card{backdrop-filter:blur(14px);background:color-mix(in srgb,var(--panel) 88%,transparent)}
+
+/* Asked for less motion: the arrangement stays, the movement stops. */
+@media (prefers-reduced-motion:reduce){
+  .orbit-arm,.orbit-badge{animation:none}
+}
