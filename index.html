@@ -246,10 +246,26 @@
     <div class="modal-section">
       <label>Your journal</label>
       <p style="margin-bottom:10px" id="journalBlurb">Everything is stored in this browser only. Export a backup before clearing browser data, or to move the journal to another machine.</p>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" onclick="exportBackup()">↓ Export backup</button>
         <button class="btn" onclick="openImport()">↑ Import backup</button>
       </div>
+    </div>
+
+    <div class="modal-field">
+      <label>Import from Interactive Brokers</label>
+      <p style="margin-bottom:10px">Rebuilds the whole book from an Activity Statement — every position, every closed trade with the profit IBKR calculated, your cash balance, and the deposits and withdrawals that make a real return possible.</p>
+      <p style="margin-bottom:10px;color:var(--text3);font-size:11px">In IBKR: <strong>Performance &amp; Reports → Statements → Activity Statement</strong>, period <strong>Year to Date</strong>, format <strong>CSV</strong>.</p>
+      <input type="file" id="ibkrFile" accept=".csv,text/csv" onchange="readIbkrFile()" style="font-size:12px">
+      <div id="ibkrPreview" style="display:none;margin-top:12px">
+        <div class="hint" id="ibkrSummary" style="margin:0 0 10px"></div>
+        <div class="hint" style="margin:0 0 10px;color:var(--red)">This replaces everything currently in your journal. Export a backup first if you want to keep it.</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="cancelIbkrImport()">Cancel</button>
+          <button class="btn btn-blue" onclick="confirmIbkrImport()">Replace my journal</button>
+        </div>
+      </div>
+      <div id="ibkrError" class="lock-error" style="margin-top:10px"></div>
     </div>
 
     <div class="modal-field danger-zone">

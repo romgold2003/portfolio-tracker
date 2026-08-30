@@ -11,7 +11,13 @@
  * bridge is deliberate and lives in exactly one place, so the set of names the
  * HTML depends on is auditable at a glance.
  */
-import { state, saveCash, saveApiKey as persistApiKey, findPosition, savePositions } from '../core/store.js';
+import {
+  state, saveCash, saveApiKey as persistApiKey, findPosition, savePositions,
+  loadState, flushNow,
+} from '../core/store.js';
+import {
+  parseIbkrStatement, statementToJournal, describeStatement,
+} from '../features/ibkr.js';
 import {
   addPosition, addClosedPosition, updatePosition, applyDca as applyDcaToPosition, previewDca,
   closePosition, reopenPosition, deletePosition, setCurrentPrice,
@@ -584,6 +590,8 @@ export function installActions(extra = {}) {
     // backup & restore
     exportBackup, openImport, closeImport, previewImport, readImportFile, confirmImport,
     copyLegacySnippet,
+    // Interactive Brokers import
+    readIbkrFile, cancelIbkrImport, confirmIbkrImport,
     // account deletion
     beginDeleteAccount, cancelDeleteAccount, confirmDeleteAccount,
     ...extra,
@@ -650,3 +658,69 @@ export async function confirmDeleteAccount() {
 
 /** Filled in by installActions(), because only main.js can stop the timers. */
 let signOutAfterDelete = async () => window.location.reload();
+
+/**
+ * Importing an Interactive Brokers Activity Statement.
+ *
+ * Read, summarised, and only then applied — the file replaces the entire
+ * journal, so what is about to happen is put on screen and confirmed before
+ * anything is touched.
+ */
+let stagedStatement = null;
+
+function ibkrError(message) {
+  const box = el('ibkrError');
+  if (!box) return;
+  box.textContent = message || '';
+  box.style.display = message ? 'block' : 'none';
+}
+
+export async function readIbkrFile() {
+  const input = el('ibkrFile');
+  const file = input?.files?.[0];
+  ibkrError('');
+  if (!file) return;
+
+  try {
+    stagedStatement = parseIbkrStatement(await file.text());
+  } catch (err) {
+    stagedStatement = null;
+    el('ibkrPreview').style.display = 'none';
+    ibkrError(err.message);
+    return;
+  }
+
+  el('ibkrSummary').textContent = describeStatement(stagedStatement);
+  el('ibkrPreview').style.display = 'block';
+}
+
+export function cancelIbkrImport() {
+  stagedStatement = null;
+  const input = el('ibkrFile');
+  if (input) input.value = '';
+  el('ibkrPreview').style.display = 'none';
+  ibkrError('');
+}
+
+export async function confirmIbkrImport() {
+  if (!stagedStatement) return;
+  const journal = statementToJournal(stagedStatement, {
+    snapshots: state.snapshots,
+    apiKey: state.apiKey,
+  });
+
+  loadState(journal);
+  await flushNow();
+
+  const count = journal.positions.length;
+  cancelIbkrImport();
+  closeSettings();
+  renderAll();
+  refreshPrices();
+  refreshMeasuredBetas();
+  show('positions');
+  alert(`Imported ${count} positions from your statement.\n\n`
+    + 'Prices are refreshing now. Your open positions, closed trades, cash and '
+    + 'deposits all came from the statement, so the numbers should match your '
+    + 'broker.');
+}

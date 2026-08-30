@@ -17,9 +17,66 @@ export const state = {
   cash: 0,
   /** @type {{date:string,value:number}[]} daily account-value points */
   snapshots: [],
+  /**
+   * Money paid in and taken out, with dates.
+   *
+   * Kept apart from trades because it is not profit. A return measured without
+   * these treats a deposit as though it had been earned, and treats it as
+   * having been in the account since January — which is how this book reported
+   * 24% where its broker said 29%.
+   */
+  cashFlows: [],
+  /** Dividends, interest, commissions and tax: money that moves without a trade. */
+  income: { dividends: 0, interest: 0, commissions: 0, tax: 0 },
+  /**
+   * What the account was actually worth on a known date, per a broker statement.
+   *
+   * Worth far more than the same figure derived backwards from today. Deriving
+   * it needs a price for every holding on that date, and anything carried in
+   * from an earlier year has none — so the derived version silently omits their
+   * gain. A statement simply states it.
+   */
+  openingNav: null,
   /** Finnhub key for stock/ETF quotes. Stays on this device. */
   apiKey: '',
 };
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A dated amount. Anything unparseable is dropped rather than stored as zero. */
+function sanitizeFlows(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((f) => {
+      const amount = Number(f?.amount);
+      const date = typeof f?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.date) ? f.date : null;
+      if (!date || !Number.isFinite(amount) || amount === 0) return null;
+      return {
+        date,
+        amount,
+        description: typeof f.description === 'string' ? f.description.slice(0, 120) : '',
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** A stated account value on a date, or null. */
+function sanitizeAnchor(value) {
+  const amount = Number(value?.value);
+  const ok = typeof value?.date === 'string' && DATE_ONLY.test(value.date) && Number.isFinite(amount);
+  return ok ? { date: value.date, value: amount } : null;
+}
+
+function sanitizeIncome(value) {
+  const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+  return {
+    dividends: n(value?.dividends),
+    interest: n(value?.interest),
+    commissions: n(value?.commissions),
+    tax: n(value?.tax),
+  };
+}
 
 /** localStorage can throw (private mode, disabled storage) — never let it break a render. */
 function readRaw(key) {
@@ -169,6 +226,9 @@ export function loadState(journal) {
   state.positions = sanitizePositions(source.positions ?? []);
   state.cash = Number(source.cash) || 0;
   state.snapshots = Array.isArray(source.snapshots) ? source.snapshots : [];
+  state.cashFlows = sanitizeFlows(source.cashFlows);
+  state.income = sanitizeIncome(source.income);
+  state.openingNav = sanitizeAnchor(source.openingNav);
   state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
 }
 
@@ -178,6 +238,9 @@ export function journalSnapshot() {
     positions: state.positions,
     cash: state.cash,
     snapshots: state.snapshots,
+    cashFlows: state.cashFlows,
+    income: state.income,
+    openingNav: state.openingNav,
     apiKey: state.apiKey,
   };
 }
@@ -187,6 +250,9 @@ export function clearState() {
   state.positions = [];
   state.cash = 0;
   state.snapshots = [];
+  state.cashFlows = [];
+  state.income = { dividends: 0, interest: 0, commissions: 0, tax: 0 };
+  state.openingNav = null;
   state.apiKey = '';
 }
 
@@ -295,6 +361,7 @@ export async function flushNow() {
 export function savePositions() { scheduleFlush(); }
 export function saveSnapshots() { scheduleFlush(); }
 export function saveCash() { scheduleFlush(); }
+export function saveCashFlows() { scheduleFlush(); }
 export function saveApiKey(key) {
   state.apiKey = key;
   scheduleFlush();

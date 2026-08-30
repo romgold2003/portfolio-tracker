@@ -343,6 +343,107 @@ export function periodPnl(positions, account, from = null, startPrices = new Map
   };
 }
 
+/**
+ * Return over a window when money went in and out during it — Modified Dietz.
+ *
+ *   R = P&L / ( BMV + SUM( w_i * CF_i ) ),   w_i = (T - t_i) / T
+ *
+ * The denominator is the point. Dividing by the opening balance alone credits
+ * the whole year's profit to money that only arrived in June; dividing by the
+ * closing balance does the opposite. Weighting each deposit by the fraction of
+ * the period it was actually present gives the average capital at work, which
+ * is what a return is a return *on*.
+ *
+ * This is the standard approximation to a true time-weighted return for anyone
+ * without a valuation on every flow date. It differs from one only to the
+ * extent the account moved sharply between flows — a broker computing daily
+ * TWR will report something close but not identical, and neither is wrong.
+ *
+ * Returns null when the weighted base is not positive, which means the window
+ * has no capital to measure a return against.
+ */
+export function modifiedDietzReturn(pnl, openingValue, flows = [], from, to) {
+  const start = new Date(from).getTime();
+  const end = new Date(to).getTime();
+  const days = (end - start) / 86_400_000;
+  if (!Number.isFinite(days) || days <= 0) return null;
+
+  let weighted = 0;
+  for (const f of flows) {
+    const at = new Date(f.date).getTime();
+    if (!Number.isFinite(at) || at < start || at > end) continue;
+    // Money present for the whole period counts fully; money that arrived
+    // yesterday counts for almost nothing.
+    const weight = (end - at) / (end - start);
+    weighted += f.amount * weight;
+  }
+
+  const base = openingValue + weighted;
+  if (!(base > 0)) return null;
+  return (pnl / base) * 100;
+}
+
+/**
+ * What the account was worth when the window opened, worked out backwards.
+ *
+ *   opening = closing - profit - money paid in
+ *
+ * Without the flows term this silently assumes every deposit was present from
+ * the start, which inflates the base by the whole amount paid in and crushes
+ * the reported return.
+ */
+export function openingValue(closingValue, pnl, flows = [], from, to) {
+  const start = new Date(from).getTime();
+  const end = new Date(to).getTime();
+  const net = flows.reduce((sum, f) => {
+    const at = new Date(f.date).getTime();
+    return (at >= start && at <= end) ? sum + f.amount : sum;
+  }, 0);
+  return closingValue - pnl - net;
+}
+
+/**
+ * How the account did over a window, by the best method the data supports.
+ *
+ * Two ways of answering, and the difference between them is whether anyone has
+ * told the app what the account was actually worth when the window opened.
+ *
+ * With a statement anchoring that date, the whole thing falls out of the
+ * balance sheet: profit is what the account is worth now, less what it was
+ * worth then, less the money paid in between — which captures dividends, fees
+ * and holdings carried in from earlier years without needing to know anything
+ * about them individually. The return is then Modified Dietz, weighting each
+ * deposit by how long it was actually present.
+ *
+ * Without one, it falls back to adding up the trades and assuming no money
+ * moved. That is the honest best guess from a journal alone, and it understates
+ * whenever money was in fact paid in.
+ *
+ * `method` says which happened, because the two are not the same claim and a
+ * reader deserves to know which they are looking at.
+ */
+export function accountPerformance({
+  positions, account, from, to, flows = [], openingNav = null, startPrices = new Map(),
+}) {
+  const anchored = openingNav && from && openingNav.date === from && openingNav.value > 0;
+
+  if (anchored) {
+    const net = flows.reduce((sum, f) => (
+      (f.date >= from && f.date <= to) ? sum + f.amount : sum
+    ), 0);
+    const pnl = account - openingNav.value - net;
+    return {
+      pnl,
+      startEquity: openingNav.value,
+      returnPct: modifiedDietzReturn(pnl, openingNav.value, flows, from, to),
+      carried: 0,
+      method: 'statement',
+    };
+  }
+
+  return { ...periodPnl(positions, account, from, startPrices), method: 'trades' };
+}
+
 /** The calendar year, which is the window the overview reports against. */
 export function yearToDatePnl(positions, account, startPrices = new Map(), now = new Date()) {
   return periodPnl(positions, account, `${now.getFullYear()}-01-01`, startPrices);

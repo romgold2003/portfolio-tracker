@@ -3,7 +3,7 @@ import { state } from '../../core/store.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
-  sectorBreakdown, yearToDatePnl, periodPnl,
+  sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
@@ -228,8 +228,15 @@ async function renderBenchmark(totals) {
 let startPrices = new Map();
 
 function yearToDateReturn(totals) {
-  const result = yearToDatePnl(state.positions, totals.account, startPrices);
-  return result.returnPct;
+  return accountPerformance({
+    positions: state.positions,
+    account: totals.account,
+    from: `${new Date().getFullYear()}-01-01`,
+    to: todayStr(),
+    flows: state.cashFlows,
+    openingNav: state.openingNav,
+    startPrices,
+  }).returnPct;
 }
 
 /**
@@ -369,7 +376,15 @@ export function renderHome() {
   // unrealised by exactly that. Every number here is counted from the trades.
   renderCurve(ui.timeframe);
 
-  const period = periodPnl(state.positions, totals.account, windowStart(), startPrices);
+  const period = accountPerformance({
+    positions: state.positions,
+    account: totals.account,
+    from: windowStart(),
+    to: todayStr(),
+    flows: state.cashFlows,
+    openingNav: state.openingNav,
+    startPrices,
+  });
   setText('kReturn', fp(period.returnPct ?? 0));
   setColor('kReturn', clr(period.returnPct ?? 0));
   renderPeriodGain(period);
