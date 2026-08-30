@@ -10,6 +10,7 @@ import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkReturn, benchmarkKey, benchmarkFailure,
+  benchmarkSpot, benchmarkYearToDate,
 } from '../../services/benchmark.js';
 import { cutoffFor } from '../../core/snapshots.js';
 import {
@@ -185,7 +186,10 @@ async function renderBenchmark(periodReturn) {
     return;
   }
 
-  const marketReturn = benchmarkReturn(rows, span.from, span.to);
+  // Live where the window runs to today, so both sides are measured at the
+  // same moment rather than yours now against the index's last close.
+  const spot = span.to === todayStr() ? benchmarkSpot() : null;
+  const marketReturn = benchmarkReturn(rows, span.from, span.to, spot);
   if (marketReturn == null) {
     valEl.textContent = '—';
     valEl.style.color = 'var(--text3)';
@@ -198,7 +202,14 @@ async function renderBenchmark(periodReturn) {
 
   const edge = (periodReturn ?? 0) - marketReturn;
   const verdict = edge >= 0 ? 'ahead of' : 'behind';
-  noteEl.textContent = `${fp(Math.abs(edge)).replace('+', '')} ${verdict} the market · ${span.days}d`;
+
+  // The market's own year is appended because it is the question people
+  // actually ask — "what has the S&P done this year" — and it cannot be read
+  // off the comparison above, which is deliberately clipped to your own window.
+  const ytd = benchmarkYearToDate(rows, benchmarkSpot());
+  const ytdNote = ytd == null ? '' : ` · S&P ${fp(ytd)} YTD`;
+
+  noteEl.textContent = `${fp(Math.abs(edge)).replace('+', '')} ${verdict} the market · ${span.days}d${ytdNote}`;
   noteEl.style.color = edge >= 0 ? 'var(--green)' : 'var(--red)';
 }
 

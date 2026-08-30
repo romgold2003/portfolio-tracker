@@ -4,20 +4,29 @@
  * Two things need a daily history of the index: the "am I beating the market"
  * line on the overview, and a beta that is measured rather than assumed.
  *
- * Getting that history into a page with no backend is the whole difficulty.
- * Stooq serves it free but sends no CORS header, so a browser cannot read it.
- * Yahoo rate-limits anonymous callers. Finnhub puts candles behind its paid
- * tier. Alpha Vantage allows cross-origin reads and has a free key, so that is
- * what this uses — and the app works without one, just with less to say.
+ * Getting that history into a browser is the whole difficulty. The free sources
+ * carrying deep history either send no CORS header or sit behind a bot check,
+ * and the one that does allow cross-origin reads caps a free key at twenty-five
+ * calls a day — which a handful of reloads exhausts.
  *
- * The series is cached for a day. A daily bar does not change intraday, and the
- * free tier allows only twenty-five calls a day.
+ * So where there is a server, it fetches the history instead: no key, no quota,
+ * years rather than a hundred days. The keyed service remains the fallback for
+ * the builds that have no server, now with a backoff so a refusal cannot spend
+ * the day's allowance on repeated reloads.
+ *
+ * The current level is separate again, and free: the tracked ETF is re-quoted
+ * with every other position, so during market hours it is already in memory.
  */
 import { API, STORAGE_KEYS } from '../config/constants.js';
+import { state } from '../core/store.js';
+import { cloudEnabled } from './cloud.js';
 import { priceHistory } from './priceLog.js';
 import { betaFromReturns } from '../core/portfolio.js';
 
-export const BENCHMARK_SYMBOL = 'SPY';
+// The ETF the comparison actually tracks. VOO over SPY because its live price
+// is usually already on screen — anyone benchmarking against the index tends to
+// hold it — and a price already fetched costs nothing to reuse.
+export const BENCHMARK_SYMBOL = 'VOO';
 export const BENCHMARK_NAME = 'S&P 500';
 
 /** A trading day's worth of staleness is fine for a daily close. */
@@ -46,6 +55,38 @@ function writeCache(rows) {
   } catch { /* the series simply will not persist */ }
 }
 
+/**
+ * How long to leave the keyed service alone after it refuses.
+ * Its quota is daily, so an hour is a compromise between not wasting calls and
+ * noticing when the quota rolls over.
+ */
+const BACKOFF_MS = 60 * 60 * 1000;
+const BACKOFF_KEY = 'pt_bench_backoff';
+
+function startBackoff(reason) {
+  try {
+    localStorage.setItem(BACKOFF_KEY, JSON.stringify({ until: Date.now() + BACKOFF_MS, reason }));
+  } catch { /* it will simply retry sooner */ }
+}
+
+function readBackoff() {
+  try {
+    const raw = localStorage.getItem(BACKOFF_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function backoffActive() {
+  const state_ = readBackoff();
+  return !!state_ && Date.now() < state_.until;
+}
+
+function readBackoffReason() {
+  return readBackoff()?.reason || 'Market data unavailable right now';
+}
+
 export function benchmarkKey() {
   try { return localStorage.getItem(STORAGE_KEYS.benchmarkKey) || ''; } catch { return ''; }
 }
@@ -54,7 +95,9 @@ export function saveBenchmarkKey(key) {
   try { localStorage.setItem(STORAGE_KEYS.benchmarkKey, key); } catch { /* ignore */ }
   // A new key means the old refusal is no longer the answer.
   series = null;
+  lastFailure = null;
   try { localStorage.removeItem(STORAGE_KEYS.benchmark); } catch { /* ignore */ }
+  try { localStorage.removeItem(BACKOFF_KEY); } catch { /* ignore */ }
 }
 
 /**
@@ -101,14 +144,75 @@ async function fetchSeries(key, outputSize) {
   return { rows: parseRows(json), refusal: refusalIn(json) };
 }
 
+/**
+ * The index right now, rather than at last night's close.
+ *
+ * The benchmark tracks an S&P 500 ETF, and anyone using this app to track an
+ * S&P position is already holding one — its price is re-quoted with every other
+ * position, every thirty seconds. So during market hours the live level is
+ * already in memory and costs nothing to read.
+ *
+ * That is what makes a same-day comparison honest: your account value moves
+ * with the market all day, and comparing it against yesterday's index close
+ * would credit or blame you for a move the index also made.
+ */
+export function benchmarkSpot() {
+  const held = state.positions.find(
+    (p) => p.status === 'Open' && p.ticker === BENCHMARK_SYMBOL && p.cur > 0,
+  );
+  return held ? held.cur : null;
+}
+
+/**
+ * History by way of this deployment's own server.
+ *
+ * Preferred over the keyed service because it needs no key, has no daily quota,
+ * and carries years rather than a hundred days. Absent on the static builds,
+ * which have no server — those fall through to the keyed path below.
+ */
+async function seriesFromServer() {
+  if (!cloudEnabled()) return null;
+  try {
+    const res = await fetch(`/api/history?symbol=${BENCHMARK_SYMBOL}&years=2`, {
+      credentials: 'same-origin',
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json?.rows) && json.rows.length >= 2 ? json.rows : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function benchmarkSeries() {
   if (series) return series;
 
   const cached = readCache();
   if (cached) { series = cached; return series; }
 
+  const fromServer = await seriesFromServer();
+  if (fromServer) {
+    lastFailure = null;
+    series = fromServer;
+    writeCache(fromServer);
+    return series;
+  }
+
   const key = benchmarkKey();
   if (!key) { lastFailure = null; return null; }
+
+  /**
+   * Stop asking after a refusal.
+   *
+   * The free tier allows twenty-five calls a day, and a failed attempt used to
+   * cache nothing — so every reload spent two more and the quota was gone
+   * inside a dozen refreshes, which is exactly how it ran out. A refusal is now
+   * remembered for an hour.
+   */
+  if (backoffActive()) {
+    lastFailure = readBackoffReason();
+    return null;
+  }
 
   try {
     /**
@@ -126,6 +230,7 @@ export async function benchmarkSeries() {
 
     if (!rows) {
       lastFailure = refusal || 'The market data service sent no prices.';
+      startBackoff(lastFailure);
       return null;
     }
 
@@ -153,11 +258,31 @@ export function closeOnOrBefore(rows, date) {
  * The index's return between two dates, as a percentage.
  * Null when the window falls outside the data.
  */
-export function benchmarkReturn(rows, fromDate, toDate) {
+export function benchmarkReturn(rows, fromDate, toDate, endOverride = null) {
   if (!rows?.length) return null;
   const start = closeOnOrBefore(rows, fromDate);
-  const end = closeOnOrBefore(rows, toDate);
+  // A live price beats the last close whenever the window runs to today —
+  // otherwise an account that has moved all morning is being measured against
+  // an index frozen at last night's close.
+  const end = endOverride ?? closeOnOrBefore(rows, toDate);
   if (!start || !end) return null;
+  return ((end - start) / start) * 100;
+}
+
+/**
+ * What the index has done this calendar year, regardless of when you started.
+ *
+ * Kept separate from the comparison above on purpose. That one matches your own
+ * window so the "ahead or behind" figure means something; this is just the
+ * market's own number, which is a useful thing to know even when your account
+ * is three weeks old.
+ */
+export function benchmarkYearToDate(rows, spot = null) {
+  if (!rows?.length) return null;
+  const janFirst = `${new Date().getFullYear()}-01-01`;
+  const start = closeOnOrBefore(rows, janFirst);
+  if (!start) return null;
+  const end = spot ?? rows[rows.length - 1].close;
   return ((end - start) / start) * 100;
 }
 
