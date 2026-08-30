@@ -22,13 +22,13 @@
   is exactly this — a looping video under a noise pass and a vertical gradient,
   inside a rounded frame. Purely decorative, so it is hidden from screen readers.
 
-  The canvas underneath is the fallback. The standalone single-file build has no
-  assets folder to serve the video from, and a phone on a bad connection may
-  never finish it, so a drawn scene sits behind and is uncovered if the video
-  does not arrive.
+  Behind the video is the first frame of it, inlined in the stylesheet as a
+  small JPEG. It paints immediately and the video fades in over it, so what is
+  on screen while 16 MB is on its way is this same picture rather than some
+  other one — and the standalone single file, which has no assets folder to
+  serve a video from, still shows it.
 -->
 <div class="signin-hero" id="signinHero" aria-hidden="true">
-  <canvas class="signin-scene" id="signinScene"></canvas>
   <video class="signin-hero-video" id="signinHeroVideo"
          autoplay loop muted playsinline preload="auto"
          src="assets/signin-hero.mp4"></video>
