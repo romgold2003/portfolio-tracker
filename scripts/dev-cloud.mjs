@@ -57,6 +57,7 @@ const ROUTES = {
   '/api/vault': '../api/vault.js',
   '/api/account': '../api/account.js',
   '/api/history': '../api/history.js',
+  '/api/quote': '../api/quote.js',
   '/api/auth/begin': '../api/auth/begin.js',
   '/api/auth/signup': '../api/auth/signup.js',
   '/api/auth/login': '../api/auth/login.js',

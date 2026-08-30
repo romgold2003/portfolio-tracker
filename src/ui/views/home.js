@@ -66,6 +66,18 @@ const LIST_HEADER = `<div style="display:grid;grid-template-columns:1fr auto aut
   <div style="font-size:10px;color:var(--text3);text-align:right;min-width:80px">P&L</div>
 </div>`;
 
+/**
+ * Says when a price came from outside regular hours.
+ *
+ * Without it an after-hours print is indistinguishable from the closing price,
+ * and the two mean different things — one is live, the other is history.
+ */
+function extBadge(p) {
+  if (!p.extPhase) return '';
+  const label = p.extPhase === 'pre' ? 'PRE' : 'AFTER';
+  return `<span class="ext-badge" title="Traded outside regular hours">${label}</span>`;
+}
+
 function miniRow(p) {
   const pnl = unreal(p);
   const retPct = pctD(pnl, costOf(p));
@@ -90,7 +102,7 @@ function miniRow(p) {
     <div style="display:flex;align-items:center;gap:6px">
       <span class="mini-tk">${escapeHtml(p.ticker)}</span>
       <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
-      <span class="mini-live" style="color:${live ? 'var(--green)' : 'var(--text3)'}">$${fmtPrice(p.cur)}${live ? ' ▲' : ''}</span>
+      <span class="mini-live" style="color:${live ? 'var(--green)' : 'var(--text3)'}">$${fmtPrice(p.cur)}${live ? ' ▲' : ''}</span>${extBadge(p)}
     </div>
     <div style="text-align:center;padding:0 12px;font-size:12px">
       ${dailyText}

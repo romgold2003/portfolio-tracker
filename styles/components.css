@@ -383,3 +383,10 @@ body:has(.recovery-banner) .shell{padding-top:74px}
   .alloc-row-lg .alloc-lg-pnl{min-width:0}
   .alloc-tk{min-width:0}
 }
+
+/* A price printed outside regular hours is live in a way a closing price is
+   not, and the two look identical without saying so. */
+.ext-badge{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;
+  font-size:8px;font-weight:700;letter-spacing:.06em;vertical-align:middle;
+  background:var(--amber-bg,var(--blue-bg));color:var(--amber);
+  border:0.5px solid var(--amber);opacity:.85}

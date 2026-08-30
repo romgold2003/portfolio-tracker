@@ -244,7 +244,7 @@ export function positionCard(p, isOpen) {
     // stored in its place is the whole stake. Printing that where a price goes
     // would read as one.
     ? `<span class="pos-liveprice" style="color:var(--text3)">${$u(costOf(p))} in</span>`
-    : `<span class="pos-liveprice" style="color:${priceColor}">$${fmtPrice(p.cur)} <span style="font-size:10px">${liveMark}</span></span>`}
+    : `<span class="pos-liveprice" style="color:${priceColor}">$${fmtPrice(p.cur)} <span style="font-size:10px">${liveMark}</span></span>${p.extPhase ? `<span class="ext-badge" title="Traded outside regular hours">${p.extPhase === 'pre' ? 'PRE' : 'AFTER'}</span>` : ''}`}
       </div>
       <div><div class="pos-pnl" style="color:${clr(pnl)}">${$s(pnl)}</div><div class="pos-pct" style="color:${clr(retPct)}">${fp(retPct)}</div></div>
     </div>${body}

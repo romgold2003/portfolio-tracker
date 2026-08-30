@@ -86,11 +86,21 @@ async function fetchStockPrice(ticker, position) {
 /** Re-quote every open position in place. Returns true if any price changed. */
 export async function refreshOpenPositions() {
   let changed = false;
-  for (const p of state.positions) {
-    if (p.status !== 'Open') continue;
+  const open = state.positions.filter((p) => p.status === 'Open');
+
+  for (const p of open) {
     const price = await fetchPrice(p.ticker, p.cls, p);
     if (price) { p.cur = price; changed = true; }
   }
+
+  // Crypto is deliberately excluded: it trades around the clock, so its price
+  // is already current and there is no "extended session" to ask about.
+  const tradable = open.filter((p) => p.cls !== 'Crypto').map((p) => p.ticker);
+  if (tradable.length) {
+    const extended = await extendedQuotes(tradable);
+    if (applyExtendedQuotes(state.positions, extended)) changed = true;
+  }
+
   return changed;
 }
 
