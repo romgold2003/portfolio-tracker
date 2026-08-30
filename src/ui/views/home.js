@@ -3,16 +3,17 @@ import { state } from '../../core/store.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
-  sectorBreakdown, yearToDatePnl,
+  sectorBreakdown, yearToDatePnl, periodPnl,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
-  benchmarkSpot, benchmarkYearToDate, yearStartPrices,
+  benchmarkSpot, benchmarkYearToDate,
 } from '../../services/benchmark.js';
-import { periodStart, curveSeries } from '../../core/snapshots.js';
+import { pricesOn } from '../../services/history.js';
+import { periodStart, cutoffFor } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -232,21 +233,27 @@ function yearToDateReturn(totals) {
 }
 
 /**
- * Fetch the 1 January prices for anything held since last year, once.
+ * Fetch what each already-held position was worth when the window opened.
  *
- * Only positions opened in an earlier year need one, which is normally none or
- * a handful, and the answer is cached for the rest of the year.
+ * Only positions predating the window need one — for a year that is normally
+ * none or a handful — and a past close never changes, so it is cached for good.
+ * Until it arrives those positions are left out, so the figure can rise on the
+ * second pass rather than starting overstated.
  */
-async function loadYearStartPrices() {
-  const yearStart = `${new Date().getFullYear()}-01-01`;
-  const carried = state.positions
-    .filter((p) => p.status === 'Open' && p.open && p.open < yearStart)
-    .map((p) => p.ticker);
-  if (!carried.length) return;
+async function loadWindowStartPrices() {
+  const from = windowStart();
+  if (!from) return;
 
-  const fetched = await yearStartPrices(carried);
-  if (fetched.size === startPrices.size) return;
-  startPrices = fetched;
+  const held = state.positions
+    .filter((p) => p.status === 'Open' && p.open && p.open < from)
+    .map((p) => p.ticker);
+  if (!held.length) return;
+
+  const fetched = await pricesOn(held, from);
+  // Only redraw when something new actually arrived, or this recurses.
+  const changed = [...fetched].some(([t, v]) => startPrices.get(t) !== v);
+  if (!changed) return;
+  startPrices = new Map([...startPrices, ...fetched]);
   renderHome();
 }
 
@@ -287,16 +294,17 @@ function trackedSpan() {
  * This follows the timeframe buttons rather than showing lifetime P&L, so
  * "1M" answers what the month did.
  */
-function renderPeriodGain(series) {
+function renderPeriodGain(period) {
   const pnlEl = document.getElementById('acctPnl');
   if (!pnlEl) return;
 
-  if (!series) {
+  if (!period) {
     pnlEl.textContent = '—';
     return;
   }
 
-  const { gain, returnPct } = series;
+  const gain = period.pnl;
+  const returnPct = period.returnPct ?? 0;
   const arrow = gain >= 0 ? '▲ ' : '▼ ';
 
   pnlEl.innerHTML = hidden
@@ -354,18 +362,33 @@ export function renderHome() {
 
   renderAllocation();
 
-  // The period figures come from the series the chart actually plotted, so the
-  // headline gain, the KPI and the benchmark all describe the same window.
-  const series = renderCurve(ui.timeframe);
-  const periodReturn = series ? series.returnPct : 0;
-  setText('kReturn', fp(periodReturn));
-  setColor('kReturn', clr(periodReturn));
+  // The chart still draws the recorded account value; the figures beside it do
+  // not come from it. That curve measures the change in what the account holds,
+  // which counts money paid in as though it had been earned — it reported 2,450
+  // of funding as profit on this book, and disagreed with realised plus
+  // unrealised by exactly that. Every number here is counted from the trades.
+  renderCurve(ui.timeframe);
 
-  renderPeriodGain(series);
+  const period = periodPnl(state.positions, totals.account, windowStart(), startPrices);
+  setText('kReturn', fp(period.returnPct ?? 0));
+  setColor('kReturn', clr(period.returnPct ?? 0));
+  renderPeriodGain(period);
 
   // Needs the network, so it settles in after the rest of the page is drawn.
   renderBenchmark(totals);
-  loadYearStartPrices();
+  loadWindowStartPrices();
 
   updateLivePill();
+}
+
+/**
+ * The first day of the window the buttons are asking for, as a date string.
+ *
+ * Null for "All", which means the whole life of the account — where the period
+ * P&L necessarily equals realised plus unrealised, so the figure under the
+ * account value and the two tiles below it finally agree.
+ */
+function windowStart() {
+  if (ui.timeframe === 'All') return null;
+  return cutoffFor(ui.timeframe).toISOString().slice(0, 10);
 }

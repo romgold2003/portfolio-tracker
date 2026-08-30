@@ -262,48 +262,50 @@ export function accountTotals(positions, cash) {
  * negative space in a pie, and a negative wedge cannot be drawn.
  */
 /**
- * What the account made this year, and the return that implies.
+ * What the account made over a window, and the return that implies.
  *
- * The account curve cannot answer this. It began the day the app was first
- * opened and records values, not where they came from — so a year of trades
- * entered afterwards moves it not at all, and the return reads the same whether
- * you made sixty thousand or nothing.
+ * The account curve cannot answer this, for two reasons. It began the day the
+ * app was first opened, so a year of trades entered afterwards moves it not at
+ * all. And it measures the change in account value, which cannot tell profit
+ * from a deposit — money paid in looked exactly like a spectacular week, and on
+ * this book reported 2,450 of funding as though it had been earned.
  *
  * Counted from the trades themselves instead:
  *
- *   - every trade closed this year contributes what it banked
- *   - every position opened this year contributes what it is up or down by
- *   - a position opened in an earlier year contributes only the part that
- *     happened this year, which needs its price on 1 January
+ *   - every trade closed inside the window contributes what it banked
+ *   - every position opened inside it contributes what it is up or down by
+ *   - a position already held when the window opened contributes only the move
+ *     since, which needs its price on that date
  *
- * That last one is why `startPrices` exists. Without a price for a holding
- * carried in from last year, none of its gain can be honestly assigned to this
- * year, so it is left out entirely and reported in `carried` — better an
- * understated return than one silently crediting this year with last year's
- * work.
+ * That last one is why `startPrices` exists. Without a price for a holding that
+ * predates the window, none of its gain can honestly be assigned to it, so it
+ * is left out and reported in `carried` — better an understated return than one
+ * silently crediting this month with last year's work.
  *
- * The starting equity is then today's account minus what this year added, and
- * the return is measured against that. It is money-weighted: it answers "what
- * did this account make this year", not "how well timed were the deposits".
+ * `from` omitted means the whole life of the account, where this necessarily
+ * equals realised plus unrealised.
+ *
+ * The starting equity is the account today less what the window added, and the
+ * return is measured against that. It is money-weighted: it answers "what did
+ * this account make", not "how well timed were the deposits".
  */
-export function yearToDatePnl(positions, account, startPrices = new Map(), now = new Date()) {
-  const yearStart = `${now.getFullYear()}-01-01`;
+export function periodPnl(positions, account, from = null, startPrices = new Map()) {
   let pnl = 0;
   let carried = 0;
 
   for (const p of positions) {
     if (p.status === 'Closed') {
-      // Booked this year, whenever it was opened.
-      if (p.close && p.close >= yearStart) pnl += realized(p);
+      // Booked inside the window, whenever it was opened.
+      if (!from || (p.close && p.close >= from)) pnl += realized(p);
       continue;
     }
 
-    if (p.open && p.open >= yearStart) {
+    if (!from || (p.open && p.open >= from)) {
       pnl += unreal(p);
       continue;
     }
 
-    // Carried in from a previous year: only this year's move belongs here.
+    // Held before the window opened: only the move inside it belongs here.
     const startPrice = startPrices.get(p.ticker);
     if (startPrice > 0) {
       const move = (p.cur - startPrice) * p.qty;
@@ -319,9 +321,14 @@ export function yearToDatePnl(positions, account, startPrices = new Map(), now =
     startEquity,
     /** Null when the starting equity is not a sensible base to divide by. */
     returnPct: startEquity > 0 ? (pnl / startEquity) * 100 : null,
-    /** Holdings from earlier years left out for want of a 1 January price. */
+    /** Holdings predating the window, left out for want of a price at its start. */
     carried,
   };
+}
+
+/** The calendar year, which is the window the overview reports against. */
+export function yearToDatePnl(positions, account, startPrices = new Map(), now = new Date()) {
+  return periodPnl(positions, account, `${now.getFullYear()}-01-01`, startPrices);
 }
 
 export function sectorBreakdown(positions, cash = 0) {

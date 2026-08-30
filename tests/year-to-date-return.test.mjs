@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 
 import { state } from '../src/core/store.js';
 import { addClosedPosition } from '../src/core/positions.js';
-import { yearToDatePnl, accountTotals } from '../src/core/portfolio.js';
+import { yearToDatePnl, periodPnl, accountTotals } from '../src/core/portfolio.js';
 
 const NOW = new Date(2026, 7, 30, 12, 0);
 const YEAR_START = '2026-01-01';
@@ -193,5 +193,74 @@ describe('money paid in', () => {
     state.cash -= 3000;
     const after = yearToDatePnl(state.positions, totalsFor(), new Map(), NOW);
     assert.equal(after.pnl, before.pnl, 'a withdrawal destroyed profit that was really made');
+  });
+});
+
+describe('the figures on the overview agree with each other', () => {
+  /**
+   * Two things a reader will check by eye, and both were wrong.
+   *
+   * The gain under the account value and the return KPI were read off the
+   * snapshot curve while the "You" row was counted from trades, so one screen
+   * carried two different answers to the same question — 21.64% against 24.50%
+   * — and the gain exceeded realised plus unrealised by whatever had been paid
+   * into the account.
+   */
+  const withTrades = () => {
+    state.cash = 8360.96;
+    state.positions = [open({ ticker: 'NVDA', entry: 100, cur: 140, qty: 30 })];
+    addClosedPosition({
+      ticker: 'VRT', cls: 'Stocks', dir: 'Long',
+      open: '2026-01-14', close: '2026-04-18', pnl: 900, pct: 22,
+    });
+    addClosedPosition({
+      ticker: 'IREN', cls: 'Stocks', dir: 'Long',
+      open: '2026-02-01', close: '2026-05-20', pnl: -300, pct: -9,
+    });
+  };
+
+  test('over the whole life, the gain equals realised plus unrealised', () => {
+    withTrades();
+    const totals = accountTotals(state.positions, state.cash);
+    const all = periodPnl(state.positions, totals.account, null, new Map());
+    assert.ok(
+      Math.abs(all.pnl - (totals.realised + totals.unrealised)) < 0.01,
+      `gain ${all.pnl} should equal ${totals.realised} + ${totals.unrealised}`,
+    );
+  });
+
+  test('the KPI and the "You" row are the same figure for the year', () => {
+    withTrades();
+    const totals = accountTotals(state.positions, state.cash);
+    const kpi = periodPnl(state.positions, totals.account, '2026-01-01', new Map());
+    const you = yearToDatePnl(state.positions, totals.account, new Map(), NOW);
+    assert.equal(kpi.returnPct, you.returnPct, 'one screen must not carry two answers');
+    assert.equal(kpi.pnl, you.pnl);
+  });
+
+  test('a shorter window reports less than the whole life', () => {
+    withTrades();
+    const totals = accountTotals(state.positions, state.cash);
+    const all = periodPnl(state.positions, totals.account, null, new Map());
+    // A window starting after both trades closed excludes them.
+    const recent = periodPnl(state.positions, totals.account, '2026-08-01', new Map());
+    assert.ok(recent.pnl < all.pnl, 'a week cannot have made everything the account ever made');
+    assert.equal(recent.pnl, 0, 'nothing opened or closed inside that window');
+  });
+
+  test('a deposit still moves none of them', () => {
+    withTrades();
+    const before = accountTotals(state.positions, state.cash);
+    const beforePnl = periodPnl(state.positions, before.account, null, new Map()).pnl;
+
+    state.cash += 5000;
+    const after = accountTotals(state.positions, state.cash);
+    const afterPnl = periodPnl(state.positions, after.account, null, new Map()).pnl;
+
+    assert.equal(afterPnl, beforePnl, 'paying money in is not a gain');
+    assert.ok(
+      Math.abs(afterPnl - (after.realised + after.unrealised)) < 0.01,
+      'and the gain must still equal the two tiles',
+    );
   });
 });
