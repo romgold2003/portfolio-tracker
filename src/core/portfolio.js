@@ -261,6 +261,69 @@ export function accountTotals(positions, cash) {
  * Shorts contribute their absolute size: a short is exposure to a sector, not
  * negative space in a pie, and a negative wedge cannot be drawn.
  */
+/**
+ * What the account made this year, and the return that implies.
+ *
+ * The account curve cannot answer this. It began the day the app was first
+ * opened and records values, not where they came from — so a year of trades
+ * entered afterwards moves it not at all, and the return reads the same whether
+ * you made sixty thousand or nothing.
+ *
+ * Counted from the trades themselves instead:
+ *
+ *   - every trade closed this year contributes what it banked
+ *   - every position opened this year contributes what it is up or down by
+ *   - a position opened in an earlier year contributes only the part that
+ *     happened this year, which needs its price on 1 January
+ *
+ * That last one is why `startPrices` exists. Without a price for a holding
+ * carried in from last year, none of its gain can be honestly assigned to this
+ * year, so it is left out entirely and reported in `carried` — better an
+ * understated return than one silently crediting this year with last year's
+ * work.
+ *
+ * The starting equity is then today's account minus what this year added, and
+ * the return is measured against that. It is money-weighted: it answers "what
+ * did this account make this year", not "how well timed were the deposits".
+ */
+export function yearToDatePnl(positions, account, startPrices = new Map(), now = new Date()) {
+  const yearStart = `${now.getFullYear()}-01-01`;
+  let pnl = 0;
+  let carried = 0;
+
+  for (const p of positions) {
+    if (p.status === 'Closed') {
+      // Booked this year, whenever it was opened.
+      if (p.close && p.close >= yearStart) pnl += realized(p);
+      continue;
+    }
+
+    if (p.open && p.open >= yearStart) {
+      pnl += unreal(p);
+      continue;
+    }
+
+    // Carried in from a previous year: only this year's move belongs here.
+    const startPrice = startPrices.get(p.ticker);
+    if (startPrice > 0) {
+      const move = (p.cur - startPrice) * p.qty;
+      pnl += p.dir === 'Short' ? -move : move;
+    } else {
+      carried += 1;
+    }
+  }
+
+  const startEquity = account - pnl;
+  return {
+    pnl,
+    startEquity,
+    /** Null when the starting equity is not a sensible base to divide by. */
+    returnPct: startEquity > 0 ? (pnl / startEquity) * 100 : null,
+    /** Holdings from earlier years left out for want of a 1 January price. */
+    carried,
+  };
+}
+
 export function sectorBreakdown(positions, cash = 0) {
   const buckets = new Map();
 

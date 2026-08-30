@@ -3,14 +3,14 @@ import { state } from '../../core/store.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
-  sectorBreakdown,
+  sectorBreakdown, yearToDatePnl,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
-  benchmarkSpot, benchmarkYearToDate,
+  benchmarkSpot, benchmarkYearToDate, yearStartPrices,
 } from '../../services/benchmark.js';
 import { periodStart, curveSeries } from '../../core/snapshots.js';
 import {
@@ -167,13 +167,13 @@ function renderAllocation() {
  * and until then yours is the honest window rather than a year you were not
  * invested for.
  */
-async function renderBenchmark() {
+async function renderBenchmark(totals) {
   const valEl = document.getElementById('benchVal');
   const mineEl = document.getElementById('benchMine');
   const noteEl = document.getElementById('benchNote');
   if (!valEl || !mineEl || !noteEl) return;
 
-  const mine = yearToDateReturn();
+  const mine = yearToDateReturn(totals);
   mineEl.textContent = mine == null ? '—' : fp(mine);
   mineEl.style.color = mine == null ? 'var(--text3)' : clr(mine);
   mineEl.title = describeOwnYear();
@@ -212,16 +212,42 @@ async function renderBenchmark() {
 }
 
 /**
- * The account's own return for the year, whatever timeframe is on screen.
+ * The account's own return for the year.
  *
- * Read off the same curve the chart is built from, just asked for the year
- * rather than the selected window, so the two can never disagree about what
- * happened.
+ * Worked out from the trades rather than from the account curve. The curve only
+ * began when the app was first opened, so it cannot see a year of trading
+ * entered afterwards — it reported the same figure whether the year had made
+ * sixty thousand or nothing, which is no use as the number sat beside the
+ * market's own.
+ *
+ * `startPrices` is filled in the background for holdings carried in from an
+ * earlier year; until it arrives those are left out, so the figure can rise
+ * slightly on the second pass rather than starting overstated.
  */
-function yearToDateReturn() {
-  if (!state.snapshots?.length) return null;
-  const series = curveSeries('YTD');
-  return series?.synthetic ? null : series.returnPct;
+let startPrices = new Map();
+
+function yearToDateReturn(totals) {
+  const result = yearToDatePnl(state.positions, totals.account, startPrices);
+  return result.returnPct;
+}
+
+/**
+ * Fetch the 1 January prices for anything held since last year, once.
+ *
+ * Only positions opened in an earlier year need one, which is normally none or
+ * a handful, and the answer is cached for the rest of the year.
+ */
+async function loadYearStartPrices() {
+  const yearStart = `${new Date().getFullYear()}-01-01`;
+  const carried = state.positions
+    .filter((p) => p.status === 'Open' && p.open && p.open < yearStart)
+    .map((p) => p.ticker);
+  if (!carried.length) return;
+
+  const fetched = await yearStartPrices(carried);
+  if (fetched.size === startPrices.size) return;
+  startPrices = fetched;
+  renderHome();
 }
 
 /** What window your own figure covers, for the tooltip. */
@@ -332,7 +358,8 @@ export function renderHome() {
   renderPeriodGain(series);
 
   // Needs the network, so it settles in after the rest of the page is drawn.
-  renderBenchmark();
+  renderBenchmark(totals);
+  loadYearStartPrices();
 
   updateLivePill();
 }

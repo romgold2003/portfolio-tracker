@@ -184,6 +184,62 @@ async function seriesFromServer() {
   }
 }
 
+/**
+ * What a list of tickers closed at on the last trading day before this year.
+ *
+ * Only needed for holdings carried in from a previous year, whose gain has to
+ * be split between the year it happened in and this one. That is usually a
+ * handful of symbols and the answer never changes once the year has turned, so
+ * it is cached permanently rather than for a day.
+ *
+ * Needs the server, which is the only thing here that can fetch arbitrary
+ * history. Returns whatever it could find; the caller reports what it could not.
+ */
+const START_PRICE_KEY = 'pt_year_start_prices';
+
+function readStartPrices() {
+  try {
+    const raw = localStorage.getItem(START_PRICE_KEY);
+    const cached = raw ? JSON.parse(raw) : null;
+    return cached?.year === new Date().getFullYear() ? new Map(cached.prices) : new Map();
+  } catch {
+    return new Map();
+  }
+}
+
+function writeStartPrices(map) {
+  try {
+    localStorage.setItem(START_PRICE_KEY, JSON.stringify({
+      year: new Date().getFullYear(), prices: [...map],
+    }));
+  } catch { /* it will simply be fetched again */ }
+}
+
+export async function yearStartPrices(tickers) {
+  const known = readStartPrices();
+  const missing = [...new Set(tickers)].filter((t) => t && !known.has(t));
+  if (!missing.length || !cloudEnabled()) return known;
+
+  const janFirst = `${new Date().getFullYear()}-01-01`;
+  for (const ticker of missing) {
+    try {
+      const res = await fetch(`/api/history?symbol=${encodeURIComponent(ticker)}&years=2`, {
+        credentials: 'same-origin',
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const close = closeOnOrBefore(json?.rows ?? [], janFirst);
+      if (close > 0) known.set(ticker, close);
+    } catch {
+      // A symbol the history service does not carry. The caller counts it as
+      // carried-in and leaves it out rather than guessing.
+    }
+  }
+
+  writeStartPrices(known);
+  return known;
+}
+
 export async function benchmarkSeries() {
   if (series) return series;
 
