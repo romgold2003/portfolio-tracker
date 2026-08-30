@@ -97,9 +97,71 @@ function closedByMonth(closed) {
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([key, trades]) => ({
       key,
-      trades: trades.sort((a, b) => (b.close || '').localeCompare(a.close || '')),
+      trades: mergeByTicker(trades)
+        .sort((a, b) => (b.close || '').localeCompare(a.close || '')),
       pnl: trades.reduce((sum, p) => sum + realized(p), 0),
+      count: trades.length,
     }));
+}
+
+/**
+ * One card per ticker per month, however many times it was sold.
+ *
+ * Selling a name in six pieces is one decision to get out, not six trades to
+ * scroll past — and a month listing AVGO five times tells you less than a
+ * single row saying what AVGO did that month. The individual sales are not
+ * lost: they become the exits inside the card, each with its own date and
+ * profit, which is where you look when you want to know how the exit was
+ * staged.
+ *
+ * The merged card is a view, never a stored position. It carries no id that
+ * would survive a click, so it is marked `merged` and rendered without the
+ * edit and delete buttons — those act on one trade, and this is several.
+ */
+function mergeByTicker(trades) {
+  const byTicker = new Map();
+  for (const p of trades) {
+    if (!byTicker.has(p.ticker)) byTicker.set(p.ticker, []);
+    byTicker.get(p.ticker).push(p);
+  }
+
+  return [...byTicker.values()].map((group) => {
+    if (group.length === 1) return group[0];
+
+    const parts = [...group].sort((a, b) => (a.close || '').localeCompare(b.close || ''));
+    const cost = parts.reduce((sum, p) => sum + costOf(p), 0);
+    const pnl = parts.reduce((sum, p) => sum + realized(p), 0);
+
+    // Every sale that made up the month, newest last, each keeping its own
+    // date and result. A trade that was itself closed in slices contributes
+    // each of those slices rather than one lump.
+    const exits = parts.flatMap((p) => (
+      p.exits?.length
+        ? p.exits.map((e) => ({ ...e, d: e.d || p.close }))
+        : [{ d: p.close, qty: 1, price: costOf(p) + realized(p), pnl: realized(p), pct: 100 }]
+    ));
+
+    const reasons = [...new Set(parts.map((p) => p.reason).filter(Boolean))];
+
+    return {
+      ...parts[parts.length - 1],
+      merged: true,
+      partCount: parts.length,
+      status: 'Closed',
+      open: null,
+      close: parts[parts.length - 1].close,
+      // Priced as a single unit standing for the whole month's dealing in this
+      // name, so cost, profit and percentage all come out right.
+      entry: cost,
+      cur: cost + pnl,
+      qty: 1,
+      origQty: 1,
+      amount: cost,
+      summary: true,
+      reason: reasons.join('\n\n') || null,
+      exits: exits.sort((a, b) => (a.d || '').localeCompare(b.d || '')),
+    };
+  });
 }
 
 function monthLabel(key) {
@@ -112,15 +174,17 @@ function monthLabel(key) {
  * One collapsed month. Only the month that is open renders its cards, so a
  * hundred closed trades cost a hundred rows of nothing until asked for.
  */
-function monthGroup({ key, trades, pnl }) {
+function monthGroup({ key, trades, pnl, count }) {
   const isOpen = ui.openClosedMonth === key;
-  const count = `${trades.length} trade${trades.length === 1 ? '' : 's'}`;
+  // Counts the sales, not the cards: several sales of one name merge into one
+  // card, and a month saying "3 trades" over five rows would be the lie.
+  const label = `${count} trade${count === 1 ? '' : 's'}`;
   return `<div class="month-group${isOpen ? ' open' : ''}">
     <div class="month-head" onclick="toggleClosedMonth('${key}')">
       <div class="month-left">
         <span class="chevron">▶</span>
         <span class="month-name">${monthLabel(key)}</span>
-        <span class="month-count">${count}</span>
+        <span class="month-count">${label}</span>
       </div>
       <span class="month-pnl" style="color:${clr(pnl)}">${$s(pnl)}</span>
     </div>

@@ -163,7 +163,12 @@ function closedBody(p, retPct) {
   return `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${opened}Closed ${escapeHtml(p.close)} · Realised ${$u(realized(p))} · ${fp(retPct)}</div>
     ${reasonBlock(p)}
     ${exitsBlock(p)}
-    <div class="pos-btns">
+    ${p.merged
+    // Several sales of one name shown as one card. Editing or deleting "it"
+    // would have to silently pick one of them, so the buttons are left off and
+    // the exit list above carries the detail instead.
+    ? `<div class="hint" style="margin:0">Sold in ${p.partCount} parts during the month — each one listed above.</div>`
+    : `<div class="pos-btns">
       <button class="pbtn" onclick="event.stopPropagation();toggleEdit(${p.id})" style="background:var(--edit-bg);border-color:var(--edit-br);color:var(--green)">✎ Edit</button>
       <button class="pbtn" onclick="event.stopPropagation();reopen(${p.id})">Reopen</button>
       <button class="pbtn" style="border-color:var(--danger-br);color:var(--text3)" onclick="event.stopPropagation();del(${p.id})">Delete completely</button>
@@ -171,7 +176,7 @@ function closedBody(p, retPct) {
     <div class="dca-panel" id="edit-${p.id}" style="display:none;border-color:var(--edit-br);margin-top:10px">
       <div class="dca-head" style="color:var(--green)">Edit closed trade</div>
       ${editFields(p, { includeExit: true })}
-    </div>`;
+    </div>`}`;
 }
 
 /** Small amber badge showing partial-close progress or exit count. */
