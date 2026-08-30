@@ -13,7 +13,7 @@
  */
 import { state, saveCash, saveApiKey as persistApiKey, findPosition, savePositions } from '../core/store.js';
 import {
-  addPosition, updatePosition, applyDca as applyDcaToPosition, previewDca,
+  addPosition, addClosedPosition, updatePosition, applyDca as applyDcaToPosition, previewDca,
   closePosition, reopenPosition, deletePosition, setCurrentPrice,
   normalizeTicker, exitProceedsOf,
 } from '../core/positions.js';
@@ -29,6 +29,7 @@ import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
   setDirection, readTradeForm, clearTradeForm, setTickerStatus, applyTickerLookup,
+  toggleClosedTrade,
 } from '../ui/views/addTrade.js';
 import { renderCurve } from '../ui/charts.js';
 import { show } from '../ui/router.js';
@@ -107,6 +108,22 @@ export function addPos() {
   const ticker = normalizeTicker(form.ticker);
   if (!ticker || !form.entry || !form.amount) {
     alert('Ticker, entry price and amount are required.');
+    return;
+  }
+
+  if (form.alreadyClosed) {
+    if (!form.close || !form.exit) {
+      alert('A closed trade needs the date you closed it and the exit price.');
+      return;
+    }
+    if (form.open && form.close < form.open) {
+      alert('The closing date is before the opening date.');
+      return;
+    }
+    addClosedPosition({ ...form, ticker });
+    renderAll();
+    clearTradeForm();
+    show('positions');
     return;
   }
 
@@ -498,7 +515,7 @@ export function installActions(extra = {}) {
     show, toggleTheme, toggleVoice, toggleAmounts,
     openSettings, closeSettings, saveApiKey,
     // trades
-    addPos, clearForm, setDir, checkTicker, saveEdit, updatePrice, editCash, del, reopen,
+    addPos, clearForm, setDir, checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
     // panels
     toggleExpand, toggleEdit, toggleDca, toggleClose,
     // dca & close

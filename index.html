@@ -162,6 +162,17 @@
           <div class="fg"><label>Entry price ($)</label><input type="number" id="f-entry" step="any" placeholder="0.00"></div>
           <div class="fg"><label>Amount invested ($)</label><input type="number" id="f-amount" step="any" placeholder="1000"></div>
           <div class="fg" style="grid-column:1/-1">
+            <label class="closed-check">
+              <input type="checkbox" id="f-closed" onchange="toggleClosedTrade()">
+              This trade is already closed
+            </label>
+          </div>
+          <div class="fg" id="f-closedDateWrap" style="display:none"><label>Date closed</label><input type="date" id="f-close"></div>
+          <div class="fg" id="f-closedPriceWrap" style="display:none"><label>Exit price ($)</label><input type="number" id="f-exit" step="any" placeholder="0.00"></div>
+          <div class="fg" id="f-closedNote" style="grid-column:1/-1;display:none">
+            <div class="hint" style="margin:0">Your cash is left alone — the money from a trade you already closed is in your balance already. The exit is recorded on the date you give, so it lands in the right month.</div>
+          </div>
+          <div class="fg" style="grid-column:1/-1">
             <label>Reason for entry</label>
             <textarea id="f-reason" placeholder="Why are you entering this trade? Setup, thesis, key levels…" style="min-height:80px;resize:vertical;font-size:13px;padding:9px 11px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);font-family:inherit;width:100%;outline:none"></textarea>
           </div>

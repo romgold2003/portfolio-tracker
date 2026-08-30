@@ -16,6 +16,7 @@ export function setDirection(direction) {
 
 /** Everything the form currently holds, unvalidated. */
 export function readTradeForm() {
+  const alreadyClosed = !!field('f-closed')?.checked;
   return {
     ticker: field('f-ticker').value,
     cls: field('f-class').value,
@@ -26,17 +27,44 @@ export function readTradeForm() {
     reason: field('f-reason').value.trim(),
     // Empty means "work it out from the ticker".
     sector: field('f-sector')?.value || null,
+    alreadyClosed,
+    close: alreadyClosed ? field('f-close')?.value || '' : '',
+    exit: alreadyClosed ? parseFloat(field('f-exit')?.value) : NaN,
   };
 }
 
+/**
+ * Show or hide the two fields a finished trade needs.
+ *
+ * They stay out of the way until the box is ticked, because the overwhelming
+ * majority of entries are trades being opened now, and a form that asks
+ * everyone for an exit price is a worse form.
+ */
+export function toggleClosedTrade() {
+  const on = !!field('f-closed')?.checked;
+  ['f-closedDateWrap', 'f-closedPriceWrap', 'f-closedNote'].forEach((id) => {
+    const el = field(id);
+    if (el) el.style.display = on ? 'flex' : 'none';
+  });
+  // A sensible default beats an empty date picker: most people entering a
+  // finished trade are working through a list and will change it anyway.
+  const closeDate = field('f-close');
+  if (on && closeDate && !closeDate.value) closeDate.value = todayStr();
+}
+
 export function clearTradeForm() {
-  ['f-ticker', 'f-entry', 'f-amount', 'f-reason'].forEach((id) => {
+  ['f-ticker', 'f-entry', 'f-amount', 'f-reason', 'f-exit'].forEach((id) => {
     const el = field(id);
     if (el) el.value = '';
   });
   setTickerStatus('', 'muted');
   field('f-date').value = todayStr();
   if (field('f-sector')) field('f-sector').value = '';
+  // Deliberately left ticked if it was: someone entering a backlog of finished
+  // trades is entering several, and re-ticking it every time would be tedious.
+  const closeDate = field('f-close');
+  if (closeDate) closeDate.value = '';
+  toggleClosedTrade();
   setDirection('Long');
 }
 

@@ -119,6 +119,64 @@ export function setCurrentPrice(id, price) {
 }
 
 /**
+ * Record a trade that was opened and closed before the app ever saw it.
+ *
+ * Someone arriving with a year of trading behind them has to be able to enter
+ * it, and the ordinary path gets that wrong twice.
+ *
+ * Cash is the first. Opening spends and closing returns, so entering a finished
+ * trade today would drop its profit into today's balance — except that profit
+ * settled months ago and is already sitting in the balance. The money would be
+ * counted twice, and the account would appear to have grown by it now. So this
+ * leaves cash alone entirely: the figure on screen is already right.
+ *
+ * The date is the second. closePosition() stamps exits with today, which is
+ * correct when you are closing something now and wrong for everything else — it
+ * would file an April trade under this month, empty out the months it belongs
+ * to, and count it into today's move as a gain that did not happen today.
+ *
+ * Prices are recorded as given, with no live quote: the trade is finished, and
+ * what the ticker does now has nothing to do with what it made.
+ */
+export function addClosedPosition({
+  ticker, cls, dir, open, close, entry, exit, amount, reason, sector,
+}) {
+  const qty = amount / entry;
+  const position = {
+    id: newId(),
+    ticker,
+    cls,
+    dir,
+    open,
+    close,
+    entry,
+    // For a closed trade `cur` is the exit price — realized() reads it as the
+    // price the position ended at, not a live quote.
+    cur: exit,
+    qty,
+    origQty: qty,
+    amount,
+    status: 'Closed',
+    reason: reason || null,
+    exits: [{
+      d: close,
+      qty: +qty.toFixed(10),
+      price: exit,
+      pnl: +((dir === 'Short' ? entry - exit : exit - entry) * qty).toFixed(6),
+      pct: 100,
+      // No previous close: an exit months ago must not be pulled into today's
+      // move, which is what a prevClose here would do.
+      prevClose: null,
+    }],
+  };
+  if (sector) position.sector = sector;
+
+  state.positions.unshift(position);
+  savePositions();
+  return position;
+}
+
+/**
  * Close all or part of a position.
  *
  * A partial exit is recorded on the position and nothing is booked to Monthly —
