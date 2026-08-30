@@ -413,7 +413,7 @@ export async function saveVault(journal) {
  * device reloads it, rather than this device's copy overwriting trades entered
  * somewhere else. Throwing tells the caller the save did not happen.
  */
-async function saveVaultToCloud(journal) {
+async function saveVaultToCloud(journal, retriesLeft = 1) {
   const blob = await encryptJson(journal, session.dataKey);
   const result = await cloud.putVault(blob, session.version);
 
@@ -424,10 +424,23 @@ async function saveVaultToCloud(journal) {
   }
 
   if (result.conflict) {
-    session.blob = result.vault;
+    // Adopt the version the server actually holds, then try once more.
+    //
+    // Almost every conflict seen in practice is this tab's own doing — a second
+    // save that set off before the first landed, carrying a version number that
+    // was already stale by the time it arrived. Refusing outright meant the
+    // app announced a clash between devices for what was really a race with
+    // itself, and then never saved again because the version stayed behind.
+    //
+    // A single retry settles that case. A conflict that survives the retry is a
+    // real one: another device is genuinely writing, and the caller is told so
+    // rather than being allowed to overwrite work it cannot see.
     session.version = result.version;
+    if (retriesLeft > 0) return saveVaultToCloud(journal, retriesLeft - 1);
+
+    session.blob = result.vault;
     throw Object.assign(
-      new Error('Your journal was changed on another device. Reload to see the newer version.'),
+      new Error('Your journal was changed on another device.'),
       { conflict: true },
     );
   }

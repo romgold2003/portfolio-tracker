@@ -199,31 +199,90 @@ const FLUSH_DELAY_MS = 150;
 let flushTimer = null;
 let persist = null;
 
+/**
+ * One save at a time.
+ *
+ * Writing to localStorage was instant, so overlapping saves were impossible and
+ * nothing guarded against them. Writing to a server takes a few hundred
+ * milliseconds, and in that window a price refresh, a tab switch or a snapshot
+ * can each start a second save. Both then send the *same* base version, the
+ * server correctly rejects the loser as a conflict, and the app reported a
+ * clash between devices that never happened — every thirty seconds.
+ *
+ * So a save in flight is awaited rather than raced, and any change that arrives
+ * meanwhile sets a flag that triggers one more save afterwards. Nothing is
+ * dropped and nothing overlaps.
+ */
+let inFlight = null;
+let changedWhileSaving = false;
+
 /** Wired at boot by the profile layer. Until then, saves are no-ops. */
-export function setPersistHandler(fn) { persist = fn; }
+export function setPersistHandler(fn) {
+  persist = fn;
+  inFlight = null;
+  changedWhileSaving = false;
+  storageFailureReported = false;
+}
 
 function scheduleFlush() {
   if (!persist || flushTimer) return;
   flushTimer = setTimeout(() => { flushTimer = null; flushNow(); }, FLUSH_DELAY_MS);
 }
 
-/** Force an immediate encrypted write. Safe to call when nothing is pending. */
+function reportFailure(err) {
+  console.error('Could not save the journal:', err);
+  if (storageFailureReported) return;
+  storageFailureReported = true;
+
+  // A clash with another device is a different situation from storage being
+  // refused, and telling someone to check for private browsing when their
+  // phone simply saved first would send them looking for the wrong problem.
+  alert(err?.conflict
+    ? 'This journal was changed somewhere else.\n\n'
+      + 'Another device signed into this account saved while you were working, '
+      + 'and that version could not be merged with yours automatically.\n\n'
+      + 'Reload the page to load the newer version. Export a backup first if '
+      + 'you have made changes here you want to keep.'
+    : 'Your journal could not be saved.\n\n'
+      + 'Changes you make now may be lost when you reload. This usually means '
+      + 'no connection, private browsing, blocked site data, or a full storage '
+      + 'quota.\n\n'
+      + 'Export a backup from Live price settings before closing this tab.');
+}
+
+/** Force an immediate write. Safe to call when nothing is pending. */
 export async function flushNow() {
   if (!persist) return;
   clearTimeout(flushTimer);
   flushTimer = null;
-  try {
-    await persist(journalSnapshot());
-  } catch (err) {
-    console.error('Could not save the encrypted journal:', err);
-    if (!storageFailureReported) {
-      storageFailureReported = true;
-      alert('This browser refused to save your journal.\n\n'
-        + 'Changes you make now will be lost when you reload. This usually means '
-        + 'private browsing, blocked site data, or a full storage quota.\n\n'
-        + 'Export a backup from Live price settings before closing this tab.');
-    }
+
+  // Already saving: note that there is more to write and let that one finish.
+  if (inFlight) {
+    changedWhileSaving = true;
+    return inFlight;
   }
+
+  inFlight = (async () => {
+    try {
+      await persist(journalSnapshot());
+      storageFailureReported = false;
+    } catch (err) {
+      reportFailure(err);
+    }
+  })();
+
+  try {
+    await inFlight;
+  } finally {
+    inFlight = null;
+  }
+
+  // Something changed while that was in the air, so write once more.
+  if (changedWhileSaving) {
+    changedWhileSaving = false;
+    await flushNow();
+  }
+  return undefined;
 }
 
 // All four save entry points write the same vault; they stay separate only so
