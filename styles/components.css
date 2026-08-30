@@ -390,3 +390,12 @@ body:has(.recovery-banner) .shell{padding-top:74px}
   font-size:8px;font-weight:700;letter-spacing:.06em;vertical-align:middle;
   background:var(--amber-bg,var(--blue-bg));color:var(--amber);
   border:0.5px solid var(--amber);opacity:.85}
+
+/* The particle wave sits between the page background and the app. Panels above
+   it are opaque, so it appears only where the layout leaves room. */
+.particle-wave{position:fixed;inset:0;z-index:0;pointer-events:none}
+.shell{position:relative;z-index:1}
+/* How loud it is, per theme. Light backgrounds show a faint dot far more
+   readily than dark ones, so the same alpha is not the same presence. */
+:root{--wave-strength:0.58}
+body.light{--wave-strength:0.34}
