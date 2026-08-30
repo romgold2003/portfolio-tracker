@@ -13,7 +13,10 @@
 .curve-wrap{position:relative;height:160px;margin-top:6px}
 
 /* KPI tiles */
-.kpi-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+/* Four tiles, wrapping to two rows rather than four thin columns on a narrow
+   window — a P&L figure squeezed into 90px is not readable. */
+.kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+@media (max-width:900px){.kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .kpi{background:var(--panel);border:0.5px solid var(--border);border-radius:10px;padding:15px 17px}
 .kpi-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
 .kpi-val{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}

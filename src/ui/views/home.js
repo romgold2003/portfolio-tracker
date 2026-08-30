@@ -334,6 +334,12 @@ export function renderHome() {
   setText('kUnreal', hidden ? MASK : $s(totals.unrealised));
   setColor('kUnreal', hidden ? 'var(--text3)' : clr(totals.unrealised));
   setText('kUnrealSub', `${totals.open.length} open position${totals.open.length !== 1 ? 's' : ''}`);
+
+  // Banked, as against the tile beside it, which is still riding.
+  const closedCount = state.positions.filter((p) => p.status === 'Closed').length;
+  setText('kRealised', hidden ? MASK : $s(totals.realised));
+  setColor('kRealised', hidden ? 'var(--text3)' : clr(totals.realised));
+  setText('kRealisedSub', `${closedCount} closed position${closedCount !== 1 ? 's' : ''}`);
   setText('kRetLbl', ui.timeframe);
   setText('kWinRate', `${totals.winRate}%`);
   setColor('kWinRate', totals.winRate >= 50 ? 'var(--amber)' : 'var(--red)');
