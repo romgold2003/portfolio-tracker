@@ -295,3 +295,91 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 @media (prefers-reduced-motion:reduce){
   .orbit-arm,.orbit-badge{animation:none}
 }
+
+/* ── Allocation, opened up ──────────────────────────────────────────────────
+   Hovering the small doughnut lifts it into the middle of the screen. */
+.alloc{border-radius:10px;transition:transform .25s ease,box-shadow .25s ease;cursor:pointer;outline:none}
+.alloc:hover,.alloc:focus-visible{transform:translateY(-2px);box-shadow:0 6px 26px var(--shadow)}
+.alloc:focus-visible{box-shadow:0 0 0 2px var(--border-blue)}
+
+.alloc-overlay{position:fixed;inset:0;z-index:400;display:flex;align-items:center;
+  justify-content:center;padding:24px;opacity:0;visibility:hidden;
+  background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(18px);
+  transition:opacity .3s ease,visibility .3s}
+.alloc-overlay.show{opacity:1;visibility:visible}
+
+/* The stage lifts and settles as it fades, which is what makes it read as
+   arriving rather than being switched on. */
+.alloc-stage{display:flex;align-items:center;gap:34px;flex-wrap:wrap;justify-content:center;
+  max-width:1000px;width:100%;
+  transform:translateY(22px) scale(.94);transition:transform .42s cubic-bezier(.16,.84,.28,1)}
+.alloc-overlay.show .alloc-stage{transform:none}
+
+.alloc-big{position:relative;width:min(52vw,420px);height:min(52vw,420px);flex:none}
+.alloc-centre{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;pointer-events:none;text-align:center}
+.alloc-centre-val{font-size:30px;font-weight:700;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.alloc-centre-lbl{font-size:12px;color:var(--text3);margin-top:6px;max-width:150px}
+
+.alloc-detail{flex:1;min-width:290px;max-width:430px;background:var(--panel);
+  border:0.5px solid var(--border);border-radius:12px;padding:16px 18px;
+  box-shadow:0 10px 44px var(--shadow);max-height:70vh;overflow-y:auto}
+.alloc-detail-head{display:flex;justify-content:space-between;align-items:baseline;
+  gap:10px;padding-bottom:10px;margin-bottom:6px;border-bottom:0.5px solid var(--border)}
+.alloc-detail-title{font-size:15px;font-weight:600}
+.alloc-detail-hint{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums}
+
+.alloc-row-lg{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12px;
+  border-bottom:0.5px solid var(--input)}
+.alloc-row-lg:last-child{border-bottom:none}
+.alloc-tk{font-weight:600;color:var(--text);min-width:56px}
+.alloc-lg-val{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--text2)}
+.alloc-lg-pnl{font-variant-numeric:tabular-nums;min-width:78px;text-align:right;font-weight:500}
+.alloc-row-lg .alloc-pct{min-width:62px;text-align:right}
+.alloc-total{border-top:0.5px solid var(--border2);margin-top:4px;padding-top:9px;font-weight:600}
+.alloc-empty{font-size:12px;color:var(--text3);padding:14px 0;line-height:1.5}
+
+/* Rows arrive in sequence, which is what sells the change of sector. */
+@keyframes alloc-row-in{from{opacity:0;transform:translateX(-9px)}to{opacity:1;transform:none}}
+.alloc-in{animation:alloc-row-in .3s cubic-bezier(.16,.84,.28,1) both}
+
+@media (max-width:760px){
+  .alloc-big{width:min(78vw,320px);height:min(78vw,320px)}
+  .alloc-detail{min-width:0;max-height:44vh}
+}
+
+/* Asked for less motion: it still opens, it just does not travel. */
+@media (prefers-reduced-motion:reduce){
+  .alloc-stage{transform:none;transition:none}
+  .alloc-in{animation:none}
+  .alloc:hover,.alloc:focus-visible{transform:none}
+}
+
+/* The big rows reuse the legend's classes, which were written for a narrow
+   column: .alloc-name has no flex basis there and collapses to nothing here,
+   and .alloc-pct carries a margin-left:auto that fights the value's. Both are
+   corrected in this context rather than changed for the legend, which is fine
+   as it is. */
+.alloc-row-lg .alloc-name{flex:1 1 auto;min-width:0;font-size:12px;color:var(--text)}
+.alloc-row-lg .alloc-pct{margin-left:0;flex:none}
+.alloc-row-lg .alloc-dot{width:9px;height:9px}
+.alloc-row-lg .alloc-lg-val{flex:none;white-space:nowrap}
+.alloc-row-lg .alloc-lg-pnl{flex:none;white-space:nowrap}
+.alloc-detail{min-width:0}
+/* Never let the panel run off the edge on a narrow window. */
+.alloc-stage{max-width:min(1000px,100%)}
+@media (max-width:900px){
+  .alloc-row-lg .alloc-lg-pnl{min-width:64px}
+  .alloc-row-lg .alloc-pct{min-width:52px}
+}
+
+/* On a narrow panel the row runs out of room: ticker, value, P&L and
+   percentage will not all fit. The percentage goes first — it is the one
+   figure derivable from the other two, and the ring itself already shows
+   proportion. */
+@media (max-width:720px){
+  .alloc-row-lg .alloc-pct{display:none}
+  .alloc-row-lg .alloc-lg-pnl{min-width:0}
+  .alloc-tk{min-width:0}
+}

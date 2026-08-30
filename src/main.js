@@ -30,6 +30,7 @@ import { renderAll, renderOnPageEnter, renderOnThemeChange } from './ui/render.j
 import { refreshMeasuredBetas } from './ui/views/positions.js';
 import { initFormDefaults } from './ui/views/addTrade.js';
 import { showLockScreen } from './ui/views/lockScreen.js';
+import { initAllocationOverlay } from './ui/views/allocationOverlay.js';
 import { describeStorageMode } from './ui/views/settings.js';
 import { initVoice } from './features/voice.js';
 import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
@@ -119,6 +120,7 @@ async function boot() {
   setRecoveryImportHandler(renderAll);
   initFormDefaults();
   wireTimeframeButtons();
+  initAllocationOverlay();
 
   // Encryption is asynchronous, so a pending save has to be forced out before
   // the tab goes away. `pagehide` fires in cases `beforeunload` misses.

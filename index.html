@@ -30,6 +30,20 @@
 
 <div class="lock-screen" id="lockScreen"></div>
 
+<!--
+  The allocation, opened up. Hovering the small doughnut lifts it into the
+  middle of the screen; hovering a wedge there lists what is inside that sector.
+-->
+<div class="alloc-overlay" id="allocOverlay" role="dialog" aria-modal="true" aria-label="Allocation by sector">
+  <div class="alloc-stage">
+    <div class="alloc-big">
+      <canvas id="allocBigChart" role="img" aria-label="Share of the account held in each sector"></canvas>
+      <div class="alloc-centre" id="allocCentre"></div>
+    </div>
+    <div class="alloc-detail" id="allocDetail"></div>
+  </div>
+</div>
+
 <div class="shell">
   <aside class="sidebar">
     <div class="logo-area">
@@ -92,7 +106,7 @@
             </div>
             <div class="hero-pnl" id="acctPnl">+$0</div>
           </div>
-          <div class="alloc">
+          <div class="alloc" id="allocCard" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Allocation — hover or press Enter to expand">
             <div class="alloc-lbl">Allocation</div>
             <div class="alloc-chart"><canvas id="sectorChart" role="img" aria-label="Share of the account held in each sector">Sector allocation.</canvas></div>
             <div class="alloc-legend" id="sectorLegend"></div>
