@@ -71,7 +71,7 @@ export function renderPositions() {
   const closedEl = document.getElementById('closedPositions');
   if (closedEl) {
     closedEl.innerHTML = closed.length
-      ? closedByMonth(closed).map(monthGroup).join('')
+      ? closedByMonth(closed, new Set(open.map((p) => p.ticker))).map(monthGroup).join('')
       : '<div class="empty">No closed trades</div>';
   }
 }
@@ -84,84 +84,110 @@ export function renderPositions() {
  * the same bucket the Monthly page uses, so the two never disagree about which
  * month a trade belongs to.
  */
-function closedByMonth(closed) {
-  const months = new Map();
-  for (const p of closed) {
-    // A trade with no close date would otherwise vanish from the page entirely.
-    const key = p.close ? p.close.slice(0, 7) : 'undated';
-    if (!months.has(key)) months.set(key, []);
-    months.get(key).push(p);
+function closedByMonth(closed, stillHeld = new Set()) {
+  const cards = [];
+
+  for (const [ticker, trades] of groupBy(closed, (p) => p.ticker)) {
+    if (stillHeld.has(ticker)) {
+      /**
+       * Part sold, part still held. The sales stay in the months they happened
+       * in, because the position is not finished and there is no final month to
+       * move them to yet. Badged so it is clear this is not the whole story.
+       */
+      for (const [, sameMonth] of groupBy(trades, monthKeyOf)) {
+        cards.push(merge(sameMonth, { stillHeld: true }));
+      }
+    } else {
+      /**
+       * Fully out. Every sale of this name becomes one card, filed under the
+       * month the last of them happened — so an exit staged over August and
+       * October reads as one position closed in October rather than two
+       * unrelated trades, which is what it was.
+       */
+      cards.push(merge(trades, { stillHeld: false }));
+    }
   }
 
+  const months = groupBy(cards, monthKeyOf);
   return [...months.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([key, trades]) => ({
+    .map(([key, inMonth]) => ({
       key,
-      trades: mergeByTicker(trades)
-        .sort((a, b) => (b.close || '').localeCompare(a.close || '')),
-      pnl: trades.reduce((sum, p) => sum + realized(p), 0),
-      count: trades.length,
+      trades: inMonth.sort((a, b) => (b.close || '').localeCompare(a.close || '')),
+      pnl: inMonth.reduce((sum, p) => sum + realized(p), 0),
+      count: inMonth.reduce((sum, p) => sum + (p.partCount || 1), 0),
     }));
 }
 
+/** A trade with no close date would otherwise vanish from the page entirely. */
+const monthKeyOf = (p) => (p.close ? p.close.slice(0, 7) : 'undated');
+
+function groupBy(list, keyOf) {
+  const out = new Map();
+  for (const item of list) {
+    const key = keyOf(item);
+    if (!out.has(key)) out.set(key, []);
+    out.get(key).push(item);
+  }
+  return out;
+}
+
 /**
- * One card per ticker per month, however many times it was sold.
+ * Several sales of one name, shown as one card.
  *
- * Selling a name in six pieces is one decision to get out, not six trades to
- * scroll past — and a month listing AVGO five times tells you less than a
- * single row saying what AVGO did that month. The individual sales are not
- * lost: they become the exits inside the card, each with its own date and
- * profit, which is where you look when you want to know how the exit was
- * staged.
+ * Selling in six pieces is one decision to get out, not six trades to scroll
+ * past. The individual sales are not lost: they become the exits inside the
+ * card, each with its own date and profit, which is where you look to see how
+ * the exit was staged.
  *
  * The merged card is a view, never a stored position. It carries no id that
  * would survive a click, so it is marked `merged` and rendered without the
  * edit and delete buttons — those act on one trade, and this is several.
  */
-function mergeByTicker(trades) {
-  const byTicker = new Map();
-  for (const p of trades) {
-    if (!byTicker.has(p.ticker)) byTicker.set(p.ticker, []);
-    byTicker.get(p.ticker).push(p);
+function merge(group, { stillHeld }) {
+  if (group.length === 1) {
+    return stillHeld ? { ...group[0], stillHeld: true } : group[0];
   }
 
-  return [...byTicker.values()].map((group) => {
-    if (group.length === 1) return group[0];
+  const parts = [...group].sort((a, b) => (a.close || '').localeCompare(b.close || ''));
+  const cost = parts.reduce((sum, p) => sum + costOf(p), 0);
+  const pnl = parts.reduce((sum, p) => sum + realized(p), 0);
 
-    const parts = [...group].sort((a, b) => (a.close || '').localeCompare(b.close || ''));
-    const cost = parts.reduce((sum, p) => sum + costOf(p), 0);
-    const pnl = parts.reduce((sum, p) => sum + realized(p), 0);
+  // Every sale, oldest first, each keeping its own date and result. A trade
+  // that was itself closed in slices contributes each of those slices rather
+  // than one lump.
+  const exits = parts.flatMap((p) => (
+    p.exits?.length
+      ? p.exits.map((e) => ({ ...e, d: e.d || p.close }))
+      : [{ d: p.close, qty: 1, price: costOf(p) + realized(p), pnl: realized(p), pct: 100 }]
+  ));
 
-    // Every sale that made up the month, newest last, each keeping its own
-    // date and result. A trade that was itself closed in slices contributes
-    // each of those slices rather than one lump.
-    const exits = parts.flatMap((p) => (
-      p.exits?.length
-        ? p.exits.map((e) => ({ ...e, d: e.d || p.close }))
-        : [{ d: p.close, qty: 1, price: costOf(p) + realized(p), pnl: realized(p), pct: 100 }]
-    ));
+  const reasons = [...new Set(parts.map((p) => p.reason).filter(Boolean))];
+  const months = [...new Set(parts.map(monthKeyOf))];
 
-    const reasons = [...new Set(parts.map((p) => p.reason).filter(Boolean))];
-
-    return {
-      ...parts[parts.length - 1],
-      merged: true,
-      partCount: parts.length,
-      status: 'Closed',
-      open: null,
-      close: parts[parts.length - 1].close,
-      // Priced as a single unit standing for the whole month's dealing in this
-      // name, so cost, profit and percentage all come out right.
-      entry: cost,
-      cur: cost + pnl,
-      qty: 1,
-      origQty: 1,
-      amount: cost,
-      summary: true,
-      reason: reasons.join('\n\n') || null,
-      exits: exits.sort((a, b) => (a.d || '').localeCompare(b.d || '')),
-    };
-  });
+  return {
+    ...parts[parts.length - 1],
+    merged: true,
+    stillHeld,
+    partCount: parts.length,
+    // The months the sales actually fell in. When an exit was staged across
+    // more than one, the card sits under the last of them and says so, rather
+    // than leaving the earlier ones looking like separate positions.
+    soldAcross: months.length > 1 ? months : null,
+    status: 'Closed',
+    open: null,
+    close: parts[parts.length - 1].close,
+    // Priced as a single unit standing for the whole exit, so cost, profit and
+    // percentage all come out right.
+    entry: cost,
+    cur: cost + pnl,
+    qty: 1,
+    origQty: 1,
+    amount: cost,
+    summary: true,
+    reason: reasons.join('\n\n') || null,
+    exits: exits.sort((a, b) => (a.d || '').localeCompare(b.d || '')),
+  };
 }
 
 function monthLabel(key) {

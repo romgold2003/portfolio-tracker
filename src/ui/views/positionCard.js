@@ -5,7 +5,7 @@
  * mutate anything. Interaction is wired through the inline `onclick` handlers,
  * which resolve against the global bridge in src/app/actions.js.
  */
-import { ASSET_CLASSES } from '../../config/constants.js';
+import { ASSET_CLASSES, MONTHS_LONG } from '../../config/constants.js';
 import {
   unreal, realized, pctD, costOf, curValOf,
   dailyDollarExits, dailyDollarTotal,
@@ -157,17 +157,44 @@ function openBody(p) {
     ${dcaPanel(p)}`;
 }
 
+/**
+ * What to say beneath an exit that happened in more than one go.
+ *
+ * Two situations, and they want opposite things said. A position still partly
+ * held is not finished: its sales sit in the months they happened in, and the
+ * card has to say so or it reads as a closed trade. A position fully out is
+ * filed under the month of its last sale, so if earlier parts went in earlier
+ * months that is worth naming — otherwise a card dated October silently
+ * contains August's profit.
+ */
+function stagedExitNote(p) {
+  if (p.stillHeld) {
+    const sold = p.partCount ? `Sold in ${p.partCount} parts this month` : 'Part of this position sold';
+    return `${sold} · you still hold the rest, so this is not the finished trade.`;
+  }
+  if (p.soldAcross?.length) {
+    const names = p.soldAcross
+      .map((key) => {
+        const [year, month] = key.split('-').map(Number);
+        return `${MONTHS_LONG[month - 1]} ${year}`;
+      })
+      .join(', ');
+    return `Closed in ${p.partCount} parts across ${names}, and filed under the last of them.`;
+  }
+  return `Sold in ${p.partCount} parts — each one listed above.`;
+}
+
 function closedBody(p, retPct) {
     // A trade entered as a finished result has no opening date to show.
   const opened = p.open ? `Opened ${escapeHtml(p.open)} · ` : '';
   return `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${opened}Closed ${escapeHtml(p.close)} · Realised ${$u(realized(p))} · ${fp(retPct)}</div>
     ${reasonBlock(p)}
     ${exitsBlock(p)}
-    ${p.merged
+    ${p.merged || p.stillHeld
     // Several sales of one name shown as one card. Editing or deleting "it"
     // would have to silently pick one of them, so the buttons are left off and
     // the exit list above carries the detail instead.
-    ? `<div class="hint" style="margin:0">Sold in ${p.partCount} parts during the month — each one listed above.</div>`
+    ? `<div class="hint" style="margin:0">${stagedExitNote(p)}</div>`
     : `<div class="pos-btns">
       <button class="pbtn" onclick="event.stopPropagation();toggleEdit(${p.id})" style="background:var(--edit-bg);border-color:var(--edit-br);color:var(--green)">✎ Edit</button>
       <button class="pbtn" onclick="event.stopPropagation();reopen(${p.id})">Reopen</button>
