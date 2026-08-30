@@ -1,10 +1,11 @@
 /** The Positions page: summary tiles, then open and closed position cards. */
 import { state } from '../../core/store.js';
-import { unreal, costOf, portfolioBeta, sortPositions } from '../../core/portfolio.js';
+import { unreal, costOf, portfolioBeta, sortPositions, realized } from '../../core/portfolio.js';
 import { measuredBetas } from '../../services/benchmark.js';
 import { ui } from '../uiState.js';
 import { positionCard } from './positionCard.js';
 import { money as $u, signedMoney as $s, pnlColor as clr } from '../format.js';
+import { MONTHS_LONG } from '../../config/constants.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 
@@ -62,8 +63,59 @@ export function renderPositions() {
   const closedEl = document.getElementById('closedPositions');
   if (closedEl) {
     closedEl.innerHTML = closed.length
-      ? [...closed].sort((a, b) => new Date(b.close) - new Date(a.close))
-        .map((p) => positionCard(p, false)).join('')
+      ? closedByMonth(closed).map(monthGroup).join('')
       : '<div class="empty">No closed trades</div>';
   }
+}
+
+/**
+ * Closed trades, newest month first.
+ *
+ * A year of trading is a hundred cards, and scrolling past all of them to reach
+ * last March is not reading a journal. Grouped by the month each trade closed —
+ * the same bucket the Monthly page uses, so the two never disagree about which
+ * month a trade belongs to.
+ */
+function closedByMonth(closed) {
+  const months = new Map();
+  for (const p of closed) {
+    // A trade with no close date would otherwise vanish from the page entirely.
+    const key = p.close ? p.close.slice(0, 7) : 'undated';
+    if (!months.has(key)) months.set(key, []);
+    months.get(key).push(p);
+  }
+
+  return [...months.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, trades]) => ({
+      key,
+      trades: trades.sort((a, b) => (b.close || '').localeCompare(a.close || '')),
+      pnl: trades.reduce((sum, p) => sum + realized(p), 0),
+    }));
+}
+
+function monthLabel(key) {
+  if (key === 'undated') return 'No close date';
+  const [year, month] = key.split('-').map(Number);
+  return `${MONTHS_LONG[month - 1]} ${year}`;
+}
+
+/**
+ * One collapsed month. Only the month that is open renders its cards, so a
+ * hundred closed trades cost a hundred rows of nothing until asked for.
+ */
+function monthGroup({ key, trades, pnl }) {
+  const isOpen = ui.openClosedMonth === key;
+  const count = `${trades.length} trade${trades.length === 1 ? '' : 's'}`;
+  return `<div class="month-group${isOpen ? ' open' : ''}">
+    <div class="month-head" onclick="toggleClosedMonth('${key}')">
+      <div class="month-left">
+        <span class="chevron">▶</span>
+        <span class="month-name">${monthLabel(key)}</span>
+        <span class="month-count">${count}</span>
+      </div>
+      <span class="month-pnl" style="color:${clr(pnl)}">${$s(pnl)}</span>
+    </div>
+    ${isOpen ? `<div class="month-body">${trades.map((p) => positionCard(p, false)).join('')}</div>` : ''}
+  </div>`;
 }

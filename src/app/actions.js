@@ -185,6 +185,18 @@ function addClosedTrade(form, ticker) {
   return true;
 }
 
+/**
+ * Open one month of closed trades, closing whichever was open.
+ *
+ * One at a time rather than many: the point of the grouping is that the page
+ * stays short, and letting every month stay open would rebuild the long list
+ * this replaced.
+ */
+export function toggleClosedMonth(key) {
+  ui.openClosedMonth = ui.openClosedMonth === key ? null : key;
+  renderPositions();
+}
+
 export function saveEdit(id) {
   const p = findPosition(id);
   if (!p) return;
@@ -565,7 +577,7 @@ export function installActions(extra = {}) {
     // dca & close
     calcDca, applyDca, setClosePct, syncClose, confirmClose,
     // lists & sorting
-    setSort, setPosSort, refreshPrices,
+    setSort, setPosSort, refreshPrices, toggleClosedMonth,
     // monthly
     renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker,
     selectMonth, toggleMonthTrade,

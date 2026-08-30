@@ -238,3 +238,16 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 .closed-check{display:flex;align-items:center;gap:8px;cursor:pointer;
   font-size:12px;color:var(--text2);text-transform:none;letter-spacing:0}
 .closed-check input{width:auto;margin:0;cursor:pointer;accent-color:var(--blue)}
+
+/* Closed trades, grouped by the month they closed. A year of trading is a
+   hundred cards; this keeps the page to one row per month until asked. */
+.month-group{background:var(--panel);border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
+.month-group.open{border-color:var(--border-blue)}
+.month-head{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;cursor:pointer}
+.month-head:hover{background:var(--hover)}
+.month-left{display:flex;align-items:center;gap:10px}
+.month-name{font-size:14px;font-weight:600;color:var(--text)}
+.month-count{font-size:11px;color:var(--text3)}
+.month-pnl{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.month-group.open .chevron{transform:rotate(90deg);color:var(--blue)}
+.month-body{border-top:0.5px solid var(--border);padding:10px 12px 2px;background:var(--panel2)}

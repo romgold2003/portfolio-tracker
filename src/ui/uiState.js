@@ -4,6 +4,8 @@
  * return to a clean default view.
  */
 export const ui = {
+  /** Which month of closed trades is expanded on the Positions page. */
+  openClosedMonth: null,
   /** Chart timeframe on the home page. */
   timeframe: '3M',
   /** Direction selected in the new-trade form. */
