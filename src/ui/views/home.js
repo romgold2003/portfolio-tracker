@@ -8,7 +8,9 @@ import {
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
-import { benchmarkSeries, benchmarkReturn, benchmarkKey } from '../../services/benchmark.js';
+import {
+  benchmarkSeries, benchmarkReturn, benchmarkKey, benchmarkFailure,
+} from '../../services/benchmark.js';
 import { cutoffFor } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
@@ -174,9 +176,12 @@ async function renderBenchmark(periodReturn) {
   if (!rows || !span) {
     valEl.textContent = '—';
     valEl.style.color = 'var(--text3)';
+    // Say what actually went wrong. "Unavailable" left someone who had just
+    // pasted a key with no way to tell a typo from a spent daily quota.
     noteEl.textContent = benchmarkKey()
-      ? 'Market data unavailable right now'
+      ? (benchmarkFailure() || 'Market data unavailable right now')
       : 'Add a market data key in settings to compare';
+    noteEl.title = noteEl.textContent;
     return;
   }
 

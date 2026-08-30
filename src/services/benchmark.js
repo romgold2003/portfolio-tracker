@@ -61,6 +61,46 @@ export function saveBenchmarkKey(key) {
  * Daily closes for the index, oldest first. Null when unavailable, which is the
  * normal state until a key is entered — callers fall back rather than fail.
  */
+/**
+ * Why the last attempt produced nothing, in the provider's own words.
+ *
+ * A silent null was the wrong thing to return here. "Market data unavailable"
+ * covers a mistyped key, an exhausted daily quota and an endpoint that has
+ * moved to a paid tier, and those need three different responses from the user
+ * — so whatever the API said is kept and shown.
+ */
+let lastFailure = null;
+
+export function benchmarkFailure() {
+  return lastFailure;
+}
+
+/** Alpha Vantage answers refusals with prose and HTTP 200. */
+function refusalIn(json) {
+  const message = json?.Information || json?.Note || json?.['Error Message'];
+  return typeof message === 'string' ? message : null;
+}
+
+function parseRows(json) {
+  const raw = json?.['Time Series (Daily)'];
+  if (!raw || typeof raw !== 'object') return null;
+  const rows = Object.entries(raw)
+    .map(([date, bar]) => ({ date, close: Number(bar['4. close']) }))
+    .filter((r) => Number.isFinite(r.close) && r.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return rows.length >= 2 ? rows : null;
+}
+
+async function fetchSeries(key, outputSize) {
+  const url = `${API.alphaVantage}?function=TIME_SERIES_DAILY`
+    + `&symbol=${BENCHMARK_SYMBOL}&outputsize=${outputSize}`
+    + `&apikey=${encodeURIComponent(key)}`;
+  const res = await fetch(url);
+  if (!res.ok) return { rows: null, refusal: `The market data service returned ${res.status}.` };
+  const json = await res.json();
+  return { rows: parseRows(json), refusal: refusalIn(json) };
+}
+
 export async function benchmarkSeries() {
   if (series) return series;
 
@@ -68,31 +108,33 @@ export async function benchmarkSeries() {
   if (cached) { series = cached; return series; }
 
   const key = benchmarkKey();
-  if (!key) return null;
+  if (!key) { lastFailure = null; return null; }
 
   try {
-    const url = `${API.alphaVantage}?function=TIME_SERIES_DAILY`
-      + `&symbol=${BENCHMARK_SYMBOL}&outputsize=full&apikey=${encodeURIComponent(key)}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const json = await res.json();
+    /**
+     * Twenty years of history is asked for first, because a year-to-date
+     * comparison needs more than the hundred days the compact response holds.
+     * That size has been drifting into Alpha Vantage's paid tier, though, and a
+     * free key gets prose instead of prices. So a refusal falls back to compact
+     * rather than giving up: a hundred days still answers 1W through 3M, which
+     * is most of what the buttons ask for.
+     */
+    let { rows, refusal } = await fetchSeries(key, 'full');
+    if (!rows) {
+      ({ rows, refusal } = await fetchSeries(key, 'compact'));
+    }
 
-    // The free tier answers a bad key, or an exhausted quota, with prose in an
-    // "Information" or "Note" field and HTTP 200. Absent price data is the only
-    // reliable signal that nothing usable came back.
-    const raw = json['Time Series (Daily)'];
-    if (!raw || typeof raw !== 'object') return null;
+    if (!rows) {
+      lastFailure = refusal || 'The market data service sent no prices.';
+      return null;
+    }
 
-    const rows = Object.entries(raw)
-      .map(([date, bar]) => ({ date, close: Number(bar['4. close']) }))
-      .filter((r) => Number.isFinite(r.close) && r.close > 0)
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    if (rows.length < 2) return null;
+    lastFailure = null;
     series = rows;
     writeCache(rows);
     return series;
-  } catch {
+  } catch (err) {
+    lastFailure = `Could not reach the market data service (${err.message}).`;
     return null;
   }
 }
