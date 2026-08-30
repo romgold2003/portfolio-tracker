@@ -12,7 +12,7 @@ import {
   benchmarkSeries, benchmarkReturn, benchmarkKey, benchmarkFailure,
   benchmarkSpot, benchmarkYearToDate,
 } from '../../services/benchmark.js';
-import { cutoffFor } from '../../core/snapshots.js';
+import { periodStart } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -202,6 +202,7 @@ async function renderBenchmark(periodReturn) {
 
   const edge = (periodReturn ?? 0) - marketReturn;
   const verdict = edge >= 0 ? 'ahead of' : 'behind';
+  const window = describeWindow(span);
 
   // The market's own year is appended because it is the question people
   // actually ask — "what has the S&P done this year" — and it cannot be read
@@ -209,15 +210,36 @@ async function renderBenchmark(periodReturn) {
   const ytd = benchmarkYearToDate(rows, benchmarkSpot());
   const ytdNote = ytd == null ? '' : ` · S&P ${fp(ytd)} YTD`;
 
-  noteEl.textContent = `${fp(Math.abs(edge)).replace('+', '')} ${verdict} the market · ${span.days}d${ytdNote}`;
+  noteEl.textContent = `${fp(Math.abs(edge)).replace('+', '')} ${verdict} the market · ${window}${ytdNote}`;
   noteEl.style.color = edge >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+/**
+ * The window in words, rather than a day count.
+ *
+ * "17d" said how long but not from when, which matters most on the timeframe
+ * where the two differ: an account opened in August cannot show a year to date,
+ * so YTD quietly means "since you started" until the calendar turns. Saying
+ * "since 12 Aug" makes that visible instead of leaving someone to wonder why
+ * their year is seventeen days long. Once a full year has been recorded the
+ * same window really is the year, and it says so.
+ */
+function describeWindow(span) {
+  if (ui.timeframe !== 'YTD') return `${span.days}d`;
+  const janFirst = `${new Date().getFullYear()}-01-01`;
+  if (span.from <= janFirst) return 'year to date';
+  const started = new Date(span.from);
+  return `since ${started.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
 }
 
 /** The first and last day the account curve actually has data for. */
 function trackedSpan() {
   const snaps = state.snapshots;
   if (!snaps?.length) return null;
-  const cutoff = cutoffFor(ui.timeframe);
+  // Never reaches back past the day the account started, so a year-to-date on a
+  // three-week-old account measures the three weeks rather than inventing the
+  // months before it.
+  const cutoff = periodStart(ui.timeframe, snaps[0].date);
   const inWindow = snaps.filter((s) => new Date(s.date) >= cutoff);
   const used = inWindow.length >= 2 ? inWindow : snaps;
   if (used.length < 2) return null;

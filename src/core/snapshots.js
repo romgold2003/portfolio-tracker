@@ -41,13 +41,33 @@ function daysSinceJanuaryFirst() {
  * a few hours *after* the 1st of January west of Greenwich, and quietly drop
  * that day's point from the window.
  */
-export function cutoffFor(timeframe) {
+export function cutoffFor(timeframe, now = new Date()) {
   if (timeframe === 'YTD') {
-    return new Date(Date.UTC(new Date().getFullYear(), 0, 1));
+    return new Date(Date.UTC(now.getFullYear(), 0, 1));
   }
-  const cutoff = new Date();
+  const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - daysForTimeframe(timeframe));
   return cutoff;
+}
+
+/**
+ * Where a year-to-date window really begins for this account.
+ *
+ * The first of January, or the day the account started if that is later. An
+ * account opened in August has no eight-month return, and inventing one by
+ * treating the months before it as flat would report a number that never
+ * happened.
+ *
+ * So until a full year has been recorded, "year to date" means "since you
+ * started" — and the moment the calendar turns, it becomes a true year to date
+ * on its own, with no switch to throw. An account opened in August 2026 reports
+ * since-August for the rest of 2026, and from 1 January 2027 reports the year.
+ */
+export function periodStart(timeframe, firstRecorded, now = new Date()) {
+  const cutoff = cutoffFor(timeframe, now);
+  if (!firstRecorded) return cutoff;
+  const inception = new Date(firstRecorded);
+  return inception > cutoff ? inception : cutoff;
 }
 
 /**
