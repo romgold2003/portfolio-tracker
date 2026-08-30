@@ -14,7 +14,7 @@ import {
 } from '../../core/profiles.js';
 import { cryptoAvailable } from '../../core/crypto.js';
 import { escapeHtml } from '../format.js';
-import { setSigninScene } from '../../features/signinScene.js';
+import { setSigninHero } from '../../features/signinHero.js';
 
 const HOST_ID = 'lockScreen';
 
@@ -185,7 +185,7 @@ function render() {
   if (!cryptoAvailable()) {
     container.innerHTML = `<div class="lock-card">${unsupportedScreen()}</div>`;
     container.style.display = 'flex';
-    setSigninScene(true);
+    setSigninHero(true);
     return;
   }
   const body = mode === 'create' ? createForm()
@@ -195,7 +195,7 @@ function render() {
 
   container.innerHTML = `<div class="lock-card">${body}</div>`;
   container.style.display = 'flex';
-  setSigninScene(true);
+  setSigninHero(true);
   wire();
 }
 
@@ -316,7 +316,7 @@ async function finish() {
   host().innerHTML = '';
   // Torn down rather than merely hidden: an animation loop behind an opaque
   // app is spent battery, and this runs on phones.
-  setSigninScene(false);
+  setSigninHero(false);
   mode = 'signin';
   await onUnlocked();
 }

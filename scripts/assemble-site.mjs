@@ -7,7 +7,7 @@
  *
  * Usage: node scripts/assemble-site.mjs [outputDir]   (default: _site)
  */
-import { mkdir, copyFile, writeFile, readFile, stat } from 'node:fs/promises';
+import { mkdir, copyFile, writeFile, readFile, stat, readdir } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,6 +32,28 @@ const MUST_NOT = [
   [/<link rel="stylesheet"/, 'the stylesheets were not inlined'],
 ];
 
+/**
+ * Copies assets/ into the output, if there is one.
+ *
+ * Flat on purpose: the moment this walks a tree it needs to care about symlinks,
+ * hidden files and what is safe to publish. One folder of files it is.
+ */
+async function copyAssets() {
+  const from = join(ROOT, 'assets');
+  const names = await readdir(from).catch(() => null);
+  if (!names || !names.length) return [];
+
+  await mkdir(join(OUT, 'assets'), { recursive: true });
+  const copied = [];
+  for (const name of names) {
+    const info = await stat(join(from, name));
+    if (!info.isFile()) continue;
+    await copyFile(join(from, name), join(OUT, 'assets', name));
+    copied.push([name, info.size]);
+  }
+  return copied;
+}
+
 async function assemble() {
   const info = await stat(BUILT).catch(() => null);
   if (!info || !info.size) {
@@ -55,8 +77,16 @@ async function assemble() {
   // Tells GitHub Pages not to run the files through Jekyll. Vercel ignores it.
   await writeFile(join(OUT, '.nojekyll'), '');
 
+  // Anything too big to inline. Today that is the sign-in video: at 16 MB it
+  // would be 21 MB of base64 inside a 456 KB page, so the hosted site fetches
+  // it and the single file goes without and falls back to the drawn scene.
+  const copied = await copyAssets();
+
   console.log(`Assembled ${OUT}`);
   console.log(`  index.html — ${Math.round(html.length / 1024)} KB, self-contained`);
+  for (const [name, bytes] of copied) {
+    console.log(`  assets/${name} — ${Math.round(bytes / 1024)} KB`);
+  }
 }
 
 assemble().catch((err) => {

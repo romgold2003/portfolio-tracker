@@ -262,11 +262,33 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 #add{position:relative}
 #add > *:not(.orbit-backdrop){position:relative;z-index:1}
 /* The sign-in scene: full bleed, behind the card. */
-/* A canvas is a replaced element, so inset:0 alone does not size it: it lays
-   out at its bitmap size, which on a 2x screen is twice the viewport in each
-   direction, and only the top-left quarter is ever on screen. The explicit
-   width and height are what pin it to the window. */
-.signin-scene{position:fixed;inset:0;width:100%;height:100%;z-index:499;display:none;pointer-events:none}
+/* PrismaHero from 21st.dev with the text taken out. Once the headline, nav,
+   paragraph and button are gone, the component is a looping video under a noise
+   pass and a vertical gradient, inside a rounded frame — which is what this is.
+   The rounding is the component's own (1rem, 2rem from the md breakpoint up). */
+.signin-hero{position:fixed;inset:0;z-index:499;display:none;pointer-events:none;
+  overflow:hidden;border-radius:1rem;background:var(--bg)}
+@media(min-width:768px){.signin-hero{border-radius:2rem}}
+
+.signin-hero-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  opacity:0;transition:opacity .9s ease}
+/* Faded in only once there is a frame to show, so a slow connection reveals the
+   drawn fallback rather than a black rectangle. */
+.signin-hero-video.is-ready{opacity:1}
+
+/* The component's noise pass. Generated rather than fetched: an image file for
+   this would be a request and a byte cost for what is four lines of SVG. */
+.signin-hero-noise{position:absolute;inset:0;opacity:.7;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.42'/%3E%3C/svg%3E")}
+
+.signin-hero-fade{position:absolute;inset:0;
+  background:linear-gradient(to bottom,rgba(0,0,0,.3),transparent,rgba(0,0,0,.6))}
+
+/* The drawn fallback, underneath. A canvas is a replaced element, so inset:0
+   alone does not size it: it lays out at its bitmap size, which on a 2x screen
+   is twice the viewport in each direction, and only the top-left quarter is
+   ever on screen. The explicit width and height are what pin it. */
+.signin-scene{position:absolute;inset:0;width:100%;height:100%;display:none}
 /* The whole arrangement hangs off a point below the bottom edge, so the rings
    arc up through the screen instead of sitting in a circle in the middle. */
 .orbit-backdrop #orbitGlobe,.orbit-ring{position:absolute;left:50%;bottom:0;
@@ -300,6 +322,14 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 /* The card has to stay legible over all of it. */
 .lock-screen{background:transparent}
 .lock-card{backdrop-filter:blur(14px);background:color-mix(in srgb,var(--panel) 88%,transparent)}
+
+/* The subject of the video sits dead centre, which is where a centred card
+   goes, so on a screen wide enough to hold both the card moves out of his way.
+   To the right, because that is where PrismaHero puts its own text column.
+   Below this width there is no room to give, and the card stays centred. */
+@media(min-width:1200px){
+  .lock-screen{justify-content:flex-end;padding-right:min(7vw,120px)}
+}
 
 /* Asked for less motion: the arrangement stays, the movement stops. */
 @media (prefers-reduced-motion:reduce){

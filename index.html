@@ -17,10 +17,24 @@
 </head>
 <body>
 <!--
-  The sign-in scene: a trader at a desk, drawn rather than filmed.
-  Purely decorative, so it is hidden from screen readers entirely.
+  The sign-in scene: PrismaHero from 21st.dev, stripped of its text. What is
+  left of that component once the headline, nav, paragraph and button are gone
+  is exactly this — a looping video under a noise pass and a vertical gradient,
+  inside a rounded frame. Purely decorative, so it is hidden from screen readers.
+
+  The canvas underneath is the fallback. The standalone single-file build has no
+  assets folder to serve the video from, and a phone on a bad connection may
+  never finish it, so a drawn scene sits behind and is uncovered if the video
+  does not arrive.
 -->
-<canvas class="signin-scene" id="signinScene" aria-hidden="true"></canvas>
+<div class="signin-hero" id="signinHero" aria-hidden="true">
+  <canvas class="signin-scene" id="signinScene"></canvas>
+  <video class="signin-hero-video" id="signinHeroVideo"
+         autoplay loop muted playsinline preload="auto"
+         src="assets/signin-hero.mp4"></video>
+  <div class="signin-hero-noise"></div>
+  <div class="signin-hero-fade"></div>
+</div>
 
 <div class="lock-screen" id="lockScreen"></div>
 
