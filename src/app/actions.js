@@ -159,10 +159,6 @@ function addClosedTrade(form, ticker) {
     alert('Enter the date you closed the trade, so it lands in the right month.');
     return false;
   }
-  if (form.open && form.close < form.open) {
-    alert('The closing date is before the opening date.');
-    return false;
-  }
   if (!Number.isFinite(form.pnl) || form.pnl === 0) {
     alert('Enter what the trade made, as a positive or negative amount.');
     return false;

@@ -21,7 +21,10 @@ export function readTradeForm() {
     ticker: field('f-ticker').value,
     cls: field('f-class').value,
     dir: ui.formDirection,
-    open: field('f-date').value,
+    // A finished trade is filed by when it closed. Asking when it opened adds
+    // a field to get wrong for no gain: nothing downstream reads it, and the
+    // month it belongs to comes from the closing date.
+    open: alreadyClosed ? null : field('f-date').value,
     entry: parseFloat(field('f-entry').value),
     amount: parseFloat(field('f-amount').value),
     reason: field('f-reason').value.trim(),
@@ -50,7 +53,7 @@ export function toggleClosedTrade() {
     const el = field(id);
     if (el) el.style.display = on ? 'flex' : 'none';
   });
-  ['f-entryWrap', 'f-amountWrap'].forEach((id) => {
+  ['f-entryWrap', 'f-amountWrap', 'f-openDateWrap'].forEach((id) => {
     const el = field(id);
     if (el) el.style.display = on ? 'none' : 'flex';
   });
@@ -67,7 +70,7 @@ export function clearTradeForm() {
     if (el) el.value = '';
   });
   setTickerStatus('', 'muted');
-  field('f-date').value = todayStr();
+  if (field('f-date')) field('f-date').value = todayStr();
   if (field('f-sector')) field('f-sector').value = '';
   // Deliberately left ticked if it was: someone entering a backlog of finished
   // trades is entering several, and re-ticking it every time would be tedious.

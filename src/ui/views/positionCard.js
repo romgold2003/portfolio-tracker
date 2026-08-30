@@ -73,7 +73,7 @@ function editFields(p, { includeExit }) {
     <div class="dca-field"><label>Direction</label>
       <select id="ed-dir-${p.id}">${['Long', 'Short'].map((d) => opt(d, p.dir === d)).join('')}</select>
     </div>
-    <div class="dca-field"><label>Date opened</label><input type="date" id="ed-date-${p.id}" value="${escapeHtml(p.open)}"></div>
+    <div class="dca-field"><label>Date opened</label><input type="date" id="ed-date-${p.id}" value="${escapeHtml(p.open || '')}"></div>
     ${includeExit ? `<div class="dca-field"><label>Date closed</label><input type="date" id="ed-close-${p.id}" value="${escapeHtml(p.close || '')}"></div>` : ''}
     <div class="dca-field"><label>Entry price ($)</label><input type="number" step="any" id="ed-entry-${p.id}" value="${p.entry}"></div>
     ${includeExit ? `<div class="dca-field"><label>Exit price ($)</label><input type="number" step="any" id="ed-exit-${p.id}" value="${p.cur}"></div>` : ''}
@@ -158,7 +158,9 @@ function openBody(p) {
 }
 
 function closedBody(p, retPct) {
-  return `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Opened ${escapeHtml(p.open)} · Closed ${escapeHtml(p.close)} · Realised ${$u(realized(p))} · ${fp(retPct)}</div>
+    // A trade entered as a finished result has no opening date to show.
+  const opened = p.open ? `Opened ${escapeHtml(p.open)} · ` : '';
+  return `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${opened}Closed ${escapeHtml(p.close)} · Realised ${$u(realized(p))} · ${fp(retPct)}</div>
     ${reasonBlock(p)}
     ${exitsBlock(p)}
     <div class="pos-btns">
