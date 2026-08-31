@@ -30,6 +30,7 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.mp4': 'video/mp4',
 };
 
 /** The same driver shape the tests use, backed by a file on disk. */
@@ -51,6 +52,33 @@ function fileDriver() {
 
 useDriver(fileDriver());
 
+/**
+ * Local stand-ins for the two things the reset flow needs from the outside
+ * world, so the whole journey can be walked in a browser without a Brevo
+ * account and without mailing anyone.
+ *
+ * The escrow secret is fixed rather than random: a restart that changed it
+ * would leave every account in .dev-cloud.db unable to be reset, which is a
+ * confusing way to spend an afternoon. It is a development value and is not
+ * the one production uses.
+ */
+process.env.ESCROW_SECRET ??= 'dev-only-escrow-secret-not-for-production';
+process.env.MAIL_FROM ??= 'dev@localhost';
+process.env.MAIL_API_KEY ??= 'dev';
+
+/**
+ * The mail provider, replaced by the terminal. Anything aimed at Brevo is
+ * intercepted and the link is printed where you are already looking.
+ */
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, options) => {
+  if (!String(url).includes('api.brevo.com')) return realFetch(url, options);
+  const message = JSON.parse(options.body);
+  const link = /https?:\/\/\S+/.exec(message.textContent)?.[0] ?? '(no link found)';
+  console.log(`\n  ✉  reset link for ${message.to[0].email}\n     ${link}\n`);
+  return { ok: true, status: 201, text: async () => '' };
+};
+
 /** api/auth/login.js is reached as /api/auth/login. */
 const ROUTES = {
   '/api/config': '../api/config.js',
@@ -65,6 +93,9 @@ const ROUTES = {
   '/api/auth/session': '../api/auth/session.js',
   '/api/auth/recover': '../api/auth/recover.js',
   '/api/auth/password': '../api/auth/password.js',
+  '/api/auth/forgot': '../api/auth/forgot.js',
+  '/api/auth/reset': '../api/auth/reset.js',
+  '/api/auth/escrow': '../api/auth/escrow.js',
 };
 
 const handlers = new Map();

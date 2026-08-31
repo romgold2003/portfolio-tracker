@@ -14,10 +14,19 @@
 import { query, one, driverGeneration } from './db.js';
 import {
   hashSecret, verifySecret, hashToken, randomToken, newId,
+  sealForServer, openFromServer, escrowAvailable,
 } from './crypto.js';
 
 /** How long a login lasts before it has to be done again. */
 const SESSION_DAYS = 30;
+
+/**
+ * How long a reset link stays good.
+ *
+ * Short, because the link is the whole credential — anyone holding it can read
+ * the journal. Long enough that finding the mail after lunch still works.
+ */
+const RESET_MINUTES = 45;
 
 /**
  * A secret that is stable for this deployment and known only to it.
@@ -218,6 +227,8 @@ export function endAllSessions(userId) {
  */
 export async function deleteUser(userId) {
   await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+  await query('DELETE FROM resets WHERE user_id = $1', [userId]);
+  await query('DELETE FROM escrow WHERE user_id = $1', [userId]);
   await query('DELETE FROM vaults WHERE user_id = $1', [userId]);
   await query('DELETE FROM users WHERE id = $1', [userId]);
 }
@@ -258,6 +269,110 @@ export async function writeVault(userId, blob, expectedVersion) {
 
   if (rows.length) return { ok: true, vault: rows[0] };
   return { ok: false, vault: await readVault(userId) };
+}
+
+/**
+ * Keep a copy of the data key so a reset link can hand it back.
+ *
+ * Silently does nothing when no ESCROW_SECRET is set. That is deliberate: the
+ * absence of a secret is the operator declining to hold anyone's key, and the
+ * right response is to store nothing, not to store it badly.
+ */
+export async function storeEscrow(userId, dataKey) {
+  if (!escrowAvailable()) return false;
+  const sealed = sealForServer(dataKey);
+  if (!sealed) return false;
+
+  const now = new Date().toISOString();
+  const { rows } = await query(
+    'UPDATE escrow SET iv = $1, ct = $2, updated_at = $3 WHERE user_id = $4 RETURNING user_id',
+    [sealed.iv, sealed.ct, now, userId],
+  );
+  if (!rows.length) {
+    await query(
+      'INSERT INTO escrow (user_id, iv, ct, updated_at) VALUES ($1, $2, $3, $4)',
+      [userId, sealed.iv, sealed.ct, now],
+    );
+  }
+  return true;
+}
+
+/**
+ * Is there a key held for this account?
+ *
+ * Reported at sign-in so the app can offer to hand one over for an account
+ * created before reset links were switched on. Deliberately does not decrypt:
+ * this runs on every login and the answer is a yes or no about a row.
+ */
+export async function hasEscrow(userId) {
+  if (!escrowAvailable()) return false;
+  return !!await one('SELECT user_id FROM escrow WHERE user_id = $1', [userId]);
+}
+
+/** The stored data key, or null if there is none or the secret has changed. */
+export async function readEscrow(userId) {
+  if (!escrowAvailable()) return null;
+  const row = await one('SELECT iv, ct FROM escrow WHERE user_id = $1', [userId]);
+  return row ? openFromServer(row) : null;
+}
+
+export function dropEscrow(userId) {
+  return query('DELETE FROM escrow WHERE user_id = $1', [userId]);
+}
+
+/**
+ * Issue a reset link's token.
+ *
+ * Any outstanding tokens for the account are dropped first, so asking twice
+ * does not leave two live ways in — the newest mail is the only one that works.
+ * Only the hash is stored: the database should not contain anything that could
+ * be used to take over an account.
+ */
+export async function createResetToken(userId) {
+  await query('DELETE FROM resets WHERE user_id = $1', [userId]);
+  const token = randomToken();
+  const now = Date.now();
+  await query(
+    `INSERT INTO resets (token_hash, user_id, created_at, expires_at, used_at)
+     VALUES ($1, $2, $3, $4, NULL)`,
+    [
+      hashToken(token), userId,
+      new Date(now).toISOString(),
+      new Date(now + RESET_MINUTES * 60_000).toISOString(),
+    ],
+  );
+  return token;
+}
+
+/** The account a live reset token belongs to, or null. Does not consume it. */
+export async function userForResetToken(token) {
+  if (!token) return null;
+  const row = await one('SELECT * FROM resets WHERE token_hash = $1', [hashToken(token)]);
+  if (!row || row.used_at) return null;
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    await query('DELETE FROM resets WHERE token_hash = $1', [hashToken(token)]);
+    return null;
+  }
+  return findUserById(row.user_id);
+}
+
+/**
+ * Spend a reset token.
+ *
+ * The UPDATE carries its own `used_at IS NULL` check and reports whether it
+ * matched, so two requests arriving with the same token cannot both succeed.
+ */
+export async function consumeResetToken(token) {
+  const { rows } = await query(
+    `UPDATE resets SET used_at = $1 WHERE token_hash = $2 AND used_at IS NULL
+     RETURNING user_id`,
+    [new Date().toISOString(), hashToken(token)],
+  );
+  return rows.length ? rows[0].user_id : null;
+}
+
+export function dropResetTokens(userId) {
+  return query('DELETE FROM resets WHERE user_id = $1', [userId]);
 }
 
 export async function updateAuth(userId, { authSalt, authSecret, passwordWrapper }) {

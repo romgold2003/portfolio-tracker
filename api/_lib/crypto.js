@@ -14,6 +14,7 @@
  */
 import {
   randomBytes, scrypt, timingSafeEqual, createHash,
+  createCipheriv, createDecipheriv,
 } from 'node:crypto';
 
 /**
@@ -91,4 +92,64 @@ export function decoySalt(email, pepper) {
     .update(`${pepper}:${email}`)
     .digest('base64url')
     .slice(0, 22);
+}
+
+/**
+ * Encrypting the one thing this server is trusted to hold: a data key.
+ *
+ * Everything else here is one-way, because the server has no business being
+ * able to reverse it. This is the exception, and it exists because a password
+ * reset by email has to end with the user's journal still readable — which
+ * means something reachable from a reset link has to be able to produce the
+ * key. There is no arrangement where that is true and the server cannot.
+ *
+ * What can still be arranged is that the *database alone* is not enough. The
+ * key below comes from ESCROW_SECRET in the deployment's environment, so a
+ * dump of the tables is inert without it. Two different places have to fall
+ * over, not one.
+ *
+ * Returns null when ESCROW_SECRET is unset, which is how the app knows to offer
+ * recovery keys instead of reset links.
+ */
+function escrowKey() {
+  const secret = process.env.ESCROW_SECRET;
+  if (!secret || secret.length < 16) return null;
+  // A fixed derivation, because the same key has to open rows written by an
+  // earlier deployment of the same secret.
+  return createHash('sha256').update(`escrow:${secret}`).digest();
+}
+
+export function escrowAvailable() {
+  return escrowKey() !== null;
+}
+
+/** Seal a short secret for storage. Returns { iv, ct } base64url, or null. */
+export function sealForServer(plaintext) {
+  const key = escrowKey();
+  if (!key) return null;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const body = Buffer.concat([cipher.update(String(plaintext), 'utf8'), cipher.final()]);
+  // The tag travels with the ciphertext; splitting them buys nothing and is one
+  // more thing to get wrong.
+  return {
+    iv: iv.toString('base64url'),
+    ct: Buffer.concat([body, cipher.getAuthTag()]).toString('base64url'),
+  };
+}
+
+/** Reverse of sealForServer. Returns null if the secret changed or it is corrupt. */
+export function openFromServer(sealed) {
+  const key = escrowKey();
+  if (!key || !sealed?.iv || !sealed?.ct) return null;
+  try {
+    const raw = Buffer.from(sealed.ct, 'base64url');
+    const tag = raw.subarray(raw.length - 16);
+    const body = raw.subarray(0, raw.length - 16);
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(sealed.iv, 'base64url'));
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(body), decipher.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
 }

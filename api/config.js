@@ -8,6 +8,8 @@
  */
 import { databaseAvailable } from './_lib/db.js';
 import { send, methodIs } from './_lib/http.js';
+import { escrowAvailable } from './_lib/crypto.js';
+import { mailAvailable } from './_lib/mail.js';
 
 export default async function handler(req, res) {
   if (!methodIs(req, res, 'GET')) return;
@@ -17,5 +19,15 @@ export default async function handler(req, res) {
   } catch {
     cloud = false;
   }
-  send(res, 200, { cloud });
+  /**
+   * Whether a forgotten password can be reset by email, which needs three
+   * things at once: somewhere to store accounts, a secret to encrypt the held
+   * data keys under, and a way to send mail. Missing any of them, the sign-in
+   * screen keeps offering recovery keys, and sign-up keeps issuing them.
+   *
+   * Reported rather than assumed so the same build works either way, and so
+   * turning it on is a matter of setting two environment variables.
+   */
+  const emailReset = cloud && escrowAvailable() && mailAvailable();
+  send(res, 200, { cloud, emailReset });
 }

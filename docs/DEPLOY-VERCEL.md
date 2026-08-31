@@ -39,11 +39,11 @@ Check it worked by opening `https://<your-app>.vercel.app/api/config`. It should
 say:
 
 ```json
-{"cloud":true}
+{"cloud":true,"emailReset":false}
 ```
 
-If it says `false`, the redeploy did not happen or the database is not connected
-to this project.
+If `cloud` says `false`, the redeploy did not happen or the database is not
+connected to this project. `emailReset` is covered below.
 
 ## 4. Name it
 
@@ -52,6 +52,68 @@ to this project.
 
 `riskbook.vercel.app` was free when this was written, along with
 `carrybook`, `highwatermark` and `netliq-app`. `netliq` was taken.
+
+## Optional: reset a forgotten password by email
+
+Off by default. Turning it on changes what this deployment can do and what it
+can see, so read the trade-off before you do it.
+
+**What you get.** "Forgot password" sends a link. The person clicks it, chooses
+a new password, and their journal is still there. New accounts stop being shown
+a recovery key at sign-up, because they no longer need one.
+
+**What it costs.** For a link to restore access to encrypted data, something
+reachable from that link has to be able to produce the key — so the server keeps
+a copy of every user's data key, and can therefore decrypt their journal. There
+is no arrangement where an email link works and this is not true. Without it,
+the server holds only ciphertext and a lost password means a lost journal unless
+the recovery key was kept.
+
+The copy is encrypted under `ESCROW_SECRET`, which lives in Vercel's
+environment and never in the database, so a leaked database on its own is still
+useless. Someone with both can read everything.
+
+### 1. A mail provider
+
+Brevo's free tier sends 300 messages a day and will send from a single verified
+address, which matters: most providers require a domain you control, and
+`*.vercel.app` is not one.
+
+1. Sign up at [brevo.com](https://www.brevo.com).
+2. **Senders, Domains & Dedicated IPs → Senders → Add a sender.** Use an address
+   you can receive mail at. Click the link they send you.
+3. **SMTP & API → API Keys → Generate a new API key.** Copy it.
+
+### 2. Two environment variables
+
+**Settings → Environment Variables**, then redeploy:
+
+| Name | Value |
+|---|---|
+| `MAIL_API_KEY` | the Brevo API key |
+| `MAIL_FROM` | the sender address you verified |
+| `MAIL_FROM_NAME` | optional, defaults to `Riskbook` |
+| `ESCROW_SECRET` | a long random string — see below |
+
+Generate the escrow secret with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
+
+**Keep it.** Change it and every account created before the change can no longer
+be reset by email — the stored keys will not open. Those users fall back to
+their recovery key, and anyone who signed up after reset links were enabled does
+not have one.
+
+`/api/config` should then say `"emailReset":true`.
+
+### What happens to accounts that already exist
+
+Nothing, until they sign up again. Reset links only work for accounts created
+*after* you turned this on, because only those handed over a copy of their key.
+Everyone older keeps their recovery key, and "Forgot password" still offers
+"Use a recovery key instead" for them.
 
 ## Optional: pin the decoy secret
 
@@ -66,12 +128,13 @@ from a real one, so if you set it, do not change it later.
 
 - **Vercel's Hobby plan forbids commercial use.** Free for friends is fine;
   charging for it is not, and you would need a paid plan.
-- **You are now holding other people's financial records.** Encrypted ones you
-  cannot read, which is the whole point of the design — but if someone asks you
+- **You are now holding other people's financial records.** If someone asks you
   to delete their account, you should be able to.
-- **Nobody can rescue a forgotten password**, including you. That is stated
-  plainly on the sign-up screen, and it is why the recovery key screen will not
-  let anyone past without ticking the box.
+- **How readable those records are is your choice**, and it is the one above.
+  Without email reset, they are ciphertext you cannot open, and nobody can
+  rescue a forgotten password — including you. With it, you hold the keys, and
+  anyone who obtains both your database and your `ESCROW_SECRET` holds them too.
+  Neither answer is wrong; only one of them lets people back in when they forget.
 
 ## Keeping GitHub Pages
 

@@ -12,7 +12,7 @@ import {
 } from '../_lib/http.js';
 import {
   createUser, startSession, publicUser, looksLikeEmail, normalizeEmail,
-  isWrapper, isVaultBlob,
+  isWrapper, isVaultBlob, storeEscrow,
 } from '../_lib/accounts.js';
 
 const SESSION_COOKIE = 'pt_session';
@@ -36,6 +36,7 @@ export default async function handler(req, res) {
   } = body ?? {};
   const isSalt = (v) => typeof v === 'string' && v.length >= 16 && v.length <= 64;
   const isSecret = (v) => typeof v === 'string' && v.length >= 32 && v.length <= 128;
+  const isDataKey = (v) => typeof v === 'string' && v.length >= 32 && v.length <= 128;
 
   if (!isSalt(authSalt) || !isSalt(recoverySalt)) return fail(res, 400, 'Malformed request.');
   if (!isSecret(authSecret) || !isSecret(recoverySecret)) return fail(res, 400, 'Malformed request.');
@@ -58,6 +59,16 @@ export default async function handler(req, res) {
   // unable to sign up and unable to find out why, and an address that already
   // has an account is discoverable from the sign-in screen anyway.
   if (!user) return fail(res, 409, 'An account already exists for that email.');
+
+  /**
+   * The copy of the data key that makes a reset link possible.
+   *
+   * Optional on both sides. A client that does not send one — an older build,
+   * or a deployment the user chose not to trust with it — simply gets an
+   * account that can only be recovered with its key, and everything else about
+   * it works the same.
+   */
+  if (isDataKey(body?.escrowDataKey)) await storeEscrow(user.id, body.escrowDataKey);
 
   const { token, maxAge } = await startSession(user.id);
   setCookie(res, SESSION_COOKIE, token, maxAge);

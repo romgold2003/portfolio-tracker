@@ -11,17 +11,21 @@
 import {
   listProfiles, findByEmail, createProfile, unlockWithPassword,
   unlockWithRecoveryKey, setPassword, looksLikeEmail, cloudMode,
+  requestPasswordReset, completePasswordReset, resetTokenInUrl,
 } from '../../core/profiles.js';
 import { cryptoAvailable } from '../../core/crypto.js';
+import { emailResetEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
 import { setSigninHero } from '../../features/signinHero.js';
 
 const HOST_ID = 'lockScreen';
 
-/** 'signin' | 'create' | 'recover' | 'recoveryKey' */
+/** 'signin' | 'create' | 'recover' | 'recoveryKey' | 'forgot' | 'sent' | 'reset' */
 let mode = 'signin';
 let issuedRecoveryKey = null;
 let pendingEmail = '';
+/** The token from a reset link, once one has been found in the address bar. */
+let resetToken = null;
 /** Set by init(): what to run once a profile is open. */
 let onUnlocked = () => {};
 /** Set by init(): the plaintext journal to absorb, if there is one. */
@@ -54,13 +58,28 @@ function migrationNotice() {
   </div>`;
 }
 
+/**
+ * What the sign-in screen claims about privacy, kept honest.
+ *
+ * The old line — encrypted before it leaves this device — was true while the
+ * recovery key was the only way back in. Once the server holds a copy of the
+ * data key so that a reset link can work, it is not, and a screen that goes on
+ * saying it would be lying to make itself sound better. What is still true is
+ * that the journal is encrypted in transit and at rest, and that the password
+ * itself never leaves.
+ */
+function signinBlurb() {
+  if (!cloudMode()) return 'Your journal is encrypted on this computer.';
+  return emailResetEnabled()
+    ? 'Sign in from any device. Your journal is encrypted, and your password never leaves this one.'
+    : 'Sign in from any device. Your journal is encrypted before it leaves this one.';
+}
+
 function signinForm() {
   const accounts = listProfiles();
   return `
     <h1 class="lock-title">Sign in</h1>
-    <p class="lock-sub">${cloudMode()
-      ? 'Sign in from any device. Your journal is encrypted before it leaves this one.'
-      : 'Your journal is encrypted on this computer.'}</p>
+    <p class="lock-sub">${signinBlurb()}</p>
     <div class="lock-field">
       <label for="lockEmail">Email</label>
       <input type="email" id="lockEmail" autocomplete="username" placeholder="you@example.com" value="${escapeHtml(pendingEmail)}">
@@ -73,16 +92,86 @@ function signinForm() {
     <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Sign in">Sign in</button>
     <div class="lock-links">
       <button class="lock-link" data-mode="create">Create an account</button>
-      ${cloudMode() || accounts.length ? '<button class="lock-link" data-mode="recover">Forgot password</button>' : ''}
+      ${forgotLink(accounts.length)}
+    </div>`;
+}
+
+/**
+ * Where "Forgot password" goes depends on what this deployment can do: to the
+ * email form where mail is configured, to the recovery-key form otherwise.
+ */
+function forgotLink(accountCount) {
+  if (emailResetEnabled()) return '<button class="lock-link" data-mode="forgot">Forgot password</button>';
+  if (cloudMode() || accountCount) return '<button class="lock-link" data-mode="recover">Forgot password</button>';
+  return '';
+}
+
+function forgotForm() {
+  return `
+    <h1 class="lock-title">Forgot password</h1>
+    <p class="lock-sub">Enter your email and we will send you a link to choose a new password.</p>
+    <div class="lock-field">
+      <label for="lockEmail">Email</label>
+      <input type="email" id="lockEmail" autocomplete="username" placeholder="you@example.com" value="${escapeHtml(pendingEmail)}">
+    </div>
+    <div id="lockError" class="lock-error"></div>
+    <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Send reset link">Send reset link</button>
+    <div class="lock-links">
+      <button class="lock-link" data-mode="signin">Back to sign in</button>
+      <button class="lock-link" data-mode="recover">Use a recovery key instead</button>
+    </div>`;
+}
+
+/**
+ * Deliberately says "if there is an account" rather than "sent".
+ *
+ * The server will not confirm whether an address is registered, and a screen
+ * that says "check your inbox" would answer that question on its behalf.
+ */
+function sentScreen() {
+  return `
+    <h1 class="lock-title">Check your email</h1>
+    <p class="lock-sub">If there is an account for
+      <strong>${escapeHtml(pendingEmail)}</strong>, a link to choose a new password
+      is on its way. It works once and expires in 45 minutes.</p>
+    <div class="lock-note">
+      Nothing arriving? Look in spam, and check the address above is the one you
+      signed up with.
+    </div>
+    <div class="lock-links">
+      <button class="lock-link" data-mode="signin">Back to sign in</button>
+      <button class="lock-link" data-mode="forgot">Send it again</button>
+    </div>`;
+}
+
+/** Reached by following a link from the email, never from inside the app. */
+function resetForm() {
+  return `
+    <h1 class="lock-title">Choose a new password</h1>
+    <p class="lock-sub">Your journal is unchanged. This only sets the password that opens it.</p>
+    <div class="lock-field">
+      <label for="lockPassword">New password</label>
+      <input type="password" id="lockPassword" autocomplete="new-password" placeholder="At least 8 characters">
+    </div>
+    <div class="lock-field">
+      <label for="lockPassword2">Confirm password</label>
+      <input type="password" id="lockPassword2" autocomplete="new-password" placeholder="Type it again">
+    </div>
+    <div id="lockError" class="lock-error"></div>
+    <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Set password and sign in">Set password and sign in</button>
+    <div class="lock-links">
+      <button class="lock-link" data-mode="signin">Cancel</button>
     </div>`;
 }
 
 function createForm() {
   return `
     <h1 class="lock-title">Create an account</h1>
-    <p class="lock-sub">${cloudMode()
-      ? 'Encrypted on this device before it is stored, so only your password opens it.'
-      : 'Stays on this computer. Nothing is sent anywhere.'}</p>
+    <p class="lock-sub">${!cloudMode()
+      ? 'Stays on this computer. Nothing is sent anywhere.'
+      : emailResetEnabled()
+        ? 'Encrypted on this device before it is stored. Forget your password and you can reset it by email.'
+        : 'Encrypted on this device before it is stored, so only your password opens it.'}</p>
     ${migrationNotice()}
     <div class="lock-field">
       <label for="lockEmail">Email</label>
@@ -106,9 +195,11 @@ function createForm() {
 function recoverForm() {
   return `
     <h1 class="lock-title">Forgot password</h1>
-    <p class="lock-sub">${cloudMode()
-      ? 'There is no email reset: the server cannot read your journal, so it cannot let you back in. Use the recovery key you saved at sign-up.'
-      : 'There is no email reset — this app has no server. Use the recovery key you were given when you signed up.'}</p>
+    <p class="lock-sub">${emailResetEnabled()
+      ? 'For an account made before reset links existed, or if the email never arrives. Use the recovery key you saved at sign-up.'
+      : cloudMode()
+        ? 'There is no email reset: the server cannot read your journal, so it cannot let you back in. Use the recovery key you saved at sign-up.'
+        : 'There is no email reset — this app has no server. Use the recovery key you were given when you signed up.'}</p>
     <div class="lock-field">
       <label for="lockEmail">Email</label>
       <input type="email" id="lockEmail" autocomplete="username" placeholder="you@example.com" value="${escapeHtml(pendingEmail)}">
@@ -188,10 +279,15 @@ function render() {
     setSigninHero(true);
     return;
   }
-  const body = mode === 'create' ? createForm()
-    : mode === 'recover' ? recoverForm()
-      : mode === 'recoveryKey' ? recoveryKeyScreen()
-        : signinForm();
+  const screens = {
+    create: createForm,
+    recover: recoverForm,
+    recoveryKey: recoveryKeyScreen,
+    forgot: forgotForm,
+    sent: sentScreen,
+    reset: resetForm,
+  };
+  const body = (screens[mode] ?? signinForm)();
 
   container.innerHTML = `<div class="lock-card">${body}</div>`;
   container.style.display = 'flex';
@@ -245,6 +341,8 @@ async function handleSubmit() {
     if (mode === 'create') return await doCreate();
     if (mode === 'recover') return await doRecover();
     if (mode === 'recoveryKey') return doFinishSignup();
+    if (mode === 'forgot') return await doForgot();
+    if (mode === 'reset') return await doReset();
     return await doSignin();
   } catch (err) {
     busy(false);
@@ -281,11 +379,23 @@ async function doCreate() {
     ? { ...legacyJournal, priceLog: {} }
     : null;
   const { recoveryKey } = await createProfile(email, password, journal);
-
   pendingEmail = email;
+
+  /**
+   * The recovery-key screen only earns its place when it is the only way back.
+   *
+   * Where a forgotten password can be reset by email, stopping a new user to
+   * make them write down a 26-character key protects against nothing they are
+   * not already covered for, and it is the step most likely to make them give
+   * up. The key still exists on the account; it is simply not something they
+   * have to deal with on their first minute.
+   */
+  if (emailResetEnabled()) return finish();
+
   issuedRecoveryKey = recoveryKey;
   mode = 'recoveryKey';
   render();
+  return undefined;
 }
 
 async function doRecover() {
@@ -302,6 +412,51 @@ async function doRecover() {
 
   await setPassword(password);
   await finish();
+}
+
+async function doForgot() {
+  const email = el('lockEmail').value;
+  if (!looksLikeEmail(email)) throw new Error('That does not look like an email address.');
+
+  busy(true, 'Sending…');
+  await requestPasswordReset(email);
+  pendingEmail = email;
+  mode = 'sent';
+  render();
+}
+
+/**
+ * Finish the reset the link started.
+ *
+ * The token is cleared from the address bar on the way through, so that a
+ * refresh, a bookmark or a shared screenshot of the URL is not a live way into
+ * the account. It has been spent by then anyway; this is about not leaving it
+ * lying around in browser history.
+ */
+async function doReset() {
+  const password = el('lockPassword').value;
+  const confirm = el('lockPassword2').value;
+  if (!password || password.length < 8) throw new Error('New password must be at least 8 characters.');
+  if (password !== confirm) throw new Error('The two passwords do not match.');
+
+  busy(true, 'Setting password…');
+  try {
+    await completePasswordReset(resetToken, password);
+  } catch (err) {
+    busy(false);
+    throw new Error(err.message || 'That reset link is no longer valid. Ask for a new one.');
+  }
+  resetToken = null;
+  clearResetFromUrl();
+  await finish();
+}
+
+function clearResetFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('reset');
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch { /* history is not essential; the token is spent either way */ }
 }
 
 function doFinishSignup() {
@@ -338,6 +493,17 @@ export function showLockScreen({ onUnlock, legacy } = {}) {
   mode = (cloudMode() ? !!legacyJournal : (!listProfiles().length || legacyJournal))
     ? 'create'
     : 'signin';
+
+  /**
+   * A reset link beats all of it. Someone arriving on ?reset=… has been sent
+   * here by their own mailbox to do one thing, and any other screen — sign in,
+   * or worse, sign up — is the app ignoring what they came for.
+   */
+  if (emailResetEnabled()) {
+    resetToken = resetTokenInUrl();
+    if (resetToken) mode = 'reset';
+  }
+
   issuedRecoveryKey = null;
   render();
 }

@@ -72,6 +72,33 @@ const SCHEMA = [
      key   TEXT PRIMARY KEY,
      value TEXT NOT NULL
    )`,
+  /**
+   * The data key, held so that a forgotten password can be recovered by email.
+   *
+   * This is the row that makes password reset possible and it is the row that
+   * makes the promise weaker, so it should be read with both facts in mind. It
+   * is encrypted under ESCROW_SECRET, which lives in the deployment's
+   * environment and never in here — so a copy of this database is still not
+   * enough to read anyone's journal. Someone holding both is.
+   *
+   * Absent ESCROW_SECRET, nothing is ever written here and the app falls back
+   * to recovery keys.
+   */
+  `CREATE TABLE IF NOT EXISTS escrow (
+     user_id    TEXT PRIMARY KEY,
+     iv         TEXT NOT NULL,
+     ct         TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   )`,
+  /** Outstanding password-reset links. Short-lived and single-use. */
+  `CREATE TABLE IF NOT EXISTS resets (
+     token_hash TEXT PRIMARY KEY,
+     user_id    TEXT NOT NULL,
+     created_at TEXT NOT NULL,
+     expires_at TEXT NOT NULL,
+     used_at    TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS resets_user ON resets (user_id)`,
 ];
 
 /** Point the module at a driver. The test suite calls this with SQLite. */

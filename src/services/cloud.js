@@ -1,11 +1,17 @@
 /**
  * The cloud, from the browser's side.
  *
- * This module is only ever a courier. Everything it sends is already encrypted
- * or already one-way — a wrapped data key, an auth secret, a block of AES-GCM
- * ciphertext — and everything it receives is still encrypted when it hands it
- * back. The password does not appear in this file, and neither does the data
- * key. That is the whole point, and it is worth keeping true as this grows.
+ * This module is a courier. Almost everything it sends is already encrypted or
+ * already one-way — a wrapped data key, an auth secret, a block of AES-GCM
+ * ciphertext — and comes back still encrypted. The password never appears in
+ * this file, and that part is worth keeping true as this grows.
+ *
+ * The data key does, in exactly two places: `signup` sends a copy for the
+ * server to hold, and `openReset` receives it back. That is the price of being
+ * able to reset a forgotten password from a link in an email, and it is a real
+ * price — it means the server can decrypt journals, where before it could not.
+ * The alternative was recovery keys, which is what a deployment without a mail
+ * provider still gets. Nothing else here handles it.
  *
  * Whether there is a cloud at all is a property of the deployment, not a
  * setting: the same source is also a file you double-click and a static site
@@ -17,6 +23,8 @@ const BASE = '/api';
 
 /** null until detectCloud() has run. */
 let available = null;
+/** Whether this deployment can reset a password by email. See detectCloud(). */
+let emailReset = false;
 
 async function request(path, { method = 'GET', body } = {}) {
   const res = await fetch(BASE + path, {
@@ -53,8 +61,10 @@ export async function detectCloud() {
     if (!res.ok) { available = false; return false; }
     const body = await res.json();
     available = !!body?.cloud;
+    emailReset = !!body?.emailReset;
   } catch {
     available = false;
+    emailReset = false;
   }
   return available;
 }
@@ -63,9 +73,20 @@ export function cloudEnabled() {
   return available === true;
 }
 
+/**
+ * Can a forgotten password be reset from a link in an email here?
+ *
+ * False on a deployment with no mail provider or no escrow secret, and on the
+ * local and static builds, where the recovery key remains the only way back in.
+ */
+export function emailResetEnabled() {
+  return available === true && emailReset === true;
+}
+
 /** Test seam, and the way the app is forced local by a failed detection. */
-export function setCloudEnabled(value) {
+export function setCloudEnabled(value, reset = false) {
   available = value;
+  emailReset = value ? reset : false;
 }
 
 /** The salts an account was created with. Answers for unknown addresses too. */
@@ -83,6 +104,34 @@ export function login(email, authSecret) {
 
 export function recover(email, recoverySecret) {
   return request('/auth/recover', { method: 'POST', body: { email, recoverySecret } });
+}
+
+/**
+ * Ask for a reset link.
+ *
+ * Always resolves, and always with the same message. The server will not say
+ * whether the address has an account, so neither can this.
+ */
+export function forgotPassword(email) {
+  return request('/auth/forgot', { method: 'POST', body: { email } });
+}
+
+/**
+ * Hand the server a copy of the data key, for an account that predates reset
+ * links. Needs a live session; the server will not give one back this way.
+ */
+export function depositEscrow(dataKey) {
+  return request('/auth/escrow', { method: 'POST', body: { dataKey } });
+}
+
+/** Redeem a token from a reset link: proves it, and returns the data key. */
+export function openReset(token) {
+  return request('/auth/reset', { method: 'POST', body: { token, step: 'open' } });
+}
+
+/** Spend the token: sets the new password's derivations and signs in. */
+export function commitReset(payload) {
+  return request('/auth/reset', { method: 'POST', body: { ...payload, step: 'commit' } });
 }
 
 export function changePassword(payload) {

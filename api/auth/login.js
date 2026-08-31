@@ -10,7 +10,7 @@ import {
   rateLimit, clearRateLimit, clientIp,
 } from '../_lib/http.js';
 import {
-  authenticate, startSession, publicUser, readVault, normalizeEmail, looksLikeEmail,
+  authenticate, startSession, publicUser, readVault, normalizeEmail, looksLikeEmail, hasEscrow,
 } from '../_lib/accounts.js';
 
 const SESSION_COOKIE = 'pt_session';
@@ -53,5 +53,8 @@ export default async function handler(req, res) {
     user: publicUser(user),
     vault: vault ? { iv: vault.iv, ct: vault.ct } : null,
     vaultVersion: vault ? vault.version : 0,
+    // Whether a copy of the key is held, so an account made before reset
+    // links existed can offer one. See api/auth/escrow.js.
+    escrowed: await hasEscrow(user.id),
   });
 }

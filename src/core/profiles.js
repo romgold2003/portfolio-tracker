@@ -169,6 +169,17 @@ async function createCloudProfile(address, password, initialJournal) {
   const authSalt = generateAuthSalt();
   const recoverySalt = generateAuthSalt();
 
+  /**
+   * On a deployment that can send mail, a copy of the data key goes with the
+   * signup so that a reset link has something to give back. On one that cannot,
+   * it is left out entirely and the recovery key is the only way in.
+   *
+   * The recovery wrapper is made either way. It costs one PBKDF2 derivation and
+   * it means an account is never left with no route back if mail is turned off
+   * later — the key can be reissued from Settings while the user is signed in.
+   */
+  const escrowDataKey = cloud.emailResetEnabled() ? toBase64(dataKey) : undefined;
+
   let response;
   try {
     response = await cloud.signup({
@@ -180,6 +191,7 @@ async function createCloudProfile(address, password, initialJournal) {
       passwordWrapper: await wrapDataKey(dataKey, password),
       recoveryWrapper: await wrapDataKey(dataKey, normalizedRecovery),
       vault: await encryptJson(initialJournal ?? emptyJournal(), dataKey),
+      escrowDataKey,
     });
   } catch (err) {
     throw new Error(err.status === 409
@@ -190,6 +202,55 @@ async function createCloudProfile(address, password, initialJournal) {
   session = { profile: response.user, dataKey, version: response.vaultVersion };
   cacheDataKey(dataKey);
   return { profile: response.user, recoveryKey };
+}
+
+/**
+ * Ask for a reset link. Resolves the same way whether or not the address is
+ * known here, because the server declines to say.
+ */
+export function requestPasswordReset(email) {
+  return cloud.forgotPassword(normalizeEmail(email));
+}
+
+/** Is there a reset token in the address bar? Returns it, or null. */
+export function resetTokenInUrl() {
+  try {
+    const token = new URL(window.location.href).searchParams.get('reset');
+    return token || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Take the token from a reset link and a new password, and end up signed in.
+ *
+ * The key comes back from the server, is rewrapped here under the new password,
+ * and only the wrapper goes back — the new password itself never leaves. That
+ * is a smaller claim than the app used to make, and it is the true one: the
+ * server held the key all along, which is what made the link possible.
+ */
+export async function completePasswordReset(token, newPassword) {
+  const opened = await cloud.openReset(token);
+  const dataKey = fromBase64(opened.dataKey);
+  const authSalt = generateAuthSalt();
+
+  const response = await cloud.commitReset({
+    token,
+    authSalt,
+    authSecret: await deriveAuthSecret(newPassword, authSalt),
+    passwordWrapper: await wrapDataKey(dataKey, newPassword),
+    dataKey: opened.dataKey,
+  });
+
+  session = {
+    profile: response.user,
+    dataKey,
+    version: response.vaultVersion ?? 0,
+    blob: response.vault ?? null,
+  };
+  cacheDataKey(dataKey);
+  return session;
 }
 
 /**
@@ -279,7 +340,24 @@ async function unlockFromCloud(email, secret, kind) {
     blob: response.vault ?? null,
   };
   cacheDataKey(dataKey);
+  backfillEscrow(response, dataKey);
   return session;
+}
+
+/**
+ * Give the server a copy of the key, once, for an account made before reset
+ * links were switched on.
+ *
+ * Otherwise the feature would only ever work for people who signed up after it
+ * was turned on, and the person who turned it on would be the first to find
+ * their own account still could not be reset.
+ *
+ * Deliberately not awaited. It is a convenience for a future forgotten
+ * password, and nothing about signing in now should wait on it or fail with it.
+ */
+function backfillEscrow(response, dataKey) {
+  if (!cloud.emailResetEnabled() || response.escrowed) return;
+  cloud.depositEscrow(toBase64(dataKey)).catch(() => {});
 }
 
 /**
