@@ -16,14 +16,14 @@ import { useDriver } from '../api/_lib/db.js';
 import { sqliteDriver } from './support/sqlite.mjs';
 import { makeClient } from './support/http.mjs';
 
-import signup from '../api/auth/signup.js';
-import login from '../api/auth/login.js';
-import begin from '../api/auth/begin.js';
-import logout from '../api/auth/logout.js';
-import session from '../api/auth/session.js';
+import signup from '../api/_auth/signup.js';
+import login from '../api/_auth/login.js';
+import begin from '../api/_auth/begin.js';
+import logout from '../api/_auth/logout.js';
+import session from '../api/_auth/session.js';
 import vaultRoute from '../api/vault.js';
-import recover from '../api/auth/recover.js';
-import changePassword from '../api/auth/password.js';
+import recover from '../api/_auth/recover.js';
+import changePassword from '../api/_auth/password.js';
 import config from '../api/config.js';
 import deleteAccount from '../api/account.js';
 

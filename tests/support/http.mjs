@@ -8,7 +8,7 @@
  */
 import { Readable } from 'node:stream';
 
-function makeReq({ method, body, headers = {}, cookies = {} }) {
+function makeReq({ method, body, headers = {}, cookies = {}, url = '/' }) {
   const raw = body === undefined ? null : Buffer.from(JSON.stringify(body));
   const stream = Readable.from(raw ? [raw] : []);
   const cookieHeader = Object.entries(cookies)
@@ -16,6 +16,9 @@ function makeReq({ method, body, headers = {}, cookies = {} }) {
 
   return Object.assign(stream, {
     method,
+    // The dynamic auth route reads the endpoint off the path, so tests that
+    // drive it need a url the way a real request has one.
+    url,
     headers: {
       host: 'app.test',
       'content-type': 'application/json',
@@ -43,9 +46,9 @@ export function makeClient(overrides = {}) {
   const jar = {};
   return {
     jar,
-    async call(handler, { method = 'GET', body, headers = {} } = {}) {
+    async call(handler, { method = 'GET', body, headers = {}, url } = {}) {
       const req = makeReq({
-        method, body, cookies: jar, headers: { ...overrides, ...headers },
+        method, body, url, cookies: jar, headers: { ...overrides, ...headers },
       });
       const res = makeRes();
       await handler(req, res);

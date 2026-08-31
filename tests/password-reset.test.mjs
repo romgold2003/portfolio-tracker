@@ -18,13 +18,13 @@ import { useDriver } from '../api/_lib/db.js';
 import { sqliteDriver } from './support/sqlite.mjs';
 import { makeClient } from './support/http.mjs';
 
-import signup from '../api/auth/signup.js';
-import login from '../api/auth/login.js';
-import begin from '../api/auth/begin.js';
-import session from '../api/auth/session.js';
-import forgot from '../api/auth/forgot.js';
-import reset from '../api/auth/reset.js';
-import escrow from '../api/auth/escrow.js';
+import signup from '../api/_auth/signup.js';
+import login from '../api/_auth/login.js';
+import begin from '../api/_auth/begin.js';
+import session from '../api/_auth/session.js';
+import forgot from '../api/_auth/forgot.js';
+import reset from '../api/_auth/reset.js';
+import escrow from '../api/_auth/escrow.js';
 import config from '../api/config.js';
 
 import {
