@@ -20,6 +20,7 @@ import {
 } from '../src/services/extendedHours.js';
 import { refreshOpenPositions } from '../src/services/prices.js';
 import { state } from '../src/core/store.js';
+import { dailyDollar } from '../src/core/portfolio.js';
 import { setCloudEnabled } from '../src/services/cloud.js';
 
 /** A pre-market print, one second old. */
@@ -127,11 +128,63 @@ describe('knowing whether the market is open', () => {
   }
 });
 
+describe('which close the day is measured from', () => {
+  /**
+   * The real numbers this got wrong. NVDA on the morning of Monday 31 August:
+   * Friday closed at 217.55, Thursday at 227.98, and it was trading at 218.70
+   * before the open. The move that morning is +0.53%, not −4.07%.
+   */
+  test('pre-market measures from the last regular close, not the one before it', () => {
+    const positions = [{ ticker: 'NVDA', status: 'Open', cur: 217.55, dailyChg: 0 }];
+    applyExtendedQuotes(positions, new Map([
+      ['NVDA', { price: 218.70, phase: 'pre', regularClose: 217.55, previousClose: 227.98 }],
+    ]));
+
+    assert.equal(positions[0].cur, 218.70);
+    assert.equal(positions[0].dailyChg.toFixed(2), '0.53');
+  });
+
+  /**
+   * After the close the fields have shuffled along: regularClose is today, and
+   * yesterday — the thing today is measured against — is previousClose.
+   */
+  test('after hours measures from the session before today', () => {
+    const positions = [{ ticker: 'NVDA', status: 'Open', cur: 220, dailyChg: 0 }];
+    applyExtendedQuotes(positions, new Map([
+      ['NVDA', { price: 224, phase: 'post', regularClose: 220, previousClose: 217.55 }],
+    ]));
+
+    assert.equal(positions[0].dailyChg.toFixed(2), '2.96');
+  });
+
+  test('a missing close falls back to the other one rather than giving up', () => {
+    const positions = [{ ticker: 'NVDA', status: 'Open', cur: 200, dailyChg: 0 }];
+    applyExtendedQuotes(positions, new Map([
+      ['NVDA', { price: 210, phase: 'pre', regularClose: null, previousClose: 200 }],
+    ]));
+    assert.equal(positions[0].dailyChg.toFixed(2), '5.00');
+  });
+
+  test('the day change drives the dollar figure under it', () => {
+    const positions = [{
+      ticker: 'NVDA', status: 'Open', dir: 'Long', qty: 10,
+      cur: 217.55, entry: 200, open: '2026-08-01', dailyChg: 0,
+    }];
+    applyExtendedQuotes(positions, new Map([
+      ['NVDA', { price: 218.70, phase: 'pre', regularClose: 217.55, previousClose: 227.98 }],
+    ]));
+
+    // Ten shares that rose 1.15 overnight are up 11.50 today — and the wrong
+    // baseline would have reported a loss of about 93.
+    assert.equal(dailyDollar(positions[0]).toFixed(2), '11.50');
+  });
+});
+
 describe('applying an extended quote', () => {
-  test('the daily move is recomputed against the previous close', () => {
+  test('the daily move is recomputed rather than left stale', () => {
     const positions = [{ ticker: 'NVDA', status: 'Open', cur: 200, dailyChg: 1 }];
     applyExtendedQuotes(positions, new Map([
-      ['NVDA', { price: 210, phase: 'pre', previousClose: 200, regularClose: 202 }],
+      ['NVDA', { price: 210, phase: 'post', previousClose: 200, regularClose: 202 }],
     ]));
 
     assert.equal(positions[0].cur, 210);

@@ -157,9 +157,36 @@ export function applyExtendedQuotes(positions, bySymbol) {
     if (p.cur !== quote.price || p.extPhase !== quote.phase) changed = true;
     p.cur = quote.price;
     p.extPhase = quote.phase;
-    if (quote.previousClose > 0) {
-      p.dailyChg = ((quote.price - quote.previousClose) / quote.previousClose) * 100;
-    }
+
+    const base = dayBaseline(quote);
+    if (base > 0) p.dailyChg = ((quote.price - base) / base) * 100;
   }
   return changed;
+}
+
+/**
+ * The price today's move is measured from, which is not the same field in both
+ * sessions — and getting this wrong is not a rounding error.
+ *
+ * The feed gives two closes. `regularClose` is the most recent regular session
+ * to have finished or be running; `previousClose` is the one before it. Which
+ * of them is "yesterday" depends on where in the day you are standing:
+ *
+ *   Monday pre-market   regularClose = Friday    previousClose = Thursday
+ *   Monday after hours  regularClose = Monday    previousClose = Friday
+ *
+ * Both times the answer wanted is Friday. So pre-market measures from
+ * `regularClose` and after-hours from `previousClose`.
+ *
+ * Using `previousClose` for both — which this did — measured Monday's
+ * pre-market against Thursday, and quietly folded Friday's entire session into
+ * "today". On a real quote that turned NVDA up 0.53% into down 4.07%, and every
+ * figure derived from it: the position's day change in dollars and percent, the
+ * account's move for the day, and the reconstructed previous close underneath
+ * them all.
+ */
+function dayBaseline({ phase, regularClose, previousClose }) {
+  const first = phase === 'pre' ? regularClose : previousClose;
+  const second = phase === 'pre' ? previousClose : regularClose;
+  return first > 0 ? first : second;
 }
