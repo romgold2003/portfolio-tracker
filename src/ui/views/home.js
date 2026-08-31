@@ -60,11 +60,13 @@ function renderPrivacyToggle() {
 }
 
 /** Header row above the compact position list. */
-const LIST_HEADER = `<div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:0;margin-bottom:6px;padding:0 2px">
-  <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em">Asset</div>
-  <div style="font-size:10px;color:var(--text3);text-align:center;padding:0 12px">D%</div>
-  <div style="font-size:10px;color:var(--text3);text-align:center;padding:0 12px">7D%</div>
-  <div style="font-size:10px;color:var(--text3);text-align:right;min-width:80px">P&L</div>
+const HEAD = 'font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em';
+const LIST_HEADER = `<div class="mini-grid" style="margin-bottom:6px;padding:0 2px">
+  <div style="${HEAD}">Asset</div>
+  <div style="${HEAD};text-align:right">Price</div>
+  <div style="${HEAD};text-align:center">D%</div>
+  <div class="mini-7d" style="${HEAD};text-align:center">7D%</div>
+  <div style="${HEAD};text-align:right">P&L</div>
 </div>`;
 
 /**
@@ -99,18 +101,21 @@ function miniRow(p) {
     ? `<span style="color:${clr(weekly)}">${fp(weekly)}</span>`
     : '<span style="color:var(--text4)">—</span>';
 
-  return `<div class="mini-row" style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;align-items:center">
-    <div style="display:flex;align-items:center;gap:6px">
+  return `<div class="mini-row mini-grid">
+    <div class="mini-asset">
       <span class="mini-tk">${escapeHtml(p.ticker)}</span>
       <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
-      <span class="mini-live" style="color:${live ? 'var(--green)' : 'var(--text3)'}">$${fmtPrice(p.cur)}${live ? ' ▲' : ''}</span>${extBadge(p)}
     </div>
-    <div style="text-align:center;padding:0 12px;font-size:12px">
+    <div class="mini-price">
+      <span class="mini-price-num" style="color:${live ? 'var(--green)' : 'var(--text3)'}">$${fmtPrice(p.cur)}</span>
+      ${live ? '<span class="mini-live" style="color:var(--green)">▲</span>' : ''}${extBadge(p)}
+    </div>
+    <div class="mini-col">
       ${dailyText}
       ${dailyMoney != null ? `<div style="font-size:10px;color:${clr(dailyMoney)};margin-top:2px">${$s(+dailyMoney.toFixed(2))}</div>` : ''}
     </div>
-    <div style="text-align:center;padding:0 12px;font-size:12px">${weeklyText}</div>
-    <div style="text-align:right;min-width:80px">
+    <div class="mini-col mini-7d">${weeklyText}</div>
+    <div class="mini-pnl">
       <div class="mini-tk" style="color:${clr(pnl)}">${$s(pnl)}</div>
       <div style="font-size:10px;color:${clr(retPct)}">${fp(retPct)}</div>
     </div>
