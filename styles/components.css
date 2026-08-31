@@ -76,8 +76,28 @@
   background:var(--input);border-radius:4px;overflow:hidden}
 .fed-bar-fill{width:100%;border-radius:4px 4px 0 0;transition:height 0.5s cubic-bezier(0.16,1,0.3,1)}
 .fed-bar-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
-.fed-note{font-size:12px;color:var(--text2);line-height:1.6;flex:1;min-width:220px;padding-bottom:2px}
-.fed-src{display:block;font-size:10px;color:var(--text4);margin-top:3px}
+
+/* Economic releases: name, when, forecast, previous. */
+.econ-card{margin-bottom:14px}
+.econ-src{font-size:10px;color:var(--text4);text-transform:none;letter-spacing:0}
+.econ-grid{display:grid;grid-template-columns:minmax(0,1fr) 62px 84px 84px;
+  align-items:center;gap:0;padding:9px 2px}
+.econ-head{font-size:10px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:0.04em;padding-bottom:6px}
+.econ-head div:nth-child(n+3),.econ-val{text-align:right}
+.econ-head div:nth-child(2),.econ-date{text-align:center}
+.econ-row{border-top:0.5px solid var(--input);font-size:13px}
+/* A release still ahead is the one worth looking at, so it is the one lit. */
+.econ-row .econ-name{color:var(--text3)}
+.econ-row.is-ahead .econ-name{color:var(--text);font-weight:600}
+.econ-date{font-size:11px;color:var(--text3)}
+.econ-val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--text)}
+.econ-prev{color:var(--text3)}
+.econ-flag{color:var(--amber);font-size:9px;margin-left:6px;vertical-align:1px}
+@media (max-width:640px){
+  .econ-grid{grid-template-columns:minmax(0,1fr) 0 70px 70px}
+  .econ-date,.econ-head div:nth-child(2){display:none}
+}
 
 /* Positions page summary tiles */
 .summary-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}

@@ -87,6 +87,7 @@ const ROUTES = {
   '/api/history': '../api/history.js',
   '/api/quote': '../api/quote.js',
   '/api/fed': '../api/fed.js',
+  '/api/econ': '../api/econ.js',
   '/api/auth/begin': '../api/_auth/begin.js',
   '/api/auth/signup': '../api/_auth/signup.js',
   '/api/auth/login': '../api/_auth/login.js',

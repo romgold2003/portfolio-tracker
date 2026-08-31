@@ -287,8 +287,16 @@
         </div>
         <div class="fed-body">
           <div class="fed-bars" id="fedBars"></div>
-          <div class="fed-note" id="fedNote"></div>
         </div>
+      </div>
+
+      <!-- Forecast and previous for the US releases that move rates. -->
+      <div class="card econ-card" id="econCard" style="display:none">
+        <div class="card-lbl">
+          <span>US data — forecast vs previous</span>
+          <span class="econ-src" id="econUpdated"></span>
+        </div>
+        <div id="econRows"></div>
       </div>
 
       <!-- Shown only while there is nothing to show, so the page is never bare. -->

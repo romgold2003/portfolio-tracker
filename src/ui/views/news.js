@@ -1,12 +1,15 @@
 /**
  * The News page.
  *
- * One panel so far: what the market expects of the Fed at its next meeting,
- * priced off 30-day fed funds futures. The arithmetic behind it lives on the
- * server in api/_lib/fedwatch.js; this file only draws the answer.
+ * Two panels: what the market expects of the Fed at its next meeting, priced
+ * off 30-day fed funds futures, and forecast against previous for the US
+ * releases that move rates. Both are fetched and worked out on the server; this
+ * file only draws the answers.
  */
 import { MONTHS_LONG } from '../../config/constants.js';
 import { fedDecision } from '../../services/fed.js';
+import { econReleases } from '../../services/econ.js';
+import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -33,12 +36,10 @@ function meetingLabel(iso) {
 function renderFedPanel(decision) {
   const card = el('fedCard');
   const bars = el('fedBars');
-  const empty = el('newsEmpty');
   if (!card || !bars) return;
 
   // No answer, no panel. See the note in the markup.
   card.style.display = decision ? '' : 'none';
-  if (empty) empty.style.display = decision ? 'none' : '';
   if (!decision) return;
 
   const meeting = el('fedMeeting');
@@ -57,27 +58,64 @@ function renderFedPanel(decision) {
       <div class="fed-bar-label">${label}</div>
     </div>`;
   }).join('');
+}
 
-  const note = el('fedNote');
-  if (note) {
-    const bps = decision.changeBps;
-    const move = bps === 0 ? 'no change' : `${bps > 0 ? '+' : ''}${bps.toFixed(0)} bps`;
-    note.innerHTML = `Priced at <strong>${decision.expected.toFixed(2)}%</strong>
-      against <strong>${decision.entering.toFixed(2)}%</strong> today — ${move}.
-      <span class="fed-src">From 30-day fed funds futures, the same basis as CME FedWatch.</span>`;
-  }
+/** "4 Sep" — enough to place it, short enough to sit in a column. */
+function shortDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d} ${MONTHS_LONG[m - 1].slice(0, 3)}`;
+}
+
+/**
+ * Forecast against previous, one row each.
+ *
+ * The two figures are the whole point: what the market is braced for, and what
+ * it was last time. Whether the gap between them matters is the reader's
+ * judgement, not the panel's, so nothing here colours or ranks them.
+ */
+function renderEconPanel(releases) {
+  const card = el('econCard');
+  const rows = el('econRows');
+  if (!card || !rows) return;
+
+  card.style.display = releases?.length ? '' : 'none';
+  if (!releases?.length) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  rows.innerHTML = `<div class="econ-head econ-grid">
+      <div>Release</div><div>Due</div><div>Forecast</div><div>Previous</div>
+    </div>` + releases.map((r) => {
+    const ahead = r.date && r.date >= today;
+    return `<div class="econ-row econ-grid${ahead ? ' is-ahead' : ''}">
+      <div class="econ-name">${escapeHtml(r.label)}${
+  r.impact === 'High' ? '<span class="econ-flag" title="High impact">●</span>' : ''}</div>
+      <div class="econ-date">${shortDate(r.date)}</div>
+      <div class="econ-val">${escapeHtml(r.forecast ?? '—')}</div>
+      <div class="econ-val econ-prev">${escapeHtml(r.previous ?? '—')}</div>
+    </div>`;
+  }).join('');
+
+  const updated = el('econUpdated');
+  if (updated) updated.textContent = 'forexfactory.com';
 }
 
 /**
  * Fetched after the page is drawn, never before it.
  *
- * A slow or missing futures feed must cost the page nothing, so this never
- * throws and the panel simply stays hidden.
+ * A slow or missing feed must cost the page nothing, so this never throws and
+ * the panel it belongs to simply stays hidden.
  */
 export async function renderNews() {
-  try {
-    renderFedPanel(await fedDecision());
-  } catch {
-    renderFedPanel(null);
-  }
+  // Independent of each other: one source being down must not blank the other.
+  const [fed, econ] = await Promise.allSettled([fedDecision(), econReleases()]);
+
+  renderFedPanel(fed.status === 'fulfilled' ? fed.value : null);
+  renderEconPanel(econ.status === 'fulfilled' ? econ.value : null);
+
+  const empty = el('newsEmpty');
+  const anything = (fed.status === 'fulfilled' && fed.value)
+    || (econ.status === 'fulfilled' && econ.value?.length);
+  if (empty) empty.style.display = anything ? 'none' : '';
 }
