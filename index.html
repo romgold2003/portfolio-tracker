@@ -238,6 +238,22 @@
     <div id="monthly" class="page">
       <div class="topbar"><div class="greeting">Monthly P&L</div></div>
 
+      <!--
+        What the market expects of the Fed at its next meeting, priced off
+        30-day fed funds futures. Hidden until it has an answer: a panel of
+        empty bars says less than no panel at all.
+      -->
+      <div class="card fed-card" id="fedCard" style="display:none">
+        <div class="card-lbl">
+          <span>Fed — next decision</span>
+          <span class="fed-meeting" id="fedMeeting"></span>
+        </div>
+        <div class="fed-body">
+          <div class="fed-bars" id="fedBars"></div>
+          <div class="fed-note" id="fedNote"></div>
+        </div>
+      </div>
+
       <!-- Chart card with year selector -->
       <div class="card chart-card">
         <div class="card-lbl">
