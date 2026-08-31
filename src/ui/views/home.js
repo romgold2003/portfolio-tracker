@@ -5,7 +5,6 @@ import {
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
   sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
-import { priceIsLive } from '../../services/prices.js';
 import { regularSessionOpen, extendedPricingAvailable } from '../../services/extendedHours.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
@@ -17,7 +16,7 @@ import { pricesOn } from '../../services/history.js';
 import { periodStart, cutoffFor } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
-  fmtPrice, escapeHtml,
+  escapeHtml,
 } from '../format.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -63,7 +62,6 @@ function renderPrivacyToggle() {
 const HEAD = 'font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em';
 const LIST_HEADER = `<div class="mini-grid" style="margin-bottom:6px;padding:0 2px">
   <div style="${HEAD}">Asset</div>
-  <div style="${HEAD};text-align:right">Price</div>
   <div style="${HEAD};text-align:center">D%</div>
   <div class="mini-7d" style="${HEAD};text-align:center">7D%</div>
   <div style="${HEAD};text-align:right">P&L</div>
@@ -84,7 +82,6 @@ function extBadge(p) {
 function miniRow(p) {
   const pnl = unreal(p);
   const retPct = pctD(pnl, costOf(p));
-  const live = priceIsLive(p);
   const daily = p.dailyChg ?? null;
   const weekly = p.weeklyChg ?? null;
   const dailyMoney = dailyDollar(p) == null && dailyDollarExits(p, todayStr()) === 0
@@ -104,11 +101,7 @@ function miniRow(p) {
   return `<div class="mini-row mini-grid">
     <div class="mini-asset">
       <span class="mini-tk">${escapeHtml(p.ticker)}</span>
-      <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
-    </div>
-    <div class="mini-price">
-      <span class="mini-price-num" style="color:${live ? 'var(--green)' : 'var(--text3)'}">$${fmtPrice(p.cur)}</span>
-      ${live ? '<span class="mini-live" style="color:var(--green)">▲</span>' : ''}${extBadge(p)}
+      <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>${extBadge(p)}
     </div>
     <div class="mini-col">
       ${dailyText}

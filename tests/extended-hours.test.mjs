@@ -16,7 +16,7 @@ import { test, beforeEach, afterEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  applyExtendedQuotes, resetExtendedCache, regularSessionOpen,
+  applyExtendedQuotes, resetExtendedCache, regularSessionOpen, tradingDayOver,
 } from '../src/services/extendedHours.js';
 import { refreshOpenPositions } from '../src/services/prices.js';
 import { state } from '../src/core/store.js';
@@ -99,7 +99,7 @@ describe('a refresh with the market shut', () => {
       return { ok: true, json: async () => ({}) };
     };
 
-    await refreshOpenPositions();
+    await refreshOpenPositions(new Date('2026-09-01T01:00:00Z'));
     assert.ok(!asked.some((u) => u.includes('/api/quote')), 'crypto needs no extended quote');
   });
 });
@@ -126,6 +126,62 @@ describe('knowing whether the market is open', () => {
       assert.equal(regularSessionOpen(new Date(iso)), open);
     });
   }
+});
+
+describe('when the trading day rolls over', () => {
+  // 20:00 New York is 03:00 in Israel, which is the boundary this was asked for.
+  const cases = [
+    ['2026-08-31T07:59:00Z', true, 'Monday 03:59 ET — before pre-market opens'],
+    ['2026-08-31T08:00:00Z', false, 'Monday 04:00 ET — pre-market opens, the day begins'],
+    ['2026-08-31T19:00:00Z', false, 'Monday 15:00 ET — mid-session'],
+    ['2026-08-31T23:59:00Z', false, 'Monday 19:59 ET — one minute of after-hours left'],
+    ['2026-09-01T00:00:00Z', true, 'Monday 20:00 ET — after-hours ends, 03:00 in Israel'],
+    ['2026-09-01T03:00:00Z', true, 'Monday 23:00 ET — nothing trades'],
+    ['2026-08-29T17:00:00Z', true, 'Saturday — the whole weekend is over'],
+  ];
+
+  for (const [iso, over, why] of cases) {
+    test(why, () => {
+      assert.equal(tradingDayOver(new Date(iso)), over);
+    });
+  }
+
+  test('an empty feed after 20:00 holds the figures instead of clearing them', () => {
+    const positions = [{ ticker: 'NVDA', status: 'Open', cur: 224, dailyChg: 2.96, extPhase: 'post' }];
+    const changed = applyExtendedQuotes(positions, new Map(), new Date('2026-09-01T01:00:00Z'));
+
+    assert.equal(changed, false);
+    assert.equal(positions[0].cur, 224, 'the evening close should stand');
+    assert.equal(positions[0].extPhase, 'post', 'and still be labelled as after-hours');
+    assert.equal(positions[0].dailyChg, 2.96, 'the day should not shrink back overnight');
+  });
+
+  test('an empty feed during the session does clear them', () => {
+    const positions = [{ ticker: 'NVDA', status: 'Open', cur: 224, dailyChg: 2.96, extPhase: 'pre' }];
+    const changed = applyExtendedQuotes(positions, new Map(), new Date('2026-08-31T15:00:00Z'));
+
+    assert.equal(changed, true);
+    assert.equal(positions[0].extPhase, undefined, 'the market reopened; the badge is a lie now');
+  });
+
+  test('the overnight hold does not re-quote a stock that already closed', async () => {
+    state.positions.push({
+      id: 1, ticker: 'NVDA', cls: 'Stocks', dir: 'Long', status: 'Open',
+      entry: 200, cur: 224, qty: 10, extPhase: 'post',
+    });
+    state.apiKey = 'a-finnhub-key';
+
+    globalThis.fetch = async (url) => {
+      asked.push(String(url));
+      return { ok: true, json: async () => ({ quotes: [] }) };
+    };
+
+    await refreshOpenPositions(new Date('2026-09-01T01:00:00Z'));
+
+    // Only the extended endpoint should have been asked. Finnhub would have
+    // answered with the 16:00 close and undone the evening.
+    assert.ok(!asked.some((u) => u.includes('finnhub')), 'the regular feed must not overwrite it');
+  });
 });
 
 describe('which close the day is measured from', () => {

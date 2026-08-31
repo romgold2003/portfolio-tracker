@@ -37,26 +37,21 @@
  * fixed width for that reason, and the header shares the class so the two
  * cannot drift apart again.
  */
-.mini-grid{display:grid;grid-template-columns:minmax(0,1fr) 128px 82px 60px 100px;align-items:center}
-@media (max-width:900px){.mini-grid{grid-template-columns:minmax(0,1fr) 104px 68px 50px 84px}}
-@media (max-width:640px){.mini-grid{grid-template-columns:minmax(0,1fr) 88px 60px 0 74px}}
+.mini-grid{display:grid;grid-template-columns:minmax(0,1fr) 92px 66px 104px;align-items:center}
+@media (max-width:900px){.mini-grid{grid-template-columns:minmax(0,1fr) 80px 56px 88px}}
+@media (max-width:640px){.mini-grid{grid-template-columns:minmax(0,1fr) 72px 0 76px}}
 
 .mini-row{padding:9px 0;border-bottom:0.5px solid var(--input)}
 .mini-row:last-child{border-bottom:none}
 .mini-asset{display:flex;align-items:center;gap:6px;min-width:0}
-/* The number is right-aligned in a box of its own so 17.64 and 505.00 end on
-   the same edge, which is what makes a column of prices readable. */
-.mini-price{display:flex;align-items:center;gap:5px}
 /* The badge carries its own margin for the position cards, where it follows
    inline text. Here the flex gap already spaces it. */
-.mini-price .ext-badge{margin-left:0}
-.mini-price-num{min-width:58px;text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
+.mini-asset .ext-badge{margin-left:0}
 .mini-col{text-align:center;font-size:12px;padding:0 6px}
 .mini-pnl{text-align:right}
 @media (max-width:640px){.mini-7d{display:none}}
 .mini-tk{font-size:13px;font-weight:600;color:var(--text)}
 .mini-cl{font-size:10px;color:var(--text4);margin-left:5px}
-.mini-live{font-size:10px}
 .mini-dir{font-size:10px;padding:2px 6px;border-radius:3px;flex:none}
 .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;line-height:1.5;vertical-align:middle}
 .d-long{background:var(--green-bg);color:var(--green)}

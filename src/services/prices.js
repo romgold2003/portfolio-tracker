@@ -11,7 +11,7 @@
 import { CG_IDS, API } from '../config/constants.js';
 import { state, currentApiKey } from '../core/store.js';
 import { logPrice, seedPrevClose, get7DChg } from './priceLog.js';
-import { extendedQuotes, applyExtendedQuotes } from './extendedHours.js';
+import { extendedQuotes, applyExtendedQuotes, tradingDayOver } from './extendedHours.js';
 
 /** CoinGecko's full symbol list, fetched at most once per session. */
 let coinList = null;
@@ -84,12 +84,30 @@ async function fetchStockPrice(ticker, position) {
   return price;
 }
 
-/** Re-quote every open position in place. Returns true if any price changed. */
-export async function refreshOpenPositions() {
+/**
+ * Re-quote every open position in place. Returns true if any price changed.
+ *
+ * `now` is a seam for the tests: what this does depends on where in the trading
+ * day it is called, and a test that can only run at the real current time can
+ * only check one of those.
+ */
+export async function refreshOpenPositions(now = new Date()) {
   let changed = false;
   const open = state.positions.filter((p) => p.status === 'Open');
 
+  /**
+   * Between eight in the evening and four the next morning in New York, a stock
+   * that traded after hours keeps the price it finished on.
+   *
+   * The regular feed reports the four o'clock close, and letting it write over
+   * an after-hours price would undo the evening's move — silently, overnight,
+   * while nothing is trading. Crypto is exempt: it never stops, so there is no
+   * day for it to be after.
+   */
+  const dayOver = tradingDayOver(now);
+
   for (const p of open) {
+    if (dayOver && p.cls !== 'Crypto' && p.extPhase) continue;
     const price = await fetchPrice(p.ticker, p.cls, p);
     if (price) { p.cur = price; changed = true; }
   }
@@ -113,7 +131,7 @@ export async function refreshOpenPositions() {
      */
     try {
       const extended = await extendedQuotes(tradable);
-      if (applyExtendedQuotes(state.positions, extended)) changed = true;
+      if (applyExtendedQuotes(state.positions, extended, now)) changed = true;
     } catch (err) {
       console.error('Extended-hours quotes failed; keeping regular prices.', err);
     }

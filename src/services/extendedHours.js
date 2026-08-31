@@ -49,7 +49,7 @@ export function resetExtendedCache() {
  * Public holidays are not modelled. On Thanksgiving this says open when the
  * market is shut, and the only consequence is a label; nothing is priced off it.
  */
-export function regularSessionOpen(now = new Date()) {
+function newYorkClock(now) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     weekday: 'short',
@@ -59,12 +59,42 @@ export function regularSessionOpen(now = new Date()) {
   }).formatToParts(now);
 
   const get = (type) => parts.find((p) => p.type === type)?.value;
-  const day = get('weekday');
-  if (day === 'Sat' || day === 'Sun') return false;
+  return {
+    day: get('weekday'),
+    // Midnight comes back as 24 from some engines.
+    minutes: (Number(get('hour')) % 24) * 60 + Number(get('minute')),
+  };
+}
 
-  // Midnight comes back as 24 from some engines.
-  const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));
+export function regularSessionOpen(now = new Date()) {
+  const { day, minutes } = newYorkClock(now);
+  if (day === 'Sat' || day === 'Sun') return false;
   return minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+}
+
+/**
+ * Is the trading day finished for now?
+ *
+ * The day worth measuring is not the regular session, it is everything that
+ * trades: pre-market from four in the morning, the session, and after-hours
+ * until eight in the evening, New York time. Eight in the evening there is
+ * three in the morning in Israel, which is the hour this was described by.
+ *
+ * It matters because of what used to happen in the gap. The last after-hours
+ * print went stale half an hour after eight, the extended price was dropped,
+ * and the regular feed pulled the day's figure back to the four o'clock close —
+ * so a day that had ended up two percent quietly became one percent at half
+ * past eight, with nothing trading and nobody watching. The move had not
+ * changed; only which part of it was being counted.
+ *
+ * So between eight in the evening and four the next morning the figures are
+ * held where the day left them. The next pre-market session re-bases everything
+ * against that day's close, which is the reset.
+ */
+export function tradingDayOver(now = new Date()) {
+  const { day, minutes } = newYorkClock(now);
+  if (day === 'Sat' || day === 'Sun') return true;
+  return minutes >= 20 * 60 || minutes < 4 * 60;
 }
 
 /**
@@ -136,8 +166,12 @@ export async function extendedQuotes(tickers) {
  *
  * Returns true when anything changed, so the caller knows whether to redraw.
  */
-export function applyExtendedQuotes(positions, bySymbol) {
+export function applyExtendedQuotes(positions, bySymbol, now = new Date()) {
   if (!bySymbol.size) {
+    // Nothing is printing because the day is over, not because the session
+    // reopened. Hold the figures where it left them; see tradingDayOver.
+    if (tradingDayOver(now)) return false;
+
     let cleared = false;
     for (const p of positions) {
       if (p.extPhase) { delete p.extPhase; cleared = true; }
