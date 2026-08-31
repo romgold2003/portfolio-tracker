@@ -1,0 +1,40 @@
+Statement,Header,Field Name,Field Value
+Statement,Data,Period,"January 1, 2026 - August 28, 2026"
+Net Asset Value,Header,Asset Class,Prior Total,Current Total,Change
+Net Asset Value,Data,Stock,21000.00,28340.34,7340.34
+Net Asset Value,Data,Cash,5365.95,8359.63,2993.68
+Net Asset Value,Data,Total,26365.95,36699.97,10334.02
+Change in NAV,Header,Field Name,Field Value
+Change in NAV,Data,Starting Value,26365.95
+Change in NAV,Data,Ending Value,36699.97
+Change in NAV,Data,Deposits & Withdrawals,8497.00
+Change in NAV,Data,Dividends,142.30
+Change in NAV,Data,Interest,12.44
+Change in NAV,Data,Commissions,-58.20
+Change in NAV,Data,Withholding Tax,-42.69
+Open Positions,Header,Asset Category,Currency,Symbol,Quantity,Cost Price,Close Price
+Open Positions,Data,Stocks,USD,NVDA,30,180.2500,217.5500
+Open Positions,Data,Stocks,USD,AVGO,12,300.1000,368.7900
+Open Positions,Data,Stocks,USD,BRK B,4,455.0000,505.0000
+Trades,Header,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,Basis,Realized P/L,Comm/Fee
+Trades,Data,Stocks,USD,AMD,"2026-02-03, 09:41:22",40,120.0000,4800.00,0,-1.00
+Trades,Data,Stocks,USD,AMD,"2026-03-14, 15:02:10",-40,142.1000,-4800.00,884.00,-1.00
+Trades,Data,Stocks,USD,META,"2026-01-20, 10:15:00",10,480.0000,4800.00,0,-1.00
+Trades,Data,Stocks,USD,META,"2026-06-11, 14:50:31",-10,560.0000,-4800.00,800.00,-1.00
+Trades,Data,Stocks,USD,TSLA,"2026-04-02, 11:00:00",25,240.0000,6000.00,0,-1.00
+Trades,Data,Stocks,USD,TSLA,"2026-05-19, 13:22:04",-25,208.0000,-6000.00,-800.00,-1.00
+Deposits & Withdrawals,Header,Currency,Settle Date,Description,Amount
+Deposits & Withdrawals,Data,USD,2026-02-11,Wire transfer,5000.00
+Deposits & Withdrawals,Data,USD,2026-05-06,Wire transfer,3497.00
+Deposits & Withdrawals,Data,USD,2026-07-01,Internal transfer between accounts,2000.00
+Dividends,Header,Currency,Date,Description,Amount
+Dividends,Data,USD,2026-04-02,NVDA cash dividend,12.30
+Dividends,Data,USD,2026-07-15,AVGO cash dividend,130.00
+Dividends,Data,Total,,,142.30
+Interest,Header,Currency,Date,Description,Amount
+Interest,Data,USD,2026-06-30,Credit interest,12.44
+Interest,Data,Total,,,12.44
+Withholding Tax,Header,Currency,Date,Description,Amount
+Withholding Tax,Data,USD,2026-04-02,NVDA dividend tax,-3.69
+Withholding Tax,Data,USD,2026-07-15,AVGO dividend tax,-39.00
+Withholding Tax,Data,Total,,,-42.69
