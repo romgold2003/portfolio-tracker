@@ -69,6 +69,7 @@
       <button class="nl" onclick="show('positions')"><span class="nl-icon">◈</span> Positions</button>
       <button class="nl" onclick="show('add')"><span class="nl-icon">＋</span> New trade</button>
       <button class="nl" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
+      <button class="nl" onclick="show('news')"><span class="nl-icon">◎</span> News</button>
     </nav>
     <div class="sidebar-bot">
       <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" style="margin-bottom:0"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
@@ -238,22 +239,6 @@
     <div id="monthly" class="page">
       <div class="topbar"><div class="greeting">Monthly P&L</div></div>
 
-      <!--
-        What the market expects of the Fed at its next meeting, priced off
-        30-day fed funds futures. Hidden until it has an answer: a panel of
-        empty bars says less than no panel at all.
-      -->
-      <div class="card fed-card" id="fedCard" style="display:none">
-        <div class="card-lbl">
-          <span>Fed — next decision</span>
-          <span class="fed-meeting" id="fedMeeting"></span>
-        </div>
-        <div class="fed-body">
-          <div class="fed-bars" id="fedBars"></div>
-          <div class="fed-note" id="fedNote"></div>
-        </div>
-      </div>
-
       <!-- Chart card with year selector -->
       <div class="card chart-card">
         <div class="card-lbl">
@@ -284,6 +269,31 @@
           </div>
         </div>
         <div id="monthDetail"><div class="empty">Select a year and month above to see its trades</div></div>
+      </div>
+    </div>
+
+    <div id="news" class="page">
+      <div class="topbar"><div class="greeting">News</div></div>
+
+      <!--
+        What the market expects of the Fed at its next meeting, priced off
+        30-day fed funds futures. Hidden until it has an answer: a panel of
+        empty bars says less than no panel at all.
+      -->
+      <div class="card fed-card" id="fedCard" style="display:none">
+        <div class="card-lbl">
+          <span>Fed — next decision</span>
+          <span class="fed-meeting" id="fedMeeting"></span>
+        </div>
+        <div class="fed-body">
+          <div class="fed-bars" id="fedBars"></div>
+          <div class="fed-note" id="fedNote"></div>
+        </div>
+      </div>
+
+      <!-- Shown only while there is nothing to show, so the page is never bare. -->
+      <div class="card" id="newsEmpty">
+        <div class="empty">Waiting on the rate futures — nothing quoting just now.</div>
       </div>
     </div>
 

@@ -9,6 +9,7 @@ import { renderHome, updateLivePill } from './views/home.js';
 import { setOrbitBackdrop } from '../features/orbitBackdrop.js';
 import { renderPositions } from './views/positions.js';
 import { renderMonthly, renderMonthDetail } from './views/monthly.js';
+import { renderNews } from './views/news.js';
 
 export { updateLivePill };
 
@@ -16,6 +17,8 @@ export function renderAll() {
   renderHome();
   renderPositions();
   renderMonthly();
+  // Fetches over the network and resolves on its own; nothing here waits on it.
+  renderNews();
 }
 
 /**
@@ -27,6 +30,7 @@ export function renderOnPageEnter(page) {
   setOrbitBackdrop(page === 'add');
   if (page === 'home') setTimeout(renderHome, 50);
   if (page === 'monthly') setTimeout(renderMonthly, 50);
+  if (page === 'news') renderNews();
 }
 
 /** After a theme change every chart must be rebuilt with the new palette. */
