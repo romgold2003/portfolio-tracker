@@ -189,8 +189,16 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 .lock-key{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px;font-weight:600;
   letter-spacing:0.06em;text-align:center;color:var(--green);background:var(--panel2);
   border:0.5px solid var(--green-br);border-radius:8px;padding:16px 12px;word-break:break-all;line-height:1.6}
-.lock-check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--textmid);margin:16px 0 4px;cursor:pointer}
-.lock-check input{width:auto;margin:0}
+/* The whole row is the target, not just the box. This is the one tick standing
+   between the reader and a key they cannot be issued again, so it should be
+   hard to miss and easy to hit. */
+.lock-check{display:flex;align-items:center;gap:11px;font-size:13px;color:var(--textmid);
+  margin:16px 0 4px;cursor:pointer;padding:12px 14px;border-radius:8px;
+  background:var(--input);border:0.5px solid var(--border2);
+  user-select:none;transition:background 0.15s,border-color 0.15s}
+.lock-check:hover{background:var(--hover2);border-color:var(--border-blue)}
+.lock-check:has(input:checked){background:var(--blue-bg);border-color:var(--border-blue);color:var(--text)}
+.lock-check input{margin:0}
 
 /* Signed-in identity and sign out, in the sidebar footer. */
 .account-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
@@ -237,7 +245,7 @@ body:has(.recovery-banner) .shell{padding-top:74px}
    stacked label above a lone box like the other fields in the grid. */
 .closed-check{display:flex;align-items:center;gap:8px;cursor:pointer;
   font-size:12px;color:var(--text2);text-transform:none;letter-spacing:0}
-.closed-check input{width:auto;margin:0;cursor:pointer;accent-color:var(--blue)}
+.closed-check input{margin:0}
 
 /* Closed trades, grouped by the month they closed. A year of trading is a
    hundred cards; this keeps the page to one row per month until asked. */

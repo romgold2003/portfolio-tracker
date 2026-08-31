@@ -10,6 +10,14 @@ input,select,textarea{background:var(--input);border:0.5px solid var(--border2);
 input:focus,select:focus{border-color:var(--blue)}
 input::placeholder{color:var(--text4)}
 
+/* The reset above is written for text fields, and appearance:none on a checkbox
+   removes the tick along with everything else — so it could be ticked and look
+   exactly the same as unticked. Checkboxes and radios keep their own rendering,
+   at a size worth aiming at. */
+input[type=checkbox],input[type=radio]{-webkit-appearance:auto;appearance:auto;
+  width:17px;height:17px;flex:none;padding:0;border-radius:0;
+  accent-color:var(--blue);cursor:pointer}
+
 /* Tables */
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:11px 16px;color:var(--text3);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:0.5px solid var(--border);white-space:nowrap}
