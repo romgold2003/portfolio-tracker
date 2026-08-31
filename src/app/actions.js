@@ -68,7 +68,17 @@ export async function refreshPrices() {
   if (refreshInFlight) return;
   refreshInFlight = true;
   try {
-    await refreshOpenPositions();
+    /**
+     * Quoting is allowed to fail; the three lines after it are not allowed to
+     * be skipped because it did. A single unhandled throw in here once stopped
+     * the app re-rendering after every refresh, and because the prices on
+     * screen were merely stale rather than absent, nothing looked broken.
+     */
+    try {
+      await refreshOpenPositions();
+    } catch (err) {
+      console.error('Price refresh failed; showing the last known prices.', err);
+    }
     savePositions();
     renderAll();
     updateLivePill();

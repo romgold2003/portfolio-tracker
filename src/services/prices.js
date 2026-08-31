@@ -11,6 +11,7 @@
 import { CG_IDS, API } from '../config/constants.js';
 import { state, currentApiKey } from '../core/store.js';
 import { logPrice, seedPrevClose, get7DChg } from './priceLog.js';
+import { extendedQuotes, applyExtendedQuotes } from './extendedHours.js';
 
 /** CoinGecko's full symbol list, fetched at most once per session. */
 let coinList = null;
@@ -97,8 +98,25 @@ export async function refreshOpenPositions() {
   // is already current and there is no "extended session" to ask about.
   const tradable = open.filter((p) => p.cls !== 'Crypto').map((p) => p.ticker);
   if (tradable.length) {
-    const extended = await extendedQuotes(tradable);
-    if (applyExtendedQuotes(state.positions, extended)) changed = true;
+    /**
+     * Contained, because of how this failed the first time.
+     *
+     * The two functions above were used here and never imported, so every
+     * refresh threw a ReferenceError on this line. The throw escaped
+     * refreshOpenPositions into its caller, which had no catch — so the save
+     * and the re-render after it never ran, and the quotes fetched a moment
+     * earlier were dropped on the floor. A missing badge was the visible half;
+     * a price display that had quietly stopped updating was the other.
+     *
+     * Off-hours pricing is an improvement on the regular close, never a
+     * precondition for showing it.
+     */
+    try {
+      const extended = await extendedQuotes(tradable);
+      if (applyExtendedQuotes(state.positions, extended)) changed = true;
+    } catch (err) {
+      console.error('Extended-hours quotes failed; keeping regular prices.', err);
+    }
   }
 
   return changed;

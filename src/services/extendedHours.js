@@ -32,6 +32,14 @@ const CACHE_MS = 45 * 1000;
 let cache = { at: 0, bySymbol: new Map() };
 
 /**
+ * Test seam. Without it each test inherits the previous one's cached quotes and
+ * the one checking what happens when the feed fails never reaches the feed.
+ */
+export function resetExtendedCache() {
+  cache = { at: 0, bySymbol: new Map() };
+}
+
+/**
  * Latest extended-hours prices for the symbols given.
  *
  * Returns a map of ticker to `{ price, phase, previousClose }` holding only the
