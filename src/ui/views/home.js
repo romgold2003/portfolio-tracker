@@ -6,6 +6,7 @@ import {
   sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
+import { regularSessionOpen, extendedPricingAvailable } from '../../services/extendedHours.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
@@ -333,18 +334,56 @@ function renderPeriodGain(period) {
 }
 
 /** The live/partial pill shown on both the home and positions pages. */
+/**
+ * What the pill says, and why it says more than it used to.
+ *
+ * "Live prices on" was shown at every hour of the day. Outside the session that
+ * is not true — the figures are the last close — and someone watching an
+ * unchanging number under a label promising live prices has no way to tell a
+ * shut market from a broken app. That is exactly the wrong way round, because
+ * one of those needs no action and the other does.
+ *
+ * So the pill now names the session. Pre-market and after-hours are reported
+ * only when prices genuinely came from those sessions, which is something the
+ * positions themselves know: applyExtendedQuotes stamps the ones it moved.
+ */
+function priceStatus() {
+  const openStocks = state.positions.filter((p) => p.status === 'Open' && p.cls !== 'Crypto');
+  const extended = openStocks.find((p) => p.extPhase);
+
+  if (extended) {
+    return {
+      label: extended.extPhase === 'pre' ? 'Pre-market' : 'After hours',
+      short: extended.extPhase === 'pre' ? 'Pre' : 'After',
+      off: false,
+    };
+  }
+
+  if (openStocks.length && !state.apiKey) {
+    return { label: 'Crypto live · stocks manual', short: 'Partial', off: true };
+  }
+
+  if (openStocks.length && !regularSessionOpen()) {
+    // Without a server there is nothing that could be showing, so say so
+    // rather than implying the feed is merely quiet.
+    return extendedPricingAvailable()
+      ? { label: 'Market closed', short: 'Closed', off: true }
+      : { label: 'Market closed · last close', short: 'Closed', off: true };
+  }
+
+  return { label: 'Live prices on', short: 'Live', off: false };
+}
+
 export function updateLivePill() {
-  const hasUnkeyedStock = state.positions.some((p) => p.status === 'Open' && p.cls !== 'Crypto') && !state.apiKey;
-  const label = hasUnkeyedStock ? 'Crypto live · stocks manual' : 'Live prices on';
+  const { label, short, off } = priceStatus();
 
   [['livePill', 'livePillTxt'], ['livePill2', 'livePill2Txt']].forEach(([pillId, textId], i) => {
     const pill = document.getElementById(pillId);
     if (!pill) return;
-    pill.className = 'live-pill' + (hasUnkeyedStock ? ' off' : '');
+    pill.className = 'live-pill' + (off ? ' off' : '');
     const text = document.getElementById(textId);
     if (!text) return;
-    if (i === 0) text.textContent = label;
-    else text.textContent = hasUnkeyedStock ? 'Partial' : 'Live';
+    text.textContent = i === 0 ? label : short;
   });
 }
 

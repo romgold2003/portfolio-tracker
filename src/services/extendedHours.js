@@ -40,6 +40,45 @@ export function resetExtendedCache() {
 }
 
 /**
+ * Is the US regular session open right now?
+ *
+ * Weekdays, half past nine to four, New York time — read from the browser's own
+ * timezone database rather than by juggling offsets, so it is right on both
+ * sides of a daylight-saving change without knowing when those are.
+ *
+ * Public holidays are not modelled. On Thanksgiving this says open when the
+ * market is shut, and the only consequence is a label; nothing is priced off it.
+ */
+export function regularSessionOpen(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(now);
+
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  const day = get('weekday');
+  if (day === 'Sat' || day === 'Sun') return false;
+
+  // Midnight comes back as 24 from some engines.
+  const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));
+  return minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+}
+
+/**
+ * Whether this build can show prices outside the regular session at all.
+ *
+ * It needs the server, so the static site and the double-clickable file cannot,
+ * and on those the honest thing is to say the market is closed rather than to
+ * present Friday's close as though it were live.
+ */
+export function extendedPricingAvailable() {
+  return cloudEnabled();
+}
+
+/**
  * Latest extended-hours prices for the symbols given.
  *
  * Returns a map of ticker to `{ price, phase, previousClose }` holding only the

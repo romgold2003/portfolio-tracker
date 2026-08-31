@@ -15,7 +15,9 @@
 import { test, beforeEach, afterEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyExtendedQuotes, resetExtendedCache } from '../src/services/extendedHours.js';
+import {
+  applyExtendedQuotes, resetExtendedCache, regularSessionOpen,
+} from '../src/services/extendedHours.js';
 import { refreshOpenPositions } from '../src/services/prices.js';
 import { state } from '../src/core/store.js';
 import { setCloudEnabled } from '../src/services/cloud.js';
@@ -99,6 +101,30 @@ describe('a refresh with the market shut', () => {
     await refreshOpenPositions();
     assert.ok(!asked.some((u) => u.includes('/api/quote')), 'crypto needs no extended quote');
   });
+});
+
+describe('knowing whether the market is open', () => {
+  // Written as UTC instants, with the New York wall-clock they land on noted,
+  // because that is the thing being asserted.
+  const cases = [
+    ['2026-08-31T13:29:00Z', false, 'Monday 09:29 ET — one minute before the bell'],
+    ['2026-08-31T13:30:00Z', true, 'Monday 09:30 ET — the open'],
+    ['2026-08-31T19:59:00Z', true, 'Monday 15:59 ET — one minute before the close'],
+    ['2026-08-31T20:00:00Z', false, 'Monday 16:00 ET — the close'],
+    ['2026-08-31T10:00:00Z', false, 'Monday 06:00 ET — pre-market is not the session'],
+    ['2026-08-31T22:00:00Z', false, 'Monday 18:00 ET — after hours is not the session'],
+    ['2026-08-29T17:00:00Z', false, 'Saturday 13:00 ET'],
+    ['2026-08-30T17:00:00Z', false, 'Sunday 13:00 ET'],
+    // January is EST, so the same UTC instant is an hour earlier in New York.
+    ['2026-01-05T14:30:00Z', true, 'Monday 09:30 EST — the offset changes, the rule does not'],
+    ['2026-01-05T21:30:00Z', false, 'Monday 16:30 EST'],
+  ];
+
+  for (const [iso, open, why] of cases) {
+    test(why, () => {
+      assert.equal(regularSessionOpen(new Date(iso)), open);
+    });
+  }
 });
 
 describe('applying an extended quote', () => {
