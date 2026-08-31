@@ -26,17 +26,24 @@ import { cloudEnabled } from './cloud.js';
  */
 const FRESH_FOR_MS = 30 * 60 * 1000;
 
-/** Extended sessions move slowly; this is polled far more often than it changes. */
-const CACHE_MS = 45 * 1000;
+/**
+ * Shorter than the refresh interval, deliberately.
+ *
+ * At forty-five seconds against a thirty-second poll, every other refresh
+ * returned the previous answer and the real interval was a minute. Twenty
+ * still collapses the bursts that matter — several renders in the same moment —
+ * without quietly halving how often anything updates.
+ */
+const CACHE_MS = 20 * 1000;
 
-let cache = { at: 0, bySymbol: new Map() };
+let cache = { at: 0, key: '', bySymbol: new Map() };
 
 /**
  * Test seam. Without it each test inherits the previous one's cached quotes and
  * the one checking what happens when the feed fails never reaches the feed.
  */
 export function resetExtendedCache() {
-  cache = { at: 0, bySymbol: new Map() };
+  cache = { at: 0, key: '', bySymbol: new Map() };
 }
 
 /**
@@ -121,7 +128,15 @@ export async function extendedQuotes(tickers) {
   const wanted = [...new Set(tickers)].filter(Boolean);
   if (!wanted.length) return new Map();
 
-  if (Date.now() - cache.at < CACHE_MS) return cache.bySymbol;
+  /**
+   * The cache answers for the symbols it was asked about, not for any question.
+   *
+   * Keyed only on time, a book that had just gained a position was handed back
+   * a map that could not contain it, and the new holding sat without a day's
+   * move until the cache happened to expire.
+   */
+  const key = [...wanted].sort().join(',');
+  if (key === cache.key && Date.now() - cache.at < CACHE_MS) return cache.bySymbol;
 
   let quotes = [];
   try {
@@ -140,7 +155,21 @@ export async function extendedQuotes(tickers) {
   const now = Date.now();
   const bySymbol = new Map();
   for (const q of quotes) {
-    if (q.phase !== 'pre' && q.phase !== 'post') continue;
+    /**
+     * Every session, not just the closed ones.
+     *
+     * This used to keep pre and post only, which left the regular session's
+     * day change to the other feed — and the two do not measure from the same
+     * place. A holding the other feed had no answer for kept whatever it was
+     * last told, so at any moment the portfolio's day could be a sum of today's
+     * move for some positions and yesterday's for the rest. That is not a
+     * number that means anything, and it is why the total disagreed with the
+     * broker while every individual price was right.
+     *
+     * The price is still only taken from here outside the session; what is
+     * taken always is the baseline, so every holding measures its day from the
+     * same close.
+     */
     if (!(q.price > 0)) continue;
     if (now - q.at * 1000 > FRESH_FOR_MS) continue;
     bySymbol.set(q.symbol.toUpperCase(), {
@@ -151,7 +180,7 @@ export async function extendedQuotes(tickers) {
     });
   }
 
-  cache = { at: now, bySymbol };
+  cache = { at: now, key, bySymbol };
   return bySymbol;
 }
 
@@ -188,12 +217,25 @@ export function applyExtendedQuotes(positions, bySymbol, now = new Date()) {
       continue;
     }
 
-    if (p.cur !== quote.price || p.extPhase !== quote.phase) changed = true;
-    p.cur = quote.price;
-    p.extPhase = quote.phase;
+    const extended = quote.phase === 'pre' || quote.phase === 'post';
+
+    /**
+     * Outside the session this is the only price there is, so it is taken.
+     * Inside it, the regular feed is quoting live and this is a one-minute bar
+     * that can lag it; the price is left alone and only the day's move is read
+     * from here, so that every holding measures from the same close.
+     */
+    if (extended && p.cur !== quote.price) { p.cur = quote.price; changed = true; }
+
+    const phase = extended ? quote.phase : undefined;
+    if (p.extPhase !== phase) {
+      changed = true;
+      if (phase) p.extPhase = phase; else delete p.extPhase;
+    }
 
     const base = dayBaseline(quote);
-    if (base > 0) p.dailyChg = ((quote.price - base) / base) * 100;
+    const price = extended ? quote.price : (quote.regularClose > 0 ? quote.regularClose : p.cur);
+    if (base > 0 && price > 0) p.dailyChg = ((price - base) / base) * 100;
   }
   return changed;
 }

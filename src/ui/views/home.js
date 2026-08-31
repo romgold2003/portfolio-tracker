@@ -16,7 +16,7 @@ import { pricesOn } from '../../services/history.js';
 import { periodStart, cutoffFor } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
-  escapeHtml,
+  fmtPrice, escapeHtml,
 } from '../format.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -101,7 +101,8 @@ function miniRow(p) {
   return `<div class="mini-row mini-grid">
     <div class="mini-asset">
       <span class="mini-tk">${escapeHtml(p.ticker)}</span>
-      <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>${extBadge(p)}
+      <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
+      <span class="mini-price" style="color:${daily == null ? 'var(--text3)' : clr(dailySign)}">$${fmtPrice(p.cur)}</span>${extBadge(p)}
     </div>
     <div class="mini-col">
       ${dailyText}

@@ -39,9 +39,19 @@ function phaseOf(at, periods) {
   return 'closed';
 }
 
+/**
+ * A share class is a dash here, whatever it is elsewhere.
+ *
+ * Statements write Berkshire's B class as "BRK B" and the app stores it as
+ * BRK.B; this source only answers to BRK-B. Asking with the dot returns
+ * nothing, which is why that holding alone sat with no day's move at all while
+ * every other one had one.
+ */
+const upstreamSymbol = (symbol) => symbol.replace(/\./g, '-');
+
 async function quoteFor(symbol) {
   const res = await fetch(
-    `${SOURCE}/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=true`,
+    `${SOURCE}/${encodeURIComponent(upstreamSymbol(symbol))}?interval=1m&range=1d&includePrePost=true`,
     { headers: { 'User-Agent': 'portfolio-tracker', Accept: 'application/json' } },
   );
   if (!res.ok) return null;
@@ -98,9 +108,17 @@ export default async function handler(req, res) {
     .filter((s) => s.status === 'fulfilled' && s.value)
     .map((s) => s.value);
 
-  // Extended sessions move slowly and this is polled; a minute at the edge
-  // spares the upstream a request per client per refresh.
-  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+  /**
+   * Short, because this is what the day's move is measured from.
+   *
+   * It used to be a minute of hard caching with five more of
+   * stale-while-revalidate, which permits the edge to answer with a six-minute
+   * old quote and refresh itself afterwards. Across the half past nine boundary
+   * that is the difference between a price and yesterday's news, and it was
+   * most of why the figures took so long to catch up. Twenty seconds still
+   * spares the upstream nearly every request from a page polling every thirty.
+   */
+  res.setHeader('Cache-Control', 'public, s-maxage=20, stale-while-revalidate=40');
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify({ quotes }));

@@ -236,6 +236,48 @@ describe('which close the day is measured from', () => {
   });
 });
 
+describe('the regular session, where the two feeds disagreed', () => {
+  /**
+   * The portfolio's day was coming out five times worse than the broker's while
+   * every individual price was right. The cause was two feeds measuring from
+   * two different closes: whatever the regular feed had no answer for kept the
+   * day change it was last given, so the total was part today and part
+   * yesterday. The baseline now comes from one place for every holding.
+   */
+  test('a regular-session quote sets the day from the previous close', () => {
+    const positions = [{ ticker: 'META', status: 'Open', dir: 'Long', cur: 572.17, dailyChg: -9.9 }];
+    applyExtendedQuotes(positions, new Map([
+      // During the session the feed reports the live price as regularClose.
+      ['META', { price: 572.17, phase: 'regular', regularClose: 572.17, previousClose: 578.02 }],
+    ]), new Date('2026-08-31T13:40:00Z'));
+
+    assert.equal(positions[0].dailyChg.toFixed(2), '-1.01', 'the stale figure must be replaced');
+    assert.equal(positions[0].extPhase, undefined, 'the session is open; there is no badge');
+  });
+
+  test('a regular-session quote does not overwrite the live price', () => {
+    // The one-minute bar can lag the live feed, and the account value is
+    // correct as it stands — only the baseline was ever wrong.
+    const positions = [{ ticker: 'AMD', status: 'Open', dir: 'Long', cur: 470.23, dailyChg: 0 }];
+    applyExtendedQuotes(positions, new Map([
+      ['AMD', { price: 469.80, phase: 'regular', regularClose: 470.23, previousClose: 465.58 }],
+    ]), new Date('2026-08-31T13:40:00Z'));
+
+    assert.equal(positions[0].cur, 470.23, 'the live price stands');
+    assert.equal(positions[0].dailyChg.toFixed(2), '1.00');
+  });
+
+  test('a short is measured the same way, whichever direction it went', () => {
+    const positions = [{ ticker: 'META', status: 'Open', dir: 'Short', cur: 572.17, dailyChg: 0 }];
+    applyExtendedQuotes(positions, new Map([
+      ['META', { price: 572.17, phase: 'regular', regularClose: 572.17, previousClose: 578.02 }],
+    ]), new Date('2026-08-31T13:40:00Z'));
+
+    // The stored figure is the asset's move; the display signs it per position.
+    assert.equal(positions[0].dailyChg.toFixed(2), '-1.01');
+  });
+});
+
 describe('applying an extended quote', () => {
   test('the daily move is recomputed rather than left stale', () => {
     const positions = [{ ticker: 'NVDA', status: 'Open', cur: 200, dailyChg: 1 }];

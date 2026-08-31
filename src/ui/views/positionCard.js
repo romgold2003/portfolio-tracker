@@ -223,7 +223,17 @@ export function positionCard(p, isOpen) {
   const retPct = pctD(pnl, costOf(p));
   const expanded = ui.expandedId === p.id;
   const live = priceIsLive(p);
-  const priceColor = live ? 'var(--green)' : 'var(--text3)';
+  /**
+   * The price is coloured by the day, not by whether the feed is connected.
+   *
+   * Green used to mean only "this quote is live", which is something the ▲
+   * beside it already says. Coloured by the day's move it carries information
+   * instead: whether the thing is up or down since the last close. Signed for
+   * the position, so a short whose price fell reads as the gain it is.
+   */
+  const dailyPct = p.dailyChg ?? null;
+  const dailySign = dailyPct == null ? 0 : (p.dir === 'Long' ? dailyPct : -dailyPct);
+  const priceColor = !isOpen || dailyPct == null ? 'var(--text3)' : clr(dailySign);
   const liveMark = live ? '▲ live' : (isOpen ? 'manual' : 'closed');
 
   const body = expanded

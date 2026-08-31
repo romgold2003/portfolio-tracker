@@ -44,6 +44,9 @@
 .mini-row{padding:9px 0;border-bottom:0.5px solid var(--input)}
 .mini-row:last-child{border-bottom:none}
 .mini-asset{display:flex;align-items:center;gap:6px;min-width:0}
+/* Secondary to the ticker, and in tabular figures so a column of them lines up
+   even though it sits inside a flex row rather than a column of its own. */
+.mini-price{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
 /* The badge carries its own margin for the position cards, where it follows
    inline text. Here the flex gap already spaces it. */
 .mini-asset .ext-badge{margin-left:0}
