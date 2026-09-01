@@ -1,15 +1,15 @@
 /**
- * Picking the watched US releases out of the calendar feed, and keeping them.
+ * Picking this week's watched US releases out of the calendar feed.
  *
- * The feed covers one week and has no history endpoint, so most of the
- * watchlist is absent from it most weeks. Everything below is really about that
- * one fact: a monthly release must not disappear from the panel between prints.
+ * The feed covers one week and rolls over on its own every Monday, so the panel
+ * is a schedule of what is landing between now and Sunday. Most weeks that is
+ * two or three rows, and that is the answer rather than a gap.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  WATCHLIST, selectReleases, mergeReleases, orderReleases,
+  WATCHLIST, selectReleases, orderReleases, weekOf,
 } from '../api/_lib/econ.js';
 
 const event = (over = {}) => ({
@@ -72,54 +72,51 @@ describe('choosing what to keep', () => {
   });
 });
 
-describe('keeping what the feed has stopped mentioning', () => {
-  const cpi = { id: 'cpi-m', label: 'CPI m/m', date: '2026-08-12', forecast: '0.2%', previous: '0.1%' };
-  const claims = { id: 'claims', label: 'Unemployment Claims', date: '2026-09-03', forecast: '205K', previous: '203K' };
-
-  test('a release missing from this week is carried through', () => {
-    const merged = mergeReleases([cpi], [claims]);
-    assert.equal(merged.length, 2);
-    assert.ok(merged.find((r) => r.id === 'cpi-m'), 'August CPI must survive September');
-  });
-
-  test('a newer print replaces the older one', () => {
-    const newer = { ...cpi, date: '2026-09-10', forecast: '0.3%', previous: '0.2%' };
-    const merged = mergeReleases([cpi], [newer]);
-    assert.equal(merged.length, 1);
-    assert.equal(merged[0].date, '2026-09-10');
-    assert.equal(merged[0].forecast, '0.3%');
-  });
-
-  test('an older print never rewinds a newer one', () => {
-    const older = { ...cpi, date: '2026-07-15', forecast: '0.1%' };
-    const merged = mergeReleases([{ ...cpi, date: '2026-09-10' }], [older]);
-    assert.equal(merged[0].date, '2026-09-10', 'a late feed must not undo a newer reading');
-  });
-
-  test('starting from nothing is not an error', () => {
-    assert.deepEqual(mergeReleases(null, [claims]), [claims]);
-    assert.deepEqual(mergeReleases([claims], []), [claims]);
-  });
-});
-
 describe('the order it reads in', () => {
-  test('follows the watchlist rather than the feed', () => {
+  test('runs through the week, earliest first', () => {
     const rows = orderReleases([
+      { id: 'cpi-m', label: 'CPI m/m', date: '2026-09-10' },
       { id: 'claims', label: 'Unemployment Claims', date: '2026-09-03' },
+    ]);
+    assert.deepEqual(rows.map((r) => r.label), ['Unemployment Claims', 'CPI m/m']);
+  });
+
+  test('two on the same day fall back to the watchlist order', () => {
+    // CPI and its core always print together; the headline reads first.
+    const rows = orderReleases([
+      { id: 'core-cpi-m', label: 'Core CPI m/m', date: '2026-09-10' },
       { id: 'cpi-m', label: 'CPI m/m', date: '2026-09-10' },
     ]);
-    assert.equal(rows[0].label, 'CPI m/m', 'CPI is first in the watchlist');
-  });
-
-  test('puts the most recent GDP reading first among its siblings', () => {
-    const rows = orderReleases([
-      { id: 'gdp:advance-gdp-q-q', label: 'Advance GDP q/q', date: '2026-07-30' },
-      { id: 'gdp:final-gdp-q-q', label: 'Final GDP q/q', date: '2026-09-25' },
-    ]);
-    assert.equal(rows[0].label, 'Final GDP q/q');
+    assert.deepEqual(rows.map((r) => r.label), ['CPI m/m', 'Core CPI m/m']);
   });
 
   test('every watchlist entry has a distinct id', () => {
     assert.equal(new Set(WATCHLIST.map((w) => w.id)).size, WATCHLIST.length);
+  });
+});
+
+describe('the week it is reporting on', () => {
+  test('runs Monday to Sunday', () => {
+    assert.deepEqual(weekOf('2026-08-31'), { from: '2026-08-31', to: '2026-09-06' });
+  });
+
+  test('a midweek day belongs to the same week', () => {
+    assert.deepEqual(weekOf('2026-09-03'), { from: '2026-08-31', to: '2026-09-06' });
+  });
+
+  test('Sunday belongs to the week that began six days earlier', () => {
+    // Not to the one starting tomorrow, which is the mistake a 0-indexed
+    // getUTCDay invites.
+    assert.deepEqual(weekOf('2026-09-06'), { from: '2026-08-31', to: '2026-09-06' });
+  });
+
+  test('the next Monday starts a new one', () => {
+    assert.deepEqual(weekOf('2026-09-07'), { from: '2026-09-07', to: '2026-09-13' });
+  });
+
+  test('a week spanning a month boundary is still seven days', () => {
+    const { from, to } = weekOf('2026-12-31');
+    assert.equal(from, '2026-12-28');
+    assert.equal(to, '2027-01-03');
   });
 });

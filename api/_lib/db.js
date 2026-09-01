@@ -99,24 +99,6 @@ const SCHEMA = [
      used_at    TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS resets_user ON resets (user_id)`,
-  /**
-   * The last figure seen for each watched economic release.
-   *
-   * The calendar feed covers one week and has no history endpoint, so a monthly
-   * release is absent from it three weeks in four. Kept here, the panel shows
-   * every indicator all the time instead of emptying out between prints.
-   *
-   * Public data, not anyone's: one row per release, shared by every account.
-   */
-  `CREATE TABLE IF NOT EXISTS econ (
-     id         TEXT PRIMARY KEY,
-     label      TEXT NOT NULL,
-     release_at TEXT,
-     impact     TEXT,
-     forecast   TEXT,
-     previous   TEXT,
-     updated_at TEXT NOT NULL
-   )`,
 ];
 
 /** Point the module at a driver. The test suite calls this with SQLite. */

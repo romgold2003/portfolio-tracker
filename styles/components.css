@@ -87,9 +87,10 @@
 .econ-head div:nth-child(n+3),.econ-val{text-align:right}
 .econ-head div:nth-child(2),.econ-date{text-align:center}
 .econ-row{border-top:0.5px solid var(--input);font-size:13px}
-/* A release still ahead is the one worth looking at, so it is the one lit. */
-.econ-row .econ-name{color:var(--text3)}
-.econ-row.is-ahead .econ-name{color:var(--text);font-weight:600}
+/* A release already out this week is dimmed; the ones still to come are lit. */
+.econ-row .econ-name{color:var(--text);font-weight:600}
+.econ-row.is-done .econ-name{color:var(--text3);font-weight:400}
+.econ-row.is-done .econ-val{color:var(--text3)}
 .econ-date{font-size:11px;color:var(--text3)}
 .econ-val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--text)}
 .econ-prev{color:var(--text3)}

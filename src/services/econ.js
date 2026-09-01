@@ -7,28 +7,40 @@
  */
 import { cloudEnabled } from './cloud.js';
 
-/** These change on a release schedule, not on a tape. */
+/**
+ * The week's schedule is fixed by Monday; only the forecasts move inside it.
+ *
+ * Short enough that the panel turns over promptly when the week does, long
+ * enough that opening the page repeatedly is not a request each time.
+ */
 const CACHE_MS = 15 * 60 * 1000;
 
-let cache = { at: 0, releases: null };
+let cache = { at: 0, week: null };
 
 export function resetEconCache() {
-  cache = { at: 0, releases: null };
+  cache = { at: 0, week: null };
 }
 
-/** The watched releases, or null if they cannot be had. Never throws. */
+/**
+ * This week's watched releases, as `{ week, releases }`, or null if they cannot
+ * be had. Never throws.
+ *
+ * An empty `releases` is a real answer, not a failure: some weeks hold none of
+ * these. It is cached like any other, so a quiet week is not re-fetched on
+ * every render.
+ */
 export async function econReleases() {
   if (!cloudEnabled()) return null;
-  if (cache.releases && Date.now() - cache.at < CACHE_MS) return cache.releases;
+  if (cache.week && Date.now() - cache.at < CACHE_MS) return cache.week;
 
   try {
     const res = await fetch('/api/econ', { credentials: 'same-origin' });
-    if (!res.ok) return cache.releases;
+    if (!res.ok) return cache.week;
     const body = await res.json();
-    if (!Array.isArray(body?.releases) || !body.releases.length) return cache.releases;
-    cache = { at: Date.now(), releases: body.releases };
-    return cache.releases;
+    if (!Array.isArray(body?.releases)) return cache.week;
+    cache = { at: Date.now(), week: { week: body.week ?? null, releases: body.releases } };
+    return cache.week;
   } catch {
-    return cache.releases;
+    return cache.week;
   }
 }

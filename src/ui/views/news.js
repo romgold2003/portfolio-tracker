@@ -68,37 +68,46 @@ function shortDate(iso) {
 }
 
 /**
- * Forecast against previous, one row each.
+ * This week's releases, forecast against previous, in the order they land.
  *
  * The two figures are the whole point: what the market is braced for, and what
  * it was last time. Whether the gap between them matters is the reader's
  * judgement, not the panel's, so nothing here colours or ranks them.
  */
-function renderEconPanel(releases) {
+function renderEconPanel(data) {
   const card = el('econCard');
   const rows = el('econRows');
   if (!card || !rows) return;
 
-  card.style.display = releases?.length ? '' : 'none';
-  if (!releases?.length) return;
+  card.style.display = data ? '' : 'none';
+  if (!data) return;
 
+  const releases = data.releases ?? [];
   const today = new Date().toISOString().slice(0, 10);
 
-  rows.innerHTML = `<div class="econ-head econ-grid">
-      <div>Release</div><div>Due</div><div>Forecast</div><div>Previous</div>
-    </div>` + releases.map((r) => {
-    const ahead = r.date && r.date >= today;
-    return `<div class="econ-row econ-grid${ahead ? ' is-ahead' : ''}">
-      <div class="econ-name">${escapeHtml(r.label)}${
+  // A week holding none of these is an answer, and saying so beats an empty
+  // card that looks like something failed to load.
+  rows.innerHTML = releases.length
+    ? `<div class="econ-head econ-grid">
+         <div>Release</div><div>Due</div><div>Forecast</div><div>Previous</div>
+       </div>` + releases.map((r) => {
+      const done = r.date && r.date < today;
+      return `<div class="econ-row econ-grid${done ? ' is-done' : ''}">
+        <div class="econ-name">${escapeHtml(r.label)}${
   r.impact === 'High' ? '<span class="econ-flag" title="High impact">●</span>' : ''}</div>
-      <div class="econ-date">${shortDate(r.date)}</div>
-      <div class="econ-val">${escapeHtml(r.forecast ?? '—')}</div>
-      <div class="econ-val econ-prev">${escapeHtml(r.previous ?? '—')}</div>
-    </div>`;
-  }).join('');
+        <div class="econ-date">${shortDate(r.date)}</div>
+        <div class="econ-val">${escapeHtml(r.forecast ?? '—')}</div>
+        <div class="econ-val econ-prev">${escapeHtml(r.previous ?? '—')}</div>
+      </div>`;
+    }).join('')
+    : '<div class="empty">Nothing from this list lands this week.</div>';
 
   const updated = el('econUpdated');
-  if (updated) updated.textContent = 'forexfactory.com';
+  if (updated) {
+    updated.textContent = data.week
+      ? `${shortDate(data.week.from)} – ${shortDate(data.week.to)} · forexfactory.com`
+      : 'forexfactory.com';
+  }
 }
 
 /**
@@ -116,6 +125,6 @@ export async function renderNews() {
 
   const empty = el('newsEmpty');
   const anything = (fed.status === 'fulfilled' && fed.value)
-    || (econ.status === 'fulfilled' && econ.value?.length);
+    || (econ.status === 'fulfilled' && econ.value);
   if (empty) empty.style.display = anything ? 'none' : '';
 }

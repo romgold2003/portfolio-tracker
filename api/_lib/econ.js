@@ -1,12 +1,14 @@
 /**
- * The US releases worth watching, from ForexFactory's calendar feed.
+ * The US releases due this week, from ForexFactory's calendar feed.
  *
- * The feed is the one ForexFactory publishes itself, and it covers a single
- * week — there is no month or history endpoint, and asking for one returns a
- * 404. That shapes everything here: in any given week only two or three of the
- * releases below are actually scheduled, so what the feed hands over is merged
- * into what was last seen rather than replacing it. CPI does not vanish from
- * the panel for the three weeks between prints.
+ * The feed ForexFactory publishes covers exactly one week, and that is the
+ * window this panel wants: what is landing between now and Sunday. It rolls
+ * over on its own every Monday, so nothing here has to schedule anything — ask
+ * it on Monday and it answers about the new week.
+ *
+ * Which means the panel is short most weeks, and that is correct rather than a
+ * gap to be filled. A week with only jobless claims in it is a week with only
+ * jobless claims in it.
  *
  * Only the figures are kept — the name, when it lands, what is expected, and
  * what it was last time. No commentary, no headlines.
@@ -73,34 +75,35 @@ const clean = (v) => {
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /**
- * Fold this week's releases into what was already known.
+ * Order for display: through the week, earliest first.
  *
- * A release seen again replaces its earlier copy — the newer print is the one
- * that matters, and its "previous" is the older one's actual. Anything not in
- * this week's feed is carried through untouched, which is the whole point.
- */
-export function mergeReleases(stored, fresh) {
-  const byId = new Map((stored || []).map((r) => [r.id, r]));
-  for (const r of fresh) {
-    const existing = byId.get(r.id);
-    // Only move forward. A late-arriving feed must not rewind a newer print.
-    if (existing && existing.date && r.date && r.date < existing.date) continue;
-    byId.set(r.id, r);
-  }
-  return [...byId.values()];
-}
-
-/**
- * Order for display: the watchlist's own order, and within a repeated entry —
- * the GDP releases — the most recent first.
+ * The panel is a schedule, so it reads like one. Two releases on the same day —
+ * CPI and core CPI always arrive together — fall back to the watchlist's order
+ * so the headline reading sits above its core.
  */
 export function orderReleases(rows, watchlist = WATCHLIST) {
   const rank = new Map(watchlist.map((w, i) => [w.id, i]));
   const baseId = (id) => id.split(':')[0];
   return [...rows].sort((a, b) => {
-    const ra = rank.get(baseId(a.id)) ?? 999;
-    const rb = rank.get(baseId(b.id)) ?? 999;
-    if (ra !== rb) return ra - rb;
-    return String(b.date || '').localeCompare(String(a.date || ''));
+    const byDate = String(a.date || '').localeCompare(String(b.date || ''));
+    if (byDate !== 0) return byDate;
+    return (rank.get(baseId(a.id)) ?? 999) - (rank.get(baseId(b.id)) ?? 999);
   });
+}
+
+/**
+ * The Monday-to-Sunday week a date falls in, as ISO days.
+ *
+ * Only for labelling the panel. The feed decides what is in the week; this just
+ * says which week that was, so a stale answer is recognisable as one.
+ */
+export function weekOf(iso) {
+  const date = new Date(`${iso}T00:00:00Z`);
+  // getUTCDay is 0 on Sunday, which belongs to the week that began six days ago.
+  const shift = (date.getUTCDay() + 6) % 7;
+  const monday = new Date(date);
+  monday.setUTCDate(date.getUTCDate() - shift);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { from: monday.toISOString().slice(0, 10), to: sunday.toISOString().slice(0, 10) };
 }
