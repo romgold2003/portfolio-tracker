@@ -23,10 +23,14 @@ export const SERIES = {
 /**
  * The daily totals, oldest first and in millions.
  *
+ * Everything the source offers is kept — about three hundred days — because the
+ * panel rolls them up into weeks and months as well, and a month bar needs the
+ * days behind it. The browser decides how far back to draw.
+ *
  * A day with no number is dropped rather than counted as a zero: a fund that
  * has not reported has not reported nothing.
  */
-export function parseFlows(payload, { days = 60 } = {}) {
+export function parseFlows(payload, { days = 400 } = {}) {
   const rows = payload?.data;
   if (!Array.isArray(rows) || !rows.length) return null;
 

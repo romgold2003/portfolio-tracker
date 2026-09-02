@@ -120,6 +120,24 @@
 .cv-bar-up{fill:var(--green)}
 .cv-bar-down{fill:var(--red)}
 
+/* Hovering. The host is the positioning context for the readout. */
+.cv-host{position:relative}
+/* SVG elements do not honour the hidden attribute on their own, so it is
+   given meaning here rather than by the browser. */
+.cv-hair[hidden],.cv-hot[hidden]{display:none}
+.cv-hair{stroke:var(--text2);stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+.cv-hot{stroke:var(--panel);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none}
+/* Follows the cursor, so it must never be under it. */
+.cv-tip{position:absolute;z-index:5;pointer-events:none;min-width:132px;
+  background:var(--panel2);border:0.5px solid var(--border2);border-radius:8px;
+  padding:9px 11px;box-shadow:0 6px 24px var(--shadow)}
+.tip-head{font-size:11px;color:var(--text3);margin-bottom:6px;
+  text-transform:uppercase;letter-spacing:0.05em}
+.tip-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  font-size:12px;line-height:1.7}
+.tip-row span{color:var(--text3)}
+.tip-row strong{font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+
 .etf-block{margin-bottom:22px}
 .etf-block:last-child{margin-bottom:0}
 .etf-head{display:flex;align-items:baseline;justify-content:space-between;

@@ -310,15 +310,19 @@
           <div class="opt-picker" id="optPicker"></div>
         </div>
         <div class="opt-stats" id="optStats"></div>
-        <div class="opt-chart" id="optGex"></div>
-        <div class="opt-chart" id="optDex"></div>
+        <!-- One readout for both curves: they are the same axis read twice. -->
+        <div class="cv-host" id="optCharts">
+          <div class="opt-chart" id="optGex"></div>
+          <div class="opt-chart" id="optDex"></div>
+          <div class="cv-tip" id="optTip" hidden></div>
+        </div>
       </div>
 
-      <!-- Daily net flows into the spot ETFs. -->
+      <!-- Net flows into the spot ETFs, by day, week or month. -->
       <div class="card etf-card" id="etfCard" style="display:none">
         <div class="card-lbl">
           <span>Spot ETF flows</span>
-          <span class="econ-src">$ millions · farside.co.uk</span>
+          <div class="opt-picker" id="etfGrain"></div>
         </div>
         <div id="etfBody"></div>
       </div>

@@ -54,6 +54,7 @@ describe('reading the series', () => {
       totalNetInflow: i * 1e6,
     })));
     assert.ok(parseFlows(many, { days: 60 }).length <= 60);
+    assert.ok(parseFlows(many).length > 60, 'the default keeps enough for a monthly roll-up');
   });
 
   test('an empty or broken answer is null, not an empty chart', () => {
