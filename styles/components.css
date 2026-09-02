@@ -89,7 +89,7 @@
   .gauge-num{font-size:26px}
 }
 
-/* Options exposure and ETF flows: diverging bars about a centre line. */
+/* Options exposure and ETF flows: curves and columns about a zero line. */
 .opt-card,.etf-card{margin-bottom:14px}
 .opt-picker{display:flex;gap:4px}
 .opt-tab{background:var(--input);border:0.5px solid var(--border2);border-radius:5px;
@@ -102,29 +102,25 @@
 .opt-stat span{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
 .opt-stat strong{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
 
-.opt-chart{margin-bottom:18px}
+.opt-chart{margin-bottom:20px}
 .opt-chart:last-child{margin-bottom:0}
-.bar-title{font-size:10px;color:var(--text3);text-transform:uppercase;
-  letter-spacing:0.05em;margin-bottom:8px}
-.bar-row{display:grid;grid-template-columns:54px minmax(0,1fr) 74px;align-items:center;
-  gap:8px;padding:1px 0}
-/* The row at the money, so the eye finds where price actually is. */
-.bar-row.is-spot{background:var(--hover);border-radius:4px}
-.bar-row.is-spot .bar-label{color:var(--text);font-weight:600}
-.bar-label{font-size:10px;color:var(--text3);text-align:right;font-variant-numeric:tabular-nums}
-.bar-track{position:relative;height:13px}
-/* The centre line is zero: left of it is negative, right of it positive. */
-.bar-zero{position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:var(--border2)}
-.bar-fill{position:absolute;top:2px;bottom:2px;border-radius:2px}
-.bar-fill.is-up{background:var(--green)}
-.bar-fill.is-down{background:var(--red)}
-.bar-value{font-size:10px;text-align:right;font-variant-numeric:tabular-nums;color:var(--text3)}
-.bar-value.is-up{color:var(--green)}
-.bar-value.is-down{color:var(--red)}
-.is-up{color:var(--green)}
-.is-down{color:var(--red)}
 
-.etf-block{margin-bottom:20px}
+/* The curves. preserveAspectRatio is none, so the plot stretches to the card
+   while strokes are held at width by vector-effect and text by its own size. */
+.cv{width:100%;height:190px;display:block;overflow:visible}
+.cv-title{font-size:10px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:0.05em;margin-bottom:6px}
+.cv-note{color:var(--text4);margin-left:8px;text-transform:none;letter-spacing:0}
+.cv-grid{stroke:var(--input);stroke-width:1;vector-effect:non-scaling-stroke}
+.cv-grid.is-zero{stroke:var(--border2)}
+.cv-ytick,.cv-xtick{fill:var(--text4);font-size:9px;font-variant-numeric:tabular-nums}
+/* Where price actually is, which is the line the eye needs first. */
+.cv-mark{stroke:var(--text3);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.cv-marklbl{fill:var(--text3);font-size:8px;text-transform:uppercase;letter-spacing:0.06em}
+.cv-bar-up{fill:var(--green)}
+.cv-bar-down{fill:var(--red)}
+
+.etf-block{margin-bottom:22px}
 .etf-block:last-child{margin-bottom:0}
 .etf-head{display:flex;align-items:baseline;justify-content:space-between;
   gap:12px;margin-bottom:8px;flex-wrap:wrap}
@@ -132,7 +128,6 @@
 .etf-sum{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
 .etf-sub{font-size:10px;color:var(--text3);font-weight:400;margin-left:8px}
 @media (max-width:640px){
-  .bar-row{grid-template-columns:44px minmax(0,1fr) 62px}
   .opt-stats{gap:16px}
 }
 
