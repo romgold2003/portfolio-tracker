@@ -1,3 +1,7 @@
+import { weekOf } from './week.js';
+
+export { weekOf };
+
 /**
  * The US releases due this week, from ForexFactory's calendar feed.
  *
@@ -89,21 +93,4 @@ export function orderReleases(rows, watchlist = WATCHLIST) {
     if (byDate !== 0) return byDate;
     return (rank.get(baseId(a.id)) ?? 999) - (rank.get(baseId(b.id)) ?? 999);
   });
-}
-
-/**
- * The Monday-to-Sunday week a date falls in, as ISO days.
- *
- * Only for labelling the panel. The feed decides what is in the week; this just
- * says which week that was, so a stale answer is recognisable as one.
- */
-export function weekOf(iso) {
-  const date = new Date(`${iso}T00:00:00Z`);
-  // getUTCDay is 0 on Sunday, which belongs to the week that began six days ago.
-  const shift = (date.getUTCDay() + 6) % 7;
-  const monday = new Date(date);
-  monday.setUTCDate(date.getUTCDate() - shift);
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
-  return { from: monday.toISOString().slice(0, 10), to: sunday.toISOString().slice(0, 10) };
 }

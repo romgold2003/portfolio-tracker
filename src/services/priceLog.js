@@ -1,6 +1,7 @@
 /**
- * A small rolling price history — one close per ticker per day — kept purely so
- * the app can show a genuine 7-day change rather than a relabelled daily change.
+ * A small rolling price history — one close per ticker per day — kept so the
+ * app can show a real week-to-date change rather than a relabelled daily one,
+ * on builds that have no server to ask for last week's closing price.
  */
 import { STORAGE_KEYS, PRICE_LOG_DAYS } from '../config/constants.js';
 
@@ -54,22 +55,38 @@ export function seedPrevClose(ticker, prevClose) {
 }
 
 /**
- * True rolling 7-day change.
+ * Change since this week began, from whatever history is on file.
  *
- * Returns null until a price at least 5 days old is on file — otherwise the
- * figure would just be a copy of the daily change, which is misleading.
+ * The fallback for when the server cannot supply the real closing price of the
+ * last session before Monday. It takes the newest logged price from before this
+ * Monday, which is the same thing whenever the app was open that day, and close
+ * enough when it was not.
+ *
+ * Returns null with nothing from before Monday on file, rather than measuring
+ * from some point inside the week and calling that the week.
  */
-export function get7DChg(ticker, currentPrice) {
+export function getWeekChg(ticker, currentPrice, monday = mondayOfWeek()) {
   const entries = log[ticker];
-  if (!entries || entries.length < 2) return null;
-  const cutoff = dateNDaysAgo(7);
-  const minAge = dateNDaysAgo(5);
+  if (!entries || !entries.length || !currentPrice) return null;
 
-  let ref = entries.filter((e) => e.d <= cutoff).sort((a, b) => b.d.localeCompare(a.d))[0];
-  if (!ref) {
-    const oldest = entries[0];
-    if (oldest && oldest.d <= minAge) ref = oldest;
-  }
-  if (!ref || !ref.p) return null;
+  const before = entries.filter((e) => e.d < monday && e.p > 0);
+  const ref = before[before.length - 1];
+  if (!ref) return null;
   return ((currentPrice - ref.p) / ref.p) * 100;
+}
+
+/**
+ * The Monday of the current week, in New York.
+ *
+ * The market's week, not the browser's: in Israel it is already Tuesday for
+ * seven hours before New York agrees, and using the local date there would move
+ * the reference a day early every week.
+ */
+export function mondayOfWeek(now = new Date()) {
+  const nyDay = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now);
+  const date = new Date(`${nyDay}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
 }

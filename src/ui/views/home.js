@@ -63,7 +63,7 @@ const HEAD = 'font-size:10px;color:var(--text3);text-transform:uppercase;letter-
 const LIST_HEADER = `<div class="mini-grid" style="margin-bottom:6px;padding:0 2px">
   <div style="${HEAD}">Asset</div>
   <div style="${HEAD};text-align:center">D%</div>
-  <div class="mini-7d" style="${HEAD};text-align:center">7D%</div>
+  <div class="mini-7d" style="${HEAD};text-align:center">W%</div>
   <div style="${HEAD};text-align:right">P&L</div>
 </div>`;
 

@@ -10,8 +10,9 @@
  */
 import { CG_IDS, API } from '../config/constants.js';
 import { state, currentApiKey } from '../core/store.js';
-import { logPrice, seedPrevClose, get7DChg } from './priceLog.js';
+import { logPrice, seedPrevClose, getWeekChg } from './priceLog.js';
 import { extendedQuotes, applyExtendedQuotes, tradingDayOver } from './extendedHours.js';
+import { weekStartCloses } from './weekStart.js';
 
 /** CoinGecko's full symbol list, fetched at most once per session. */
 let coinList = null;
@@ -60,9 +61,7 @@ async function fetchCryptoPrice(ticker, position) {
   if (position && price) {
     position.dailyChg = json[id]?.usd_24h_change ?? null;
     logPrice(ticker, price);
-    // CoinGecko returns a real 7-day figure for crypto — prefer it over our log.
-    const cg7 = json[id]?.usd_7d_change;
-    position.weeklyChg = cg7 != null && Number.isFinite(cg7) ? cg7 : get7DChg(ticker, price);
+    position.weeklyChg = getWeekChg(ticker, price);
   }
   return price;
 }
@@ -79,7 +78,7 @@ async function fetchStockPrice(ticker, position) {
     if (prevClose) position.dailyChg = ((json.c - prevClose) / prevClose) * 100;
     seedPrevClose(ticker, prevClose);
     logPrice(ticker, price);
-    position.weeklyChg = get7DChg(ticker, price);
+    position.weeklyChg = getWeekChg(ticker, price);
   }
   return price;
 }
@@ -137,7 +136,36 @@ export async function refreshOpenPositions(now = new Date()) {
     }
   }
 
+  await applyWeekToDate(open);
   return changed;
+}
+
+/**
+ * The week's change, measured from the real close before Monday.
+ *
+ * Last of all, because it is measured against whatever price the steps above
+ * settled on — including an extended-hours one, so on a Monday morning before
+ * the bell the week is already showing what the pre-market has done to it.
+ *
+ * The price log stands in when the server cannot answer. It holds one price a
+ * day and only for days the app was open, so it is an approximation; this is
+ * the exact figure, and it is preferred wherever it exists.
+ */
+async function applyWeekToDate(open) {
+  const tickers = open.map((p) => p.ticker);
+  if (!tickers.length) return;
+
+  let closes = new Map();
+  try {
+    closes = await weekStartCloses(tickers);
+  } catch {
+    // Falls through to the logged history below, which is the point of it.
+  }
+
+  for (const p of open) {
+    const ref = closes.get((p.ticker || '').toUpperCase());
+    if (ref > 0 && p.cur > 0) p.weeklyChg = ((p.cur - ref) / ref) * 100;
+  }
 }
 
 /** Whether a position's displayed price is coming from a live feed. */
