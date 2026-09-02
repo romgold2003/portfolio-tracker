@@ -1,16 +1,19 @@
 /**
  * The News page.
  *
- * Two fear-and-greed dials in the corner, what the market expects of the Fed at
- * its next meeting priced off 30-day fed funds futures, and forecast against
- * previous for the US releases that move rates. All of it is fetched and worked
- * out on the server; this file only draws the answers.
+ * Fear-and-greed dials in the corner, the odds on the Fed's next decision,
+ * this week's US releases, options exposure by strike, and daily ETF flows.
+ * All of it is fetched and worked out on the server; the views here only draw
+ * the answers, and each one hides itself rather than showing an empty frame
+ * when its source has nothing.
  */
 import { MONTHS_LONG } from '../../config/constants.js';
 import { fedDecision } from '../../services/fed.js';
 import { econReleases } from '../../services/econ.js';
 import { marketSentiment } from '../../services/sentiment.js';
 import { gaugeSvg } from './gauge.js';
+import { optionsProfile, etfFlows } from '../../services/options.js';
+import { renderExposure, renderEtfFlows, currentMarket, setMarket } from './exposure.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -131,23 +134,33 @@ function renderGauges(sentiment) {
   host.innerHTML = dials.join('');
 }
 
+/** Switching market redraws only the exposure panel, not the whole page. */
+async function pickMarket(id) {
+  setMarket(id);
+  renderExposure(await optionsProfile(id), pickMarket);
+}
+
 /**
  * Fetched after the page is drawn, never before it.
  *
- * A slow or missing feed must cost the page nothing, so this never throws and
- * the panel it belongs to simply stays hidden.
+ * Five sources, asked together and settled independently: one being down must
+ * not take the other four with it.
  */
 export async function renderNews() {
   // Independent of each other: one source being down must not blank the others.
-  const [fed, econ, mood] = await Promise.allSettled([
+  const [fed, econ, mood, opts, etf] = await Promise.allSettled([
     fedDecision(), econReleases(), marketSentiment(),
+    optionsProfile(currentMarket()), etfFlows(),
   ]);
   const value = (r) => (r.status === 'fulfilled' ? r.value : null);
 
   renderFedPanel(value(fed));
   renderEconPanel(value(econ));
   renderGauges(value(mood));
+  renderExposure(value(opts), pickMarket);
+  renderEtfFlows(value(etf));
 
+  const anything = value(fed) || value(econ) || value(mood) || value(opts) || value(etf);
   const empty = el('newsEmpty');
-  if (empty) empty.style.display = (value(fed) || value(econ) || value(mood)) ? 'none' : '';
+  if (empty) empty.style.display = anything ? 'none' : '';
 }

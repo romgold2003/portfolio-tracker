@@ -303,6 +303,26 @@
         <div id="econRows"></div>
       </div>
 
+      <!-- Gamma and delta exposure by strike, for whichever market is picked. -->
+      <div class="card opt-card" id="optionsCard" style="display:none">
+        <div class="card-lbl">
+          <span>Options exposure — <span id="optMarketName"></span></span>
+          <div class="opt-picker" id="optPicker"></div>
+        </div>
+        <div class="opt-stats" id="optStats"></div>
+        <div class="opt-chart" id="optGex"></div>
+        <div class="opt-chart" id="optDex"></div>
+      </div>
+
+      <!-- Daily net flows into the spot ETFs. -->
+      <div class="card etf-card" id="etfCard" style="display:none">
+        <div class="card-lbl">
+          <span>Spot ETF flows</span>
+          <span class="econ-src">$ millions · farside.co.uk</span>
+        </div>
+        <div id="etfBody"></div>
+      </div>
+
       <!-- Shown only while there is nothing to show, so the page is never bare. -->
       <div class="card" id="newsEmpty">
         <div class="empty">Waiting on the rate futures — nothing quoting just now.</div>
