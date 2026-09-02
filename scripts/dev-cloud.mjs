@@ -89,6 +89,7 @@ const ROUTES = {
   '/api/fed': '../api/fed.js',
   '/api/econ': '../api/econ.js',
   '/api/weekstart': '../api/weekstart.js',
+  '/api/sentiment': '../api/sentiment.js',
   '/api/auth/begin': '../api/_auth/begin.js',
   '/api/auth/signup': '../api/_auth/signup.js',
   '/api/auth/login': '../api/_auth/login.js',

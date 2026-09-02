@@ -1,14 +1,16 @@
 /**
  * The News page.
  *
- * Two panels: what the market expects of the Fed at its next meeting, priced
- * off 30-day fed funds futures, and forecast against previous for the US
- * releases that move rates. Both are fetched and worked out on the server; this
- * file only draws the answers.
+ * Two fear-and-greed dials in the corner, what the market expects of the Fed at
+ * its next meeting priced off 30-day fed funds futures, and forecast against
+ * previous for the US releases that move rates. All of it is fetched and worked
+ * out on the server; this file only draws the answers.
  */
 import { MONTHS_LONG } from '../../config/constants.js';
 import { fedDecision } from '../../services/fed.js';
 import { econReleases } from '../../services/econ.js';
+import { marketSentiment } from '../../services/sentiment.js';
+import { gaugeSvg } from './gauge.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -110,6 +112,25 @@ function renderEconPanel(data) {
   }
 }
 
+/** The two dials in the corner of the page. */
+function renderGauges(sentiment) {
+  const host = el('sentimentGauges');
+  if (!host) return;
+
+  const dials = [
+    ['stocks', 'Stocks'],
+    ['crypto', 'Crypto'],
+  ]
+    .map(([key, title]) => {
+      const r = sentiment?.[key];
+      return r ? gaugeSvg({ value: r.value, label: r.label, title }) : '';
+    })
+    .filter(Boolean);
+
+  host.style.display = dials.length ? '' : 'none';
+  host.innerHTML = dials.join('');
+}
+
 /**
  * Fetched after the page is drawn, never before it.
  *
@@ -117,14 +138,16 @@ function renderEconPanel(data) {
  * the panel it belongs to simply stays hidden.
  */
 export async function renderNews() {
-  // Independent of each other: one source being down must not blank the other.
-  const [fed, econ] = await Promise.allSettled([fedDecision(), econReleases()]);
+  // Independent of each other: one source being down must not blank the others.
+  const [fed, econ, mood] = await Promise.allSettled([
+    fedDecision(), econReleases(), marketSentiment(),
+  ]);
+  const value = (r) => (r.status === 'fulfilled' ? r.value : null);
 
-  renderFedPanel(fed.status === 'fulfilled' ? fed.value : null);
-  renderEconPanel(econ.status === 'fulfilled' ? econ.value : null);
+  renderFedPanel(value(fed));
+  renderEconPanel(value(econ));
+  renderGauges(value(mood));
 
   const empty = el('newsEmpty');
-  const anything = (fed.status === 'fulfilled' && fed.value)
-    || (econ.status === 'fulfilled' && econ.value);
-  if (empty) empty.style.display = anything ? 'none' : '';
+  if (empty) empty.style.display = (value(fed) || value(econ) || value(mood)) ? 'none' : '';
 }
