@@ -494,5 +494,15 @@ export function describeStatement(parsed) {
     parsed.flows.length ? `${parsed.flows.length} deposits and withdrawals netting ${money(net)}` : null,
     parsed.income.dividends ? `${money(parsed.income.dividends)} dividends` : null,
     parsed.income.commissions ? `${money(parsed.income.commissions)} commissions` : null,
+    /**
+     * Said out loud because it is the one thing in here whose absence is
+     * invisible. Everything else above shows up as a wrong position or a wrong
+     * balance; a missing time-weighted return just leaves the year quietly
+     * measured a different way, and the only way to find out was to compare
+     * against the broker and wonder which was broken.
+     */
+    parsed.twr != null
+      ? `broker's own return ${parsed.twr.toFixed(2)}% through ${parsed.periodEnd ?? 'the period end'}`
+      : 'no broker return in this file — the year will be measured here instead',
   ].filter(Boolean).join(' · ');
 }

@@ -190,3 +190,20 @@ describe('surviving the trip through the vault', () => {
     assert.equal(state.openingNav, null);
   });
 });
+
+describe('saying whether the broker figure was found', () => {
+  test('the preview names it, so a silent fallback cannot go unnoticed', async () => {
+    const { describeStatement } = await import('../src/features/ibkr.js');
+    const base = {
+      positions: [], closed: [], flows: [], cash: 0,
+      income: { dividends: 0, commissions: 0, interest: 0, tax: 0 },
+    };
+    const found = describeStatement({ ...base, twr: 27.562836129, periodEnd: '2026-09-02' });
+    assert.match(found, /broker's own return 27\.56% through 2026-09-02/);
+
+    // And its absence is stated rather than left blank, because a missing
+    // return changes how the year is measured and nothing else would show it.
+    const missing = describeStatement({ ...base, twr: null, periodEnd: '2026-09-02' });
+    assert.match(missing, /no broker return in this file/);
+  });
+});

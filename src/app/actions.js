@@ -719,14 +719,27 @@ export async function confirmIbkrImport() {
   await flushNow();
 
   const count = journal.positions.length;
+  const nav = journal.openingNav;
   cancelIbkrImport();
   closeSettings();
   renderAll();
   refreshPrices();
   refreshMeasuredBetas();
   show('positions');
+
+  /**
+   * Whether the broker's own return came through is worth saying plainly. It
+   * decides how the year is measured, the two methods differ by several points
+   * on an account that has been paid into, and there is otherwise no sign of
+   * which one is in play.
+   */
+  const measure = nav?.twr != null
+    ? `Your year is measured the way your broker measures it: their own ${
+      nav.twr.toFixed(2)}% through ${nav.through}, plus everything since.`
+    : 'This statement carried no time-weighted return, so the year is measured '
+      + 'here instead and may read a little above or below your broker.';
+
   alert(`Imported ${count} positions from your statement.\n\n`
     + 'Prices are refreshing now. Your open positions, closed trades, cash and '
-    + 'deposits all came from the statement, so the numbers should match your '
-    + 'broker.');
+    + `deposits all came from the statement.\n\n${measure}`);
 }
