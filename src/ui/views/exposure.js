@@ -33,9 +33,9 @@ const dayLabel = (iso) => {
   return `${d} ${MONTHS[m - 1]}`;
 };
 
-/* ── days into weeks and months ────────────────────────────────────────── */
+/* ── grouping rows into bars ───────────────────────────────────────────── */
 
-/** Daily, weekly or monthly — offered by both panels, on the same three ids. */
+/** Daily, weekly or monthly — the flows panel, which reports whole days. */
 const GRAINS = [
   { id: 'daily', label: 'Daily', bars: 30 },
   { id: 'weekly', label: 'Weekly', bars: 26 },
@@ -43,6 +43,23 @@ const GRAINS = [
 ];
 
 const grainDef = (id) => GRAINS.find((g) => g.id === id) ?? GRAINS[0];
+
+/**
+ * One hour to one week — the exposure panel, which is stamped to the minute.
+ *
+ * No monthly bar. Exposure is a position that turns over with the expiry cycle;
+ * a month of it averaged into one point says almost nothing that the weekly
+ * bar has not already said, and it needs a month of recording before it draws
+ * anything at all.
+ */
+const FRAMES = [
+  { id: '1h', label: '1H', ms: 3600e3, bars: 48 },
+  { id: '4h', label: '4H', ms: 4 * 3600e3, bars: 42 },
+  { id: '1d', label: '1D', ms: 24 * 3600e3, bars: 60 },
+  { id: '1w', label: '1W', ms: 7 * 24 * 3600e3, bars: 52 },
+];
+
+const frameDef = (id) => FRAMES.find((f) => f.id === id) ?? FRAMES[0];
 
 /** The Monday of a day's week, which is what a weekly bucket is stacked on. */
 function mondayOf(iso) {
@@ -59,7 +76,7 @@ const bucketLabel = (key, id) => (id === 'monthly'
   : dayLabel(key));
 
 /**
- * Group daily rows into days, weeks or months, oldest first.
+ * Group whole days into days, weeks or months, oldest first.
  *
  * Only the grouping is shared. What a bucket then *means* differs between the
  * two panels and is decided by the caller, because a week of ETF flow is a sum
@@ -75,6 +92,70 @@ function bucket(rows, id, dateOf) {
   return [...buckets.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([key, list]) => ({ key, label: bucketLabel(key, id), rows: list }));
+}
+
+/**
+ * The start of the bar a moment falls in, in UTC.
+ *
+ * Hours, four-hours and days divide the epoch exactly, so those are one modulo.
+ * Weeks are the exception: 1 January 1970 was a Thursday, so a plain division
+ * would start every week on one. The shift shunts the origin back to the Monday
+ * before it, which is where the flows panel already starts its weeks.
+ */
+const MONDAY_EPOCH_SHIFT = 3 * 86400e3;
+
+export function frameStart(ms, size) {
+  if (size >= 7 * 24 * 3600e3) {
+    return Math.floor((ms + MONDAY_EPOCH_SHIFT) / size) * size - MONDAY_EPOCH_SHIFT;
+  }
+  return Math.floor(ms / size) * size;
+}
+
+const pad = (n) => String(n).padStart(2, '0');
+const dayOf = (ms) => {
+  const d = new Date(ms);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+};
+
+/**
+ * Intraday bars carry the day too, once the chart covers more than one.
+ *
+ * Without that a four-hour axis is unreadable. It labels every sixth bar, six
+ * four-hour bars is exactly a day, so every label lands on the same hour and
+ * the axis reads "16:00, 16:00, 16:00" across a fortnight. Marking only the
+ * bars that open a day does not fix it either — the stride steps straight over
+ * them. Naming the day on every intraday label is the one version that cannot
+ * come out ambiguous, and it still fits the tick.
+ */
+function frameLabel(ms, id, multiDay) {
+  if (id !== '1h' && id !== '4h') return dayOf(ms);
+  const hour = `${pad(new Date(ms).getUTCHours())}:00`;
+  return multiDay ? `${dayOf(ms)} ${hour}` : hour;
+}
+
+/** The same moment written out in full, for the readout. */
+function stampLabel(ms, id) {
+  return id === '1h' || id === '4h'
+    ? `${dayOf(ms)} ${pad(new Date(ms).getUTCHours())}:00 UTC`
+    : dayOf(ms);
+}
+
+/** Group minute-stamped readings into bars of one size, oldest first. */
+function barsOf(rows, id) {
+  const { ms: size } = frameDef(id);
+  const buckets = new Map();
+  for (const row of rows) {
+    const t = Date.parse(row.at);
+    if (!Number.isFinite(t)) continue;
+    const key = frameStart(t, size);
+    const list = buckets.get(key);
+    if (list) list.push(row); else buckets.set(key, [row]);
+  }
+  const sorted = [...buckets.entries()].sort((a, b) => a[0] - b[0]);
+  const multiDay = sorted.length > 1 && dayOf(sorted[0][0]) !== dayOf(sorted[sorted.length - 1][0]);
+  return sorted.map(([key, list]) => ({
+    start: key, label: frameLabel(key, id, multiDay), rows: list,
+  }));
 }
 
 /* ── the plot area, shared by both charts ──────────────────────────────── */
@@ -319,7 +400,7 @@ let view = 'strike';
 let lastProfile = null;
 let lastPick = null;
 
-const VIEWS = [{ id: 'strike', label: 'By strike' }, ...GRAINS];
+const VIEWS = [{ id: 'strike', label: 'By strike' }, ...FRAMES];
 
 /** The index of the strike nearest spot, so the curve can be marked at price. */
 function spotIndex(strikes, spot) {
@@ -335,32 +416,33 @@ function spotIndex(strikes, spot) {
 const mean = (nums) => nums.reduce((s, n) => s + n, 0) / nums.length;
 
 /**
- * Roll daily readings into weeks or months.
+ * Roll minute-stamped readings into bars of one timeframe.
  *
  * Averaged, not summed — the opposite of the flows panel, and for a reason
  * worth stating. An ETF flow is money that moved, so a week's worth adds up. An
- * exposure is a standing position, the size of the book as it sits; adding five
- * days of it would report a wall five times taller than any that ever existed.
- * The average is the level that stood over the period.
+ * exposure is a standing position, the size of the book as it sits; adding a
+ * day of readings would report a wall a hundred times taller than any that ever
+ * existed. The average is the level that stood over the bar.
  *
- * Each bucket also carries how many readings are behind it, because a week made
- * of one observation is not the same claim as a week made of five.
+ * Each bar carries the readings behind it and when it opened and closed,
+ * because a bar made of one observation is not the same claim as one made of
+ * twelve — and while a bar is still forming it is made of very few.
  */
 export function rollUpExposure(rows, id) {
-  return bucket(rows, id, (r) => r.day).map((b) => ({
+  return barsOf(rows, id).map((b) => ({
+    start: b.start,
     label: b.label,
-    from: b.rows[0].day,
-    to: b.rows[b.rows.length - 1].day,
-    days: b.rows.length,
+    from: b.rows[0].at,
+    to: b.rows[b.rows.length - 1].at,
+    reads: b.rows.length,
     gex: Math.round(mean(b.rows.map((r) => r.netGex))),
     dex: Math.round(mean(b.rows.map((r) => r.netDex))),
     spot: mean(b.rows.map((r) => r.spot)),
   }));
 }
 
-/** Read as "Net GEX · weekly average", so nobody reads an average as a total. */
-const timeTitle = (name, id) =>
-  `${name} · ${id === 'daily' ? 'daily' : `${id === 'weekly' ? 'weekly' : 'monthly'} average`}`;
+/** Read as "Net GEX · 4H average", so nobody reads an average as a total. */
+const timeTitle = (name, id) => `${name} · ${frameDef(id).label} average`;
 
 /**
  * The strike profile: gamma and delta across prices, right now.
@@ -397,29 +479,40 @@ function drawByStrike(profile, gex, dex) {
   });
 }
 
+/** "in 3 h", "in 12 min" — how much longer the last bar has to run. */
+function remaining(bar, id) {
+  const left = bar.start + frameDef(id).ms - Date.now();
+  if (left <= 0) return null;
+  const mins = Math.round(left / 60000);
+  return mins >= 90 ? `${Math.round(mins / 60)} h` : `${mins} min`;
+}
+
 /**
  * The same two numbers through time, from the recorded history.
  *
- * A curve needs two points, and this history only begins the first day the
- * panel was opened — so a young record says so plainly rather than drawing a
- * single dot and letting it look like a flat market.
+ * A curve needs two bars, and this record only begins the first time the panel
+ * was opened — so a young one says so plainly rather than drawing a single dot
+ * and letting it read as a flat market.
  */
 function drawOverTime(profile, gex, dex, id) {
   const history = profile.history ?? [];
-  const rolled = rollUpExposure(history, id).slice(-grainDef(id).bars);
+  const rolled = rollUpExposure(history, id).slice(-frameDef(id).bars);
 
   if (rolled.length < 2) {
-    const since = history.length ? dayLabel(history[history.length - 1].day) : null;
     gex.innerHTML = `<div class="cv-empty">${
   history.length
-    ? `One reading so far, taken ${escapeHtml(since)}. A curve needs two — this fills in a day at a time.`
-    : 'No readings recorded yet. Exposure through time is kept from today onwards.'
+    ? `Only ${history.length === 1 ? 'one reading' : `${history.length} readings`} so far, all inside
+       the same ${escapeHtml(frameDef(id).label)} bar. A curve needs two bars — try a shorter
+       timeframe, or leave this open.`
+    : 'Nothing recorded yet. Exposure through time is kept from the first time this is opened.'
 }</div>`;
     dex.innerHTML = '';
     return;
   }
 
-  const note = `${rolled.length} ${id === 'daily' ? 'days' : id === 'weekly' ? 'weeks' : 'months'} recorded`;
+  const last = rolled[rolled.length - 1];
+  const left = remaining(last, id);
+  const note = `${rolled.length} bars${left ? ` · last one closes in ${left}` : ''}`;
   const gexPoints = rolled.map((r) => ({ label: r.label, value: r.gex }));
   const dexPoints = rolled.map((r) => ({ label: r.label, value: r.dex }));
 
@@ -439,13 +532,13 @@ function drawOverTime(profile, gex, dex, id) {
     tip: el('optTip'),
     describe: (i) => {
       const row = rolled[i];
-      // A week or month is a span, so it is named as one; a day is just itself.
-      const when = row.from === row.to ? row.label : `${dayLabel(row.from)} – ${dayLabel(row.to)}`;
-      return `<div class="tip-head">${escapeHtml(when)}</div>
+      const forming = i === rolled.length - 1 && remaining(row, id);
+      return `<div class="tip-head">${escapeHtml(stampLabel(row.start, id))}${
+  forming ? ' · forming' : ''}</div>
         <div class="tip-row"><span>Net GEX</span><strong class="${row.gex >= 0 ? 'is-up' : 'is-down'}">${short(row.gex)}</strong></div>
         <div class="tip-row"><span>Net DEX</span><strong class="${row.dex >= 0 ? 'is-up' : 'is-down'}">${short(row.dex)}</strong></div>
-        <div class="tip-row"><span>Spot</span><strong>${strikeLabel(row.spot)}</strong></div>${
-  id === 'daily' ? '' : `<div class="tip-row"><span>Readings</span><strong>${row.days}</strong></div>`}`;
+        <div class="tip-row"><span>Spot</span><strong>${strikeLabel(row.spot)}</strong></div>
+        <div class="tip-row"><span>Readings</span><strong>${row.reads}</strong></div>`;
     },
   });
 }

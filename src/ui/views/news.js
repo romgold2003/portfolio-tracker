@@ -169,7 +169,51 @@ function renderGauges(sentiment) {
 /** Switching market redraws only the exposure panel, not the whole page. */
 async function pickMarket(id) {
   setMarket(id);
-  renderExposure(await optionsProfile(id), pickMarket);
+  const profile = await optionsProfile(id);
+  renderExposure(profile, pickMarket);
+  scheduleLive(profile);
+}
+
+/* ── keeping the exposure panel live ───────────────────────────────────── */
+
+/**
+ * The exposure panel refreshes itself while it is on screen.
+ *
+ * Only this panel: the Fed's odds, the week's calendar and the ETF flows all
+ * change on the order of a day, and re-asking for them on a minute's timer
+ * would be traffic for its own sake.
+ *
+ * How often is the answer's own business — Deribit says a minute, the CBOE
+ * chains say a quarter hour, and both are what those sources can actually
+ * deliver. A floor is kept here anyway so that a bad `refreshMs` from a
+ * future change cannot turn this into a hot loop.
+ */
+const LIVE_FLOOR_MS = 30 * 1000;
+let liveTimer = null;
+
+function scheduleLive(profile) {
+  clearTimeout(liveTimer);
+  const wait = Math.max(LIVE_FLOOR_MS, Number(profile?.refreshMs) || 60000);
+  liveTimer = setTimeout(refreshLive, wait);
+}
+
+async function refreshLive() {
+  const card = el('optionsCard');
+  /**
+   * A hidden page still has its elements, so the check is whether the card is
+   * laid out at all — offsetParent is null inside a display:none page. Together
+   * with the visibility check that means a backgrounded tab or another page
+   * costs nothing upstream; the timer keeps ticking so it resumes on its own.
+   */
+  const onScreen = card && card.offsetParent !== null && document.visibilityState === 'visible';
+  if (!onScreen) {
+    liveTimer = setTimeout(refreshLive, LIVE_FLOOR_MS);
+    return;
+  }
+
+  const profile = await optionsProfile(currentMarket());
+  if (profile) renderExposure(profile, pickMarket);
+  scheduleLive(profile);
 }
 
 /**
@@ -191,6 +235,7 @@ export async function renderNews() {
   renderGauges(value(mood));
   renderExposure(value(opts), pickMarket);
   renderEtfFlows(value(etf));
+  scheduleLive(value(opts));
 
   const anything = value(fed) || value(econ) || value(mood) || value(opts) || value(etf);
   const empty = el('newsEmpty');

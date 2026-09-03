@@ -6,7 +6,13 @@
  */
 import { cloudEnabled } from './cloud.js';
 
-/** Open interest is struck once a day; the spot behind it moves through it. */
+/**
+ * How long a profile stands before it is worth asking again.
+ *
+ * The answer carries its own `refreshMs`, because it differs by market: Deribit
+ * has something new every minute, the CBOE chains are quarter-hour delayed and
+ * do not. This is only the fallback for an answer that did not say.
+ */
 const OPTIONS_CACHE_MS = 10 * 60 * 1000;
 /** The funds report once, after the close. */
 const ETF_CACHE_MS = 30 * 60 * 1000;
@@ -24,7 +30,8 @@ export async function optionsProfile(market) {
   if (!cloudEnabled()) return null;
   const key = String(market || 'BTC').toUpperCase();
   const hit = optionsCache.get(key);
-  if (hit && Date.now() - hit.at < OPTIONS_CACHE_MS) return hit.data;
+  const ttl = Number(hit?.data?.refreshMs) || OPTIONS_CACHE_MS;
+  if (hit && Date.now() - hit.at < ttl) return hit.data;
 
   try {
     const res = await fetch(`/api/options?market=${encodeURIComponent(key)}`, {
