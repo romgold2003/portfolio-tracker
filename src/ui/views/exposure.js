@@ -33,6 +33,50 @@ const dayLabel = (iso) => {
   return `${d} ${MONTHS[m - 1]}`;
 };
 
+/* ── days into weeks and months ────────────────────────────────────────── */
+
+/** Daily, weekly or monthly — offered by both panels, on the same three ids. */
+const GRAINS = [
+  { id: 'daily', label: 'Daily', bars: 30 },
+  { id: 'weekly', label: 'Weekly', bars: 26 },
+  { id: 'monthly', label: 'Monthly', bars: 12 },
+];
+
+const grainDef = (id) => GRAINS.find((g) => g.id === id) ?? GRAINS[0];
+
+/** The Monday of a day's week, which is what a weekly bucket is stacked on. */
+function mondayOf(iso) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+const bucketKey = (iso, id) =>
+  (id === 'weekly' ? mondayOf(iso) : id === 'monthly' ? iso.slice(0, 7) : iso);
+
+const bucketLabel = (key, id) => (id === 'monthly'
+  ? `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(2, 4)}`
+  : dayLabel(key));
+
+/**
+ * Group daily rows into days, weeks or months, oldest first.
+ *
+ * Only the grouping is shared. What a bucket then *means* differs between the
+ * two panels and is decided by the caller, because a week of ETF flow is a sum
+ * and a week of exposure is not.
+ */
+function bucket(rows, id, dateOf) {
+  const buckets = new Map();
+  for (const row of rows) {
+    const key = bucketKey(dateOf(row), id);
+    const list = buckets.get(key);
+    if (list) list.push(row); else buckets.set(key, [row]);
+  }
+  return [...buckets.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, list]) => ({ key, label: bucketLabel(key, id), rows: list }));
+}
+
 /* ── the plot area, shared by both charts ──────────────────────────────── */
 
 const W = 900;
@@ -85,7 +129,7 @@ function gridFor(s, format) {
  * strikes invents gamma at prices where no contract trades, and the kinks are
  * real — they are where the open interest sits.
  */
-function lineChart({ points, colour, markIndex, title }) {
+function lineChart({ points, colour, markIndex, title, note }) {
   if (!points.length) return '';
   const s = scaleFor(points.map((p) => p.value));
   const n = points.length;
@@ -105,7 +149,8 @@ function lineChart({ points, colour, markIndex, title }) {
   const dots = coords.map((c) =>
     `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.4" fill="${colour}" />`).join('');
 
-  return `<div class="cv-title">${escapeHtml(title)}</div>
+  return `<div class="cv-title">${escapeHtml(title)}${
+  note ? `<span class="cv-note">${escapeHtml(note)}</span>` : ''}</div>
     <svg class="cv" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
          aria-label="${escapeHtml(title)}">
       ${gridFor(s, short)}${mark}
@@ -164,6 +209,9 @@ function columnChart({ points, title, note }) {
  * this was modelled on shows one readout covering both, and separating them
  * would mean hovering twice to compare gamma with delta at a price.
  */
+/** The handlers currently bound to a chart host, so they can be taken off. */
+const BOUND = new WeakMap();
+
 function attachHover({ host, charts, count, tip, describe }) {
   if (!host || !count) return;
 
@@ -227,8 +275,22 @@ function attachHover({ host, charts, count, tip, describe }) {
 
   for (const chart of charts) {
     if (!chart) continue;
+    /**
+     * The exposure charts live in two divs that index.html ships and this only
+     * ever refills, so the same element is bound again on every render — a
+     * refresh, or a switch between views. Without dropping the previous pair
+     * the handlers stack up, and each one reads a closure over the data it was
+     * created with: hovering a curve drawn from weekly buckets would also run
+     * the daily and by-strike readouts, last one winning.
+     */
+    const previous = BOUND.get(chart);
+    if (previous) {
+      chart.removeEventListener('pointermove', previous.move);
+      chart.removeEventListener('pointerleave', previous.clear);
+    }
     chart.addEventListener('pointermove', move);
     chart.addEventListener('pointerleave', clear);
+    BOUND.set(chart, { move, clear });
   }
 }
 
@@ -242,6 +304,23 @@ function stampYs(container, points) {
 
 /* ── the exposure panel ────────────────────────────────────────────────── */
 
+const GEX_COLOUR = '#e0a13c';
+const DEX_COLOUR = '#4a9ae8';
+
+/**
+ * Which way the panel is read: across strikes, or through time.
+ *
+ * Both answer a real question and neither replaces the other. The strike view
+ * is where the pressure sits at this moment — the wall, the flip. The time
+ * views are whether that pressure has been building or draining. Survives a
+ * re-render, like the market does.
+ */
+let view = 'strike';
+let lastProfile = null;
+let lastPick = null;
+
+const VIEWS = [{ id: 'strike', label: 'By strike' }, ...GRAINS];
+
 /** The index of the strike nearest spot, so the curve can be marked at price. */
 function spotIndex(strikes, spot) {
   let best = -1;
@@ -253,38 +332,40 @@ function spotIndex(strikes, spot) {
   return best;
 }
 
-export function renderExposure(profile, onPick) {
-  const card = el('optionsCard');
-  if (!card) return;
-  card.style.display = profile ? '' : 'none';
-  if (!profile) return;
+const mean = (nums) => nums.reduce((s, n) => s + n, 0) / nums.length;
 
-  const name = el('optMarketName');
-  if (name) name.textContent = profile.label ?? profile.market;
+/**
+ * Roll daily readings into weeks or months.
+ *
+ * Averaged, not summed — the opposite of the flows panel, and for a reason
+ * worth stating. An ETF flow is money that moved, so a week's worth adds up. An
+ * exposure is a standing position, the size of the book as it sits; adding five
+ * days of it would report a wall five times taller than any that ever existed.
+ * The average is the level that stood over the period.
+ *
+ * Each bucket also carries how many readings are behind it, because a week made
+ * of one observation is not the same claim as a week made of five.
+ */
+export function rollUpExposure(rows, id) {
+  return bucket(rows, id, (r) => r.day).map((b) => ({
+    label: b.label,
+    from: b.rows[0].day,
+    to: b.rows[b.rows.length - 1].day,
+    days: b.rows.length,
+    gex: Math.round(mean(b.rows.map((r) => r.netGex))),
+    dex: Math.round(mean(b.rows.map((r) => r.netDex))),
+    spot: mean(b.rows.map((r) => r.spot)),
+  }));
+}
 
-  const picker = el('optPicker');
-  if (picker) {
-    picker.innerHTML = (profile.markets ?? []).map((m) =>
-      `<button class="opt-tab${m.id === profile.market ? ' active' : ''}"
-        data-market="${escapeHtml(m.id)}">${escapeHtml(m.label)}</button>`).join('');
-    picker.onclick = (e) => {
-      const id = e.target?.dataset?.market;
-      if (id) onPick(id);
-    };
-  }
+/** Read as "Net GEX · weekly average", so nobody reads an average as a total. */
+const timeTitle = (name, id) =>
+  `${name} · ${id === 'daily' ? 'daily' : `${id === 'weekly' ? 'weekly' : 'monthly'} average`}`;
 
-  const stats = el('optStats');
-  if (stats) {
-    // The flip is absent when cumulative gamma never crosses zero inside the
-    // strikes drawn, and saying so beats printing a strike that crossed nothing.
-    stats.innerHTML = `
-      <div class="opt-stat"><span>Spot</span><strong>${strikeLabel(profile.spot)}</strong></div>
-      <div class="opt-stat"><span>Net GEX</span><strong class="${profile.netGex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netGex)}</strong></div>
-      <div class="opt-stat"><span>Net DEX</span><strong class="${profile.netDex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netDex)}</strong></div>
-      <div class="opt-stat"><span>Gamma flip</span><strong>${
-  profile.gammaFlip ? strikeLabel(profile.gammaFlip) : '—'}</strong></div>`;
-  }
-
+/**
+ * The strike profile: gamma and delta across prices, right now.
+ */
+function drawByStrike(profile, gex, dex) {
   const at = spotIndex(profile.strikes, profile.spot);
   const points = (key) => profile.strikes.map((r) => ({
     label: strikeLabel(r.strike), value: r[key],
@@ -292,10 +373,12 @@ export function renderExposure(profile, onPick) {
   const gexPoints = points('gex');
   const dexPoints = points('dex');
 
-  const gex = el('optGex');
-  const dex = el('optDex');
-  if (gex) gex.innerHTML = lineChart({ points: gexPoints, colour: '#e0a13c', markIndex: at, title: 'GEX · Gamma exposure ($)' });
-  if (dex) dex.innerHTML = lineChart({ points: dexPoints, colour: '#4a9ae8', markIndex: at, title: 'DEX · Delta exposure ($)' });
+  gex.innerHTML = lineChart({
+    points: gexPoints, colour: GEX_COLOUR, markIndex: at, title: 'GEX · Gamma exposure ($)',
+  });
+  dex.innerHTML = lineChart({
+    points: dexPoints, colour: DEX_COLOUR, markIndex: at, title: 'DEX · Delta exposure ($)',
+  });
   stampYs(gex, gexPoints);
   stampYs(dex, dexPoints);
 
@@ -314,52 +397,144 @@ export function renderExposure(profile, onPick) {
   });
 }
 
+/**
+ * The same two numbers through time, from the recorded history.
+ *
+ * A curve needs two points, and this history only begins the first day the
+ * panel was opened — so a young record says so plainly rather than drawing a
+ * single dot and letting it look like a flat market.
+ */
+function drawOverTime(profile, gex, dex, id) {
+  const history = profile.history ?? [];
+  const rolled = rollUpExposure(history, id).slice(-grainDef(id).bars);
+
+  if (rolled.length < 2) {
+    const since = history.length ? dayLabel(history[history.length - 1].day) : null;
+    gex.innerHTML = `<div class="cv-empty">${
+  history.length
+    ? `One reading so far, taken ${escapeHtml(since)}. A curve needs two — this fills in a day at a time.`
+    : 'No readings recorded yet. Exposure through time is kept from today onwards.'
+}</div>`;
+    dex.innerHTML = '';
+    return;
+  }
+
+  const note = `${rolled.length} ${id === 'daily' ? 'days' : id === 'weekly' ? 'weeks' : 'months'} recorded`;
+  const gexPoints = rolled.map((r) => ({ label: r.label, value: r.gex }));
+  const dexPoints = rolled.map((r) => ({ label: r.label, value: r.dex }));
+
+  gex.innerHTML = lineChart({
+    points: gexPoints, colour: GEX_COLOUR, markIndex: -1, title: timeTitle('GEX · Net gamma ($)', id), note,
+  });
+  dex.innerHTML = lineChart({
+    points: dexPoints, colour: DEX_COLOUR, markIndex: -1, title: timeTitle('DEX · Net delta ($)', id),
+  });
+  stampYs(gex, gexPoints);
+  stampYs(dex, dexPoints);
+
+  attachHover({
+    host: el('optCharts'),
+    charts: [gex, dex],
+    count: rolled.length,
+    tip: el('optTip'),
+    describe: (i) => {
+      const row = rolled[i];
+      // A week or month is a span, so it is named as one; a day is just itself.
+      const when = row.from === row.to ? row.label : `${dayLabel(row.from)} – ${dayLabel(row.to)}`;
+      return `<div class="tip-head">${escapeHtml(when)}</div>
+        <div class="tip-row"><span>Net GEX</span><strong class="${row.gex >= 0 ? 'is-up' : 'is-down'}">${short(row.gex)}</strong></div>
+        <div class="tip-row"><span>Net DEX</span><strong class="${row.dex >= 0 ? 'is-up' : 'is-down'}">${short(row.dex)}</strong></div>
+        <div class="tip-row"><span>Spot</span><strong>${strikeLabel(row.spot)}</strong></div>${
+  id === 'daily' ? '' : `<div class="tip-row"><span>Readings</span><strong>${row.days}</strong></div>`}`;
+    },
+  });
+}
+
+export function renderExposure(profile, onPick) {
+  const card = el('optionsCard');
+  if (!card) return;
+  card.style.display = profile ? '' : 'none';
+  if (!profile) return;
+  lastProfile = profile;
+  if (onPick) lastPick = onPick;
+
+  const name = el('optMarketName');
+  if (name) name.textContent = profile.label ?? profile.market;
+
+  const picker = el('optPicker');
+  if (picker) {
+    picker.innerHTML = (profile.markets ?? []).map((m) =>
+      `<button class="opt-tab${m.id === profile.market ? ' active' : ''}"
+        data-market="${escapeHtml(m.id)}">${escapeHtml(m.label)}</button>`).join('');
+    picker.onclick = (e) => {
+      const id = e.target?.dataset?.market;
+      if (id) lastPick?.(id);
+    };
+  }
+
+  /**
+   * The time views are only offered where there is a history to draw. Without a
+   * database attached nothing is ever recorded, and a tab that could only ever
+   * say "no readings" is worse than no tab.
+   */
+  const grainPicker = el('optGrain');
+  if (grainPicker) {
+    const offered = profile.history ? VIEWS : VIEWS.slice(0, 1);
+    if (!offered.some((v) => v.id === view)) view = 'strike';
+    grainPicker.innerHTML = offered.length > 1 ? offered.map((v) =>
+      `<button class="opt-tab${v.id === view ? ' active' : ''}"
+        data-view="${v.id}">${escapeHtml(v.label)}</button>`).join('') : '';
+    grainPicker.onclick = (e) => {
+      const id = e.target?.dataset?.view;
+      if (!id || id === view) return;
+      view = id;
+      renderExposure(lastProfile, lastPick);
+    };
+  }
+
+  const stats = el('optStats');
+  if (stats) {
+    // The flip is absent when cumulative gamma never crosses zero inside the
+    // strikes drawn, and saying so beats printing a strike that crossed nothing.
+    stats.innerHTML = `
+      <div class="opt-stat"><span>Spot</span><strong>${strikeLabel(profile.spot)}</strong></div>
+      <div class="opt-stat"><span>Net GEX</span><strong class="${profile.netGex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netGex)}</strong></div>
+      <div class="opt-stat"><span>Net DEX</span><strong class="${profile.netDex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netDex)}</strong></div>
+      <div class="opt-stat"><span>Gamma flip</span><strong>${
+  profile.gammaFlip ? strikeLabel(profile.gammaFlip) : '—'}</strong></div>`;
+  }
+
+  const gex = el('optGex');
+  const dex = el('optDex');
+  if (!gex || !dex) return;
+  if (view === 'strike') drawByStrike(profile, gex, dex);
+  else drawOverTime(profile, gex, dex, view);
+}
+
 /* ── the flows panel ───────────────────────────────────────────────────── */
 
 /** Daily, weekly or monthly. Survives a re-render, like the market does. */
 let grain = 'daily';
 let lastFlows = null;
 
-const GRAINS = [
-  { id: 'daily', label: 'Daily', bars: 30 },
-  { id: 'weekly', label: 'Weekly', bars: 26 },
-  { id: 'monthly', label: 'Monthly', bars: 12 },
-];
-
-/** The Monday of a day's week, which is what a weekly bar is stacked on. */
-function mondayOf(iso) {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-  return d.toISOString().slice(0, 10);
-}
-
 /**
  * Roll daily flows into weeks or months.
  *
  * Summed, not averaged: a week's flow is the money that moved that week, and
- * an average would answer a question nobody asked.
+ * an average would answer a question nobody asked. Exposure is rolled up the
+ * other way — see rollUpExposure.
  */
-function rollUp(flows, id) {
-  if (id === 'daily') return flows.map((f) => ({ label: dayLabel(f.date), value: f.flow }));
-
-  const buckets = new Map();
-  for (const f of flows) {
-    const key = id === 'weekly' ? mondayOf(f.date) : f.date.slice(0, 7);
-    buckets.set(key, (buckets.get(key) ?? 0) + f.flow);
-  }
-
-  return [...buckets.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([key, value]) => ({
-      label: id === 'weekly' ? dayLabel(key) : `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(2, 4)}`,
-      value: +value.toFixed(1),
-    }));
+export function rollUp(flows, id) {
+  return bucket(flows, id, (f) => f.date).map((b) => ({
+    label: b.label,
+    value: +b.rows.reduce((s, f) => s + f.flow, 0).toFixed(1),
+  }));
 }
 
 function drawFlows() {
   const body = el('etfBody');
   if (!body || !lastFlows) return;
-  const grainDef = GRAINS.find((g) => g.id === grain) ?? GRAINS[0];
+  const bars = grainDef(grain).bars;
 
   body.innerHTML = ['BTC', 'ETH'].map((id) => {
     const set = lastFlows[id];
@@ -383,7 +558,7 @@ function drawFlows() {
     const host = el(`etfChart-${id}`);
     if (!set?.flows?.length || !host) continue;
 
-    const rolled = rollUp(set.flows, grain).slice(-grainDef.bars);
+    const rolled = rollUp(set.flows, grain).slice(-bars);
     host.insertAdjacentHTML('afterbegin', columnChart({ points: rolled, title: 'Net flow', note: '$ millions' }));
     // Columns sit in the middle of a slot rather than on a shared edge, so the
     // crosshair has to be placed the same way.

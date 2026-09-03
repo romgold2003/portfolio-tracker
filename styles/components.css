@@ -92,6 +92,8 @@
 /* Options exposure and ETF flows: curves and columns about a zero line. */
 .opt-card,.etf-card{margin-bottom:14px}
 .opt-picker{display:flex;gap:4px}
+/* Market and view sit together on the right, so the label keeps the left. */
+.opt-pickers{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .opt-tab{background:var(--input);border:0.5px solid var(--border2);border-radius:5px;
   padding:4px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit}
 .opt-tab:hover{background:var(--hover2);color:var(--text)}
@@ -111,6 +113,8 @@
 .cv-title{font-size:10px;color:var(--text3);text-transform:uppercase;
   letter-spacing:0.05em;margin-bottom:6px}
 .cv-note{color:var(--text4);margin-left:8px;text-transform:none;letter-spacing:0}
+/* Stands in for a curve while the recorded history is too short to draw one. */
+.cv-empty{color:var(--text3);font-size:12px;line-height:1.6;padding:26px 0;text-align:center}
 .cv-grid{stroke:var(--input);stroke-width:1;vector-effect:non-scaling-stroke}
 .cv-grid.is-zero{stroke:var(--border2)}
 .cv-ytick,.cv-xtick{fill:var(--text4);font-size:9px;font-variant-numeric:tabular-nums}

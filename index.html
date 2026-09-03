@@ -303,11 +303,15 @@
         <div id="econRows"></div>
       </div>
 
-      <!-- Gamma and delta exposure by strike, for whichever market is picked. -->
+      <!-- Gamma and delta exposure for whichever market is picked, read either
+           across strikes or through the recorded daily history. -->
       <div class="card opt-card" id="optionsCard" style="display:none">
         <div class="card-lbl">
           <span>Options exposure — <span id="optMarketName"></span></span>
-          <div class="opt-picker" id="optPicker"></div>
+          <div class="opt-pickers">
+            <div class="opt-picker" id="optPicker"></div>
+            <div class="opt-picker" id="optGrain"></div>
+          </div>
         </div>
         <div class="opt-stats" id="optStats"></div>
         <!-- One readout for both curves: they are the same axis read twice. -->

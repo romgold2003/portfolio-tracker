@@ -8,6 +8,7 @@
 import { fail, methodIs, readCookies } from './_lib/http.js';
 import { userForToken } from './_lib/accounts.js';
 import { fromCboe, fromDeribit } from './_lib/options.js';
+import { trackExposure } from './_lib/exposureHistory.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -51,12 +52,26 @@ export default async function handler(req, res) {
   if (!profile) return fail(res, 503, 'That chain could not be read.');
 
   /**
+   * Today's net exposure is filed before the answer goes out, and the whole
+   * recorded series comes back with it. Nobody sells this history for free, so
+   * the only way to have a curve through time is to keep one — see
+   * _lib/exposureHistory.js. Null where no database is attached, and the panel
+   * then offers the strike profile alone.
+   */
+  const history = await trackExposure(id, profile);
+
+  /**
    * Fifteen minutes. Open interest is struck once a day at the clearing house
    * and the spot it is priced against moves through the session; this is a map
    * of where the pressure sits, not a tape.
+   *
+   * The recording rides on the same cache miss, which is the right frequency:
+   * a day needs one reading, not one per page load.
    */
   res.setHeader('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify({ market: id, label: market.label, markets: MARKET_LIST, ...profile }));
+  res.end(JSON.stringify({
+    market: id, label: market.label, markets: MARKET_LIST, ...profile, history,
+  }));
 }
