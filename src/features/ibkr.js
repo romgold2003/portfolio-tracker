@@ -195,6 +195,33 @@ function readTrades(group) {
   return { closed, commissions, firstBuy };
 }
 
+/**
+ * The broker's own time-weighted return for the period.
+ *
+ * IBKR prints it inside the Net Asset Value section, under a second header of
+ * its own, as a lone percentage on an otherwise empty row. There is no column
+ * to look it up by and the label is in the account's language, so it is found
+ * by shape instead: the only row in that section holding one field that reads
+ * as a percentage.
+ *
+ * Worth having because it is not a number this app can derive. A true
+ * time-weighted return needs the account valued on every day money moved, and
+ * a journal cannot see that — but the broker computed it daily and wrote it
+ * down, and it is the figure their own app shows.
+ */
+function readTimeWeightedReturn(group) {
+  for (const row of group?.rows ?? []) {
+    const fields = row.map(clean).filter(Boolean);
+    if (fields.length !== 1) continue;
+    const match = /^(-?[\d.,]+)\s*%$/.exec(fields[0]);
+    if (match) {
+      const value = num(match[1]);
+      if (Number.isFinite(value)) return value;
+    }
+  }
+  return null;
+}
+
 function readNavCash(group) {
   if (!group?.header) return null;
   const iClass = 0;
@@ -273,22 +300,34 @@ const MONTH_NAMES = [
   ['november', 'novembre'], ['december', 'décembre', 'decembre'],
 ];
 
-function readPeriodStart(groups, fallbackDates) {
+/** "Août 28, 2026" as 2026-08-28, or null if the month is not one we know. */
+function readWrittenDate(text) {
+  const match = /([\p{L}]+)\s+(\d{1,2}),?\s+(\d{4})/u.exec(text);
+  if (!match) return null;
+  const month = MONTH_NAMES.findIndex((names) => names.includes(match[1].toLowerCase()));
+  if (month < 0) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${match[3]}-${pad(month + 1)}-${pad(Number(match[2]))}`;
+}
+
+/**
+ * The days the statement covers.
+ *
+ * The last day matters as much as the first: everything the broker computed is
+ * true up to it and no further, so it is where this app has to take over.
+ */
+function readPeriod(groups, fallbackDates) {
   const statement = groups.get('statement');
   const row = statement?.rows.find((r) => /^period$/i.test(clean(r[0])));
   const text = row ? clean(row[1]) : '';
+  const halves = text.split(/\s+-\s+/);
 
-  const match = text.match(/([\p{L}]+)\s+(\d{1,2}),?\s+(\d{4})/u);
-  if (match) {
-    const month = MONTH_NAMES.findIndex((names) => names.includes(match[1].toLowerCase()));
-    if (month >= 0) {
-      const pad = (n) => String(n).padStart(2, '0');
-      return `${match[3]}-${pad(month + 1)}-${pad(Number(match[2]))}`;
-    }
-  }
-
-  const earliest = fallbackDates.filter(Boolean).sort()[0];
-  return earliest ?? null;
+  const from = readWrittenDate(halves[0] ?? '')
+    ?? fallbackDates.filter(Boolean).sort()[0]
+    ?? null;
+  // A one-day statement writes a single date, which is both ends of it.
+  const to = halves.length > 1 ? readWrittenDate(halves[1]) : from;
+  return { from, to };
 }
 
 /** Totals from the simple income sections. */
@@ -321,10 +360,12 @@ export function parseIbkrStatement(text) {
   const dividends = readTotal(groups.get('dividends'));
   const interest = readTotal(groups.get('interest'));
   const tax = readTotal(groups.get('tax'));
-  const periodStart = readPeriodStart(groups, [
+  const period = readPeriod(groups, [
     ...closed.map((c) => c.close),
     ...flows.map((f) => f.date),
   ]);
+  const periodStart = period.from;
+  const twr = readTimeWeightedReturn(groups.get('nav'));
 
   if (!positions.length && !closed.length) {
     throw new Error('No positions or trades found in that statement.');
@@ -335,6 +376,8 @@ export function parseIbkrStatement(text) {
     closed,
     firstBuy,
     periodStart,
+    periodEnd: period.to,
+    twr,
     cash: cash ?? null,
     flows,
     income: {
@@ -416,8 +459,21 @@ export function statementToJournal(parsed, existing = {}) {
     snapshots: existing.snapshots ?? [],
     cashFlows: parsed.flows,
     income: parsed.income,
+    /**
+     * What the broker says about the window it covered.
+     *
+     * `value` anchors the opening balance so profit falls out of the balance
+     * sheet. `twr` and the closing pair are what let the app report the same
+     * return the broker's own app shows — see accountPerformance.
+     */
     openingNav: parsed.periodStart && parsed.navChange?.startNav != null
-      ? { date: parsed.periodStart, value: parsed.navChange.startNav }
+      ? {
+        date: parsed.periodStart,
+        value: parsed.navChange.startNav,
+        through: parsed.periodEnd ?? null,
+        throughValue: parsed.navChange.endNav ?? null,
+        twr: parsed.twr ?? null,
+      }
       : null,
     apiKey: existing.apiKey ?? '',
   };

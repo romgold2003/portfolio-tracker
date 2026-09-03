@@ -187,9 +187,9 @@ async function renderBenchmark(totals) {
   if (!valEl || !mineEl || !noteEl) return;
 
   const mine = yearToDateReturn(totals);
-  mineEl.textContent = mine == null ? '—' : fp(mine);
-  mineEl.style.color = mine == null ? 'var(--text3)' : clr(mine);
-  mineEl.title = describeOwnYear();
+  mineEl.textContent = mine.returnPct == null ? '—' : fp(mine.returnPct);
+  mineEl.style.color = mine.returnPct == null ? 'var(--text3)' : clr(mine.returnPct);
+  mineEl.title = describeOwnYear(mine);
 
   const clear = () => { noteEl.textContent = ''; noteEl.title = ''; };
 
@@ -248,7 +248,7 @@ function yearToDateReturn(totals) {
     flows: state.cashFlows,
     openingNav: state.openingNav,
     startPrices,
-  }).returnPct;
+  });
 }
 
 /**
@@ -276,15 +276,38 @@ async function loadWindowStartPrices() {
   renderHome();
 }
 
-/** What window your own figure covers, for the tooltip. */
-function describeOwnYear() {
+const longDate = (iso) => new Date(iso).toLocaleDateString('en-GB', {
+  day: 'numeric', month: 'long', year: 'numeric',
+});
+
+/**
+ * What window your own figure covers and how it was worked out, for the
+ * tooltip.
+ *
+ * Naming the method is the point. Two honest ways of measuring a year disagree
+ * by a few points whenever money was paid in, and anyone comparing this against
+ * their broker's app deserves to know which one they are looking at rather than
+ * wondering which is broken.
+ */
+function describeOwnYear(performance) {
+  const year = new Date().getFullYear();
+
+  if (performance?.method === 'broker') {
+    return `Time-weighted return, the same measure your broker reports: ${
+      performance.brokerTwr.toFixed(2)}% from their statement to ${
+      longDate(performance.brokerThrough)}, compounded with this account's move since.`;
+  }
+  if (performance?.method === 'statement') {
+    return `Your return since 1 January ${year}, measured on the money you had at work `
+      + '(Modified Dietz). Import a statement carrying your broker\'s own time-weighted '
+      + 'return to match their figure exactly.';
+  }
+
   const span = trackedSpan();
   if (!span) return '';
-  const janFirst = `${new Date().getFullYear()}-01-01`;
-  if (span.from <= janFirst) return `Your return since 1 January ${new Date().getFullYear()}`;
-  const started = new Date(span.from);
-  const when = started.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  return `Your return since ${when}, when this account started`;
+  const janFirst = `${year}-01-01`;
+  if (span.from <= janFirst) return `Your return since 1 January ${year}`;
+  return `Your return since ${longDate(span.from)}, when this account started`;
 }
 
 /** The first and last day the year's curve actually has data for. */

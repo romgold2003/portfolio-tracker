@@ -403,23 +403,68 @@ export function openingValue(closingValue, pnl, flows = [], from, to) {
 }
 
 /**
+ * Chain the broker's own return with the days since they wrote it.
+ *
+ *   1 + R = (1 + R_broker) * (1 + R_since)
+ *
+ * This is what a time-weighted return is: the compound of the sub-period
+ * returns, each measured on the capital actually at work in it, so that money
+ * arriving or leaving between them changes nothing. That property is the whole
+ * reason it is the industry's measure and the one a broker reports.
+ *
+ * It matters here because a journal cannot compute one itself. A true
+ * time-weighted return needs the account valued on every day money moved, and
+ * this app only knows what it was worth on the days it happened to be open.
+ * The broker did value it daily — and printed the answer on the statement. So
+ * the long stretch is taken from them, and only the stub since their closing
+ * date is measured here, where Modified Dietz over a short window with few
+ * flows is a close approximation rather than a different answer.
+ *
+ * Null when the stub cannot be measured, so the caller falls back rather than
+ * reporting a figure resting on a base it does not have.
+ */
+function chainedFromBroker({ account, openingNav, flows, to }) {
+  const { twr, through, throughValue } = openingNav;
+  if (twr == null || !through || !(throughValue > 0) || through > to) return null;
+
+  const since = flows.filter((f) => f.date > through && f.date <= to);
+  const net = since.reduce((sum, f) => sum + f.amount, 0);
+  const stubPnl = account - throughValue - net;
+  // A statement that closes today has no stub, and the broker's figure stands
+  // on its own.
+  const stub = through === to
+    ? 0
+    : modifiedDietzReturn(stubPnl, throughValue, since, through, to);
+  if (stub == null) return null;
+
+  return ((1 + twr / 100) * (1 + stub / 100) - 1) * 100;
+}
+
+/**
  * How the account did over a window, by the best method the data supports.
  *
- * Two ways of answering, and the difference between them is whether anyone has
- * told the app what the account was actually worth when the window opened.
+ * Three ways of answering, in descending order of how much is actually known.
  *
- * With a statement anchoring that date, the whole thing falls out of the
- * balance sheet: profit is what the account is worth now, less what it was
- * worth then, less the money paid in between — which captures dividends, fees
- * and holdings carried in from earlier years without needing to know anything
- * about them individually. The return is then Modified Dietz, weighting each
- * deposit by how long it was actually present.
+ * Best is when the statement carried the broker's own time-weighted return.
+ * That is the number their app shows, it is computed from daily valuations this
+ * app has never seen, and it is chainable — so it is used for the stretch it
+ * covers and this app measures only the days since.
  *
- * Without one, it falls back to adding up the trades and assuming no money
- * moved. That is the honest best guess from a journal alone, and it understates
- * whenever money was in fact paid in.
+ * Failing that, a statement still anchors what the account was worth when the
+ * window opened, and the whole thing falls out of the balance sheet: profit is
+ * what the account is worth now, less what it was worth then, less the money
+ * paid in between — which captures dividends, fees and holdings carried in from
+ * earlier years without needing to know anything about them individually. The
+ * return is then Modified Dietz, weighting each deposit by how long it was
+ * actually present. That answers a slightly different question — it is the
+ * return on the money you had at work, so it credits you for adding before a
+ * good run — and will read a little above or below the broker accordingly.
  *
- * `method` says which happened, because the two are not the same claim and a
+ * Failing even that, it adds up the trades and assumes no money moved. That is
+ * the honest best guess from a journal alone, and it understates whenever money
+ * was in fact paid in.
+ *
+ * `method` says which happened, because the three are not the same claim and a
  * reader deserves to know which they are looking at.
  */
 export function accountPerformance({
@@ -432,12 +477,17 @@ export function accountPerformance({
       (f.date >= from && f.date <= to) ? sum + f.amount : sum
     ), 0);
     const pnl = account - openingNav.value - net;
+    const chained = chainedFromBroker({ account, openingNav, flows, to });
+
     return {
       pnl,
       startEquity: openingNav.value,
-      returnPct: modifiedDietzReturn(pnl, openingNav.value, flows, from, to),
+      returnPct: chained ?? modifiedDietzReturn(pnl, openingNav.value, flows, from, to),
       carried: 0,
-      method: 'statement',
+      method: chained == null ? 'statement' : 'broker',
+      /** The broker's own figure and the day it runs to, for the tooltip. */
+      brokerTwr: chained == null ? null : openingNav.twr,
+      brokerThrough: chained == null ? null : openingNav.through,
     };
   }
 

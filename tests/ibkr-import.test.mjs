@@ -13,7 +13,16 @@ import { parseIbkrStatement, statementToJournal, describeStatement } from '../sr
 import { state, loadState } from '../src/core/store.js';
 import { accountTotals, accountPerformance, modifiedDietzReturn } from '../src/core/portfolio.js';
 
-const FILE = 'C:/Users/User/OneDrive - Reichman University/Desktop/MULTI_20260101_20260828.csv';
+/**
+ * The statement is personal, so it is not in the repository and these tests
+ * no-op without it. Both places it is normally kept are tried — pointing at one
+ * that had moved is how this whole file came to be passing while asserting
+ * nothing.
+ */
+const FILES = [
+  'C:/Users/User/OneDrive - Reichman University/Desktop/MULTI_20260101_20260828.csv',
+  'C:/Users/User/Downloads/MULTI_20260101_20260828.csv',
+];
 const near = (a, b, tol = 0.01) => Math.abs(a - b) < tol;
 
 /** What IBKR states about this account, from its own summary blocks. */
@@ -33,7 +42,8 @@ const IB = {
 
 let parsed = null;
 before(() => {
-  if (existsSync(FILE)) parsed = parseIbkrStatement(readFileSync(FILE, 'utf8'));
+  const found = FILES.find((f) => existsSync(f));
+  if (found) parsed = parseIbkrStatement(readFileSync(found, 'utf8'));
 });
 const withFile = (fn) => () => {
   if (!parsed) return; // statement not on this machine; nothing to assert
@@ -72,8 +82,31 @@ describe('the parsed statement matches what IBKR states', () => {
     );
   }));
 
-  test('the period start is read from prose in the account language', withFile(() => {
+  test('the period is read from prose in the account language', withFile(() => {
     assert.equal(parsed.periodStart, '2026-01-01');
+    assert.equal(parsed.periodEnd, '2026-08-28');
+  }));
+
+  test("the broker's own time-weighted return is picked up", withFile(() => {
+    // It sits in the Net Asset Value block under a header of its own, as a lone
+    // percentage with no column to look it up by. Without it this app can only
+    // report Modified Dietz, which on this account reads three points high.
+    assert.ok(near(parsed.twr, 28.900517844, 1e-9), `read ${parsed.twr}`);
+  }));
+
+  test('the journal carries it through to the return', withFile(() => {
+    const nav = statementToJournal(parsed).openingNav;
+    assert.equal(nav.through, '2026-08-28');
+    assert.ok(near(nav.throughValue, IB.endNav));
+    assert.ok(near(nav.twr, 28.900517844, 1e-9));
+
+    // Read on the statement's own closing day it must be the broker's figure.
+    const r = accountPerformance({
+      positions: [], account: IB.endNav, from: '2026-01-01', to: '2026-08-28',
+      flows: parsed.flows, openingNav: nav,
+    });
+    assert.equal(r.method, 'broker');
+    assert.ok(near(r.returnPct, 28.900517844, 1e-9), `reported ${r.returnPct}`);
   }));
 });
 
