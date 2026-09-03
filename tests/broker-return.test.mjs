@@ -19,6 +19,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { accountPerformance, modifiedDietzReturn } from '../src/core/portfolio.js';
+import { state, loadState } from '../src/core/store.js';
 
 /**
  * The real statement, to the cent. Interactive Brokers, 1 January to 28 August
@@ -139,5 +140,53 @@ describe('falling back rather than guessing', () => {
       positions: [], account: 46000, from: STATEMENT.from, to: '2026-09-03', flows: [], openingNav: null,
     });
     assert.equal(r.method, 'trades');
+  });
+});
+
+describe('surviving the trip through the vault', () => {
+  test("the broker's figures are not dropped on the way in", () => {
+    // They were. loadState sanitises everything it reads, and the anchor's
+    // sanitiser listed only the opening date and balance — so a freshly
+    // imported statement lost its time-weighted return before anything could
+    // use it, and the app reported Modified Dietz as though none had been read.
+    loadState({
+      positions: [],
+      cash: 0,
+      cashFlows: STATEMENT.flows,
+      openingNav: openingNav(),
+    });
+
+    assert.equal(state.openingNav.through, STATEMENT.to);
+    assert.ok(Math.abs(state.openingNav.throughValue - STATEMENT.endNav) < 1e-9);
+    assert.ok(Math.abs(state.openingNav.twr - STATEMENT.twr) < 1e-9);
+
+    const r = accountPerformance({
+      positions: [], account: STATEMENT.endNav, from: STATEMENT.from, to: STATEMENT.to,
+      flows: state.cashFlows, openingNav: state.openingNav,
+    });
+    assert.equal(r.method, 'broker');
+  });
+
+  test('a malformed closing end is left off rather than trusted', () => {
+    loadState({
+      positions: [],
+      cash: 0,
+      openingNav: openingNav({ through: 'last Tuesday', throughValue: -5, twr: 'lots' }),
+    });
+    const nav = state.openingNav;
+    assert.equal(nav.date, STATEMENT.from, 'the anchor itself still stands');
+    assert.equal(nav.through, undefined);
+    assert.equal(nav.throughValue, undefined);
+    assert.equal(nav.twr, undefined);
+  });
+
+  test('a return of exactly zero is a figure, not a missing one', () => {
+    loadState({ positions: [], cash: 0, openingNav: openingNav({ twr: 0 }) });
+    assert.equal(state.openingNav.twr, 0);
+  });
+
+  test('an anchor with no opening balance is still refused entirely', () => {
+    loadState({ positions: [], cash: 0, openingNav: { date: 'nonsense', value: 10 } });
+    assert.equal(state.openingNav, null);
   });
 });

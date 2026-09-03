@@ -95,7 +95,14 @@ describe('the parsed statement matches what IBKR states', () => {
   }));
 
   test('the journal carries it through to the return', withFile(() => {
-    const nav = statementToJournal(parsed).openingNav;
+    /**
+     * Loaded through the store, not read straight off the parser. The first
+     * version of this test took the object the importer returns and never
+     * noticed that loading it dropped three of its fields on the way in — so
+     * the app went on reporting the old figure while this passed.
+     */
+    loadState(statementToJournal(parsed));
+    const nav = state.openingNav;
     assert.equal(nav.through, '2026-08-28');
     assert.ok(near(nav.throughValue, IB.endNav));
     assert.ok(near(nav.twr, 28.900517844, 1e-9));
@@ -103,7 +110,7 @@ describe('the parsed statement matches what IBKR states', () => {
     // Read on the statement's own closing day it must be the broker's figure.
     const r = accountPerformance({
       positions: [], account: IB.endNav, from: '2026-01-01', to: '2026-08-28',
-      flows: parsed.flows, openingNav: nav,
+      flows: state.cashFlows, openingNav: nav,
     });
     assert.equal(r.method, 'broker');
     assert.ok(near(r.returnPct, 28.900517844, 1e-9), `reported ${r.returnPct}`);
@@ -141,10 +148,14 @@ describe('the journal it builds', () => {
       flows: state.cashFlows,
       openingNav: state.openingNav,
     });
-    assert.equal(perf.method, 'statement', 'should use the stated opening balance');
+    // Either anchored method is right here; what must not happen is falling
+    // back to counting the trades and assuming no money moved.
+    assert.notEqual(perf.method, 'trades', 'should use the stated opening balance');
     // IBKR's own "Total P&L for the period" is 10,334.02.
     assert.ok(near(perf.pnl, 10334.02, 6), `year P&L ${perf.pnl}`);
-    assert.ok(perf.returnPct > 25 && perf.returnPct < 40, `return ${perf.returnPct}`);
+    // Read on the statement's closing day, it is the broker's own return.
+    assert.equal(perf.method, 'broker');
+    assert.ok(near(perf.returnPct, 28.900517844, 1e-9), `return ${perf.returnPct}`);
   }));
 
   test('leaves the recorded account curve alone', withFile(() => {

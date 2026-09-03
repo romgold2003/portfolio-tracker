@@ -61,11 +61,38 @@ function sanitizeFlows(list) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** A stated account value on a date, or null. */
+/**
+ * What a statement stated about the window it covered, or null.
+ *
+ * The opening date and balance are what make it an anchor and are required.
+ * The three fields after them describe the closing end — the day the broker's
+ * figures run to, the balance there, and the time-weighted return they computed
+ * — and each is admitted only if it is well formed, because a half-read
+ * statement should fall back to measuring the year rather than chain onto a
+ * number that is not there.
+ *
+ * Dropping unknown keys is the right default for anything coming out of a
+ * vault, but this list has to be kept in step with what the importer produces:
+ * omitting the closing fields here silently threw away the broker's own return
+ * on load, and the app went on reporting Modified Dietz as though the statement
+ * had never carried one.
+ */
 function sanitizeAnchor(value) {
   const amount = Number(value?.value);
   const ok = typeof value?.date === 'string' && DATE_ONLY.test(value.date) && Number.isFinite(amount);
-  return ok ? { date: value.date, value: amount } : null;
+  if (!ok) return null;
+
+  const anchor = { date: value.date, value: amount };
+
+  if (typeof value.through === 'string' && DATE_ONLY.test(value.through)) {
+    anchor.through = value.through;
+  }
+  const closing = Number(value.throughValue);
+  if (Number.isFinite(closing) && closing > 0) anchor.throughValue = closing;
+  const twr = Number(value.twr);
+  if (value.twr != null && Number.isFinite(twr)) anchor.twr = twr;
+
+  return anchor;
 }
 
 function sanitizeIncome(value) {
