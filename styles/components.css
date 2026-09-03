@@ -156,24 +156,35 @@
 /* Economic releases: name, when, forecast, previous. */
 .econ-card{margin-bottom:14px}
 .econ-src{font-size:10px;color:var(--text4);text-transform:none;letter-spacing:0}
-.econ-grid{display:grid;grid-template-columns:minmax(0,1fr) 62px 84px 84px;
+/* Release, what it printed, when it is due, forecast, previous. */
+.econ-grid{display:grid;grid-template-columns:minmax(0,1fr) 84px 62px 84px 84px;
   align-items:center;gap:0;padding:9px 2px}
 .econ-head{font-size:10px;color:var(--text3);text-transform:uppercase;
   letter-spacing:0.04em;padding-bottom:6px}
-.econ-head div:nth-child(n+3),.econ-val{text-align:right}
-.econ-head div:nth-child(2),.econ-date{text-align:center}
+.econ-head div:nth-child(2),.econ-head div:nth-child(n+4),.econ-val{text-align:right}
+.econ-head div:nth-child(3),.econ-date{text-align:center}
 .econ-row{border-top:0.5px solid var(--input);font-size:13px}
 /* A release already out this week is dimmed; the ones still to come are lit. */
 .econ-row .econ-name{color:var(--text);font-weight:600}
 .econ-row.is-done .econ-name{color:var(--text3);font-weight:400}
 .econ-row.is-done .econ-val{color:var(--text3)}
+/* The figure that printed keeps its weight after the day it printed on: it is
+   the one number on a past row still worth reading. */
+.econ-row.is-done .econ-actual{color:var(--text2)}
 .econ-date{font-size:11px;color:var(--text3)}
 .econ-val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--text)}
+.econ-actual strong{font-weight:600}
+/* Which side of the forecast it came in on. Uncoloured on purpose — a fall in
+   jobless claims is good news and a fall in GDP is not. */
+.econ-vs{color:var(--text4);font-size:8px;margin-left:5px;vertical-align:1px}
 .econ-prev{color:var(--text3)}
 .econ-flag{color:var(--amber);font-size:9px;margin-left:6px;vertical-align:1px}
+/* On a phone the due date goes — the week is the card's own heading — and the
+   three figures give back what the fourth column took, so the release still
+   has room for its name. */
 @media (max-width:640px){
-  .econ-grid{grid-template-columns:minmax(0,1fr) 0 70px 70px}
-  .econ-date,.econ-head div:nth-child(2){display:none}
+  .econ-grid{grid-template-columns:minmax(0,1fr) 64px 0 64px 64px}
+  .econ-date,.econ-head div:nth-child(3){display:none}
 }
 
 /* Positions page summary tiles */

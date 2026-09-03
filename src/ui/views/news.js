@@ -72,14 +72,45 @@ function shortDate(iso) {
   return `${d} ${MONTHS_LONG[m - 1].slice(0, 3)}`;
 }
 
+/** "205K", "-0.3%", "-89.4B" as a number, so two of them can be compared. */
+function figure(text) {
+  const m = /^(-?[\d.]+)\s*([KMB])?/i.exec(String(text ?? '').trim());
+  if (!m) return null;
+  const value = Number(m[1]);
+  if (!Number.isFinite(value)) return null;
+  const scale = { K: 1e3, M: 1e6, B: 1e9 }[(m[2] || '').toUpperCase()] ?? 1;
+  return value * scale;
+}
+
 /**
- * This week's releases, forecast against previous, in the order they land.
+ * What a release printed, once it has.
  *
- * The two figures are the whole point: what the market is braced for, and what
- * it was last time. Whether the gap between them matters is the reader's
- * judgement, not the panel's, so nothing here colours or ranks them.
+ * The caret says which side of the forecast it came in on and nothing more. It
+ * is deliberately not coloured green or red: a fall in jobless claims is good
+ * news and a fall in GDP is not, so a column that judged every surprise the
+ * same way would be wrong about half of them.
  */
-function renderEconPanel(data) {
+function actualCell(r) {
+  if (!r.actual) return '—';
+  const actual = figure(r.actual);
+  const forecast = figure(r.forecast);
+  const arrow = actual != null && forecast != null && actual !== forecast
+    ? `<span class="econ-vs" title="${actual > forecast ? 'Above' : 'Below'} forecast ${
+      escapeHtml(r.forecast)}">${actual > forecast ? '▲' : '▼'}</span>`
+    : '';
+  return `<strong>${escapeHtml(r.actual)}</strong>${arrow}`;
+}
+
+/**
+ * This week's releases, in the order they land: what printed, when it is due,
+ * what was expected, and what it was last time.
+ *
+ * Those figures are the whole point. Whether the gap between any two of them
+ * matters is the reader's judgement, not the panel's, so nothing here colours
+ * or ranks them. A release still to come has a dash where its figure will go,
+ * and one already out keeps that figure for the rest of the week.
+ */
+export function renderEconPanel(data) {
   const card = el('econCard');
   const rows = el('econRows');
   if (!card || !rows) return;
@@ -94,12 +125,13 @@ function renderEconPanel(data) {
   // card that looks like something failed to load.
   rows.innerHTML = releases.length
     ? `<div class="econ-head econ-grid">
-         <div>Release</div><div>Due</div><div>Forecast</div><div>Previous</div>
+         <div>Release</div><div>Actual</div><div>Due</div><div>Forecast</div><div>Previous</div>
        </div>` + releases.map((r) => {
       const done = r.date && r.date < today;
       return `<div class="econ-row econ-grid${done ? ' is-done' : ''}">
         <div class="econ-name">${escapeHtml(r.label)}${
   r.impact === 'High' ? '<span class="econ-flag" title="High impact">●</span>' : ''}</div>
+        <div class="econ-val econ-actual">${actualCell(r)}</div>
         <div class="econ-date">${shortDate(r.date)}</div>
         <div class="econ-val">${escapeHtml(r.forecast ?? '—')}</div>
         <div class="econ-val econ-prev">${escapeHtml(r.previous ?? '—')}</div>
