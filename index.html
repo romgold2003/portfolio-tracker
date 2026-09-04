@@ -398,6 +398,12 @@
         </div>
       </div>
     </div>
+
+    <!-- Which build is actually running. Stamped by scripts/build-standalone.mjs
+         at deploy; left as a dash when the page is served straight from source.
+         It is here because "I fixed that" and "it still does it" have crossed
+         more than once, and the difference was a tab that had never reloaded. -->
+    <p class="build-stamp">Build <span id="buildStamp">—</span></p>
   </div>
 </div>
 

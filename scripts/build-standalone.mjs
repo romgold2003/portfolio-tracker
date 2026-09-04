@@ -83,7 +83,7 @@ async function build() {
     bundleApp(),
   ]);
 
-  const out = html
+  let out = html
     // The four <link> tags become one inline stylesheet.
     .replace(
       /<!-- Stylesheets[\s\S]*?<link rel="stylesheet" href="styles\/components\.css">/,
@@ -109,6 +109,24 @@ async function build() {
   if (leftovers.length) {
     throw new Error(`Inlining missed: ${leftovers.map(([, what]) => what).join(', ')}`);
   }
+
+  /**
+   * Stamp the build so a running page can say which one it is.
+   *
+   * The commit and the day it was built, nothing else. This exists because
+   * "that is fixed" and "it still does it" have crossed more than once, and
+   * every time the answer was a tab holding JavaScript from an earlier deploy
+   * — which nothing on screen could have told either of us.
+   *
+   * Falls back to the date alone outside a git checkout, so a build never
+   * fails for want of it.
+   */
+  let commit = '';
+  try {
+    commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch { /* not a checkout, or no git; the date alone still identifies it */ }
+  const stamp = [commit, new Date().toISOString().slice(0, 10)].filter(Boolean).join(' · ');
+  out = out.replace('<span id="buildStamp">—</span>', `<span id="buildStamp">${stamp}</span>`);
 
   await mkdir(dirname(OUT_FILE), { recursive: true });
   await writeFile(OUT_FILE, out, 'utf8');

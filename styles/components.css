@@ -593,3 +593,8 @@ body:has(.recovery-banner) .shell{padding-top:74px}
    readily than dark ones, so the same alpha is not the same presence. */
 :root{--wave-strength:0.58}
 body.light{--wave-strength:0.34}
+
+/* Which build is running. Deliberately quiet — it is only ever read when
+   something on screen disagrees with what it should be. */
+.build-stamp{margin:18px 0 0;font-size:10px;color:var(--text4);text-align:right;
+  font-variant-numeric:tabular-nums}
