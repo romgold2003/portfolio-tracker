@@ -167,29 +167,44 @@ export async function fetchActuals(releases, { fetchImpl = fetch, now = new Date
     const key = String(r.id).split(':')[0];
     const series = SERIES[key];
     if (!series || !r.previous) continue;
-    wanted.set(`${series.id}|${series.transform}`, series);
+    wanted.set(key, series);
   }
   if (!wanted.size) return new Map();
 
-  const results = await Promise.allSettled([...wanted].map(async ([key, series]) => {
-    const res = await fetchImpl(seriesUrl(series, now), {
+  // One request per series-and-transformation, not per row: CPI month-on-month
+  // and year-on-year are two rows of the panel but one id under two of them.
+  const byUrl = new Map();
+  for (const series of wanted.values()) byUrl.set(seriesUrl(series, now), series);
+
+  const results = await Promise.allSettled([...byUrl.keys()].map(async (url) => {
+    const res = await fetchImpl(url, {
       headers: { 'User-Agent': 'portfolio-tracker', Accept: 'text/csv' },
     });
-    if (!res.ok) throw new Error(`FRED ${series.id} answered ${res.status}`);
-    return [key, parseSeries(await res.text())];
+    if (!res.ok) throw new Error(`FRED answered ${res.status}`);
+    return [url, parseSeries(await res.text())];
   }));
 
-  const bySeries = new Map();
-  for (const r of results) if (r.status === 'fulfilled') bySeries.set(r.value[0], r.value[1]);
-  return bySeries;
+  const fetched = new Map();
+  for (const r of results) if (r.status === 'fulfilled') fetched.set(r.value[0], r.value[1]);
+
+  /**
+   * Keyed by watchlist id rather than by anything FRED-shaped, so this and the
+   * BLS reader hand back the same kind of thing and one can simply replace the
+   * other where it is faster.
+   */
+  const out = new Map();
+  for (const [key, series] of wanted) {
+    const rows = fetched.get(seriesUrl(series, now));
+    if (rows?.length) out.set(key, { rows, unit: series.unit, freq: series.freq });
+  }
+  return out;
 }
 
 /** Put the printed figure on each release the check clears. */
 export function attachActuals(releases, bySeries) {
   return releases.map((r) => {
-    const series = SERIES[String(r.id).split(':')[0]];
-    const rows = series && bySeries.get(`${series.id}|${series.transform}`);
-    const hit = rows ? actualFor(rows, r, series.unit, series.freq) : null;
+    const found = bySeries.get(String(r.id).split(':')[0]);
+    const hit = found ? actualFor(found.rows, r, found.unit, found.freq) : null;
     return { ...r, actual: hit?.actual ?? null, observed: hit?.observed ?? null };
   });
 }

@@ -13,7 +13,12 @@ import { cloudEnabled } from './cloud.js';
  * Short enough that the panel turns over promptly when the week does, long
  * enough that opening the page repeatedly is not a request each time.
  */
-const CACHE_MS = 15 * 60 * 1000;
+/**
+ * Two minutes. A release prints at half past the hour and the panel is watched
+ * for it — a quarter of an hour of holding the previous answer was most of why
+ * a figure took so long to appear.
+ */
+const CACHE_MS = 2 * 60 * 1000;
 
 let cache = { at: 0, week: null };
 

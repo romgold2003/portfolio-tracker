@@ -19,6 +19,7 @@ import { fail, methodIs, readCookies } from './_lib/http.js';
 import { userForToken } from './_lib/accounts.js';
 import { selectReleases, orderReleases, weekOf } from './_lib/econ.js';
 import { fetchActuals, attachActuals } from './_lib/fred.js';
+import { fetchActuals as fetchBls } from './_lib/bls.js';
 
 const SESSION_COOKIE = 'pt_session';
 const FEED = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
@@ -47,23 +48,37 @@ export default async function handler(req, res) {
    * nothing else. The schedule is the panel's first job and it is already in
    * hand by this point.
    */
+  /**
+   * BLS first, FRED behind it.
+   *
+   * FRED republishes rather than publishes, and the delay is real: the August
+   * unemployment rate printed at 08:30 and FRED still had July half an hour
+   * later, while BLS had it at once. So whatever BLS owns comes from BLS, and
+   * FRED covers the rest — claims, retail sales, GDP — and stands in wherever
+   * BLS could not answer.
+   */
   let releases = scheduled;
   try {
-    releases = attachActuals(scheduled, await fetchActuals(scheduled));
+    const [fred, bls] = await Promise.all([
+      fetchActuals(scheduled),
+      fetchBls(scheduled),
+    ]);
+    releases = attachActuals(scheduled, new Map([...fred, ...bls]));
   } catch (err) {
     console.error('Release figures unavailable:', err);
   }
 
   /**
-   * Fifteen minutes. The week's schedule is fixed on Monday and the forecasts
-   * within it are revised in days, but a release prints at half past the hour
-   * and should not then wait an hour to be seen. FRED's own lag behind the
-   * agencies is the larger part of the delay either way.
+   * Two minutes.
    *
-   * It is worth being explicit that this does not delay the Monday rollover:
-   * the cache is fifteen minutes old at worst, and the week turns at midnight.
+   * The week's schedule is fixed on Monday and its forecasts are revised in
+   * days, so this is not about them — it is about the half-hour after 08:30,
+   * when a figure has printed and the panel is being watched for it. Fifteen
+   * minutes here plus fifteen in the browser meant a number could be half an
+   * hour old before it was ever drawn, on top of whatever the source itself
+   * took. That was the larger part of the delay and it was ours.
    */
-  res.setHeader('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=3600');
+  res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify({
