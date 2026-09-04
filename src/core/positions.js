@@ -38,7 +38,15 @@ function spendCash(amount) {
   saveCash();
 }
 
-export function addPosition({ ticker, cls, dir, open, entry, amount, reason, sector }) {
+/**
+ * `qty` is taken when given and derived when not.
+ *
+ * The form can be filled either way round — cash spent, or shares bought — and
+ * whichever was typed is the one that must survive. Deriving the share count
+ * from the amount regardless would quietly round a stated "3 shares" into
+ * 2.99999 the moment the amount was itself derived from it.
+ */
+export function addPosition({ ticker, cls, dir, open, entry, amount, qty, reason, sector }) {
   const position = {
     id: newId(),
     ticker,
@@ -48,7 +56,7 @@ export function addPosition({ ticker, cls, dir, open, entry, amount, reason, sec
     close: null,
     entry,
     cur: entry,
-    qty: amount / entry,
+    qty: Number.isFinite(qty) && qty > 0 ? qty : amount / entry,
     amount,
     status: 'Open',
     reason: reason || null,

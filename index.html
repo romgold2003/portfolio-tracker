@@ -209,8 +209,21 @@
           </div>
           <div class="fg"><label>Sector</label><select id="f-sector"><option value="">Auto — from ticker</option></select></div>
           <div class="fg" id="f-openDateWrap"><label>Date opened</label><input type="date" id="f-date"></div>
-          <div class="fg" id="f-entryWrap"><label>Entry price ($)</label><input type="number" id="f-entry" step="any" placeholder="0.00"></div>
-          <div class="fg" id="f-amountWrap"><label>Amount invested ($)</label><input type="number" id="f-amount" step="any" placeholder="1000"></div>
+          <div class="fg" id="f-entryWrap"><label>Entry price ($)</label><input type="number" id="f-entry" step="any" placeholder="0.00" oninput="updateSizeHint()"></div>
+          <!-- Size the position either way: what you spent, or what you bought.
+               Whichever is not typed is worked out from the entry price and
+               shown under the field. -->
+          <div class="fg" id="f-amountWrap">
+            <div class="fg-head">
+              <label for="f-amount" id="f-sizeLabel">Amount invested ($)</label>
+              <div class="size-toggle" id="f-sizeToggle">
+                <button type="button" class="size-opt active" data-size="amount" onclick="setSizeMode('amount')">Amount</button>
+                <button type="button" class="size-opt" data-size="qty" onclick="setSizeMode('qty')">Shares</button>
+              </div>
+            </div>
+            <input type="number" id="f-amount" step="any" placeholder="1000" oninput="updateSizeHint()">
+            <div class="ticker-status muted" id="f-sizeHint"></div>
+          </div>
           <div class="fg" style="grid-column:1/-1">
             <label class="closed-check">
               <input type="checkbox" id="f-closed" onchange="toggleClosedTrade()">
@@ -228,7 +241,7 @@
             <textarea id="f-reason" placeholder="Why are you entering this trade? Setup, thesis, key levels…" style="min-height:80px;resize:vertical;font-size:13px;padding:9px 11px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);font-family:inherit;width:100%;outline:none"></textarea>
           </div>
         </div>
-        <div class="hint">Quantity is calculated from amount ÷ entry price. Current price auto-fills live from the feed once saved.</div>
+        <div class="hint">Size the trade by what you spent or by how many shares you bought — the other follows from the entry price. Current price auto-fills live from the feed once saved.</div>
         <div class="btn-row">
           <button class="btn" onclick="clearForm()">Clear</button>
           <button class="btn btn-blue" onclick="addPos()">Save trade</button>

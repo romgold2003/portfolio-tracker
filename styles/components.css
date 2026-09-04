@@ -640,3 +640,12 @@ body.light{--wave-strength:0.34}
 .gam-count{margin-left:6px;font-variant-numeric:tabular-nums;color:var(--text4)}
 /* A subject with nothing in it at this size stays pressable, just quieter. */
 .opt-tab.is-empty{opacity:0.45}
+
+/* New-trade form: size the position by cash or by share count. */
+.fg-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.size-toggle{display:flex;gap:2px;background:var(--input);border:0.5px solid var(--border2);
+  border-radius:5px;padding:2px}
+.size-opt{background:transparent;border:0;border-radius:3px;padding:3px 9px;font-size:10px;
+  color:var(--text3);cursor:pointer;font-family:inherit}
+.size-opt:hover{color:var(--text)}
+.size-opt.active{background:var(--blue-bg);color:var(--blue)}

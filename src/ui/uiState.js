@@ -10,6 +10,8 @@ export const ui = {
   timeframe: '3M',
   /** Direction selected in the new-trade form. */
   formDirection: 'Long',
+  /** Whether the new-trade form is sized by cash spent or by share count. */
+  formSizeMode: 'amount',
   /** Expanded position card id, or null. */
   expandedId: null,
   /** Expanded trade row in the monthly detail table, or null. */

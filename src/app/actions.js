@@ -35,6 +35,7 @@ import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
   setDirection, readTradeForm, clearTradeForm, setTickerStatus, applyTickerLookup,
+  setSizeMode as applySizeMode, updateSizeHint as refreshSizeHint,
   toggleClosedTrade,
 } from '../ui/views/addTrade.js';
 import { renderCurve } from '../ui/charts.js';
@@ -137,8 +138,12 @@ export function addPos() {
     return;
   }
 
+  // Both are derived from whichever was typed, so either being absent means the
+  // same thing — but the message has to name the field actually on screen.
   if (!form.entry || !form.amount) {
-    alert('Entry price and amount invested are required.');
+    alert(ui.formSizeMode === 'qty'
+      ? 'Entry price and number of shares are required.'
+      : 'Entry price and amount invested are required.');
     return;
   }
 
@@ -499,6 +504,8 @@ export function setTimeframe(tf) {
 
 export function setDir(direction) { setDirection(direction); }
 export function clearForm() { clearTradeForm(); }
+export function setSizeMode(mode) { applySizeMode(mode); }
+export function updateSizeHint() { refreshSizeHint(); }
 
 // ─── Voice helpers ───────────────────────────────────────────────
 // Small wrappers so the voice grammar can talk in intents rather than DOM ids.
@@ -583,7 +590,8 @@ export function installActions(extra = {}) {
     show, toggleTheme, toggleVoice, toggleAmounts,
     openSettings, closeSettings, saveApiKey,
     // trades
-    addPos, clearForm, setDir, checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
+    addPos, clearForm, setDir, setSizeMode, updateSizeHint,
+    checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
     // panels
     toggleExpand, toggleEdit, toggleDca, toggleClose,
     // dca & close
