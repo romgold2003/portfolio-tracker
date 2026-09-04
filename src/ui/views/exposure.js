@@ -53,13 +53,56 @@ const grainDef = (id) => GRAINS.find((g) => g.id === id) ?? GRAINS[0];
  * anything at all.
  */
 const FRAMES = [
-  { id: '1h', label: '1H', ms: 3600e3, bars: 48 },
-  { id: '4h', label: '4H', ms: 4 * 3600e3, bars: 42 },
-  { id: '1d', label: '1D', ms: 24 * 3600e3, bars: 60 },
-  { id: '1w', label: '1W', ms: 7 * 24 * 3600e3, bars: 52 },
+  { id: '1h', label: '1H', ms: 3600e3 },
+  { id: '4h', label: '4H', ms: 4 * 3600e3 },
+  { id: '1d', label: '1D', ms: 24 * 3600e3 },
+  { id: '1w', label: '1W', ms: 7 * 24 * 3600e3 },
 ];
 
 const frameDef = (id) => FRAMES.find((f) => f.id === id) ?? FRAMES[0];
+
+/**
+ * How far back to look, which is a separate question from how wide a bar is.
+ *
+ * A chart needs both and they are usually confused: 1D is a bar a day, 1M is a
+ * month of them. Keeping them apart is what lets a month be read in daily bars
+ * or in four-hour ones without a tab for every combination.
+ */
+const RANGES = [
+  { id: '7d', label: '7D', days: 7 },
+  { id: '1m', label: '1M', days: 30 },
+  { id: '3m', label: '3M', days: 91 },
+  { id: '6m', label: '6M', days: 182 },
+  { id: '1y', label: '1Y', days: 365 },
+  { id: '5y', label: '5Y', days: 1826 },
+  { id: 'all', label: 'All', days: Infinity },
+];
+
+const rangeDef = (id) => RANGES.find((r) => r.id === id) ?? RANGES[1];
+
+/**
+ * The most points worth drawing across 900 units of viewBox.
+ *
+ * Past this they are closer together than the stroke is wide, so the curve
+ * stops gaining detail and starts costing legibility.
+ */
+const MAX_BARS = 400;
+
+/**
+ * The finest bar size that draws a range without overrunning the plot.
+ *
+ * A year of hourly bars is nine thousand points on a chart nine hundred wide,
+ * so asking for it has to mean something rather than nothing. Real charts
+ * silently coarsen; this one coarsens and then says it did, in the note above
+ * the curve.
+ */
+function fittingFrame(wanted, spanMs) {
+  const from = FRAMES.findIndex((f) => f.id === wanted);
+  for (let i = Math.max(0, from); i < FRAMES.length; i++) {
+    if (spanMs / FRAMES[i].ms <= MAX_BARS) return FRAMES[i];
+  }
+  return FRAMES[FRAMES.length - 1];
+}
 
 /** The Monday of a day's week, which is what a weekly bucket is stacked on. */
 function mondayOf(iso) {
@@ -397,6 +440,8 @@ const DEX_COLOUR = '#4a9ae8';
  * re-render, like the market does.
  */
 let view = 'strike';
+/** How far back the time views look. Separate from the bar size. */
+let range = '1m';
 let lastProfile = null;
 let lastPick = null;
 
@@ -494,16 +539,29 @@ function remaining(bar, id) {
  * was opened — so a young one says so plainly rather than drawing a single dot
  * and letting it read as a flat market.
  */
-function drawOverTime(profile, gex, dex, id) {
-  const history = profile.history ?? [];
-  const rolled = rollUpExposure(history, id).slice(-frameDef(id).bars);
+function drawOverTime(profile, gex, dex, wanted) {
+  const all = profile.history ?? [];
+  const span = rangeDef(range);
+
+  // Everything recorded, when the range is "All" or reaches past the record.
+  const oldest = all.length ? Date.parse(all[0].at) : Date.now();
+  const cutoff = span.days === Infinity ? oldest : Date.now() - span.days * 86400e3;
+  const history = all.filter((r) => Date.parse(r.at) >= cutoff);
+
+  const covered = history.length
+    ? Date.now() - Date.parse(history[0].at)
+    : span.days * 86400e3;
+  const frame = fittingFrame(wanted, Math.min(covered, (span.days ?? 0) * 86400e3 || covered));
+  const id = frame.id;
+  const rolled = rollUpExposure(history, id).slice(-MAX_BARS);
 
   if (rolled.length < 2) {
     gex.innerHTML = `<div class="cv-empty">${
-  history.length
-    ? `Only ${history.length === 1 ? 'one reading' : `${history.length} readings`} so far, all inside
-       the same ${escapeHtml(frameDef(id).label)} bar. A curve needs two bars — try a shorter
-       timeframe, or leave this open.`
+  all.length
+    ? `Only ${all.length === 1 ? 'one reading' : `${all.length} readings`} recorded, and
+       ${history.length === all.length ? 'they do not' : 'the ones inside this range do not'}
+       yet span two ${escapeHtml(frame.label)} bars. A curve needs two — try a shorter
+       timeframe, a wider range, or leave this open.`
     : 'Nothing recorded yet. Exposure through time is kept from the first time this is opened.'
 }</div>`;
     dex.innerHTML = '';
@@ -512,7 +570,12 @@ function drawOverTime(profile, gex, dex, id) {
 
   const last = rolled[rolled.length - 1];
   const left = remaining(last, id);
-  const note = `${rolled.length} bars${left ? ` · last one closes in ${left}` : ''}`;
+  const note = [
+    `${rolled.length} bars`,
+    // Only worth saying when it is not what was asked for.
+    id === wanted ? null : `${frame.label} bars — ${frameDef(wanted).label} is too fine for ${span.label}`,
+    left ? `last one closes in ${left}` : null,
+  ].filter(Boolean).join(' · ');
   const gexPoints = rolled.map((r) => ({ label: r.label, value: r.gex }));
   const dexPoints = rolled.map((r) => ({ label: r.label, value: r.dex }));
 
@@ -581,6 +644,25 @@ export function renderExposure(profile, onPick) {
       const id = e.target?.dataset?.view;
       if (!id || id === view) return;
       view = id;
+      renderExposure(lastProfile, lastPick);
+    };
+  }
+
+  /**
+   * How far back to look. Only meaningful once a bar size is chosen, so it is
+   * hidden on the strike profile, which has no time axis at all.
+   */
+  const rangePicker = el('optRange');
+  if (rangePicker) {
+    const showing = view !== 'strike' && profile.history;
+    rangePicker.style.display = showing ? '' : 'none';
+    rangePicker.innerHTML = showing ? RANGES.map((r) =>
+      `<button class="opt-tab${r.id === range ? ' active' : ''}"
+        data-range="${r.id}">${escapeHtml(r.label)}</button>`).join('') : '';
+    rangePicker.onclick = (e) => {
+      const id = e.target?.dataset?.range;
+      if (!id || id === range) return;
+      range = id;
       renderExposure(lastProfile, lastPick);
     };
   }

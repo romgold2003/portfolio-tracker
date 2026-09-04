@@ -71,8 +71,26 @@ export function readingSlot(now = new Date()) {
   return `${new Date(floored).toISOString().slice(0, 19)}Z`;
 }
 
-/** How long readings are kept. Enough for a year of weekly bars. */
-const KEEP_DAYS = 400;
+/**
+ * Readings are thinned as they age rather than deleted.
+ *
+ * Five-minute resolution is what an hourly bar needs and it is worthless to a
+ * weekly one, but kept at full resolution forever it would be 288 rows a day
+ * per market — half a million rows to draw a five-year chart out of two
+ * hundred and sixty points.
+ *
+ * So recent days keep everything, the weeks behind them keep one reading an
+ * hour, and everything older keeps one a day. A five-year history then costs
+ * about six thousand rows per market, and every timeframe still has more
+ * readings behind each of its bars than it can draw.
+ */
+const TIERS = [
+  { after: 7, groupBy: 13 },   // beyond a week: one an hour  (…T14)
+  { after: 90, groupBy: 10 },  // beyond a quarter: one a day (…-03)
+];
+
+/** Nothing is dropped for age; only thinned. "All" is meant to mean all. */
+const KEEP_DAYS = 366 * 10;
 
 export async function recordReading(market, profile, now = new Date()) {
   await ensureTable();
@@ -101,10 +119,37 @@ export async function recordReading(market, profile, now = new Date()) {
   return at;
 }
 
-/** Drop what has aged out. Cheap, and only ever removes whole old slots. */
+const daysBefore = (now, days) => new Date(now.getTime() - days * 86400e3).toISOString();
+
+/**
+ * Thin the older readings and drop anything past the retention window.
+ *
+ * The kept row in each group is the earliest, which makes this stable: running
+ * it twice changes nothing, because the survivor of a group is still that
+ * group's minimum the second time round.
+ *
+ * `groupBy` is a prefix length over the ISO stamp — 13 characters is
+ * "2026-09-03T14", an hour; 10 is "2026-09-03", a day. Both substr and MIN are
+ * plain SQL, so SQLite in the tests does the same thing Postgres does in
+ * production.
+ */
 async function prune(market, now = new Date()) {
-  const cutoff = new Date(now.getTime() - KEEP_DAYS * 86400e3).toISOString();
-  await query('DELETE FROM exposure_readings WHERE market = $1 AND at < $2', [market, cutoff]);
+  for (const { after, groupBy } of TIERS) {
+    const cutoff = daysBefore(now, after);
+    await query(
+      `DELETE FROM exposure_readings
+       WHERE market = $1 AND at < $2 AND at NOT IN (
+         SELECT MIN(at) FROM exposure_readings
+         WHERE market = $3 AND at < $4
+         GROUP BY substr(at, 1, $5)
+       )`,
+      [market, cutoff, market, cutoff, groupBy],
+    );
+  }
+  await query(
+    'DELETE FROM exposure_readings WHERE market = $1 AND at < $2',
+    [market, daysBefore(now, KEEP_DAYS)],
+  );
 }
 
 /**

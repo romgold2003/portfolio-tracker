@@ -301,10 +301,23 @@ describe('applying an extended quote', () => {
   });
 
   test('the badge is cleared once the session reopens', () => {
+    // 10:00 in New York, explicitly. Left to the real clock this passed only
+    // between 04:00 and 20:00 there and failed overnight, because an empty
+    // quote map means "the day is over, hold the figures" outside the session
+    // and "the session reopened, drop the badge" inside it.
+    const midSession = new Date('2026-09-03T14:00:00Z');
     const positions = [{ ticker: 'NVDA', status: 'Open', cur: 210, extPhase: 'pre' }];
-    const changed = applyExtendedQuotes(positions, new Map());
+    const changed = applyExtendedQuotes(positions, new Map(), midSession);
     assert.equal(changed, true);
     assert.equal(positions[0].extPhase, undefined, 'a stale PRE badge would be a lie');
+  });
+
+  test('and held, not cleared, when the day is simply over', () => {
+    // The other side of the same branch, which is why the clock mattered.
+    const overnight = new Date('2026-09-04T02:00:00Z'); // 22:00 in New York
+    const positions = [{ ticker: 'NVDA', status: 'Open', cur: 210, extPhase: 'post' }];
+    assert.equal(applyExtendedQuotes(positions, new Map(), overnight), false);
+    assert.equal(positions[0].extPhase, 'post', 'the last session\'s badge still stands');
   });
 
   test('lower-case tickers still match', () => {

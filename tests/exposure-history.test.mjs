@@ -131,12 +131,42 @@ describe('recording alongside the chart', () => {
     assert.equal(history[1].netGex, 30);
   });
 
-  test('readings older than the retention window are dropped', async () => {
-    await recordReading('BTC', profile(1, 1), at('2024-01-01T00:00:00Z'));
-    const history = await trackExposure('BTC', profile(2, 2), at('2026-09-03T14:00:00Z'));
+  test('old readings are thinned, not thrown away', async () => {
+    // Twelve readings across one hour, three months back. A weekly bar needs
+    // one of them; keeping all twelve forever is what makes a five-year chart
+    // cost half a million rows.
+    for (let m = 0; m < 60; m += 5) {
+      await recordReading('BTC', profile(m, m), at(`2026-06-01T09:${String(m).padStart(2, '0')}:00Z`));
+    }
+    const history = await trackExposure('BTC', profile(999, 999), at('2026-09-03T14:00:00Z'));
 
-    assert.equal(history.length, 1, 'a reading from two years ago should have aged out');
-    assert.equal(history[0].netGex, 2);
+    const old = history.filter((r) => r.at.startsWith('2026-06-01'));
+    assert.equal(old.length, 1, 'a day three months back should keep one reading');
+    assert.equal(old[0].at, '2026-06-01T09:00:00Z', 'the earliest of the group survives');
+    assert.ok(history.some((r) => r.netGex === 999), 'and today is untouched');
+  });
+
+  test('a week back keeps every reading, an hour apart keeps one', async () => {
+    const now = at('2026-09-03T14:00:00Z');
+    // Inside the week: full resolution.
+    await recordReading('BTC', profile(1, 1), at('2026-09-01T09:00:00Z'));
+    await recordReading('BTC', profile(2, 2), at('2026-09-01T09:05:00Z'));
+    // Three weeks back: thinned to the hour.
+    await recordReading('BTC', profile(3, 3), at('2026-08-10T09:00:00Z'));
+    await recordReading('BTC', profile(4, 4), at('2026-08-10T09:05:00Z'));
+
+    const history = await trackExposure('BTC', profile(5, 5), now);
+    assert.equal(history.filter((r) => r.at.startsWith('2026-09-01')).length, 2);
+    assert.equal(history.filter((r) => r.at.startsWith('2026-08-10')).length, 1);
+  });
+
+  test('thinning twice changes nothing the second time', async () => {
+    for (let m = 0; m < 30; m += 5) {
+      await recordReading('BTC', profile(m, m), at(`2026-06-01T09:${String(m).padStart(2, '0')}:00Z`));
+    }
+    const first = await trackExposure('BTC', profile(9, 9), at('2026-09-03T14:00:00Z'));
+    const second = await trackExposure('BTC', profile(9, 9), at('2026-09-03T14:00:00Z'));
+    assert.deepEqual(second.map((r) => r.at), first.map((r) => r.at));
   });
 
   test('a database that throws costs the history, not the chart', async () => {
