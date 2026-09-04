@@ -63,12 +63,21 @@ describe('exposure is a level, so it averages', () => {
     assert.deepEqual(bars.map((b) => b.label), ['14:00', '15:00']);
   });
 
-  test('a four-hour bar gathers the hours inside it', () => {
+  test('a daily bar gathers the hours inside it', () => {
     const rows = every15('2026-09-03T12:00:00Z', Array.from({ length: 16 }, () => 100));
-    const bars = rollUpExposure(rows, '4h');
-    assert.equal(bars.length, 1, '12:00 to 15:45 is one four-hour bar');
-    assert.equal(bars[0].label, '12:00');
+    const bars = rollUpExposure(rows, '1d');
+    assert.equal(bars.length, 1, '12:00 to 15:45 is all one day');
+    assert.equal(bars[0].label, '3 Sep');
     assert.equal(bars[0].reads, 16);
+  });
+
+  test('the windowed views bucket by day like 1D does', () => {
+    // 180D and 364D differ from 1D only in how far back they reach, which is
+    // the caller's business; the bars themselves must be identical.
+    const rows = every15('2026-09-03T12:00:00Z', [1, 2, 3, 4]);
+    for (const id of ['180d', '364d']) {
+      assert.deepEqual(rollUpExposure(rows, id), rollUpExposure(rows, '1d'));
+    }
   });
 
   test('daily and weekly bars are labelled by their day', () => {

@@ -44,65 +44,41 @@ const GRAINS = [
 
 const grainDef = (id) => GRAINS.find((g) => g.id === id) ?? GRAINS[0];
 
+const HOUR = 3600e3;
+const DAY = 24 * HOUR;
+
 /**
- * One hour to one week — the exposure panel, which is stamped to the minute.
+ * The timeframes, as one list.
  *
- * No monthly bar. Exposure is a position that turns over with the expiry cycle;
- * a month of it averaged into one point says almost nothing that the weekly
- * bar has not already said, and it needs a month of recording before it draws
- * anything at all.
+ * Each is a whole view rather than half of one: `ms` is how wide a bar is and
+ * `days` is how far back to look. An earlier version split those into two rows
+ * of buttons, which is what a trading terminal does and was more machinery than
+ * this panel needs — five named views answer the same questions without asking
+ * anyone to combine two controls in their head.
+ *
+ * The first three show everything recorded at that bar size. The last two are
+ * fixed windows, which is what makes them worth having beside 1D: the same
+ * daily bars, held to a stated number of days.
  */
 const FRAMES = [
-  { id: '1h', label: '1H', ms: 3600e3 },
-  { id: '4h', label: '4H', ms: 4 * 3600e3 },
-  { id: '1d', label: '1D', ms: 24 * 3600e3 },
-  { id: '1w', label: '1W', ms: 7 * 24 * 3600e3 },
+  { id: '1h', label: '1H', ms: HOUR, days: null },
+  { id: '1d', label: '1D', ms: DAY, days: null },
+  { id: '1w', label: '1W', ms: 7 * DAY, days: null },
+  { id: '180d', label: '180D', ms: DAY, days: 180 },
+  { id: '364d', label: '364D', ms: DAY, days: 364 },
 ];
 
 const frameDef = (id) => FRAMES.find((f) => f.id === id) ?? FRAMES[0];
 
 /**
- * How far back to look, which is a separate question from how wide a bar is.
- *
- * A chart needs both and they are usually confused: 1D is a bar a day, 1M is a
- * month of them. Keeping them apart is what lets a month be read in daily bars
- * or in four-hour ones without a tab for every combination.
- */
-const RANGES = [
-  { id: '7d', label: '7D', days: 7 },
-  { id: '1m', label: '1M', days: 30 },
-  { id: '3m', label: '3M', days: 91 },
-  { id: '6m', label: '6M', days: 182 },
-  { id: '1y', label: '1Y', days: 365 },
-  { id: '5y', label: '5Y', days: 1826 },
-  { id: 'all', label: 'All', days: Infinity },
-];
-
-const rangeDef = (id) => RANGES.find((r) => r.id === id) ?? RANGES[1];
-
-/**
  * The most points worth drawing across 900 units of viewBox.
  *
  * Past this they are closer together than the stroke is wide, so the curve
- * stops gaining detail and starts costing legibility.
+ * stops gaining detail and starts costing legibility. It only ever binds on the
+ * open-ended views — a year of hourly bars would be nine thousand points — and
+ * there it keeps the most recent, which is the end anyone reads first.
  */
 const MAX_BARS = 400;
-
-/**
- * The finest bar size that draws a range without overrunning the plot.
- *
- * A year of hourly bars is nine thousand points on a chart nine hundred wide,
- * so asking for it has to mean something rather than nothing. Real charts
- * silently coarsen; this one coarsens and then says it did, in the note above
- * the curve.
- */
-function fittingFrame(wanted, spanMs) {
-  const from = FRAMES.findIndex((f) => f.id === wanted);
-  for (let i = Math.max(0, from); i < FRAMES.length; i++) {
-    if (spanMs / FRAMES[i].ms <= MAX_BARS) return FRAMES[i];
-  }
-  return FRAMES[FRAMES.length - 1];
-}
 
 /** The Monday of a day's week, which is what a weekly bucket is stacked on. */
 function mondayOf(iso) {
@@ -160,25 +136,28 @@ const dayOf = (ms) => {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 };
 
+/** True for a view whose bars are shorter than a day, so the hour matters. */
+const isIntraday = (id) => frameDef(id).ms < DAY;
+
 /**
  * Intraday bars carry the day too, once the chart covers more than one.
  *
- * Without that a four-hour axis is unreadable. It labels every sixth bar, six
- * four-hour bars is exactly a day, so every label lands on the same hour and
- * the axis reads "16:00, 16:00, 16:00" across a fortnight. Marking only the
- * bars that open a day does not fix it either — the stride steps straight over
- * them. Naming the day on every intraday label is the one version that cannot
- * come out ambiguous, and it still fits the tick.
+ * Without that the axis is unreadable across a long stretch: labels land at a
+ * stride, and a stride that happens to be a whole number of days puts every
+ * label on the same hour — "16:00, 16:00, 16:00" across a fortnight. Marking
+ * only the bars that open a day does not fix it either, because the stride
+ * steps straight over them. Naming the day on every intraday label is the one
+ * version that cannot come out ambiguous, and it still fits the tick.
  */
 function frameLabel(ms, id, multiDay) {
-  if (id !== '1h' && id !== '4h') return dayOf(ms);
+  if (!isIntraday(id)) return dayOf(ms);
   const hour = `${pad(new Date(ms).getUTCHours())}:00`;
   return multiDay ? `${dayOf(ms)} ${hour}` : hour;
 }
 
 /** The same moment written out in full, for the readout. */
 function stampLabel(ms, id) {
-  return id === '1h' || id === '4h'
+  return isIntraday(id)
     ? `${dayOf(ms)} ${pad(new Date(ms).getUTCHours())}:00 UTC`
     : dayOf(ms);
 }
@@ -440,8 +419,6 @@ const DEX_COLOUR = '#4a9ae8';
  * re-render, like the market does.
  */
 let view = 'strike';
-/** How far back the time views look. Separate from the bar size. */
-let range = '1m';
 let lastProfile = null;
 let lastPick = null;
 
@@ -486,8 +463,19 @@ export function rollUpExposure(rows, id) {
   }));
 }
 
-/** Read as "Net GEX · 4H average", so nobody reads an average as a total. */
-const timeTitle = (name, id) => `${name} · ${frameDef(id).label} average`;
+/**
+ * Read as "Net GEX · daily average", so nobody reads an average as a total.
+ *
+ * Named for the bar rather than the view. 180D and 364D are drawn in daily
+ * bars and only differ in how far back they reach, so calling either a "180D
+ * average" would describe a bar half a year wide that does not exist. How far
+ * back it reaches is the note's job.
+ */
+function timeTitle(name, id) {
+  const { ms } = frameDef(id);
+  const bar = ms >= 7 * DAY ? 'weekly' : ms >= DAY ? 'daily' : 'hourly';
+  return `${name} · ${bar} average`;
+}
 
 /**
  * The strike profile: gamma and delta across prices, right now.
@@ -539,29 +527,25 @@ function remaining(bar, id) {
  * was opened — so a young one says so plainly rather than drawing a single dot
  * and letting it read as a flat market.
  */
-function drawOverTime(profile, gex, dex, wanted) {
+function drawOverTime(profile, gex, dex, id) {
   const all = profile.history ?? [];
-  const span = rangeDef(range);
+  const frame = frameDef(id);
 
-  // Everything recorded, when the range is "All" or reaches past the record.
-  const oldest = all.length ? Date.parse(all[0].at) : Date.now();
-  const cutoff = span.days === Infinity ? oldest : Date.now() - span.days * 86400e3;
-  const history = all.filter((r) => Date.parse(r.at) >= cutoff);
+  // A windowed view is held to its days; an open-ended one takes everything.
+  const history = frame.days == null
+    ? all
+    : all.filter((r) => Date.parse(r.at) >= Date.now() - frame.days * DAY);
 
-  const covered = history.length
-    ? Date.now() - Date.parse(history[0].at)
-    : span.days * 86400e3;
-  const frame = fittingFrame(wanted, Math.min(covered, (span.days ?? 0) * 86400e3 || covered));
-  const id = frame.id;
   const rolled = rollUpExposure(history, id).slice(-MAX_BARS);
 
   if (rolled.length < 2) {
+    const windowed = frame.days != null && history.length !== all.length;
     gex.innerHTML = `<div class="cv-empty">${
   all.length
     ? `Only ${all.length === 1 ? 'one reading' : `${all.length} readings`} recorded, and
-       ${history.length === all.length ? 'they do not' : 'the ones inside this range do not'}
-       yet span two ${escapeHtml(frame.label)} bars. A curve needs two — try a shorter
-       timeframe, a wider range, or leave this open.`
+       ${windowed ? 'the ones inside this window do not' : 'they do not'} yet span two
+       ${escapeHtml(frame.label)} bars. A curve needs two — try a shorter timeframe, or
+       leave this open.`
     : 'Nothing recorded yet. Exposure through time is kept from the first time this is opened.'
 }</div>`;
     dex.innerHTML = '';
@@ -572,8 +556,7 @@ function drawOverTime(profile, gex, dex, wanted) {
   const left = remaining(last, id);
   const note = [
     `${rolled.length} bars`,
-    // Only worth saying when it is not what was asked for.
-    id === wanted ? null : `${frame.label} bars — ${frameDef(wanted).label} is too fine for ${span.label}`,
+    frame.days == null ? null : `last ${frame.days} days`,
     left ? `last one closes in ${left}` : null,
   ].filter(Boolean).join(' · ');
   const gexPoints = rolled.map((r) => ({ label: r.label, value: r.gex }));
@@ -644,25 +627,6 @@ export function renderExposure(profile, onPick) {
       const id = e.target?.dataset?.view;
       if (!id || id === view) return;
       view = id;
-      renderExposure(lastProfile, lastPick);
-    };
-  }
-
-  /**
-   * How far back to look. Only meaningful once a bar size is chosen, so it is
-   * hidden on the strike profile, which has no time axis at all.
-   */
-  const rangePicker = el('optRange');
-  if (rangePicker) {
-    const showing = view !== 'strike' && profile.history;
-    rangePicker.style.display = showing ? '' : 'none';
-    rangePicker.innerHTML = showing ? RANGES.map((r) =>
-      `<button class="opt-tab${r.id === range ? ' active' : ''}"
-        data-range="${r.id}">${escapeHtml(r.label)}</button>`).join('') : '';
-    rangePicker.onclick = (e) => {
-      const id = e.target?.dataset?.range;
-      if (!id || id === range) return;
-      range = id;
       renderExposure(lastProfile, lastPick);
     };
   }
