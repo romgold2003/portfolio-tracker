@@ -279,6 +279,15 @@
         <div class="gauges" id="sentimentGauges" style="display:none"></div>
       </div>
 
+      <!-- Two halves of the page, and only one is ever on screen. Markets is
+           what the app has always shown; Gamble is other people's money. -->
+      <div class="subtabs" id="newsTabs">
+        <button class="subtab active" data-tab="market">Markets</button>
+        <button class="subtab" data-tab="gamble">Gamble</button>
+      </div>
+
+      <div id="newsMarket">
+
       <!--
         What the market expects of the Fed at its next meeting, priced off
         30-day fed funds futures. Hidden until it has an answer: a panel of
@@ -331,20 +340,27 @@
         <div id="etfBody"></div>
       </div>
 
-      <!-- Large bets on macro events: who placed them and for how much. Public
-           on-chain Polymarket trades, read straight from the browser. -->
-      <div class="card gam-card" id="gambleCard" style="display:none">
-        <div class="card-lbl">
-          <span>Gamble — whale bets on macro</span>
-          <div class="opt-picker" id="gamBand"></div>
-        </div>
-        <div id="gamRows"></div>
-        <p class="gam-src">Polymarket · on-chain, refreshed every 30s</p>
-      </div>
-
       <!-- Shown only while there is nothing to show, so the page is never bare. -->
       <div class="card" id="newsEmpty">
         <div class="empty">Waiting on the rate futures — nothing quoting just now.</div>
+      </div>
+
+      </div><!-- /newsMarket -->
+
+      <!-- Large bets on macro events: who placed them and for how much. Public
+           on-chain Polymarket trades, read straight from the browser.
+           Subject first, then size — which is the order the question is asked
+           in: what is moving, and who is betting how much on it. -->
+      <div id="newsGamble" hidden>
+        <div class="card gam-card" id="gambleCard">
+          <div class="card-lbl">
+            <span>Whale bets — <span id="gamTopicName">all macro</span></span>
+            <div class="opt-picker" id="gamBand"></div>
+          </div>
+          <div class="opt-picker gam-topics" id="gamTopics"></div>
+          <div id="gamRows"></div>
+          <p class="gam-src">Polymarket · on-chain, refreshed every 30s</p>
+        </div>
       </div>
     </div>
 

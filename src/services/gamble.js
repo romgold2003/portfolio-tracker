@@ -88,6 +88,28 @@ export function topicOf(title) {
   return TOPICS.find((t) => t.match.test(text)) ?? null;
 }
 
+/** The subject buttons, with everything first because most bands are thin. */
+export const TOPIC_TABS = [{ id: 'all', label: 'All macro' }, ...TOPICS.map(
+  ({ id, label }) => ({ id, label }),
+)];
+
+/**
+ * How many trades each subject and band holds right now.
+ *
+ * The buttons carry their own counts because most of this grid is empty most of
+ * the time — half a million dollars does not land on an Iran market every day —
+ * and a button that leads to "nothing here" is worse than one that says so
+ * before it is pressed.
+ */
+export function countByTopic(rows, band) {
+  const counts = new Map(TOPIC_TABS.map((t) => [t.id, 0]));
+  for (const t of selectTrades(rows, { band, topic: 'all', limit: Infinity })) {
+    counts.set('all', counts.get('all') + 1);
+    counts.set(t.topic, (counts.get(t.topic) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /**
  * A trade's cash value.
  *
@@ -108,7 +130,7 @@ const shortWallet = (w) => (typeof w === 'string' && w.length > 12
  * point of the panel is who placed the bet, and a row that cannot say is not a
  * smaller answer but a different one.
  */
-export function selectTrades(rows, { band = 'small', limit = 40 } = {}) {
+export function selectTrades(rows, { band = 'small', topic: wanted = 'all', limit = 40 } = {}) {
   if (!Array.isArray(rows)) return [];
   const { min, max } = bandDef(band);
   const out = [];
@@ -120,6 +142,7 @@ export function selectTrades(rows, { band = 'small', limit = 40 } = {}) {
 
     const topic = topicOf(title);
     if (!topic) continue;
+    if (wanted !== 'all' && topic.id !== wanted) continue;
 
     const usd = cashOf(t);
     if (!(usd >= min) || usd >= max) continue;

@@ -11,12 +11,15 @@
  * profile page they came from.
  */
 import { escapeHtml } from '../format.js';
-import { BANDS, bandDef, selectTrades, whaleTrades } from '../../services/gamble.js';
+import {
+  BANDS, bandDef, TOPIC_TABS, countByTopic, selectTrades, whaleTrades,
+} from '../../services/gamble.js';
 
 const el = (id) => document.getElementById(id);
 
-/** Which band is showing. Survives a re-render, like the other panels. */
+/** Subject and size. Both survive a re-render, like the other panels. */
 let band = 'small';
+let topic = 'all';
 let lastRows = null;
 
 /** "2m", "4h", "3d" — enough to place a trade without a full timestamp. */
@@ -66,12 +69,12 @@ function draw() {
   const rows = el('gamRows');
   if (!rows) return;
 
-  const picker = el('gamBand');
-  if (picker) {
-    picker.innerHTML = BANDS.map((b) =>
+  const bandPicker = el('gamBand');
+  if (bandPicker) {
+    bandPicker.innerHTML = BANDS.map((b) =>
       `<button class="opt-tab${b.id === band ? ' active' : ''}"
         data-band="${b.id}">${escapeHtml(b.label)}</button>`).join('');
-    picker.onclick = (e) => {
+    bandPicker.onclick = (e) => {
       const id = e.target?.dataset?.band;
       if (!id || id === band) return;
       band = id;
@@ -79,18 +82,51 @@ function draw() {
     };
   }
 
-  const trades = selectTrades(lastRows, { band });
+  /**
+   * The subjects, each carrying how many trades it holds at the chosen size.
+   *
+   * Counted against the current band rather than the whole feed, so switching
+   * to $500k+ shows straight away which subjects anyone is actually betting
+   * that big on — usually one, sometimes none.
+   */
+  const counts = countByTopic(lastRows, band);
+  const topics = el('gamTopics');
+  if (topics) {
+    /**
+     * An empty subject stays selected. Bouncing back to "all macro" was worse
+     * than the emptiness it was avoiding: pressing Economy and landing on
+     * everything reads as the button being broken, and the count on the button
+     * has already said there is nothing there.
+     */
+    topics.innerHTML = TOPIC_TABS.map((t) => {
+      const n = counts.get(t.id) ?? 0;
+      return `<button class="opt-tab${t.id === topic ? ' active' : ''}${n ? '' : ' is-empty'}"
+        data-topic="${t.id}">${escapeHtml(t.label)}<span class="gam-count">${n}</span></button>`;
+    }).join('');
+    topics.onclick = (e) => {
+      const id = e.target?.closest('[data-topic]')?.dataset?.topic;
+      if (!id || id === topic) return;
+      topic = id;
+      draw();
+    };
+  }
+
+  const name = el('gamTopicName');
+  if (name) name.textContent = (TOPIC_TABS.find((t) => t.id === topic) ?? TOPIC_TABS[0]).label.toLowerCase();
+
+  const trades = selectTrades(lastRows, { band, topic });
 
   /**
-   * An empty band is a real answer and says so. The largest band is empty most
-   * of the time — that is what makes it worth watching — and "nothing this big
-   * has traded" must not read as a panel that failed to load.
+   * An empty combination is a real answer and says so. The largest band is
+   * empty most of the time — that is what makes it worth watching — and
+   * "nothing this big has traded" must not read as a panel that failed to load.
    */
   rows.innerHTML = trades.length
     ? `<div class="gam-head gam-grid">
          <div>Size</div><div>Whale</div><div>Bet</div><div>Market</div><div>When</div>
        </div>${trades.map(row).join('')}`
-    : `<div class="empty">No ${escapeHtml(bandDef(band).label)} bets on macro
+    : `<div class="empty">No ${escapeHtml(bandDef(band).label)} bets on
+       ${escapeHtml((TOPIC_TABS.find((t) => t.id === topic) ?? TOPIC_TABS[0]).label.toLowerCase())}
        in the last few hundred trades.</div>`;
 }
 
@@ -107,6 +143,36 @@ export async function renderGamble() {
 
   card.style.display = lastRows ? '' : 'none';
   if (lastRows) draw();
+}
+
+/**
+ * The two halves of the News page.
+ *
+ * Bound once, on the tab strip rather than on each button, so re-rendering
+ * either pane cannot leave a stale handler behind.
+ */
+export function installNewsTabs() {
+  const strip = el('newsTabs');
+  if (!strip || strip.dataset.bound === '1') return;
+  strip.dataset.bound = '1';
+
+  strip.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-tab]');
+    if (!button) return;
+    const wanted = button.dataset.tab;
+
+    for (const b of strip.querySelectorAll('[data-tab]')) {
+      b.classList.toggle('active', b.dataset.tab === wanted);
+    }
+    // `hidden` rather than display, so nothing here has to know what each pane
+    // is laid out as.
+    el('newsMarket').hidden = wanted !== 'market';
+    el('newsGamble').hidden = wanted !== 'gamble';
+
+    // Coming back to a pane that has been sitting behind another for a while
+    // should not show what was true when it was last on screen.
+    if (wanted === 'gamble') renderGamble();
+  });
 }
 
 /**

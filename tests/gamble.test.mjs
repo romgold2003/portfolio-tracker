@@ -15,7 +15,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  BANDS, bandDef, topicOf, cashOf, selectTrades, FLOOR_USD,
+  BANDS, bandDef, topicOf, cashOf, selectTrades, FLOOR_USD, TOPIC_TABS, countByTopic,
 } from '../src/services/gamble.js';
 
 /** A row in the feed's own shape. `size` is shares, `price` is 0–1. */
@@ -160,5 +160,54 @@ describe('the rows it hands the panel', () => {
   test('nothing to show is an empty list, not a throw', () => {
     assert.deepEqual(selectTrades(null, { band: 'small' }), []);
     assert.deepEqual(selectTrades([], { band: 'small' }), []);
+  });
+});
+
+describe('filtering to one subject', () => {
+  const rows = [
+    trade({ title: 'Will the Fed decrease interest rates by 25 bps?', size: 1e6, price: 0.12 }),
+    trade({ title: 'Will the U.S. invade Iran before 2027?', size: 1e6, price: 0.13 }),
+    trade({ title: 'Clarity Act (H.R.3633) signed into law in 2026?', size: 1e6, price: 0.14 }),
+    trade({ title: 'LoL: KT Rolster vs Dplus KIA', size: 1e6, price: 0.15 }),
+  ];
+
+  test('a subject takes only its own, and "all" takes every macro one', () => {
+    assert.equal(selectTrades(rows, { band: 'small', topic: 'fed' }).length, 1);
+    assert.equal(selectTrades(rows, { band: 'small', topic: 'geo' }).length, 1);
+    assert.equal(selectTrades(rows, { band: 'small', topic: 'all' }).length, 3);
+  });
+
+  test('the sport stays out whichever subject is asked for', () => {
+    for (const t of TOPIC_TABS) {
+      const titles = selectTrades(rows, { band: 'small', topic: t.id }).map((r) => r.title);
+      assert.ok(!titles.some((x) => x.startsWith('LoL')), `sport leaked into "${t.id}"`);
+    }
+  });
+
+  test('the counts on the buttons match what pressing them shows', () => {
+    // The counts exist so a button cannot promise rows it does not have.
+    const counts = countByTopic(rows, 'small');
+    for (const t of TOPIC_TABS) {
+      assert.equal(
+        counts.get(t.id),
+        selectTrades(rows, { band: 'small', topic: t.id, limit: Infinity }).length,
+        `"${t.id}" counted wrong`,
+      );
+    }
+  });
+
+  test('counts follow the band, not the whole feed', () => {
+    const big = [trade({ title: 'Fed rate cut in September?', size: 1e6, price: 0.75 })];
+    assert.equal(countByTopic(big, 'small').get('fed'), 0);
+    assert.equal(countByTopic(big, 'large').get('fed'), 1);
+  });
+
+  test('"all macro" is offered first, before the subjects', () => {
+    assert.equal(TOPIC_TABS[0].id, 'all');
+    assert.ok(TOPIC_TABS.some((t) => t.id === 'fed'), 'the Fed must have its own button');
+  });
+
+  test('an unknown subject shows nothing rather than everything', () => {
+    assert.equal(selectTrades(rows, { band: 'small', topic: 'sport' }).length, 0);
   });
 });

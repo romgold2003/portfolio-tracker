@@ -14,7 +14,7 @@ import { marketSentiment } from '../../services/sentiment.js';
 import { gaugeSvg } from './gauge.js';
 import { optionsProfile, etfFlows } from '../../services/options.js';
 import { renderExposure, renderEtfFlows, currentMarket, setMarket } from './exposure.js';
-import { renderGamble, startGamble } from './gamble.js';
+import { renderGamble, startGamble, installNewsTabs } from './gamble.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -240,6 +240,7 @@ export async function renderNews() {
 
   // Its own source and its own cadence, so it neither waits on the five above
   // nor blocks them.
+  installNewsTabs();
   renderGamble();
   startGamble();
 

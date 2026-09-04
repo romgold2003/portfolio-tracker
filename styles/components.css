@@ -628,3 +628,15 @@ body.light{--wave-strength:0.34}
   .gam-grid{grid-template-columns:84px minmax(0,1fr) 0 minmax(0,1.2fr) 38px}
   .gam-bet,.gam-head div:nth-child(3){display:none}
 }
+
+/* The News page's two halves. */
+.subtabs{display:flex;gap:4px;margin:0 0 14px}
+.subtab{background:transparent;border:0;border-bottom:2px solid transparent;
+  padding:7px 14px;font-size:13px;color:var(--text3);cursor:pointer;font-family:inherit}
+.subtab:hover{color:var(--text)}
+.subtab.active{color:var(--text);border-bottom-color:var(--blue)}
+/* Subjects wrap under the card label rather than crowding it. */
+.gam-topics{flex-wrap:wrap;margin:0 0 14px}
+.gam-count{margin-left:6px;font-variant-numeric:tabular-nums;color:var(--text4)}
+/* A subject with nothing in it at this size stays pressable, just quieter. */
+.opt-tab.is-empty{opacity:0.45}
