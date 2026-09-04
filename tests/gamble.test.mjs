@@ -211,3 +211,41 @@ describe('filtering to one subject', () => {
     assert.equal(selectTrades(rows, { band: 'small', topic: 'sport' }).length, 0);
   });
 });
+
+describe('the $50k–100k band', () => {
+  const rows = [
+    trade({ size: 1e6, price: 0.06, timestamp: 6 }),   // 60k
+    trade({ size: 1e6, price: 0.12, timestamp: 5 }),   // 120k
+    trade({ size: 1e6, price: 0.75, timestamp: 4 }),   // 750k
+  ];
+
+  test('takes only what falls in it', () => {
+    assert.deepEqual(selectTrades(rows, { band: 'entry' }).map((t) => t.usd), [60_000]);
+  });
+
+  test('adding it did not move anything out of the bands above', () => {
+    assert.deepEqual(selectTrades(rows, { band: 'small' }).map((t) => t.usd), [120_000]);
+    assert.deepEqual(selectTrades(rows, { band: 'large' }).map((t) => t.usd), [750_000]);
+  });
+
+  test('$100,000 exactly belongs upward, so nothing is counted twice', () => {
+    const edge = [trade({ size: 1e6, price: 0.1 })];
+    assert.equal(selectTrades(edge, { band: 'entry' }).length, 0);
+    assert.equal(selectTrades(edge, { band: 'small' }).length, 1);
+  });
+
+  test('below the floor nothing is shown at all', () => {
+    // $49,000 is under what the feed is even asked for; if one arrives it is
+    // not quietly promoted into the smallest band.
+    const under = [trade({ size: 1e6, price: 0.049 })];
+    for (const b of BANDS) assert.equal(selectTrades(under, { band: b.id }).length, 0);
+  });
+
+  test('the bands are contiguous from the floor upward', () => {
+    assert.equal(BANDS[0].min, FLOOR_USD);
+    for (let i = 1; i < BANDS.length; i++) {
+      assert.equal(BANDS[i].min, BANDS[i - 1].max, `a gap before ${BANDS[i].label}`);
+    }
+    assert.equal(BANDS[BANDS.length - 1].max, Infinity, 'the top band must not close');
+  });
+});

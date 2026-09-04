@@ -24,8 +24,23 @@
 
 const ENDPOINT = 'https://data-api.polymarket.com/trades';
 
-/** Nothing below this is a whale, and it is what the feed is asked to filter. */
-export const FLOOR_USD = 100_000;
+/** Nothing below this is worth a row, and it is the feed's own filter. */
+export const FLOOR_USD = 50_000;
+
+/**
+ * The feed is asked twice, at two floors.
+ *
+ * It answers with the most recent N trades above whatever floor it is given, so
+ * one request at $50k is not a superset of one at $100k — it is a shorter
+ * window. Measured: 500 trades above $100k reach back twenty-five days and hold
+ * fifteen, three and three in the upper bands; the same 500 above $50k reach
+ * back nine and hold one, two and none. Lowering the single floor would have
+ * emptied the bands this panel was built for.
+ *
+ * So the high floor keeps the reach the large bands need, the low one fills the
+ * new small band, and the overlap is dropped.
+ */
+const FLOORS = [100_000, FLOOR_USD];
 
 /**
  * The bands to read the flow in.
@@ -35,6 +50,7 @@ export const FLOOR_USD = 100_000;
  * in bands is how the same list answers "who is nibbling" and "who has decided".
  */
 export const BANDS = [
+  { id: 'entry', label: '$50k–100k', min: 50_000, max: 100_000 },
   { id: 'small', label: '$100k–250k', min: 100_000, max: 250_000 },
   { id: 'mid', label: '$250k–500k', min: 250_000, max: 500_000 },
   { id: 'large', label: '$500k+', min: 500_000, max: Infinity },
@@ -173,14 +189,37 @@ export function selectTrades(rows, { band = 'small', topic: wanted = 'all', limi
  * bands and the macro filter both need more rows than any one band will keep —
  * most of what comes back above $100k is sport.
  */
+/**
+ * One fill, identified well enough to recognise it in the other answer.
+ *
+ * A single transaction can carry several fills, so the hash alone is not it —
+ * the size and the moment are what separate them.
+ */
+const fillKey = (t) =>
+  `${t?.transactionHash ?? ''}|${t?.proxyWallet ?? ''}|${t?.size ?? ''}|${t?.timestamp ?? ''}`;
+
+/**
+ * The recent large trades, straight from Polymarket.
+ *
+ * Both floors are asked at once and merged, because everything above $100k
+ * appears in both answers. Either request failing costs only the bands it
+ * feeds, so a panel with one dead floor is thinner rather than empty.
+ */
 export async function whaleTrades({ signal } = {}) {
-  const url = `${ENDPOINT}?limit=500&filterType=CASH&filterAmount=${FLOOR_USD}`;
-  try {
-    const res = await fetch(url, { signal });
-    if (!res.ok) return null;
+  const answers = await Promise.allSettled(FLOORS.map(async (floor) => {
+    const res = await fetch(
+      `${ENDPOINT}?limit=500&filterType=CASH&filterAmount=${floor}`, { signal },
+    );
+    if (!res.ok) throw new Error(`Polymarket answered ${res.status}`);
     const rows = await res.json();
-    return Array.isArray(rows) ? rows : null;
-  } catch {
-    return null;
+    if (!Array.isArray(rows)) throw new Error('Polymarket sent something else');
+    return rows;
+  }));
+
+  const merged = new Map();
+  for (const answer of answers) {
+    if (answer.status !== 'fulfilled') continue;
+    for (const t of answer.value) merged.set(fillKey(t), t);
   }
+  return merged.size ? [...merged.values()] : null;
 }
