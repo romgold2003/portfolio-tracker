@@ -14,6 +14,7 @@ import { marketSentiment } from '../../services/sentiment.js';
 import { gaugeSvg } from './gauge.js';
 import { optionsProfile, etfFlows } from '../../services/options.js';
 import { renderExposure, renderEtfFlows, currentMarket, setMarket } from './exposure.js';
+import { renderGamble, startGamble } from './gamble.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -236,6 +237,11 @@ export async function renderNews() {
   renderExposure(value(opts), pickMarket);
   renderEtfFlows(value(etf));
   scheduleLive(value(opts));
+
+  // Its own source and its own cadence, so it neither waits on the five above
+  // nor blocks them.
+  renderGamble();
+  startGamble();
 
   const anything = value(fed) || value(econ) || value(mood) || value(opts) || value(etf);
   const empty = el('newsEmpty');

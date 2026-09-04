@@ -598,3 +598,33 @@ body.light{--wave-strength:0.34}
    something on screen disagrees with what it should be. */
 .build-stamp{margin:18px 0 0;font-size:10px;color:var(--text4);text-align:right;
   font-variant-numeric:tabular-nums}
+
+/* Gamble: large bets on macro events. Size, who, what they bought, where. */
+.gam-card{margin-bottom:14px}
+.gam-grid{display:grid;grid-template-columns:96px minmax(0,1.05fr) 96px minmax(0,2fr) 46px;
+  align-items:center;gap:0 10px;padding:9px 2px}
+.gam-head{font-size:10px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:0.04em;padding-bottom:6px}
+.gam-head div:last-child,.gam-when{text-align:right}
+.gam-row{border-top:0.5px solid var(--input);font-size:13px}
+.gam-size{font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+/* Name over wallet: the pseudonym is who, the address is which. */
+.gam-who,.gam-market{display:flex;flex-direction:column;gap:1px;min-width:0}
+.gam-name{color:var(--text);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gam-wallet{color:var(--text3);font-size:10px;font-variant-numeric:tabular-nums;
+  text-decoration:none;width:fit-content}
+.gam-wallet:hover{color:var(--blue);text-decoration:underline}
+/* Uncoloured on purpose — buying No and selling Yes are the same lean, and a
+   green BUY would push the reader the wrong way. */
+.gam-bet{display:flex;align-items:baseline;gap:5px;font-size:11px}
+.gam-side{color:var(--text3);letter-spacing:0.03em}
+.gam-outcome{color:var(--text);font-weight:600}
+.gam-price{color:var(--text4);font-variant-numeric:tabular-nums}
+.gam-title{color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gam-topic{color:var(--text4);font-size:10px}
+.gam-when{color:var(--text3);font-size:11px;font-variant-numeric:tabular-nums}
+.gam-src{margin:12px 0 0;font-size:10px;color:var(--text4)}
+@media (max-width:640px){
+  .gam-grid{grid-template-columns:84px minmax(0,1fr) 0 minmax(0,1.2fr) 38px}
+  .gam-bet,.gam-head div:nth-child(3){display:none}
+}

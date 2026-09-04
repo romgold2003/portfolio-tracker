@@ -1,0 +1,370 @@
+//@version=6
+// Liquidation Heatmap - a CoinGlass-style liquidation map, rebuilt from the open
+// interest, price and volume that TradingView already carries.
+//
+// The model, in one paragraph: a rise in open interest means new positions were
+// opened at roughly the current price. Split that new notional into longs and
+// shorts by where the bar closed inside its own range, then, for each leverage
+// tier traders actually use, work out where those positions get liquidated and
+// drop the notional into a price bucket. Buckets fade over time (positions get
+// closed voluntarily) and are WIPED the moment price trades through them - those
+// positions were liquidated, so that liquidity is gone and the row vanishes.
+// What survives is the untouched liquidity above and below.
+//
+// Two display modes:
+//   Heatmap - every surviving row, drawn from where it formed to the right edge.
+//   Levels  - only the dominant clusters, as a short stub at the right edge.
+// Either way, the top clusters get a hoverable marker on the right.
+
+indicator("Liquidation Heatmap", "LIQ HEAT", overlay = true, max_boxes_count = 500, max_labels_count = 100, max_lines_count = 100)
+
+// --------------------------------- inputs ---------------------------------
+gD = "Display"
+mode      = input.string("Heatmap", "Mode", options = ["Heatmap", "Levels"], group = gD)
+palette   = input.string("Viridis", "Palette", options = ["Viridis", "Blue to red", "Long vs short"], group = gD)
+maxRows   = input.int(480, "Heatmap rows", minval = 20, maxval = 490, group = gD, tooltip = "Heatmap mode only. TradingView caps drawings at 500, so the largest rows win the slots.")
+maxLevels = input.int(10,  "Main levels (markers + table)", minval = 1, maxval = 40, group = gD)
+gamma     = input.float(0.45, "Intensity curve", minval = 0.1, maxval = 1.0, step = 0.05, group = gD, tooltip = "Lower keeps small rows visible. Liquidity is heavy-tailed, so 0.4-0.5 reads closest to CoinGlass.")
+stubBars  = input.int(25, "Levels mode: stub width (bars)", minval = 2, maxval = 300, group = gD)
+padBars   = input.int(8,  "Reach past the last bar", minval = 0, maxval = 100, group = gD)
+showLine  = input.bool(true, "Line at the exact level", group = gD)
+showTable = input.bool(true, "Show cluster table", group = gD)
+
+gM = "Model"
+autoTf      = input.bool(true,  "Scale resolution to the chart timeframe", group = gM)
+lookback    = input.int(1000,   "Bars to model",             minval = 50,   maxval = 5000, group = gM)
+decayPct    = input.float(0.15, "Position decay per bar (%)",minval = 0.0,  maxval = 5.0, step = 0.05, group = gM)
+mmPct       = input.float(0.50, "Maintenance margin (%)",    minval = 0.0,  maxval = 5.0, step = 0.05, group = gM)
+useOI       = input.bool(true,  "Use open interest when the symbol has it", group = gM)
+volShare    = input.float(30,   "Fallback: % of volume that opens new positions", minval = 1, maxval = 100, group = gM)
+wipeTouched = input.bool(true,  "Wipe a level once price trades through it", group = gM, tooltip = "This is the whole point. Price touching a level means those positions were liquidated, so the row disappears.")
+
+gX = "Manual resolution (when auto is off)"
+bucketIn = input.float(0.10, "Price bucket size (%)",           minval = 0.01, maxval = 5.0,   step = 0.01, group = gX)
+distIn   = input.float(20.0, "Only consider levels within (%)", minval = 1.0,  maxval = 100.0, step = 1.0,  group = gX)
+mergeIn  = input.float(0.75, "Merge levels closer than (%)",    minval = 0.05, maxval = 10.0,  step = 0.05, group = gX)
+
+gL = "Leverage tiers"
+useL10  = input.bool(true, "10x",  inline = "a", group = gL)
+wL10    = input.float(1.0, "",     inline = "a", group = gL, minval = 0, step = 0.1)
+useL25  = input.bool(true, "25x",  inline = "b", group = gL)
+wL25    = input.float(1.0, "",     inline = "b", group = gL, minval = 0, step = 0.1)
+useL50  = input.bool(true, "50x",  inline = "c", group = gL)
+wL50    = input.float(0.8, "",     inline = "c", group = gL, minval = 0, step = 0.1)
+useL100 = input.bool(true, "100x", inline = "d", group = gL)
+wL100   = input.float(0.6, "",     inline = "d", group = gL, minval = 0, step = 0.1)
+
+gP = "Paste levels (optional)"
+showManual = input.bool(false, "Draw pasted levels", group = gP)
+manualStr  = input.string("", "price:size, price:size, ...", group = gP, tooltip = "From tools/fetch-levels.mjs or tools/fetch-hyperliquid-true.mjs")
+manualCol  = input.color(color.new(color.orange, 10), "Colour", group = gP)
+
+gA = "Alerts"
+nearPct   = input.float(1.5, "Magnet within (%)", minval = 0.1, maxval = 10.0, step = 0.1, group = gA)
+nearRatio = input.float(0.5, "Magnet at least this share of the biggest", minval = 0.05, maxval = 1.0, step = 0.05, group = gA)
+
+// ------------------------- timeframe-derived scale -------------------------
+// kTf is 0 on a 1-minute chart and 1 on a daily one, so every resolution knob
+// slides smoothly between the two instead of stepping at arbitrary cutoffs.
+tfSec = math.max(timeframe.in_seconds(), 1)
+kTf   = math.min(math.max(math.log(tfSec / 60.0) / math.log(1440.0), -0.6), 1.6)
+
+// Fine enough that the rows read as a heatmap rather than as fat bands: about
+// 0.10% on a 1H chart, ~0.02% on 1m, ~0.32% on 1D.
+bucketPct  = autoTf ? math.min(math.max(0.02 * math.pow(16.0,  kTf), 0.01), 1.5) : bucketIn
+maxDistPct = autoTf ? math.min(math.max(4.00 * math.pow(12.5, kTf), 2.00), 60.0) : distIn
+mergePct   = autoTf ? bucketPct * 3.0 : mergeIn
+
+// --------------------------------- state ---------------------------------
+var map<int, float> heatLong  = map.new<int, float>()
+var map<int, float> heatShort = map.new<int, float>()
+var map<int, int>   bornAt    = map.new<int, int>()
+var array<box>   cells    = array.new<box>()
+var array<label> levLabs  = array.new<label>()
+var array<line>  levLines = array.new<line>()
+var array<line>  mlines   = array.new<line>()
+var array<label> mlabels  = array.new<label>()
+var float scale  = 1.0   // decay carried globally so the map is never looped per bar
+var float runMax = 0.0
+
+logG  = math.log(1.0 + bucketPct / 100.0)
+mm    = mmPct / 100.0
+decay = decayPct / 100.0
+
+idxOf(float p) => int(math.floor(math.log(p) / logG))
+bktLo(int i)   => math.exp(i * logG)
+bktHi(int i)   => math.exp((i + 1) * logG)
+bktMid(int i)  => math.exp((i + 0.5) * logG)
+
+fmtUsd(float v) =>
+    v >= 1e9 ? str.tostring(v / 1e9, "#.##") + "B" :
+      v >= 1e6 ? str.tostring(v / 1e6, "#.##") + "M" :
+      v >= 1e3 ? str.tostring(v / 1e3, "#.#")  + "K" : str.tostring(v, "#")
+
+// ------------------------- new positions this bar -------------------------
+// Called unconditionally: request.* must run on every bar, so the toggle is applied after.
+oiRaw = request.security(syminfo.tickerid + "_OI", timeframe.period, close, ignore_invalid_symbol = true)
+oi    = useOI ? oiRaw : float(na)
+hasOI = not na(oi) and not na(oi[1])
+
+rng      = math.max(high - low, syminfo.mintick)
+buyShare = math.min(math.max((close - low) / rng, 0.0), 1.0)
+
+opened = hasOI ? math.max(oi - oi[1], 0.0) * hl2 : nz(volume) * hl2 * (volShare / 100.0)
+
+inWindow = bar_index >= last_bar_index - lookback
+
+if inWindow
+    scale := scale * (1.0 - decay)
+
+    // Renormalise before the decay factor underflows to zero.
+    if scale < 1e-9
+        for k in map.keys(heatLong)
+            map.put(heatLong, k, map.get(heatLong, k) * scale)
+        for k in map.keys(heatShort)
+            map.put(heatShort, k, map.get(heatShort, k) * scale)
+        scale := 1.0
+
+    // THE WIPE. Price traded through these prices on this bar, so every position
+    // sitting there has already been liquidated. The row disappears for good.
+    if wipeTouched
+        loIdx = idxOf(low)
+        hiIdx = math.min(idxOf(high), loIdx + 2000)
+        for i = loIdx to hiIdx
+            map.remove(heatLong,  i)
+            map.remove(heatShort, i)
+            map.remove(bornAt,    i)
+
+    if opened > 0
+        longNot  = opened * buyShare
+        shortNot = opened * (1.0 - buyShare)
+        entry    = hlc3
+
+        for t = 0 to 3
+            lev = t == 0 ? 10.0   : t == 1 ? 25.0   : t == 2 ? 50.0   : 100.0
+            on  = t == 0 ? useL10 : t == 1 ? useL25 : t == 2 ? useL50 : useL100
+            w   = t == 0 ? wL10   : t == 1 ? wL25   : t == 2 ? wL50   : wL100
+            if on and w > 0
+                gap = 1.0 / lev - mm
+                if gap > 0
+                    li = idxOf(entry * (1.0 - gap))   // longs blow up below
+                    si = idxOf(entry * (1.0 + gap))   // shorts blow up above
+                    map.put(heatLong,  li, nz(map.get(heatLong,  li)) + longNot  * w / scale)
+                    map.put(heatShort, si, nz(map.get(heatShort, si)) + shortNot * w / scale)
+                    if not map.contains(bornAt, li)
+                        map.put(bornAt, li, bar_index)
+                    if not map.contains(bornAt, si)
+                        map.put(bornAt, si, bar_index)
+                    runMax := math.max(runMax, math.max(nz(map.get(heatLong, li)), nz(map.get(heatShort, si))) * scale)
+
+// --------------------------------- colour ---------------------------------
+// Viridis, the perceptually-even ramp CoinGlass uses: deep purple for cold,
+// teal through green in the middle, bright yellow for the heaviest rows.
+viridis(float t) =>
+    tt = math.min(math.max(t, 0.0), 1.0)
+    color c = na
+    if tt < 0.25
+        c := color.from_gradient(tt, 0.00, 0.25, #440154, #3b528b)
+    else if tt < 0.50
+        c := color.from_gradient(tt, 0.25, 0.50, #3b528b, #21918c)
+    else if tt < 0.75
+        c := color.from_gradient(tt, 0.50, 0.75, #21918c, #5ec962)
+    else
+        c := color.from_gradient(tt, 0.75, 1.00, #5ec962, #fde725)
+    c
+
+blueRed(float t) =>
+    tt = math.min(math.max(t, 0.0), 1.0)
+    color c = na
+    if tt < 0.33
+        c := color.from_gradient(tt, 0.00, 0.33, #101a4d, #2b4fd8)
+    else if tt < 0.66
+        c := color.from_gradient(tt, 0.33, 0.66, #2b4fd8, #ffd23f)
+    else
+        c := color.from_gradient(tt, 0.66, 1.00, #ffd23f, #ff2d55)
+    c
+
+// Hot rows stay solid, cold rows fade back so the candles read through.
+rowCol(float t, bool isLong, int floorT, int topT) =>
+    tt = math.min(math.max(t, 0.0), 1.0)
+    base = palette == "Viridis" ? viridis(tt) : palette == "Blue to red" ? blueRed(tt) : (isLong ? #ff2d55 : #13c296)
+    color.new(base, int(floorT - (floorT - topT) * tt))
+
+// --------------------------------- render ---------------------------------
+if barstate.islast
+    for b in cells
+        box.delete(b)
+    array.clear(cells)
+    for lb in levLabs
+        label.delete(lb)
+    array.clear(levLabs)
+    for ln in levLines
+        line.delete(ln)
+    array.clear(levLines)
+
+    // 1. every live bucket, near enough to matter
+    ks  = array.new<int>()
+    ksf = array.new<float>()
+    vl  = array.new<float>()
+    vs  = array.new<float>()
+    vt  = array.new<float>()
+
+    seen = map.new<int, bool>()
+    for k in map.keys(heatLong)
+        map.put(seen, k, true)
+    for k in map.keys(heatShort)
+        map.put(seen, k, true)
+
+    band = maxDistPct / 100.0
+    for k in map.keys(seen)
+        l = nz(map.get(heatLong,  k)) * scale
+        s = nz(map.get(heatShort, k)) * scale
+        if l + s > 0 and math.abs(bktMid(k) / close - 1.0) <= band
+            array.push(ks,  k)
+            array.push(ksf, float(k))
+            array.push(vl,  l)
+            array.push(vs,  s)
+            array.push(vt,  l + s)
+
+    n     = array.size(ks)
+    right = last_bar_index + padBars
+    int left0 = math.max(0, last_bar_index - lookback)
+
+    // 2. HEATMAP MODE - one row per bucket, from where it formed to the right edge
+    if n > 0 and mode == "Heatmap"
+        ordV = array.sort_indices(vt, order.descending)
+        vmax = array.get(vt, array.get(ordV, 0))
+        rows = math.min(n, maxRows)
+        for r = 0 to rows - 1
+            j   = array.get(ordV, r)
+            k   = array.get(ks, j)
+            t   = math.pow(array.get(vt, j) / vmax, gamma)
+            lft = math.max(left0, nz(map.get(bornAt, k), left0))
+            col = rowCol(t, array.get(vl, j) >= array.get(vs, j), 82, 12)
+            array.push(cells, box.new(lft, bktHi(k), right, bktLo(k),
+              border_color = color.new(color.black, 100), bgcolor = col, xloc = xloc.bar_index))
+
+    // 3. merge neighbours into the dominant levels (both modes use these)
+    cLo  = array.new<float>()
+    cHi  = array.new<float>()
+    cL   = array.new<float>()
+    cS   = array.new<float>()
+    cT   = array.new<float>()
+    cNum = array.new<float>()
+
+    if n > 0
+        ordP = array.sort_indices(ksf, order.ascending)
+        for r = 0 to n - 1
+            j = array.get(ordP, r)
+            k = array.get(ks, j)
+            l = array.get(vl, j)
+            s = array.get(vs, j)
+            t = l + s
+            m = array.size(cT) - 1
+            if m >= 0 and bktLo(k) <= array.get(cHi, m) * (1.0 + mergePct / 100.0)
+                array.set(cHi,  m, math.max(array.get(cHi, m), bktHi(k)))
+                array.set(cL,   m, array.get(cL,   m) + l)
+                array.set(cS,   m, array.get(cS,   m) + s)
+                array.set(cT,   m, array.get(cT,   m) + t)
+                array.set(cNum, m, array.get(cNum, m) + bktMid(k) * t)
+            else
+                array.push(cLo,  bktLo(k))
+                array.push(cHi,  bktHi(k))
+                array.push(cL,   l)
+                array.push(cS,   s)
+                array.push(cT,   t)
+                array.push(cNum, bktMid(k) * t)
+
+    nc = array.size(cT)
+    if nc > 0
+        ordT  = array.sort_indices(cT, order.descending)
+        shown = math.min(nc, maxLevels)
+        cmax  = array.get(cT, array.get(ordT, 0))
+        lstub = last_bar_index - stubBars
+
+        for r = 0 to shown - 1
+            j    = array.get(ordT, r)
+            tot  = array.get(cT, j)
+            lng  = array.get(cL, j)
+            sht  = array.get(cS, j)
+            px   = array.get(cNum, j) / tot
+            lo   = array.get(cLo, j)
+            hi   = array.get(cHi, j)
+            isL  = lng >= sht
+            t    = math.pow(tot / cmax, gamma)
+            dist = (px / close - 1.0) * 100.0
+            edge = rowCol(t, isL, 55, 5)
+
+            // In Levels mode the cluster itself is the drawing. In Heatmap mode the
+            // rows are already there, so only the marker and the line go on top.
+            if mode == "Levels"
+                array.push(cells, box.new(lstub, hi, right, lo,
+                  border_color = color.new(edge, 55), border_width = 1,
+                  bgcolor = rowCol(t, isL, 88, 30), xloc = xloc.bar_index))
+
+            if showLine
+                array.push(levLines, line.new(lstub, px, right, px, xloc = xloc.bar_index,
+                  color = edge, width = 1, style = line.style_dotted))
+
+            tip = "Liquidation cluster" +
+              "\nLevel      " + str.tostring(px, format.mintick) +
+              "\nSide       " + (isL ? "long liquidations" : "short liquidations") +
+              "\nSize       $" + fmtUsd(tot) +
+              "\nLongs      $" + fmtUsd(lng) +
+              "\nShorts     $" + fmtUsd(sht) +
+              "\nDistance   " + (dist >= 0 ? "+" : "") + str.tostring(dist, "#.##") + "%" +
+              "\nSpan       " + str.tostring(lo, format.mintick) + "  to  " + str.tostring(hi, format.mintick) +
+              "\nRank       #" + str.tostring(r + 1) + " of " + str.tostring(nc) +
+              "\n\nWiped the moment price trades through it."
+
+            array.push(levLabs, label.new(right, px, fmtUsd(tot), xloc = xloc.bar_index, yloc = yloc.price,
+              style = label.style_label_left, color = edge, textcolor = color.white, size = size.small, tooltip = tip))
+
+        if showTable
+            var table tb = table.new(position.top_right, 4, 9, border_width = 1)
+            table.clear(tb, 0, 0, 3, 8)
+            table.cell(tb, 0, 0, "Level", text_color = color.gray, text_size = size.tiny)
+            table.cell(tb, 1, 0, "Dist",  text_color = color.gray, text_size = size.tiny)
+            table.cell(tb, 2, 0, "Side",  text_color = color.gray, text_size = size.tiny)
+            table.cell(tb, 3, 0, "Size",  text_color = color.gray, text_size = size.tiny)
+            for r = 0 to math.min(shown, 8) - 1
+                j    = array.get(ordT, r)
+                tot  = array.get(cT, j)
+                px   = array.get(cNum, j) / tot
+                isL  = array.get(cL, j) >= array.get(cS, j)
+                dist = (px / close - 1.0) * 100.0
+                table.cell(tb, 0, r + 1, str.tostring(px, format.mintick), text_color = color.white, text_size = size.tiny)
+                table.cell(tb, 1, r + 1, (dist >= 0 ? "+" : "") + str.tostring(dist, "#.##") + "%", text_color = dist >= 0 ? color.teal : color.red, text_size = size.tiny)
+                table.cell(tb, 2, r + 1, isL ? "long" : "short", text_color = isL ? color.red : color.teal, text_size = size.tiny)
+                table.cell(tb, 3, r + 1, fmtUsd(tot), text_color = color.white, text_size = size.tiny)
+
+    // -- pasted levels (real data from the tools/ scripts) --
+    for ln in mlines
+        line.delete(ln)
+    array.clear(mlines)
+    for lb in mlabels
+        label.delete(lb)
+    array.clear(mlabels)
+
+    if showManual and str.length(manualStr) > 0
+        for p in str.split(manualStr, ",")
+            kv = str.split(str.replace_all(p, " ", ""), ":")
+            if array.size(kv) >= 1
+                px = str.tonumber(array.get(kv, 0))
+                sz = array.size(kv) > 1 ? str.tonumber(array.get(kv, 1)) : na
+                if not na(px)
+                    w = na(sz) ? 2 : int(math.min(math.max(sz, 1), 6))
+                    array.push(mlines, line.new(last_bar_index - stubBars, px, right, px, xloc = xloc.bar_index, color = manualCol, width = w))
+                    array.push(mlabels, label.new(right, px, "REAL", xloc = xloc.bar_index, yloc = yloc.price,
+                      style = label.style_label_left, color = color.new(color.black, 100), textcolor = manualCol, size = size.tiny,
+                      tooltip = "Pasted from real exchange data\nPrice  " + str.tostring(px, format.mintick) + (na(sz) ? "" : "\nSize   " + str.tostring(sz))))
+
+// --------------------------------- alerts ---------------------------------
+float nearBig = 0.0
+if inWindow and runMax > 0
+    for i = idxOf(close * (1.0 - nearPct / 100.0)) to idxOf(close * (1.0 + nearPct / 100.0))
+        nearBig := math.max(nearBig, (nz(map.get(heatLong, i)) + nz(map.get(heatShort, i))) * scale)
+
+magnet = runMax > 0 and nearBig / runMax >= nearRatio
+alertcondition(magnet, "Liquidation magnet near price", "Price is within reach of a large liquidation cluster")
+plotshape(magnet and not magnet[1], "Magnet", shape.triangleup, location.belowbar, color.new(color.orange, 30), size = size.tiny)
