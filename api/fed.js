@@ -12,7 +12,9 @@
 import { fail, methodIs, readCookies } from './_lib/http.js';
 import { userForToken } from './_lib/accounts.js';
 import { requiredContracts, readDecision } from './_lib/fedwatch.js';
-import { fromPolymarket, fromKalshi, blend, spread } from './_lib/fedsources.js';
+import {
+  fromPolymarket, fromKalshi, fromFutures, pool, buckets, mode, spread,
+} from './_lib/fedsources.js';
 
 const SESSION_COOKIE = 'pt_session';
 const SOURCE = 'https://query1.finance.yahoo.com/v8/finance/chart';
@@ -138,12 +140,12 @@ export default async function handler(req, res) {
   ]);
 
   const sources = [
-    { id: 'futures', label: 'Fed funds futures', odds: decision.odds },
-    poly && { id: 'polymarket', label: 'Polymarket', odds: poly },
-    kalshi && { id: 'kalshi', label: 'Kalshi', odds: kalshi },
-  ].filter(Boolean);
+    { id: 'futures', label: 'Fed funds futures', dist: fromFutures(decision.changeBps) },
+    poly && { id: 'polymarket', label: 'Polymarket', dist: poly },
+    kalshi && { id: 'kalshi', label: 'Kalshi', dist: kalshi },
+  ].filter((s) => s && s.dist);
 
-  const consensus = blend(sources);
+  const pooled = pool(sources);
 
   /**
    * A minute. These move on the futures tape, which is continuous, but the
@@ -157,9 +159,11 @@ export default async function handler(req, res) {
     ...decision,
     // The blend is what the panel draws; the sources are what it can show
     // underneath, so an average is never mistaken for an agreement.
-    odds: consensus ?? decision.odds,
+    odds: buckets(pooled) ?? decision.odds,
+    distribution: pooled,
+    likeliest: mode(pooled),
     futuresOdds: decision.odds,
-    sources,
-    spread: spread(sources),
+    sources: sources.map((s) => ({ ...s, odds: buckets(s.dist) })),
+    spread: spread(sources, pooled),
   }));
 }

@@ -33,13 +33,28 @@ const FED_BARS = [
   { key: 'decrease', label: 'Cut', colour: 'var(--green)' },
 ];
 
+/**
+ * Every outcome the committee can pick, rather than the three directions.
+ *
+ * A pooled 53% chance of "a raise" is two different meetings depending on
+ * whether it is 52% on a quarter and 1% on a half, or evenly split — and the
+ * sources quote it that finely, so the panel may as well show it.
+ */
+const FED_SCENARIOS = [
+  { bps: -50, label: '−50+', colour: 'var(--green)' },
+  { bps: -25, label: '−25', colour: 'var(--green)' },
+  { bps: 0, label: 'Hold', colour: 'var(--text3)' },
+  { bps: 25, label: '+25', colour: 'var(--red)' },
+  { bps: 50, label: '+50+', colour: 'var(--red)' },
+];
+
 /** "16 September 2026", which is how anyone says it out loud. */
 function meetingLabel(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   return `${d} ${MONTHS_LONG[m - 1]} ${y}`;
 }
 
-function renderFedPanel(decision) {
+export function renderFedPanel(decision) {
   const card = el('fedCard');
   const bars = el('fedBars');
   if (!card || !bars) return;
@@ -51,17 +66,26 @@ function renderFedPanel(decision) {
   const meeting = el('fedMeeting');
   if (meeting) meeting.textContent = meetingLabel(decision.meeting);
 
-  bars.innerHTML = FED_BARS.map(({ key, label, colour }) => {
-    const p = (decision.odds?.[key] ?? 0) * 100;
+  /**
+   * One bar per outcome when the pooled distribution is there, and the three
+   * directions when it is not — an older cached answer, or a day when only the
+   * futures replied.
+   */
+  const dist = decision.distribution;
+  const shown = dist
+    ? FED_SCENARIOS.map(({ bps, label, colour }) => ({ p: (dist[bps] ?? 0) * 100, label, colour }))
+    : FED_BARS.map(({ key, label, colour }) => ({ p: (decision.odds?.[key] ?? 0) * 100, label, colour }));
+
+  bars.innerHTML = shown.map(({ p, label, colour }) => {
     // A bar of literally zero reads as a rendering fault rather than as zero,
     // so the floor is a sliver that is visibly nothing.
     const height = Math.max(p, 1.2);
-    return `<div class="fed-bar" title="${label}: ${p.toFixed(1)}%">
-      <div class="fed-bar-pct">${p.toFixed(0)}%</div>
+    return `<div class="fed-bar" title="${escapeHtml(label)}: ${p.toFixed(1)}%">
+      <div class="fed-bar-pct">${p < 1 && p > 0 ? '<1' : p.toFixed(0)}%</div>
       <div class="fed-bar-track">
         <div class="fed-bar-fill" style="height:${height}%;background:${colour}"></div>
       </div>
-      <div class="fed-bar-label">${label}</div>
+      <div class="fed-bar-label">${escapeHtml(label)}</div>
     </div>`;
   }).join('');
 
@@ -87,17 +111,27 @@ function renderFedSources(decision) {
   host.style.display = sources.length > 1 ? '' : 'none';
   if (sources.length < 2) return;
 
-  const leading = FED_BARS
-    .map(({ key, label }) => ({ key, label, p: decision.odds?.[key] ?? 0 }))
-    .sort((a, b) => b.p - a.p)[0];
+  /**
+   * Compared on the single outcome the pool leads with — a quarter-point hike,
+   * say — rather than on a direction. Two sources can agree that a raise is
+   * likely and disagree completely about its size.
+   */
+  const best = decision.likeliest;
+  const scenario = FED_SCENARIOS.find((s) => s.bps === best?.bps);
+  const reading = (s) => (scenario && s.dist
+    ? s.dist[scenario.bps] ?? 0
+    : s.odds?.[best?.bps > 0 ? 'increase' : best?.bps < 0 ? 'decrease' : 'hold'] ?? 0);
 
   const parts = sources.map((s) =>
     `<span class="fed-src"><span class="fed-src-name">${escapeHtml(s.label)}</span>${
-      ((s.odds?.[leading.key] ?? 0) * 100).toFixed(0)}%</span>`).join('');
+      (reading(s) * 100).toFixed(0)}%</span>`).join('');
 
   const gap = Number(decision.spread) || 0;
-  host.innerHTML = `${parts}<span class="fed-src-note">on ${
-    escapeHtml(leading.label.toLowerCase())}${
+  const name = scenario
+    ? (scenario.bps === 0 ? 'no change' : `a ${Math.abs(scenario.bps)}bp ${scenario.bps > 0 ? 'hike' : 'cut'}`)
+    : 'the likeliest outcome';
+
+  host.innerHTML = `${parts}<span class="fed-src-note">on ${escapeHtml(name)}${
     gap >= 5 ? ` · they disagree by ${gap.toFixed(0)} points` : ''}</span>`;
 }
 

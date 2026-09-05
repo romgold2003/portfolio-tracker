@@ -1,47 +1,76 @@
 /**
- * The odds on the Fed, read from more than one market.
+ * Pooling the odds on the Fed across three markets.
  *
- * Three venues price this and on 5 September 2026 they did not agree: the fed
- * funds futures implied a 58% chance of a hike while Polymarket said 50% and
- * Kalshi 51% — the two prediction markets agreeing with each other and not with
- * the futures, which is the direction the documented term premium in futures
- * would predict.
+ * On 5 September 2026 the fed funds futures implied a 58% chance of a hike
+ * while Polymarket said 49% and Kalshi 50% — the two prediction markets
+ * agreeing with each other and not with the futures, which is the direction the
+ * term premium in futures would predict.
  *
- * So the tests are about not losing that. A blend must never quietly become the
- * only thing on offer, an unnormalised book must not out-vote a tight one, and
- * a source that fails must cost its own vote and nothing else.
+ * Two things are being protected here. The distribution must stay whole:
+ * collapsing to cut/hold/raise before pooling throws away the tails, and the
+ * tails are where a surprise lives. And the pool must stay conservative —
+ * extremizing correlated forecasters manufactures confidence out of an echo,
+ * and all three of these are watching the same statements.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  normalise, currentUpper, fromPolymarket, fromKalshi, blend, spread,
+  OUTCOMES, normalise, currentUpper, fromFutures, fromPolymarket, fromKalshi,
+  pool, buckets, mode, spread,
 } from '../api/_lib/fedsources.js';
 
-const pct = (o) => Object.fromEntries(
-  Object.entries(o).map(([k, v]) => [k, +(v * 100).toFixed(1)]),
-);
+const pct = (d) => Object.fromEntries(OUTCOMES.map((b) => [b, +((d?.[b] ?? 0) * 100).toFixed(1)]));
+const sums = (d) => OUTCOMES.reduce((s, b) => s + d[b], 0);
 
-describe('making a book add up', () => {
-  test('a book quoting over 100 is scaled, not trusted', () => {
-    // Polymarket's five legs came to 100.15: each carries its own spread.
-    const out = normalise({ decrease: 0.005, hold: 0.495, increase: 0.5015 });
-    const total = out.decrease + out.hold + out.increase;
-    assert.ok(Math.abs(total - 1) < 1e-12, `sums to ${total}`);
+describe('the shape everything is carried in', () => {
+  test('it is a distribution over five outcomes, not three buckets', () => {
+    assert.deepEqual(OUTCOMES, [-50, -25, 0, 25, 50]);
   });
 
-  test('a book of nothing is null rather than three zeroes', () => {
-    assert.equal(normalise({ decrease: 0, hold: 0, increase: 0 }), null);
+  test('a book quoting over 100 is scaled, not trusted', () => {
+    // Polymarket's five legs came to 100.15: each carries its own spread.
+    const out = normalise({ '-50': 0.0015, '-25': 0.0035, 0: 0.495, 25: 0.495, 50: 0.0065 });
+    assert.ok(Math.abs(sums(out) - 1) < 1e-12);
+  });
+
+  test('a book of nothing is null rather than five zeroes', () => {
+    assert.equal(normalise({}), null);
     assert.equal(normalise(null), null);
   });
 });
 
 describe('where the target range sits', () => {
   test('the effective rate is rounded up to the top of its quarter', () => {
-    // 3.63 sits inside 3.50–3.75, so a hike is anything above 3.75.
     assert.equal(currentUpper(3.63), 3.75);
     assert.equal(currentUpper(4.33), 4.5);
     assert.equal(currentUpper(3.75), 3.75, 'exactly on the top stays there');
+  });
+});
+
+describe('the futures, as a distribution', () => {
+  test('an expected move splits across the two steps around it', () => {
+    // +14.57bp is 58.3% of the way from a hold to a quarter-point hike, which
+    // is exactly what the panel showed before any of this.
+    assert.deepEqual(pct(fromFutures(14.57)), { '-50': 0, '-25': 0, 0: 41.7, 25: 58.3, 50: 0 });
+  });
+
+  test('no expected move is all on the hold', () => {
+    assert.deepEqual(pct(fromFutures(0)), { '-50': 0, '-25': 0, 0: 100, 25: 0, 50: 0 });
+  });
+
+  test('a cut lands on the cut side', () => {
+    assert.deepEqual(pct(fromFutures(-12.5)), { '-50': 0, '-25': 50, 0: 50, 25: 0, 50: 0 });
+  });
+
+  test('a move past the ends is held at them rather than lost', () => {
+    assert.equal(pct(fromFutures(-90))['-50'], 100);
+    assert.equal(pct(fromFutures(200))[50], 100);
+  });
+
+  test('no expectation at all is no distribution', () => {
+    assert.equal(fromFutures(NaN), null);
+    assert.equal(fromFutures(undefined), null);
   });
 });
 
@@ -57,9 +86,12 @@ describe('reading Polymarket', () => {
     ],
   };
 
-  test('five separate binaries fold into the three the panel shows', () => {
-    const odds = fromPolymarket([event], '2026-09-16');
-    assert.deepEqual(pct(odds), { decrease: 0.5, hold: 49.4, increase: 50.1 });
+  test('all five legs are kept apart, including the tails', () => {
+    // The tails are the point of not collapsing early: 0.6% on a fifty is a
+    // different market from 0% on one.
+    assert.deepEqual(pct(fromPolymarket([event], '2026-09-16')), {
+      '-50': 0.1, '-25': 0.3, 0: 49.4, 25: 49.4, 50: 0.6,
+    });
   });
 
   test('the meeting month has to match, so October is not read as September', () => {
@@ -78,22 +110,30 @@ describe('reading Polymarket', () => {
 });
 
 describe('reading Kalshi', () => {
-  /** The real ladder: cumulative "Above X%" thresholds. */
-  const rung = (strike, mid) => ({
+  /** Cumulative "Above X%" rungs, quoted two-sided. */
+  const rung = (strike, mid, width = 0.01) => ({
     floor_strike: strike,
-    yes_bid_dollars: String(mid - 0.005),
-    yes_ask_dollars: String(mid + 0.005),
+    yes_bid_dollars: String(mid - width / 2),
+    yes_ask_dollars: String(mid + width / 2),
   });
   const ladder = [
     rung(4.25, 0.005), rung(4, 0.015), rung(3.75, 0.515), rung(3.5, 0.995), rung(3.25, 0.995),
   ];
 
-  test('the ladder is differenced into cut, hold and raise', () => {
-    // Above 3.75 is a hike; failing to clear 3.50 is a cut; the rest is a hold.
-    assert.deepEqual(pct(fromKalshi(ladder, 3.63)), { decrease: 0.5, hold: 48, increase: 51.5 });
+  test('the ladder is differenced into the same five outcomes', () => {
+    assert.deepEqual(pct(fromKalshi(ladder, 3.63)), {
+      '-50': 0.5, '-25': 0, 0: 48, 25: 50, 50: 1.5,
+    });
   });
 
-  test('the rungs it needs are the ones around today\'s range', () => {
+  test('a rung quoted too wide is not used as a price', () => {
+    // A mid from a two-cent market is a number; from a sixty-cent market it is
+    // a guess wearing one, and it would move the whole pool.
+    const wide = ladder.map((r) => (Number(r.floor_strike) === 3.75 ? rung(3.75, 0.515, 0.6) : r));
+    assert.equal(fromKalshi(wide, 3.63), null);
+  });
+
+  test('the rungs it needs are the ones around the range today', () => {
     // At 4.33 the relevant rungs are 4.50 and 4.25, and 4.50 is not quoted.
     assert.equal(fromKalshi(ladder, 4.33), null);
   });
@@ -105,38 +145,83 @@ describe('reading Kalshi', () => {
   });
 });
 
-describe('blending them', () => {
-  const futures = { id: 'futures', odds: { decrease: 0, hold: 0.417, increase: 0.583 } };
-  const poly = { id: 'polymarket', odds: { decrease: 0.005, hold: 0.494, increase: 0.501 } };
-  const kalshi = { id: 'kalshi', odds: { decrease: 0.005, hold: 0.48, increase: 0.515 } };
+describe('pooling them', () => {
+  const futures = { dist: fromFutures(14.57) };
+  const poly = { dist: { '-50': 0.001, '-25': 0.003, 0: 0.494, 25: 0.494, 50: 0.006 } };
+  const kalshi = { dist: { '-50': 0.005, '-25': 0, 0: 0.48, 25: 0.5, 50: 0.015 } };
 
-  test('the real three, blended', () => {
-    assert.deepEqual(pct(blend([futures, poly, kalshi])), {
-      decrease: 0.3, hold: 46.4, increase: 53.3,
+  test('the real three, pooled', () => {
+    assert.deepEqual(pct(pool([futures, poly, kalshi])), {
+      '-50': 0.2, '-25': 0.1, 0: 46.4, 25: 52.6, 50: 0.7,
     });
   });
 
-  test('two agreeing outvote one that does not', () => {
-    // The point of reading three. The blend must land nearer the pair than the
-    // outlier, because the outlier is the source with a known lean.
-    const out = blend([futures, poly, kalshi]);
-    assert.ok(Math.abs(out.increase - 0.505) < Math.abs(out.increase - 0.583));
+  test('it is not extremized — the pool sits between its members', () => {
+    // The decision worth guarding. Extremizing would push the leading outcome
+    // above every source that fed it, which is only defensible when forecasters
+    // hold independent information. These three read each other.
+    const out = pool([futures, poly, kalshi]);
+    const members = [futures, poly, kalshi].map((s) => s.dist[25]);
+    assert.ok(
+      out[25] <= Math.max(...members) && out[25] >= Math.min(...members),
+      `pooled ${out[25]} escaped the range of its sources`,
+    );
   });
 
-  test('the futures alone reproduce exactly what the panel showed before', () => {
-    assert.deepEqual(pct(blend([futures])), { decrease: 0, hold: 41.7, increase: 58.3 });
+  test('two agreeing outvote one that does not', () => {
+    const out = pool([futures, poly, kalshi]);
+    assert.ok(Math.abs(out[25] - 0.494) < Math.abs(out[25] - 0.583));
+  });
+
+  test('the futures alone reproduce what the panel showed before', () => {
+    const b = buckets(pool([futures]));
+    assert.equal(b.decrease, 0);
+    assert.ok(Math.abs(b.hold - 0.417) < 0.001, `hold ${b.hold}`);
+    assert.ok(Math.abs(b.increase - 0.583) < 0.001, `increase ${b.increase}`);
   });
 
   test('a source that failed simply is not in it', () => {
-    const partial = blend([futures, { id: 'polymarket', odds: null }]);
-    assert.deepEqual(pct(partial), { decrease: 0, hold: 41.7, increase: 58.3 });
-    assert.equal(blend([]), null);
-    assert.equal(blend(null), null);
+    assert.deepEqual(pct(pool([futures, { dist: null }])), pct(futures.dist));
+    assert.equal(pool([]), null);
+    assert.equal(pool(null), null);
   });
 
-  test('the spread is the widest gap on any outcome', () => {
-    // 58.3 against 50.1 on a raise: eight points, and worth saying out loud.
-    assert.equal(spread([futures, poly, kalshi]), 8.2);
-    assert.equal(spread([futures]), 0, 'one source cannot disagree with itself');
+  test('the pool is still a distribution', () => {
+    assert.ok(Math.abs(sums(pool([futures, poly, kalshi])) - 1) < 1e-12);
+  });
+});
+
+describe('what the panel reads off it', () => {
+  const sources = [
+    { dist: fromFutures(14.57) },
+    { dist: { '-50': 0.001, '-25': 0.003, 0: 0.494, 25: 0.494, 50: 0.006 } },
+    { dist: { '-50': 0.005, '-25': 0, 0: 0.48, 25: 0.5, 50: 0.015 } },
+  ];
+  const pooled = pool(sources);
+
+  test('the three bars are summed from the five outcomes', () => {
+    const b = buckets(pooled);
+    assert.ok(Math.abs(b.decrease - 0.003) < 0.001);
+    assert.ok(Math.abs(b.hold - 0.464) < 0.001);
+    assert.ok(Math.abs(b.increase - 0.533) < 0.001);
+    assert.ok(Math.abs(b.decrease + b.hold + b.increase - 1) < 1e-12);
+  });
+
+  test('the likeliest single outcome is named, not just the direction', () => {
+    // "A hike" and "a quarter-point hike" are different claims.
+    const m = mode(pooled);
+    assert.equal(m.bps, 25);
+    assert.ok(Math.abs(m.probability - 0.526) < 0.001);
+  });
+
+  test('the spread is measured on the outcome they collectively lead with', () => {
+    // 58.3% against a normalised 49.5%: the gap the panel calls out.
+    assert.equal(spread(sources, pooled), 8.8);
+    assert.equal(spread([sources[0]]), 0, 'one source cannot disagree with itself');
+  });
+
+  test('nothing pooled is nothing read', () => {
+    assert.equal(buckets(null), null);
+    assert.equal(mode(null), null);
   });
 });

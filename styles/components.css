@@ -68,8 +68,8 @@
 .fed-card{margin-bottom:14px}
 .fed-meeting{font-size:11px;color:var(--text2);text-transform:none;letter-spacing:0}
 .fed-body{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap}
-.fed-bars{display:flex;align-items:flex-end;gap:14px;flex:none}
-.fed-bar{display:flex;flex-direction:column;align-items:center;gap:5px;width:52px}
+.fed-bars{display:flex;align-items:flex-end;gap:10px;flex:none;flex-wrap:wrap}
+.fed-bar{display:flex;flex-direction:column;align-items:center;gap:5px;width:48px}
 .fed-bar-pct{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
 /* The track is the full 100%, so a bar is read against what it did not take. */
 .fed-bar-track{width:100%;height:76px;display:flex;align-items:flex-end;
