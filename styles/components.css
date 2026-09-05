@@ -656,3 +656,6 @@ body.light{--wave-strength:0.34}
 .fed-src{color:var(--text);font-variant-numeric:tabular-nums}
 .fed-src-name{color:var(--text3);margin-right:5px}
 .fed-src-note{color:var(--text4)}
+/* A source whose exchange is shut: shown, greyed, and out of the pool. */
+.fed-src.is-shut{color:var(--text4)}
+.fed-shut{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;margin-left:4px}

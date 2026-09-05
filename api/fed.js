@@ -19,6 +19,16 @@ import {
 const SESSION_COOKIE = 'pt_session';
 const SOURCE = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
+/**
+ * A contract's price, and when it was last quoted.
+ *
+ * The timestamp is the point. Fed funds futures keep exchange hours — shut all
+ * weekend and for an hour most nights — while both prediction markets run
+ * around the clock. Asked on a Saturday evening the futures answer with
+ * Friday's close, twenty-five hours old, and pooling that into a figure meant
+ * to describe this moment drags it back a day and a half. Nothing in the price
+ * itself says so; only the time does.
+ */
 async function priceOf(symbol) {
   const res = await fetch(
     `${SOURCE}/${encodeURIComponent(symbol)}?interval=1d&range=5d`,
@@ -26,9 +36,20 @@ async function priceOf(symbol) {
   );
   if (!res.ok) return null;
   const json = await res.json();
-  const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-  return typeof price === 'number' && price > 0 ? price : null;
+  const meta = json?.chart?.result?.[0]?.meta;
+  const price = meta?.regularMarketPrice;
+  if (!(typeof price === 'number' && price > 0)) return null;
+  const at = Number(meta?.regularMarketTime);
+  return { price, at: Number.isFinite(at) ? at * 1000 : null };
 }
+
+/**
+ * How old a futures quote may be before it stops describing now.
+ *
+ * Two hours clears the nightly maintenance break and any thin overnight
+ * stretch, and does not clear a weekend.
+ */
+const FUTURES_STALE_MS = 2 * 60 * 60 * 1000;
 
 /**
  * The rate the next meeting opens at: whatever the Fed is paying today.
@@ -113,9 +134,14 @@ export default async function handler(req, res) {
     effectiveRate(),
   ]);
   const prices = {};
+  let quotedAt = null;
   wanted.forEach((symbol, i) => {
     const r = settled[i];
-    if (r.status === 'fulfilled' && r.value != null) prices[symbol] = r.value;
+    if (r.status !== 'fulfilled' || r.value == null) return;
+    prices[symbol] = r.value.price;
+    // The meeting month is the contract the answer actually rests on, so its
+    // quote time is the one that decides whether the futures are speaking now.
+    if (symbol === wanted[wanted.length - 1]) quotedAt = r.value.at;
   });
 
   const decision = readDecision({ today, prices, effr });
@@ -139,10 +165,28 @@ export default async function handler(req, res) {
     kalshiOdds(decision.meeting, effr),
   ]);
 
+  /**
+   * A source that is shut does not get a vote in what is true now.
+   *
+   * The futures are excluded rather than down-weighted while the exchange is
+   * closed. A stale quote is not a weak opinion about the present, it is a
+   * confident opinion about the past, and averaging it in would hold the panel
+   * at Friday's number through a weekend in which the prediction markets had
+   * moved. The prediction markets trade continuously and are always live.
+   */
+  const futuresAge = quotedAt == null ? null : Date.now() - quotedAt;
+  const futuresLive = futuresAge == null || futuresAge < FUTURES_STALE_MS;
+
   const sources = [
-    { id: 'futures', label: 'Fed funds futures', dist: fromFutures(decision.changeBps) },
-    poly && { id: 'polymarket', label: 'Polymarket', dist: poly },
-    kalshi && { id: 'kalshi', label: 'Kalshi', dist: kalshi },
+    {
+      id: 'futures',
+      label: 'Fed funds futures',
+      dist: fromFutures(decision.changeBps),
+      live: futuresLive,
+      asOf: quotedAt,
+    },
+    poly && { id: 'polymarket', label: 'Polymarket', dist: poly, live: true, asOf: Date.now() },
+    kalshi && { id: 'kalshi', label: 'Kalshi', dist: kalshi, live: true, asOf: Date.now() },
   ].filter((s) => s && s.dist);
 
   const pooled = pool(sources);

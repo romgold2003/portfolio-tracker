@@ -132,9 +132,20 @@ function renderFedSources(decision) {
     ? s.dist[scenario.bps] ?? 0
     : s.odds?.[best?.bps > 0 ? 'increase' : best?.bps < 0 ? 'decrease' : 'hold'] ?? 0);
 
-  const parts = sources.map((s) =>
-    `<span class="fed-src"><span class="fed-src-name">${escapeHtml(s.label)}</span>${
-      (reading(s) * 100).toFixed(0)}%</span>`).join('');
+  /**
+   * A shut source is shown greyed with its figure, not hidden.
+   *
+   * It is out of the pool — a stale quote is a confident statement about the
+   * past — but seeing that the futures closed at 58% while the live markets sit
+   * at 50% is exactly the comparison worth having on a Monday morning.
+   */
+  const parts = sources.map((s) => {
+    const off = s.live === false;
+    return `<span class="fed-src${off ? ' is-shut' : ''}"${
+      off ? ' title="Market closed — not counted in the pooled figure"' : ''
+    }><span class="fed-src-name">${escapeHtml(s.label)}</span>${
+      (reading(s) * 100).toFixed(0)}%${off ? ' <span class="fed-shut">closed</span>' : ''}</span>`;
+  }).join('');
 
   const gap = Number(decision.spread) || 0;
   const name = scenario
@@ -271,6 +282,31 @@ async function pickMarket(id) {
 const LIVE_FLOOR_MS = 30 * 1000;
 let liveTimer = null;
 
+/**
+ * The Fed panel refreshes itself too, on its own timer.
+ *
+ * It is watched for a sudden repricing, and a number that only updates when the
+ * page is reloaded cannot show one. A minute, which is what the endpoint caches
+ * for — asking faster would return the same answer.
+ *
+ * Like the exposure panel, a page that is off screen or in a background tab
+ * skips the fetch and keeps the timer, so it resumes on its own.
+ */
+const FED_EVERY_MS = 60 * 1000;
+let fedTimer = null;
+
+function startFedRefresh() {
+  clearInterval(fedTimer);
+  fedTimer = setInterval(async () => {
+    const card = el('fedCard');
+    const onScreen = card && card.offsetParent !== null
+      && document.visibilityState === 'visible';
+    if (!onScreen) return;
+    const fresh = await fedDecision();
+    if (fresh) renderFedPanel(fresh);
+  }, FED_EVERY_MS);
+}
+
 function scheduleLive(profile) {
   clearTimeout(liveTimer);
   const wait = Math.max(LIVE_FLOOR_MS, Number(profile?.refreshMs) || 60000);
@@ -322,6 +358,7 @@ export async function renderNews() {
   installNewsTabs();
   renderGamble();
   startGamble();
+  startFedRefresh();
 
   const anything = value(fed) || value(econ) || value(mood) || value(opts) || value(etf);
   const empty = el('newsEmpty');

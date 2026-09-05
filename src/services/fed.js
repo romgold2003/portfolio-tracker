@@ -14,7 +14,12 @@ import { cloudEnabled } from './cloud.js';
  * of a percent over an hour. Asking every five minutes is already far more
  * often than the number changes.
  */
-const CACHE_MS = 5 * 60 * 1000;
+/**
+ * A minute. The panel is watched for a sudden repricing, so holding the
+ * previous answer for five was most of what stood between a shift happening
+ * and it appearing — the endpoint itself only caches for sixty seconds.
+ */
+const CACHE_MS = 60 * 1000;
 
 let cache = { at: 0, decision: null };
 

@@ -204,8 +204,13 @@ const FUTURES_WEIGHT = 0.3;
  * false alarms.
  */
 export function pool(sources) {
+  // A source explicitly marked shut is not asked. See the note in api/fed.js:
+  // a stale quote is a confident opinion about the past, not a weak one about
+  // the present, and it would hold the pool at Friday's number all weekend.
+  const live = (sources ?? []).filter((s) => s?.live !== false);
+
   const dist = (id) => {
-    const found = (sources ?? []).find((s) => s?.id === id);
+    const found = live.find((s) => s?.id === id);
     return found ? normalise(found.dist) : null;
   };
 
@@ -215,7 +220,7 @@ export function pool(sources) {
   // Anything without an id — a caller passing bare distributions, and every
   // test that does — falls back to a plain mean over whatever it was given.
   if (!futures && !markets.length) {
-    const usable = (sources ?? []).map((s) => normalise(s?.dist)).filter(Boolean);
+    const usable = live.map((s) => normalise(s?.dist)).filter(Boolean);
     if (!usable.length) return null;
     return normalise(Object.fromEntries(OUTCOMES.map((b) => [
       b, usable.reduce((sum, d) => sum + d[b], 0) / usable.length,
@@ -262,7 +267,9 @@ export function mode(dist) {
  * point spread is worse than no number, because it reads as confidence.
  */
 export function spread(sources, pooled) {
-  const usable = (sources ?? []).map((s) => normalise(s?.dist)).filter(Boolean);
+  const usable = (sources ?? [])
+    .filter((s) => s?.live !== false)
+    .map((s) => normalise(s?.dist)).filter(Boolean);
   if (usable.length < 2) return 0;
   const on = mode(pooled ?? pool(sources))?.bps ?? 0;
   const values = usable.map((d) => d[on] ?? 0);

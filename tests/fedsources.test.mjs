@@ -272,3 +272,40 @@ describe('what the panel reads off it', () => {
     assert.equal(mode(null), null);
   });
 });
+
+describe('a shut market does not vote on what is true now', () => {
+  const futures = { id: 'futures', dist: fromFutures(14.57) };
+  const poly = { id: 'polymarket', dist: { '-50': 0.001, '-25': 0.003, 0: 0.494, 25: 0.494, 50: 0.006 } };
+  const kalshi = { id: 'kalshi', dist: { '-50': 0.005, '-25': 0, 0: 0.48, 25: 0.5, 50: 0.015 } };
+
+  test('the weekend: futures excluded, prediction markets carry it', () => {
+    /**
+     * Fed funds futures keep exchange hours; both prediction markets run around
+     * the clock. Asked on a Saturday the futures answer with Friday's close,
+     * twenty-five hours old — a confident statement about the past, not a weak
+     * one about the present.
+     */
+    const open = pool([futures, poly, kalshi])[25];
+    const shut = pool([{ ...futures, live: false }, poly, kalshi])[25];
+    const marketsOnly = pool([poly, kalshi])[25];
+
+    assert.ok(Math.abs(shut - marketsOnly) < 1e-12, 'a shut source still moved the pool');
+    assert.ok(Math.abs(open - shut) > 0.02, 'excluding it should visibly change the answer');
+  });
+
+  test('the disagreement is measured among the open ones only', () => {
+    // Otherwise a closed market makes the live ones look like they disagree.
+    assert.ok(spread([futures, poly, kalshi]) > 5);
+    assert.ok(spread([{ ...futures, live: false }, poly, kalshi]) < 2);
+  });
+
+  test('everything shut is nothing, not a stale answer dressed as fresh', () => {
+    assert.equal(pool([{ ...futures, live: false }]), null);
+  });
+
+  test('live is only false when it is said, so old callers are unaffected', () => {
+    assert.deepEqual(pool([futures, poly, kalshi]), pool([
+      { ...futures, live: undefined }, poly, kalshi,
+    ]));
+  });
+});
