@@ -120,7 +120,9 @@ export function outcomeOdds(entering, expected, step = 0.25) {
  * When the previous month does hold one, its own outcome is solved first and
  * carried forward, which is what makes back-to-back meetings work.
  */
-export function readDecision({ today, prices, meetings = FOMC_MEETINGS, step = 0.25 }) {
+export function readDecision({
+  today, prices, effr, meetings = FOMC_MEETINGS, step = 0.25,
+}) {
   const meeting = nextMeeting(today, meetings);
   if (!meeting) return null;
 
@@ -130,34 +132,53 @@ export function readDecision({ today, prices, meetings = FOMC_MEETINGS, step = 0
     return typeof price === 'number' && price > 0 && price < 100 ? 100 - price : null;
   };
 
-  // Walk back to the most recent month with no meeting in it: that month's
-  // average is the prevailing rate, undisturbed, and is the anchor.
-  let anchorYear = year;
-  let anchorMonth = month;
-  const hasMeeting = (y, m) => meetings.some((d) => {
-    const [my, mm] = d.split('-').map(Number);
-    return my === y && mm === m;
-  });
+  /**
+   * The rate the meeting opens at.
+   *
+   * The published effective rate is the right answer and the robust one. No
+   * meeting falls between today and the next one — that is what makes it the
+   * next one — so whatever the Fed is paying now is what this meeting will
+   * change from, and it is a number that exists every day.
+   *
+   * The futures anchor below was the original method and broke the moment it
+   * was relied on: it walks back to the last month with no meeting in it and
+   * reads that contract, but a contract for a month that has ended is settled
+   * and delisted. In September the anchor was August, August's contract was
+   * gone, and the whole panel disappeared rather than reporting anything.
+   * It is kept only for the case where the effective rate cannot be had.
+   */
+  let entering = Number.isFinite(effr) ? effr : null;
+  let source = 'effr';
 
-  for (let back = 0; back < 6; back++) {
-    anchorMonth -= 1;
-    if (anchorMonth === 0) { anchorMonth = 12; anchorYear -= 1; }
-    if (!hasMeeting(anchorYear, anchorMonth)) break;
-  }
+  if (entering == null) {
+    source = 'futures';
+    let anchorYear = year;
+    let anchorMonth = month;
+    const hasMeeting = (y, m) => meetings.some((d) => {
+      const [my, mm] = d.split('-').map(Number);
+      return my === y && mm === m;
+    });
 
-  let entering = rateOf(anchorYear, anchorMonth);
-  if (entering == null) return null;
+    for (let back = 0; back < 6; back++) {
+      anchorMonth -= 1;
+      if (anchorMonth === 0) { anchorMonth = 12; anchorYear -= 1; }
+      if (!hasMeeting(anchorYear, anchorMonth)) break;
+    }
 
-  // Carry the anchor forward through any meetings between it and this one.
-  for (const d of meetings) {
-    if (d <= `${anchorYear}-${String(anchorMonth).padStart(2, '0')}-31`) continue;
-    if (d >= meeting) break;
-    const [my, mm, md] = d.split('-').map(Number);
-    const avg = rateOf(my, mm);
-    if (avg == null) return null;
-    const next = impliedRateAfter({ impliedAverage: avg, entering, year: my, month: mm, day: md });
-    if (next == null) continue;
-    entering = next;
+    entering = rateOf(anchorYear, anchorMonth);
+    if (entering == null) return null;
+
+    // Carry the anchor forward through any meetings between it and this one.
+    for (const d of meetings) {
+      if (d <= `${anchorYear}-${String(anchorMonth).padStart(2, '0')}-31`) continue;
+      if (d >= meeting) break;
+      const [my, mm, md] = d.split('-').map(Number);
+      const avg = rateOf(my, mm);
+      if (avg == null) return null;
+      const next = impliedRateAfter({ impliedAverage: avg, entering, year: my, month: mm, day: md });
+      if (next == null) continue;
+      entering = next;
+    }
   }
 
   const impliedAverage = rateOf(year, month);
@@ -173,6 +194,8 @@ export function readDecision({ today, prices, meetings = FOMC_MEETINGS, step = 0
     changeBps: Math.round((expected - entering) * 10000) / 100,
     odds: outcomeOdds(entering, expected, step),
     steps: stepProbabilities(entering, expected, step),
+    /** Which anchor produced `entering`, so a fallback answer is identifiable. */
+    enteringSource: source,
   };
 }
 
@@ -183,9 +206,16 @@ export function requiredContracts(today, meetings = FOMC_MEETINGS) {
   const [year, month] = meeting.split('-').map(Number);
 
   const wanted = [];
-  // The meeting month, and the five before it — enough to reach an undisturbed
-  // month and carry it forward however the calendar falls.
-  for (let back = 6; back >= 0; back--) {
+  /**
+   * The meeting month, and two before it.
+   *
+   * The meeting month is the only one actually needed now that the entering
+   * rate comes from the published effective rate; the other two are there for
+   * the futures fallback. It used to ask for six months back, every one of
+   * which is a settled and delisted contract by the time it is wanted — six
+   * guaranteed 404s on every request.
+   */
+  for (let back = 2; back >= 0; back--) {
     let y = year;
     let m = month - back;
     while (m <= 0) { m += 12; y -= 1; }

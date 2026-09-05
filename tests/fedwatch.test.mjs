@@ -143,3 +143,63 @@ describe('reading a decision from contract prices', () => {
     }), null);
   });
 });
+
+describe('the rate the meeting opens at', () => {
+  /**
+   * The bug this exists for: the panel vanished on 5 September 2026.
+   *
+   * The entering rate was read from the last month with no meeting in it —
+   * August — and a contract for a month that has ended is settled and
+   * delisted. Yahoo answered 404 for six of the seven contracts requested,
+   * readDecision returned null, and the card hid itself. Nothing said why.
+   *
+   * The published effective rate is the fix and the better anchor anyway: no
+   * meeting falls between today and the next one, so whatever the Fed is
+   * paying now is what that meeting changes from.
+   */
+  const SEPT = { today: '2026-09-05', meetings: ['2026-09-16'] };
+
+  test('it comes from the effective rate, with only the meeting month priced', () => {
+    // Exactly the live situation: August expired, September quoting 96.302.
+    const d = readDecision({ ...SEPT, prices: { 'ZQU26.CBT': 96.302 }, effr: 3.63 });
+    assert.ok(d, 'the panel must not vanish because last month expired');
+    assert.equal(d.enteringSource, 'effr');
+    assert.equal(d.entering, 3.63);
+    assert.ok(Math.abs(d.expected - 3.7757) < 0.001, `expected ${d.expected}`);
+    assert.ok(d.odds.increase > 0.5 && d.odds.decrease === 0);
+  });
+
+  test('the old futures anchor still answers when those contracts exist', () => {
+    const d = readDecision({
+      ...SEPT,
+      prices: { 'ZQQ26.CBT': 96.37, 'ZQU26.CBT': 96.302 },
+      meetings: ['2026-09-16'],
+    });
+    assert.ok(d, 'the fallback must still work where nothing has expired');
+    assert.equal(d.enteringSource, 'futures');
+    assert.ok(Math.abs(d.entering - 3.63) < 0.001);
+  });
+
+  test('an effective rate that is not a number falls back rather than throwing', () => {
+    for (const effr of [null, undefined, NaN, 'three']) {
+      const d = readDecision({ ...SEPT, prices: { 'ZQQ26.CBT': 96.37, 'ZQU26.CBT': 96.302 }, effr });
+      assert.equal(d?.enteringSource, 'futures', `effr ${effr} was trusted`);
+    }
+  });
+
+  test('with neither anchor there is no answer, rather than a made-up one', () => {
+    assert.equal(readDecision({ ...SEPT, prices: {}, effr: null }), null);
+  });
+
+  test('the meeting month is still required even with the effective rate', () => {
+    // The effective rate says where we are, not where the market thinks we go.
+    assert.equal(readDecision({ ...SEPT, prices: {}, effr: 3.63 }), null);
+  });
+
+  test('only three contracts are asked for, not seven', () => {
+    // Six of the old seven were guaranteed 404s: months already settled.
+    const wanted = requiredContracts('2026-09-05', ['2026-09-16']);
+    assert.equal(wanted.length, 3);
+    assert.ok(wanted.includes('ZQU26.CBT'), 'the meeting month must be in there');
+  });
+});

@@ -27,6 +27,35 @@ async function priceOf(symbol) {
   return typeof price === 'number' && price > 0 ? price : null;
 }
 
+/**
+ * The rate the next meeting opens at: whatever the Fed is paying today.
+ *
+ * The effective rate is published daily and never expires, which the futures
+ * anchor it replaces could not say — that read the previous month's contract,
+ * and a contract for a month that has ended is settled and delisted. Null on
+ * any failure, which puts readDecision back on the old anchor rather than
+ * taking the panel down.
+ */
+async function effectiveRate() {
+  try {
+    const from = new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10);
+    const res = await fetch(
+      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=EFFR&cosd=${from}`,
+      { headers: { 'User-Agent': 'portfolio-tracker', Accept: 'text/csv' } },
+    );
+    if (!res.ok) return null;
+    const lines = (await res.text()).trim().split('\n').slice(1);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const value = Number(lines[i].split(',')[1]);
+      // A day with no fixing prints a dot; the most recent real one is wanted.
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (!methodIs(req, res, 'GET')) return;
 
@@ -37,14 +66,17 @@ export default async function handler(req, res) {
   const wanted = requiredContracts(today);
   if (!wanted.length) return fail(res, 503, 'No scheduled meeting is known.');
 
-  const settled = await Promise.allSettled(wanted.map(priceOf));
+  const [settled, effr] = await Promise.all([
+    Promise.allSettled(wanted.map(priceOf)),
+    effectiveRate(),
+  ]);
   const prices = {};
   wanted.forEach((symbol, i) => {
     const r = settled[i];
     if (r.status === 'fulfilled' && r.value != null) prices[symbol] = r.value;
   });
 
-  const decision = readDecision({ today, prices });
+  const decision = readDecision({ today, prices, effr });
   if (!decision) {
     // The contracts did not answer. Better to say so than to publish odds
     // derived from a rate nobody quoted.
