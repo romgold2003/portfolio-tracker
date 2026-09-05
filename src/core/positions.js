@@ -31,10 +31,21 @@ export function normalizeTicker(raw) {
     .replace(/-([A-Z])$/, '.$1');
 }
 
-/** Buying spends cash, but only down to zero — cash is never driven negative. */
+/**
+ * Buying spends cash, and it is allowed to go negative.
+ *
+ * It used to stop at zero, which invented money. The account is cash plus what
+ * the positions are worth, so recording a $10,000 buy against $8,359 of cash
+ * left the position on the books, the cash at zero, and $1,641 of stock paid
+ * for by nothing — the total rose by that much on a trade that moved none. With
+ * no cash at all, an entire position was free.
+ *
+ * A balance below zero is either a statement that has gone stale or borrowed
+ * money, and both are things worth seeing. Silently absorbing the difference is
+ * the one option that leaves the total wrong and says nothing.
+ */
 function spendCash(amount) {
-  if (state.cash <= 0) return;
-  state.cash = Math.max(0, state.cash - amount);
+  state.cash -= amount;
   saveCash();
 }
 
@@ -89,9 +100,12 @@ export function updatePosition(id, fields) {
   if (fields.exit != null) p.cur = fields.exit;
   if (fields.close) p.close = fields.close;
 
+  // Not clamped at zero, for the reason in spendCash: an edit that raises the
+  // amount past the cash on hand would otherwise leave the extra paid for by
+  // nothing and the account total overstated by the difference.
   const cashDelta = fields.amount - previousCost;
   if (cashDelta !== 0) {
-    state.cash = Math.max(0, state.cash - cashDelta);
+    state.cash -= cashDelta;
     saveCash();
   }
   savePositions();
@@ -286,7 +300,10 @@ export function reopenPosition(id) {
   const p = findPosition(id);
   if (!p) return null;
   if (p.exits && p.exits.length) {
-    state.cash = Math.max(0, state.cash - exitProceedsOf(p));
+    // Reopening takes back what the exits paid in. Clamping that at zero would
+    // return the position to the book without fully removing the proceeds,
+    // leaving the difference on the account as money that was counted twice.
+    state.cash -= exitProceedsOf(p);
     saveCash();
     p.qty = baseQtyOf(p);
     p.amount = p.entry * p.qty;
