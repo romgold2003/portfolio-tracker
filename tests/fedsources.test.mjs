@@ -150,7 +150,54 @@ describe('pooling them', () => {
   const poly = { dist: { '-50': 0.001, '-25': 0.003, 0: 0.494, 25: 0.494, 50: 0.006 } };
   const kalshi = { dist: { '-50': 0.005, '-25': 0, 0: 0.48, 25: 0.5, 50: 0.015 } };
 
-  test('the real three, pooled', () => {
+  /** The same three, named — which is what the endpoint actually passes. */
+  const named = [
+    { id: 'futures', dist: futures.dist },
+    { id: 'polymarket', dist: poly.dist },
+    { id: 'kalshi', dist: kalshi.dist },
+  ];
+
+  test('the real three, pooled in two blocks', () => {
+    assert.deepEqual(pct(pool(named)), {
+      '-50': 0.2, '-25': 0.1, 0: 46.6, 25: 52.3, 50: 0.7,
+    });
+  });
+
+  test('Polymarket and Kalshi share one vote, not two', () => {
+    /**
+     * They correlate at 0.983 — one opinion quoted twice. A flat three-way mean
+     * hands it 67% of the answer by accident, so they are averaged together
+     * first and the pair takes 70% on purpose.
+     *
+     * The test: adding Kalshi to a pool that already has Polymarket must not
+     * shift the answer nearly as much as adding the futures would.
+     */
+    const withKalshi = pool([named[0], named[1], named[2]])[25];
+    const withoutKalshi = pool([named[0], named[1]])[25];
+    const futuresOnly = pool([named[0]])[25];
+    assert.ok(
+      Math.abs(withKalshi - withoutKalshi) < Math.abs(withKalshi - futuresOnly) / 4,
+      'a second prediction market moved the pool like an independent source',
+    );
+  });
+
+  test('the futures are held to 30%, whatever their depth', () => {
+    // Measured, not chosen: minimum-variance weights over thirty days put 29%
+    // on them, and they were both the most biased and the noisiest source.
+    const pooled = pool(named);
+    const marketsOnly = pool([named[1], named[2]])[25];
+    const share = (pooled[25] - marketsOnly) / (futures.dist[25] - marketsOnly);
+    assert.ok(Math.abs(share - 0.3) < 0.01, `futures carried ${(share * 100).toFixed(1)}%`);
+  });
+
+  test('either block alone carries the whole answer', () => {
+    assert.deepEqual(pct(pool([named[0]])), pct(futures.dist));
+    const marketsOnly = pool([named[1], named[2]]);
+    assert.ok(Math.abs(marketsOnly[25] - 0.497) < 0.005, `got ${marketsOnly[25]}`);
+  });
+
+  test('unnamed sources still fall back to a plain mean', () => {
+    // Every caller that passes bare distributions, tests included.
     assert.deepEqual(pct(pool([futures, poly, kalshi])), {
       '-50': 0.2, '-25': 0.1, 0: 46.4, 25: 52.6, 50: 0.7,
     });

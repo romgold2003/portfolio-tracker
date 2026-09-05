@@ -73,7 +73,17 @@ export function renderFedPanel(decision) {
    */
   const dist = decision.distribution;
   const shown = dist
-    ? FED_SCENARIOS.map(({ bps, label, colour }) => ({ p: (dist[bps] ?? 0) * 100, label, colour }))
+    ? FED_SCENARIOS
+      .map(({ bps, label, colour }) => ({ bps, p: (dist[bps] ?? 0) * 100, label, colour }))
+      /**
+       * A half-point move is priced under 1% almost always, and five bars where
+       * two are permanently empty is a worse panel. So the tails are drawn only
+       * once they are worth reading — but they stay in the arithmetic, because
+       * the half-point going from nothing to eight percent is precisely the
+       * shift this panel is watched for, and an outcome that had been dropped
+       * could not report it.
+       */
+      .filter(({ bps, p }) => Math.abs(bps) < 50 || p >= 1)
     : FED_BARS.map(({ key, label, colour }) => ({ p: (decision.odds?.[key] ?? 0) * 100, label, colour }));
 
   bars.innerHTML = shown.map(({ p, label, colour }) => {
