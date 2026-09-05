@@ -12,6 +12,7 @@
 import { fail, methodIs, readCookies } from './_lib/http.js';
 import { userForToken } from './_lib/accounts.js';
 import { requiredContracts, readDecision } from './_lib/fedwatch.js';
+import { fromPolymarket, fromKalshi, blend, spread } from './_lib/fedsources.js';
 
 const SESSION_COOKIE = 'pt_session';
 const SOURCE = 'https://query1.finance.yahoo.com/v8/finance/chart';
@@ -56,6 +57,45 @@ async function effectiveRate() {
   }
 }
 
+/**
+ * Polymarket's book on the meeting.
+ *
+ * The open events, most traded first — the Fed decision sits near the top of
+ * that list whenever it is live, and asking for it by slug would break the
+ * first time they renamed one.
+ */
+async function polymarketOdds(meeting) {
+  try {
+    const res = await fetch(
+      'https://gamma-api.polymarket.com/events?closed=false&limit=200&order=volume24hr&ascending=false',
+      { headers: { 'User-Agent': 'portfolio-tracker', Accept: 'application/json' } },
+    );
+    if (!res.ok) return null;
+    return fromPolymarket(await res.json(), meeting);
+  } catch {
+    return null;
+  }
+}
+
+/** Kalshi's ladder for the meeting, addressed by its own month ticker. */
+async function kalshiOdds(meeting, effr) {
+  if (!(effr > 0)) return null;
+  const [year, month] = meeting.split('-');
+  const ticker = `KXFED-${year.slice(2)}${
+    ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][Number(month) - 1]
+  }`;
+  try {
+    const res = await fetch(
+      `https://api.elections.kalshi.com/trade-api/v2/markets?event_ticker=${ticker}&status=open&limit=50`,
+      { headers: { 'User-Agent': 'portfolio-tracker', Accept: 'application/json' } },
+    );
+    if (!res.ok) return null;
+    return fromKalshi((await res.json())?.markets, effr);
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (!methodIs(req, res, 'GET')) return;
 
@@ -84,6 +124,28 @@ export default async function handler(req, res) {
   }
 
   /**
+   * The same question, asked of two prediction markets as well.
+   *
+   * Both are settled independently and both disagreed with the futures on the
+   * day this was written — 50% and 51% against the futures' 58%, agreeing with
+   * each other. Neither is allowed to take the panel down: a source that does
+   * not answer simply drops out of the blend, and the futures alone reproduce
+   * exactly what this showed before.
+   */
+  const [poly, kalshi] = await Promise.all([
+    polymarketOdds(decision.meeting),
+    kalshiOdds(decision.meeting, effr),
+  ]);
+
+  const sources = [
+    { id: 'futures', label: 'Fed funds futures', odds: decision.odds },
+    poly && { id: 'polymarket', label: 'Polymarket', odds: poly },
+    kalshi && { id: 'kalshi', label: 'Kalshi', odds: kalshi },
+  ].filter(Boolean);
+
+  const consensus = blend(sources);
+
+  /**
    * A minute. These move on the futures tape, which is continuous, but the
    * odds shift in fractions of a percent over an hour — this is not a price
    * ticking, and nobody is trading off the panel.
@@ -91,5 +153,13 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(decision));
+  res.end(JSON.stringify({
+    ...decision,
+    // The blend is what the panel draws; the sources are what it can show
+    // underneath, so an average is never mistaken for an agreement.
+    odds: consensus ?? decision.odds,
+    futuresOdds: decision.odds,
+    sources,
+    spread: spread(sources),
+  }));
 }

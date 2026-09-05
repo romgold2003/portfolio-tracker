@@ -64,6 +64,41 @@ function renderFedPanel(decision) {
       <div class="fed-bar-label">${label}</div>
     </div>`;
   }).join('');
+
+  renderFedSources(decision);
+}
+
+/**
+ * What each market says on its own, and how far apart they are.
+ *
+ * The bars above are a blend of three, and a blend is only honest while the
+ * spread behind it is visible — on the day this was written the futures said
+ * 58% and the two prediction markets said 50% and 51%, which is a disagreement
+ * worth seeing rather than an average worth trusting.
+ *
+ * Each is quoted on whichever outcome the blend leads with, because comparing
+ * them on the same outcome is the only comparison that means anything.
+ */
+function renderFedSources(decision) {
+  const host = el('fedSources');
+  if (!host) return;
+
+  const sources = decision.sources ?? [];
+  host.style.display = sources.length > 1 ? '' : 'none';
+  if (sources.length < 2) return;
+
+  const leading = FED_BARS
+    .map(({ key, label }) => ({ key, label, p: decision.odds?.[key] ?? 0 }))
+    .sort((a, b) => b.p - a.p)[0];
+
+  const parts = sources.map((s) =>
+    `<span class="fed-src"><span class="fed-src-name">${escapeHtml(s.label)}</span>${
+      ((s.odds?.[leading.key] ?? 0) * 100).toFixed(0)}%</span>`).join('');
+
+  const gap = Number(decision.spread) || 0;
+  host.innerHTML = `${parts}<span class="fed-src-note">on ${
+    escapeHtml(leading.label.toLowerCase())}${
+    gap >= 5 ? ` · they disagree by ${gap.toFixed(0)} points` : ''}</span>`;
 }
 
 /** "4 Sep" — enough to place it, short enough to sit in a column. */

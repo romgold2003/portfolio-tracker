@@ -649,3 +649,10 @@ body.light{--wave-strength:0.34}
   color:var(--text3);cursor:pointer;font-family:inherit}
 .size-opt:hover{color:var(--text)}
 .size-opt.active{background:var(--blue-bg);color:var(--blue)}
+
+/* Fed panel: what each market says, under the blended bars. */
+.fed-sources{display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin-top:14px;
+  padding-top:12px;border-top:0.5px solid var(--input);font-size:11px}
+.fed-src{color:var(--text);font-variant-numeric:tabular-nums}
+.fed-src-name{color:var(--text3);margin-right:5px}
+.fed-src-note{color:var(--text4)}
