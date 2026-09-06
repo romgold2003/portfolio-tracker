@@ -4,9 +4,9 @@
  * Two series, fetched together. The parsing and the choice of source are
  * explained in _lib/etfflows.js; this is the part that talks to the network.
  */
-import { fail, methodIs, readCookies } from './_lib/http.js';
-import { userForToken } from './_lib/accounts.js';
-import { parseFlows, summarise, SERIES } from './_lib/etfflows.js';
+import { fail, methodIs, readCookies } from '../_lib/http.js';
+import { userForToken } from '../_lib/accounts.js';
+import { parseFlows, summarise, SERIES } from '../_lib/etfflows.js';
 
 const SESSION_COOKIE = 'pt_session';
 const ENDPOINT = 'https://api.sosovalue.xyz/openapi/v2/etf/historicalInflowChart';

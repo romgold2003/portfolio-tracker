@@ -4,6 +4,36 @@
   "outputDirectory": "_site",
   "framework": null,
   "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/fed",
+      "destination": "/api/news/fed"
+    },
+    {
+      "source": "/api/econ",
+      "destination": "/api/news/econ"
+    },
+    {
+      "source": "/api/sentiment",
+      "destination": "/api/news/sentiment"
+    },
+    {
+      "source": "/api/etf",
+      "destination": "/api/news/etf"
+    },
+    {
+      "source": "/api/options",
+      "destination": "/api/news/options"
+    },
+    {
+      "source": "/api/weekstart",
+      "destination": "/api/news/weekstart"
+    },
+    {
+      "source": "/api/whales",
+      "destination": "/api/news/whales"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -12,20 +42,45 @@
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://coin-images.coingecko.com; font-src 'self'; connect-src 'self' https://api.coingecko.com https://finnhub.io https://www.alphavantage.co https://data-api.polymarket.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "Permissions-Policy", "value": "microphone=(self), camera=(), geolocation=(), payment=()" },
-        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "microphone=(self), camera=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains"
+        },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        }
       ]
     },
     {
       "source": "/index.html",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
     },
     {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     }
   ]
 }

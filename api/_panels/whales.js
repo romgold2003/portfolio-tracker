@@ -1,12 +1,12 @@
 /**
- * The crypto whale tracker's server half — and the twelfth function.
+ * The crypto whale tracker's server half.
  *
- * A Hobby deployment is allowed twelve serverless functions and eleven were
- * already spent, so this is the last one there will be. It is written as a
- * router for that reason: `?resource=` rather than two files, the same trick
- * api/auth/[action].js plays for ten endpoints, so anything on-chain that comes
- * later lands here instead of failing the build. Vercel does not warn when the
- * limit is passed. It simply stops deploying.
+ * Reached at /api/whales, served by api/news/[panel].js, which is one function
+ * for all seven News panels. This lived as its own file once and that is what
+ * pushed the deployment to thirteen functions against a limit of twelve — a
+ * limit Vercel enforces by quietly not deploying rather than by failing. Two
+ * resources behind one `?resource=` for the same reason: what can be one
+ * function should be.
  *
  *   ?resource=coins  the top fifty, joined to what can actually be watched
  *   ?resource=feed   the transfers, read from the store and topped up
@@ -14,20 +14,13 @@
  * Signed-in only. The data is public but the key behind it is not, and an open
  * proxy on someone else's rate limit is not a thing to leave lying around.
  */
-import { fail, methodIs, readCookies, send } from './_lib/http.js';
-import { userForToken } from './_lib/accounts.js';
-import { topCoins, priceMap, watchContracts } from './_lib/topcoins.js';
-import { fetchTransfers, feedConfigured } from './_lib/whalealert.js';
-import { collect, FLOOR_USD as CHAIN_FLOOR } from './_lib/chainfeeds.js';
-import * as store from './_lib/whalestore.js';
+import { fail, methodIs, readCookies, send } from '../_lib/http.js';
+import { userForToken } from '../_lib/accounts.js';
+import { topCoins, priceMap, watchContracts } from '../_lib/topcoins.js';
+import { fetchTransfers, feedConfigured } from '../_lib/whalealert.js';
+import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
+import * as store from '../_lib/whalestore.js';
 
-/**
- * Longer than the ten second default, because one poll of five chains against
- * public indexers cannot be done in ten. Only the once-a-minute request that
- * actually polls takes this long; every other one answers from the store in
- * milliseconds, and the panel keeps the rows it already has meanwhile.
- */
-export const config = { maxDuration: 60 };
 
 const SESSION_COOKIE = 'pt_session';
 

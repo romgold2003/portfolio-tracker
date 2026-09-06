@@ -6,9 +6,9 @@
  * security policy does not admit, and because one fetch here answers for every
  * reader rather than each browser asking for itself.
  */
-import { fail, methodIs, readCookies } from './_lib/http.js';
-import { userForToken } from './_lib/accounts.js';
-import { readSentiment } from './_lib/sentiment.js';
+import { fail, methodIs, readCookies } from '../_lib/http.js';
+import { userForToken } from '../_lib/accounts.js';
+import { readSentiment } from '../_lib/sentiment.js';
 
 const SESSION_COOKIE = 'pt_session';
 const SOURCE = 'https://feargreedmeter.com/';

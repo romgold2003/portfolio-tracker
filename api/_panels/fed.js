@@ -9,12 +9,12 @@
  * reach the source, and the content security policy is not going to be opened
  * up to a futures exchange so that it can.
  */
-import { fail, methodIs, readCookies } from './_lib/http.js';
-import { userForToken } from './_lib/accounts.js';
-import { requiredContracts, readDecision } from './_lib/fedwatch.js';
+import { fail, methodIs, readCookies } from '../_lib/http.js';
+import { userForToken } from '../_lib/accounts.js';
+import { requiredContracts, readDecision } from '../_lib/fedwatch.js';
 import {
   fromPolymarket, fromKalshi, fromFutures, pool, buckets, mode, spread,
-} from './_lib/fedsources.js';
+} from '../_lib/fedsources.js';
 
 const SESSION_COOKIE = 'pt_session';
 const SOURCE = 'https://query1.finance.yahoo.com/v8/finance/chart';

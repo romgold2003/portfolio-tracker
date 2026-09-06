@@ -10,9 +10,9 @@
  * once a minute. One fetch of daily bars per symbol, cached at the edge for
  * hours, against a quote endpoint hit every twenty seconds.
  */
-import { fail, methodIs, readCookies } from './_lib/http.js';
-import { userForToken } from './_lib/accounts.js';
-import { weekOf, newYorkDay } from './_lib/week.js';
+import { fail, methodIs, readCookies } from '../_lib/http.js';
+import { userForToken } from '../_lib/accounts.js';
+import { weekOf, newYorkDay } from '../_lib/week.js';
 
 const SESSION_COOKIE = 'pt_session';
 const SOURCE = 'https://query1.finance.yahoo.com/v8/finance/chart';

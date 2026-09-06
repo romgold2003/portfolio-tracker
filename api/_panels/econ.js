@@ -15,11 +15,11 @@
  * Server-side because both are third-party hosts the content security policy
  * does not admit.
  */
-import { fail, methodIs, readCookies } from './_lib/http.js';
-import { userForToken } from './_lib/accounts.js';
-import { selectReleases, orderReleases, weekOf } from './_lib/econ.js';
-import { fetchActuals, attachActuals } from './_lib/fred.js';
-import { fetchActuals as fetchBls } from './_lib/bls.js';
+import { fail, methodIs, readCookies } from '../_lib/http.js';
+import { userForToken } from '../_lib/accounts.js';
+import { selectReleases, orderReleases, weekOf } from '../_lib/econ.js';
+import { fetchActuals, attachActuals } from '../_lib/fred.js';
+import { fetchActuals as fetchBls } from '../_lib/bls.js';
 
 const SESSION_COOKIE = 'pt_session';
 const FEED = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';

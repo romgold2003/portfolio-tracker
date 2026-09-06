@@ -5,10 +5,10 @@
  * because the payloads are large — the S&P chain is twelve megabytes — and
  * because neither source sends a CORS header a browser would accept.
  */
-import { fail, methodIs, readCookies } from './_lib/http.js';
-import { userForToken } from './_lib/accounts.js';
-import { fromCboe, fromDeribit } from './_lib/options.js';
-import { trackExposure } from './_lib/exposureHistory.js';
+import { fail, methodIs, readCookies } from '../_lib/http.js';
+import { userForToken } from '../_lib/accounts.js';
+import { fromCboe, fromDeribit } from '../_lib/options.js';
+import { trackExposure } from '../_lib/exposureHistory.js';
 
 const SESSION_COOKIE = 'pt_session';
 
