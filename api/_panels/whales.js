@@ -71,8 +71,18 @@ let lastPoll = { failed: [], written: 0, at: 0 };
  * chain and nothing else, and what is already stored stays perfectly readable.
  * The failures are returned so the panel can name them.
  */
-async function topUp(now) {
-  if (now - lastPollAt < POLL_MS) return lastPoll;
+/** Length-independent comparison, so timing reveals nothing about the secret. */
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function topUp(now, { force = false } = {}) {
+  // The scheduled collector is the point of being called; it does not wait out
+  // a throttle that exists to stop many open tabs polling at once.
+  if (!force && now - lastPollAt < POLL_MS) return lastPoll;
   lastPollAt = now;
 
   const failed = [];
@@ -136,11 +146,39 @@ export function resetPollClock() {
 export default async function handler(req, res) {
   if (!methodIs(req, res, 'GET')) return;
 
-  const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
-  if (!user) return fail(res, 401, 'Not signed in.');
-
   const url = new URL(req.url, 'http://localhost');
   const resource = url.searchParams.get('resource') || 'feed';
+
+  /**
+   * The scheduled collector, and the reason the record is worth anything.
+   *
+   * Everything the accumulation, consensus and stealth layers do is arithmetic
+   * over a history — and until this existed the app only collected while
+   * somebody had the panel open. A tab open for five minutes a day gives five
+   * minutes of tape a day, which is why the store held twelve transfers and
+   * every consensus reading came back Neutral: not because the whales were
+   * balanced, but because almost nothing had been watched.
+   *
+   * So this one path polls without a session, guarded by a shared secret rather
+   * than a login, and something outside calls it on a schedule. It writes to the
+   * store and returns a count; it never reads anybody's data out.
+   *
+   * Compared in constant time, because a secret checked with === leaks its
+   * length and its prefix to anyone willing to time the answers.
+   */
+  if (resource === 'poll') {
+    const expected = process.env.CRON_SECRET || '';
+    const given = url.searchParams.get('key') || '';
+    if (!expected) return fail(res, 503, 'No collector secret is configured.');
+    if (!timingSafeEqual(given, expected)) return fail(res, 401, 'Wrong key.');
+
+    const poll = await topUp(Date.now(), { force: true });
+    res.setHeader('Cache-Control', 'no-store');
+    return send(res, 200, { written: poll.written, failed: poll.failed, at: poll.at });
+  }
+
+  const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
+  if (!user) return fail(res, 401, 'Not signed in.');
 
   if (resource === 'coins') {
     try {

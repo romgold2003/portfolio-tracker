@@ -224,7 +224,7 @@ function blockscoutParty(end) {
  * platform map — so this follows the top fifty as it changes rather than a list
  * typed here.
  */
-async function blockscout({ chain, host, pages = 2, prices, contracts = [], signal }) {
+async function blockscout({ chain, host, pages = 1, prices, contracts = [], signal }) {
   const out = [];
 
   const scan = async (items) => {
@@ -273,16 +273,25 @@ async function blockscout({ chain, host, pages = 2, prices, contracts = [], sign
    * what the host will answer.
    */
   /**
-   * All at once rather than in batches.
+   * All at once rather than in batches, and twenty rather than ten.
    *
    * Measured against the live host: one contract feed takes about ten seconds
-   * and ten of them in parallel take about fourteen. It is slow per request and
-   * entirely happy with concurrency, so the earlier batches-of-four were paying
-   * that ten seconds five times over and timing the whole chain out. A contract
-   * that will not answer is not worth failing the chain over, so these are
-   * settled, not raced.
+   * and ten in parallel take about fourteen. It is slow per request and
+   * entirely happy with concurrency, so batching was paying that ten seconds
+   * over and over and timing the whole chain out, while a wider fan-out costs
+   * only a few seconds more and doubles the assets covered.
+   *
+   * The budget for it came from the chain-wide feed, which was cut from three
+   * pages to one on evidence: two hundred consecutive transfers off it held
+   * nothing above four hundred thousand dollars, while fifty from a single
+   * token's own feed held five above twenty million. The general tape is
+   * almost entirely dust; the token feeds are where the size is. Spending the
+   * same seconds on twice as many token feeds is strictly the better trade.
+   *
+   * A contract that will not answer is not worth failing the chain over, so
+   * these are settled, not raced.
    */
-  await Promise.allSettled(contracts.slice(0, 10).map(async (address) => {
+  await Promise.allSettled(contracts.slice(0, 20).map(async (address) => {
     const body = await json(`https://${host}/api/v2/tokens/${address}/transfers`, { signal });
     await scan(body?.items);
   }));

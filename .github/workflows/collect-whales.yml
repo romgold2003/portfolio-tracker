@@ -1,0 +1,64 @@
+# Keep the whale record growing while nobody is looking.
+#
+# Everything the accumulation, consensus and stealth layers compute is
+# arithmetic over a history, and until this workflow existed the app only
+# collected while somebody had the panel open. A tab open for five minutes a day
+# gave five minutes of tape a day — which is why the store held twelve transfers
+# and every consensus reading came back Neutral. Not because the whales were
+# balanced, but because almost nothing had been watched.
+#
+# Here rather than on Vercel: a Hobby deployment allows two cron jobs and will
+# run them **once a day**, which is not a record, it is a daily snapshot.
+# Actions minutes are unlimited on a public repository, and this repository is
+# public, so the schedule is free and can run every ten minutes.
+#
+# The job does nothing but ask the deployment to poll. All the work, the keys
+# and the database stay on the server; this is a doorbell.
+
+name: Collect whale transfers
+
+on:
+  schedule:
+    # Every ten minutes. GitHub queues scheduled runs and can delay them under
+    # load, so treat this as "roughly every ten minutes" — which is fine, since
+    # each poll reads a window rather than a point and overlapping is harmless.
+    - cron: '*/10 * * * *'
+  # So it can be run by hand after a deploy without waiting for the schedule.
+  workflow_dispatch:
+
+# Two runs polling at once would only duplicate work the store then discards.
+concurrency:
+  group: collect-whales
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ask the deployment to poll the chains
+        env:
+          BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
+          KEY: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "CRON_SECRET is not set on this repository — nothing to do."
+            echo "Add it under Settings -> Secrets and variables -> Actions,"
+            echo "with the same value as CRON_SECRET in the Vercel environment."
+            exit 0
+          fi
+
+          # --max-time is generous: one sweep of five chains takes about twenty
+          # seconds and the endpoint is allowed sixty.
+          code=$(curl -s -S --max-time 90 -o response.json -w '%{http_code}' \
+            "$BASE/api/whales?resource=poll&key=$KEY")
+
+          echo "HTTP $code"
+          cat response.json
+          echo
+
+          # A failed poll is worth surfacing, but it is not worth failing loudly
+          # every ten minutes over a provider having a bad afternoon.
+          if [ "$code" != "200" ]; then
+            echo "::warning::the collector answered $code"
+          fi

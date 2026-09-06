@@ -23,6 +23,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.argv[2]) || 4173;
 const DB_FILE = join(ROOT, '.dev-cloud.db');
 
+// So the scheduled collector can be exercised locally the way it runs live.
+process.env.CRON_SECRET ??= 'dev-secret';
+
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
