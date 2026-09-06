@@ -16,9 +16,18 @@
  */
 import { fail, methodIs, readCookies, send } from './_lib/http.js';
 import { userForToken } from './_lib/accounts.js';
-import { topCoins } from './_lib/topcoins.js';
+import { topCoins, priceMap, watchContracts } from './_lib/topcoins.js';
 import { fetchTransfers, feedConfigured } from './_lib/whalealert.js';
+import { collect, FLOOR_USD as CHAIN_FLOOR } from './_lib/chainfeeds.js';
 import * as store from './_lib/whalestore.js';
+
+/**
+ * Longer than the ten second default, because one poll of five chains against
+ * public indexers cannot be done in ten. Only the once-a-minute request that
+ * actually polls takes this long; every other one answers from the store in
+ * milliseconds, and the panel keeps the rows it already has meanwhile.
+ */
+export const config = { maxDuration: 60 };
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -44,41 +53,81 @@ const OVERLAP_S = 120;
 const MAX_LOOKBACK_S = 60 * 60;
 
 let lastPollAt = 0;
-let lastPollError = null;
+let lastPoll = { failed: [], written: 0, at: 0 };
 
 /**
  * Top the store up, at most once a minute, and never at the cost of the answer.
  *
- * A provider that is down, rate limited or unconfigured leaves whatever is
- * already stored perfectly readable, so the failure is reported alongside the
- * rows rather than instead of them.
+ * The keyless chain readers always run. Whale Alert is asked *as well* when a
+ * key is set — it sees chains this app has no reader for and labels addresses
+ * better than any of them — but it is an upgrade rather than a dependency.
+ * The first version had it as the only source, which meant a deployment with
+ * no key showed an empty panel forever. That is not a tracker.
+ *
+ * Everything is settled rather than raced: a source that is down costs its own
+ * chain and nothing else, and what is already stored stays perfectly readable.
+ * The failures are returned so the panel can name them.
  */
 async function topUp(now) {
-  if (!feedConfigured()) return { polled: false, error: 'no-key' };
-  if (now - lastPollAt < POLL_MS) return { polled: false, error: lastPollError };
+  if (now - lastPollAt < POLL_MS) return lastPoll;
   lastPollAt = now;
 
+  const failed = [];
+  let written = 0;
+
+  let prices = null;
   try {
-    const newest = await store.latestAt();
-    const floor = Math.floor(now / 1000) - MAX_LOOKBACK_S;
-    const start = Math.max(floor, (newest ?? floor) - OVERLAP_S);
-
-    const transfers = await fetchTransfers({ start, minValue: FLOOR_USD });
-    await store.record(transfers);
-    await store.prune({ now });
-
-    lastPollError = null;
-    return { polled: true, found: transfers.length, error: null };
+    prices = await priceMap();
   } catch (err) {
-    lastPollError = err.message;
-    return { polled: true, error: err.message };
+    failed.push({ chain: 'prices', error: err.message });
   }
+
+  if (prices) {
+    try {
+      /**
+       * The addresses to sweep come from CoinGecko's platform map, so the
+       * sweep follows the top fifty as it changes — but that map is nineteen
+       * thousand rows and the first fetch of it is slow enough to blow the
+       * whole request's budget on its own.
+       *
+       * So it is raced rather than awaited. A poll that arrives before the map
+       * is warm sweeps the chain-wide feeds only, which is thinner and not
+       * wrong, and the fetch it started keeps running and fills the cache for
+       * the next one. Nothing waits a minute to be slightly more thorough.
+       */
+      const contracts = await Promise.race([
+        watchContracts().catch(() => ({})),
+        new Promise((resolve) => { setTimeout(() => resolve({}), 2500); }),
+      ]);
+      const { rows, failed: chainFailures } = await collect({ prices, contracts });
+      failed.push(...chainFailures);
+      written += await store.record(rows);
+    } catch (err) {
+      failed.push({ chain: 'chains', error: err.message });
+    }
+  }
+
+  if (feedConfigured()) {
+    try {
+      const newest = await store.latestAt();
+      const floor = Math.floor(now / 1000) - MAX_LOOKBACK_S;
+      const start = Math.max(floor, (newest ?? floor) - OVERLAP_S);
+      written += await store.record(await fetchTransfers({ start, minValue: FLOOR_USD }));
+    } catch (err) {
+      failed.push({ chain: 'whale-alert', error: err.message });
+    }
+  }
+
+  try { await store.prune({ now }); } catch { /* pruning is housekeeping */ }
+
+  lastPoll = { failed, written, at: now };
+  return lastPoll;
 }
 
 /** Only for the tests, which drive the poll clock themselves. */
 export function resetPollClock() {
   lastPollAt = 0;
-  lastPollError = null;
+  lastPoll = { failed: [], written: 0, at: 0 };
 }
 
 export default async function handler(req, res) {
@@ -136,8 +185,15 @@ export default async function handler(req, res) {
        * is something the reader can act on.
        */
       provider: {
-        configured: feedConfigured(),
-        error: poll.error ?? null,
+        // The keyless readers are always there, so the panel is never in the
+        // "nothing is configured" state the first version could reach.
+        configured: true,
+        whaleAlert: feedConfigured(),
+        failed: poll.failed,
+        error: poll.failed.length
+          ? poll.failed.map((f) => `${f.chain}: ${f.error}`).join('; ')
+          : null,
+        polledAt: poll.at,
         stored: rows.length,
       },
     });

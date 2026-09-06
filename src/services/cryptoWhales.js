@@ -88,6 +88,7 @@ export function directionOf(t) {
   if (kind !== 'transfer') return { id: kind, label: kind.replace(/\b\w/g, (c) => c.toUpperCase()) };
 
   const side = (end) => {
+    if (isVoid(end)) return null;
     const type = String(end?.ownerType ?? '').toLowerCase();
     if (!type) return null;
     if (type === 'exchange') return 'Exchange';
@@ -103,8 +104,25 @@ export function directionOf(t) {
   return { id: 'unknown', label: 'Wallet → Wallet' };
 }
 
+/**
+ * Addresses that are not parties: the burn holes each chain mints from and
+ * burns into. Indexers give them names — Blockscout calls Ethereum's
+ * "Null: 0x000...000" — and a row that renders that in bold reads as though an
+ * entity called Null sent sixty-six million dollars. Nobody sent it.
+ *
+ * Suppressed here as well as at write time, so rows already in the store from
+ * before that was understood display correctly too.
+ */
+const NOT_A_PARTY = new Set([
+  '0x0000000000000000000000000000000000000000',
+  'T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb',
+]);
+
+export const isVoid = (end) => !!end?.address && NOT_A_PARTY.has(end.address);
+
 /** What to call an end of a transfer: the entity when known, else the address. */
 export function partyName(end) {
+  if (isVoid(end)) return '—';
   const owner = String(end?.owner ?? '').trim();
   if (owner) return owner.replace(/\b\w/g, (c) => c.toUpperCase());
   return shortAddress(end?.address) || 'Unknown';

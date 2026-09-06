@@ -17,7 +17,7 @@ import { escapeHtml } from '../format.js';
 import {
   BANDS, bandDef, selectTransfers, fetchCoins, fetchTransfers,
   explorerTx, explorerAddress, chainLabel, directionOf, partyName,
-  shortAddress, money, tokens,
+  shortAddress, money, tokens, isVoid,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -54,6 +54,8 @@ const stamp = (seconds) => new Date(seconds * 1000).toLocaleString();
  */
 function party(end, chain) {
   const name = partyName(end);
+  // The burn hole gets no link and no emphasis: there is nothing to look at.
+  if (isVoid(end)) return '<span class="cw-void" title="No counterparty: the tokens were created or destroyed">—</span>';
   const href = explorerAddress(chain, end?.address);
   const title = end?.address ? `${end.address}${end.owner ? ` · ${end.owner}` : ''}` : 'not attributed';
   const known = end?.owner ? ' is-known' : '';
@@ -121,9 +123,14 @@ function drawCoins() {
     const classes = ['cw-coin'];
     if (c.symbol === symbol) classes.push('active');
     if (!watchable) classes.push('is-off');
+    const readers = (c.readers ?? []).map((r) => r.label ?? chainLabel(r.chain));
+    const via = (c.viaProvider ?? []).map(chainLabel);
     const title = watchable
-      ? `${c.name} · ${c.chains.map(chainLabel).join(', ')}`
-      : `${c.name} · no on-chain whale coverage`;
+      ? [`${c.name} · #${c.rank}`,
+        readers.length ? `read directly on ${readers.join(', ')}` : null,
+        via.length ? `via Whale Alert on ${via.join(', ')}` : null,
+        c.support === 'partial' ? 'sampled, not swept' : null].filter(Boolean).join(' · ')
+      : `${c.name} · #${c.rank} · no chain this app can read`;
 
     return `<button class="${classes.join(' ')}" data-symbol="${escapeHtml(c.symbol)}"
       ${watchable ? '' : 'disabled'} title="${escapeHtml(title)}">
@@ -170,21 +177,17 @@ function drawBands() {
  */
 function emptyMessage() {
   const provider = feed?.provider;
-  if (provider?.configured === false) {
-    return `No on-chain provider is configured on this deployment. Set
-      <code>WHALE_ALERT_KEY</code> in the Vercel environment and the feed starts
-      filling on the next refresh.`;
-  }
   if (provider?.configured === null) {
     return 'Could not reach the tracker. It will try again shortly.';
   }
   if (provider?.error) {
-    return `The on-chain provider is not answering right now (${escapeHtml(provider.error)}).
+    return `Some chains are not answering right now (${escapeHtml(provider.error)}).
       Anything already recorded is still shown.`;
   }
   const where = symbol ? `${escapeHtml(symbol)} ` : '';
   return `No ${where}transfers in the ${escapeHtml(bandDef(band).label)} range yet.
-    The record starts when the panel is first opened and grows from there.`;
+    The chains are read once a minute and the record grows from there —
+    transfers this large are rare, which is what makes them worth watching.`;
 }
 
 function draw() {
@@ -207,12 +210,16 @@ function draw() {
 
   const src = el('cwSrc');
   if (src) {
-    const chains = coins?.chains?.length ?? 0;
+    // Named individually rather than counted, because "5 chains" tells nobody
+    // whether the one they care about is among them.
+    const names = (coins?.chains ?? []).map((c) => c.label + (c.complete ? '' : '*'));
     const watchable = coins?.watchable ?? 0;
     src.innerHTML = lastAt
-      ? `Whale Alert · ${chains} chains, ${watchable} of the top 50 watchable ·
-         $20M floor · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}`
-      : 'Whale Alert · on-chain';
+      ? `${escapeHtml(names.join(' · ') || 'on-chain')}${
+        feed?.provider?.whaleAlert ? ' · Whale Alert' : ''} — ${watchable} of the top 50
+         watchable · $20M floor · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}
+         ${names.some((n) => n.endsWith('*')) ? '<br>* sampled each poll rather than swept in full' : ''}`
+      : 'Reading the chains…';
   }
 }
 

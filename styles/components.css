@@ -705,3 +705,6 @@ body.light{--wave-strength:0.34}
 /* A source whose exchange is shut: shown, greyed, and out of the pool. */
 .fed-src.is-shut{color:var(--text4)}
 .fed-shut{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;margin-left:4px}
+/* The burn hole is a placeholder, not a party — so it is neither a link nor
+   emphasised, and reads as the absence it is. */
+.cw-void{color:var(--text4)}

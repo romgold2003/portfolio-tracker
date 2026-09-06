@@ -20,7 +20,8 @@ import { sqliteDriver } from './support/sqlite.mjs';
 import {
   normaliseTransfer, fetchCoverage, fetchTransfers, resetCoverageCache,
 } from '../api/_lib/whalealert.js';
-import { topCoins, resetTopCoinsCache } from '../api/_lib/topcoins.js';
+import { topCoins, watchContracts, resetTopCoinsCache, resetPriceCache } from '../api/_lib/topcoins.js';
+import { priceFor, normalise as normaliseChain } from '../api/_lib/chainfeeds.js';
 import * as store from '../api/_lib/whalestore.js';
 import {
   BANDS, bandDef, selectTransfers, directionOf, partyName, money, tokens,
@@ -58,6 +59,7 @@ beforeEach(() => {
   store.resetTableCache();
   resetCoverageCache();
   resetTopCoinsCache();
+  resetPriceCache();
 });
 
 describe('what the provider says it can see', () => {
@@ -77,53 +79,180 @@ describe('what the provider says it can see', () => {
   });
 });
 
-describe('the top fifty, joined to that', () => {
+describe('the top fifty, joined to the chains that can be read', () => {
   const markets = [
     { id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', image: 'b.png', market_cap_rank: 1 },
     { id: 'tether', symbol: 'usdt', name: 'Tether', image: 'u.png', market_cap_rank: 3 },
-    { id: 'avalanche', symbol: 'avax', name: 'Avalanche', image: 'a.png', market_cap_rank: 12 },
+    { id: 'avalanche-2', symbol: 'avax', name: 'Avalanche', image: 'a.png', market_cap_rank: 12 },
+    { id: 'chainlink', symbol: 'link', name: 'Chainlink', image: 'l.png', market_cap_rank: 15 },
   ];
 
-  test('each coin says which chains it can be watched on, and how many', async () => {
-    const { coins, watchable } = await topCoins({
-      fetcher: stubFetch([{ json: markets }, { json: COVERAGE }]),
-    });
+  /** CoinGecko's own contract map — the thing that replaces a typed table. */
+  const platforms = [
+    { id: 'bitcoin', platforms: {} },
+    {
+      id: 'tether',
+      platforms: {
+        ethereum: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+        tron: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        'polygon-pos': '0xc2132d05d31c914a87c6611c10748aeb04b58e8f',
+        solana: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+      },
+    },
+    { id: 'avalanche-2', platforms: {} },
+    { id: 'chainlink', platforms: { ethereum: '0x514910771af9ca656af840dff83e8264ecf986ca' } },
+  ];
 
+  const feed = (extra = []) => stubFetch([
+    { json: markets }, { json: platforms }, ...extra,
+  ]);
+
+  test('a coin is matched to a chain by its contract, not by a typed table', async () => {
+    const { coins } = await topCoins({ fetcher: feed() });
     const bySymbol = Object.fromEntries(coins.map((c) => [c.symbol, c]));
-    assert.deepEqual(bySymbol.BTC.chains, ['bitcoin']);
-    assert.equal(bySymbol.BTC.support, 'single');
-    // A stablecoin is one asset on four ledgers, and the picker has to say so.
-    assert.deepEqual(bySymbol.USDT.chains, ['ethereum', 'bitcoin', 'solana', 'tron']);
+
+    // Three of Tether's four networks have a reader here; Solana does not, and
+    // is correctly not claimed.
+    assert.deepEqual(bySymbol.USDT.readers.map((r) => r.chain).sort(),
+      ['ethereum', 'polygon', 'tron']);
     assert.equal(bySymbol.USDT.support, 'multi');
-    assert.equal(watchable, 2);
+    assert.equal(
+      bySymbol.USDT.readers.find((r) => r.chain === 'tron').contract,
+      'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+    );
   });
 
-  test('a top-fifty coin with no coverage is kept and marked, not dropped', async () => {
-    const { coins } = await topCoins({
-      fetcher: stubFetch([{ json: markets }, { json: COVERAGE }]),
-    });
+  test('a native coin is matched to its own chain, contract or not', async () => {
+    const { coins } = await topCoins({ fetcher: feed() });
+    const btc = coins.find((c) => c.symbol === 'BTC');
+    assert.deepEqual(btc.readers.map((r) => r.chain), ['bitcoin']);
+    assert.equal(btc.readers[0].contract, null);
+    assert.equal(btc.readers[0].native, true);
+    // Bitcoin is sampled rather than swept, and the word for that is partial.
+    assert.equal(btc.support, 'partial');
+  });
+
+  test('a top-fifty coin with no readable chain is kept and marked, not dropped', async () => {
+    const { coins, watchable } = await topCoins({ fetcher: feed() });
     const avax = coins.find((c) => c.symbol === 'AVAX');
     // Showing it greyed is information. Omitting it looks like a bug.
     assert.ok(avax, 'AVAX was dropped from the list');
     assert.equal(avax.support, 'none');
     assert.deepEqual(avax.chains, []);
     assert.equal(avax.rank, 12);
+    assert.equal(watchable, 3);
   });
 
-  test('an unreachable coverage list is unknown, not unsupported', async () => {
-    // Saying "cannot be watched" because a second service was briefly down is
-    // a confident claim built on a missing answer.
+  test('a chain read in full is single, not partial', async () => {
+    const { coins } = await topCoins({ fetcher: feed() });
+    assert.equal(coins.find((c) => c.symbol === 'LINK').support, 'single');
+  });
+
+  test('an unreachable contract map is unknown, not unsupported', async () => {
+    // Saying "cannot be watched" because a second request failed is a
+    // confident claim built on a missing answer. Native coins still match.
     const fetcher = async (url) => {
-      if (String(url).includes('coingecko')) {
-        return { ok: true, status: 200, json: async () => markets };
-      }
-      throw new Error('coverage is down');
+      if (String(url).includes('coins/list')) throw new Error('platform map is down');
+      return { ok: true, status: 200, json: async () => markets };
     };
-    const { coins, watchable } = await topCoins({ fetcher });
-    assert.ok(coins.every((c) => c.support === 'unknown'));
-    assert.equal(watchable, 0);
+    const { coins } = await topCoins({ fetcher });
+    assert.equal(coins.find((c) => c.symbol === 'USDT').support, 'unknown');
+    // BTC needs no contract, so it is still readable and still says so.
+    assert.equal(coins.find((c) => c.symbol === 'BTC').support, 'partial');
+  });
+
+  test('the sweep list is the contracts, taken from that same map', async () => {
+    const contracts = await watchContracts({ fetcher: feed() });
+    assert.ok(contracts.ethereum.includes('0xdac17f958d2ee523a2206206994597c13d831ec7'));
+    assert.ok(contracts.tron.includes('TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'));
+    // No address appears twice, or the same feed would be swept twice.
+    for (const list of Object.values(contracts)) {
+      assert.equal(new Set(list).size, list.length);
+    }
+  });
+
+  test('every chain reports whether it is swept or only sampled', async () => {
+    const { chains } = await topCoins({ fetcher: feed() });
+    assert.ok(chains.length >= 5);
+    for (const c of chains) {
+      assert.equal(typeof c.complete, 'boolean');
+      // A sampled chain must carry the sentence that says so.
+      if (!c.complete) assert.ok(c.note, `${c.id} is sampled but says nothing`);
+    }
   });
 });
+
+describe('valuing a transfer, which is where the garbage gets in', () => {
+  test('an unlisted token is dropped rather than valued', () => {
+    // Anyone can deploy a contract and have an indexer quote a price for it.
+    // At a $20M floor that garbage outranks every real transfer.
+    const prices = new Map([['USDC', 1]]);
+    assert.equal(priceFor('AIPF', prices, 405_000_000), null);
+    assert.equal(priceFor('USDC', prices, 0.9999), 1);
+  });
+
+  test('two quotes that disagree wildly means neither is trusted', () => {
+    const prices = new Map([['LINK', 20]]);
+    assert.equal(priceFor('LINK', prices, 21), 20);
+    assert.equal(priceFor('LINK', prices, 400), null);
+    assert.equal(priceFor('LINK', prices, 0.01), null);
+  });
+
+  test('a wrapper is priced as the asset it wraps', () => {
+    // WETH is redeemable one-for-one by the contract; it is not a guess. It is
+    // also the largest single source of big transfers on Ethereum, and was
+    // invisible while it went unpriced.
+    const prices = new Map([['ETH', 2500], ['BTC', 80000]]);
+    assert.equal(priceFor('WETH', prices, 2510), 2500);
+    assert.equal(priceFor('WBTC', prices, 79900), 80000);
+  });
+
+  test('nothing is one transfer of twenty-five billion dollars', () => {
+    // The first live scan produced $27,870,034,145,600,000,000 from a token
+    // whose exchange rate was fiction.
+    assert.equal(normaliseChain({
+      chain: 'ethereum', symbol: 'AIPF', amount: 1, usd: 2.787e19,
+      hash: '0xabc', at: 1_780_000_000,
+    }), null);
+    assert.ok(normaliseChain({
+      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 5e8,
+      hash: '0xabc', at: 1_780_000_000,
+    }));
+  });
+
+  test('below the floor is not a whale', () => {
+    assert.equal(normaliseChain({
+      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 19_999_999,
+      hash: '0xabc', at: 1_780_000_000,
+    }), null);
+  });
+
+  test('a mint, a burn and a contract call are not plain transfers', () => {
+    const base = { chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 5e7, hash: '0xa', at: 1e9 };
+    const zero = '0x0000000000000000000000000000000000000000';
+    assert.equal(normaliseChain({ ...base, from: { address: zero } }).kind, 'mint');
+    assert.equal(normaliseChain({ ...base, to: { address: zero } }).kind, 'burn');
+    // One atomic transaction moving money between two contracts is not a whale
+    // deciding something, and the first live scan was six legs of exactly that.
+    assert.equal(normaliseChain({ ...base, to: { address: '0xb', contract: true } }).kind, 'contract');
+    assert.equal(normaliseChain({ ...base, from: { address: '0xb' }, to: { address: '0xc' } }).kind,
+      'transfer');
+  });
+
+  test('one movement is one id, whatever size each leg was', () => {
+    // A swap emits the same asset in and out of one transaction at slightly
+    // different sizes. Both kept would show one event twice.
+    const leg = (usd) => normaliseChain({
+      chain: 'ethereum', symbol: 'WBTC', amount: 1, usd, hash: '0xsame', at: 1e9,
+    });
+    assert.equal(leg(4.396e8).id, leg(4.39e8).id);
+    // Different assets in one transaction really are two movements.
+    assert.notEqual(leg(5e7).id, normaliseChain({
+      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 5e7, hash: '0xsame', at: 1e9,
+    }).id);
+  });
+});
+
 
 describe('reading one transfer', () => {
   const raw = {
@@ -418,5 +547,24 @@ describe('the numbers on screen', () => {
     assert.equal(tokens(9.4127, 'BTC'), '9.41 BTC');
     assert.equal(tokens(412_000_000_000, 'SHIB'), '412,000,000,000 SHIB');
     assert.equal(tokens(null, 'BTC'), '');
+  });
+});
+
+describe('the zero address is not a counterparty', () => {
+  test('a mint has no sender, however the indexer labels it', () => {
+    // Blockscout calls it "Null: 0x000...000", which the row rendered in bold
+    // as a recognised entity — so a mint read as though a party called Null had
+    // sent sixty-six million dollars. Nobody sent it. It was created.
+    const row = normaliseChain({
+      chain: 'ethereum', symbol: 'USYC', amount: 58e6, usd: 6.6e7,
+      hash: '0xd346', at: 1_788_506_231,
+      from: { address: '0x0000000000000000000000000000000000000000', owner: 'Null: 0x000...000', ownerType: 'entity' },
+      to: { address: '0x231d', owner: 'CrossChainTeller', ownerType: 'contract', contract: true },
+    });
+    assert.equal(row.kind, 'mint');
+    assert.equal(row.from.owner, null);
+    assert.equal(row.from.ownerType, null);
+    // The real counterparty keeps its name.
+    assert.equal(row.to.owner, 'CrossChainTeller');
   });
 });

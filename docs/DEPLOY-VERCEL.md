@@ -115,33 +115,54 @@ Nothing, until they sign up again. Reset links only work for accounts created
 Everyone older keeps their recovery key, and "Forgot password" still offers
 "Use a recovery key instead" for them.
 
-## Optional: the crypto whale tracker
+## The crypto whale tracker
 
-News → Gamble → Crypto watches very large on-chain transfers. Two halves, and
-only one of them needs anything:
+News → Gamble → Crypto watches very large on-chain transfers. **It needs no
+configuration and no key.** Five public endpoints are read directly:
 
-- **The coin picker works with no configuration.** CoinGecko gives the top fifty
-  and the provider's own public status endpoint says which of them can be
-  watched and on which chains. On the day this was written that was 29 of the
-  50, across 14 chains.
-- **The transfers need a key.** Set `WHALE_ALERT_KEY` to a key from
-  [whale-alert.io](https://developer.whale-alert.io/). Without it the panel says
-  so rather than showing nothing, which are different problems.
+| Chain | Source | Coverage |
+|---|---|---|
+| Ethereum | Blockscout | swept: chain-wide feed plus each large token's own feed |
+| Polygon | Blockscout | swept, same way |
+| Tron | Tronscan | swept — where most large USDT moves |
+| XRP Ledger | XRPL public JSON-RPC | **sampled**: the most recent ledgers each poll |
+| Bitcoin | blockchain.info | **sampled**: the unconfirmed pool each poll |
 
-The free tier allows ten calls a minute and reports transfers over $500,000 —
-comfortably below this panel's $20M floor — but reaches back only about an hour.
-That is why every poll writes what it saw into the database and the panel reads
-from there: left running, the app accumulates the history the plan will not
-hand over in one request. The deployment asks the provider at most once a
-minute however many tabs are open.
+The two sampled chains are marked with an asterisk in the panel. There is no
+free endpoint that answers "large Bitcoin transactions", and walking confirmed
+blocks costs a hundred and twenty requests each, which a one-minute poll cannot
+spend. So those two catch what they see and miss the rest, and say so.
 
-There is no free alternative worth adding beside it. Arkham sits behind a bot
-check, Blockchair answers per chain with no USD value and no entity labels, and
-ClankApp no longer resolves.
+### Optional: `WHALE_ALERT_KEY`
+
+Setting it to a key from [whale-alert.io](https://developer.whale-alert.io/)
+adds a sixth source *alongside* the five above — it sees chains this app has no
+reader for (Solana, Cardano, Litecoin, Hyperliquid and others) and labels
+exchange addresses far better than any free indexer. It is an upgrade, never a
+dependency: with no key the panel still works.
+
+Its free tier allows ten calls a minute and reaches back about an hour.
+
+### Why the panel is often empty
+
+A twenty-million-dollar transfer is genuinely rare — roughly one in fifty
+thousand Ethereum transfers. Measured live, two hundred consecutive transfers
+held nothing above four hundred thousand dollars. That is why every poll writes
+what it saw into the database and the panel reads from the store: the record
+accumulates, and a day of running is a day of history. An empty panel on the
+first load is the honest answer, not a fault.
+
+### Function budget and duration
 
 **This was the twelfth of twelve functions.** `api/whales.js` routes on
 `?resource=` for that reason; anything on-chain that comes later has to go
 inside it rather than beside it.
+
+It also declares `maxDuration: 60`. One poll of five chains against public
+indexers takes about twenty seconds — Blockscout alone needs ten for a single
+token feed — and the default ten-second limit would cut every poll short. Only
+the once-a-minute request that actually polls is slow; the rest answer from the
+store in milliseconds.
 
 ## Optional: pin the decoy secret
 
