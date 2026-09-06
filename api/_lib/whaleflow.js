@@ -135,8 +135,29 @@ export function accumulation(rows, {
     if (Number(r.at) < cutoff) continue;
     if (!POSITIONAL.has(r.kind)) continue;
     if (symbol && r.symbol !== symbol) continue;
-    touch(r.to?.address ?? r.to_addr, r.to?.owner ?? r.to_owner, r, 'in');
-    touch(r.from?.address ?? r.from_addr, r.from?.owner ?? r.from_owner, r, 'out');
+    // A value that is not a positive number is not a movement, whatever the
+    // row says. Nothing valid reaches here that way, and one that did would
+    // otherwise be added into a total.
+    if (!(Number(r.usd) > 0)) continue;
+
+    const to = r.to?.address ?? r.to_addr;
+    const from = r.from?.address ?? r.from_addr;
+
+    /**
+     * A wallet paying itself moved nothing.
+     *
+     * Both ends are the same address, so it credits and debits the same wallet:
+     * net zero, but **two transfers counted from one**. That count is not
+     * cosmetic — it is the gate deciding whether a wallet has repeat activity,
+     * the observation count under the performance score, and part of the
+     * stealth test. Bitcoin does this constantly, since change comes back to an
+     * address the sender controls, so a single self-send was enough to make a
+     * wallet look like it had come back for more.
+     */
+    if (to && from && to === from) continue;
+
+    touch(to, r.to?.owner ?? r.to_owner, r, 'in');
+    touch(from, r.from?.owner ?? r.from_owner, r, 'out');
   }
 
   return [...wallets.values()].filter((w) => w.transfers >= minTransfers).map((w) => ({

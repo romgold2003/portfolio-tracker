@@ -406,3 +406,41 @@ describe('the ranked table — one row per whale per coin', () => {
     assert.deepEqual(ranked(null), []);
   });
 });
+
+describe('movements that are not movements', () => {
+  const S = Math.floor(NOW / 1000);
+  const one = (over) => ({
+    id: 'x', at: S - 3600, blockchain: 'bitcoin', symbol: 'BTC', kind: 'transfer',
+    amount: 100, usd: 30_000_000, hash: 'h', parts: 1,
+    from: { address: 'A' }, to: { address: 'B' }, ...over,
+  });
+
+  test('a wallet paying itself is not two transfers', () => {
+    // It credits and debits the same address, so one row counted as two —
+    // and that count gates repeat activity, the observation count under the
+    // score, and part of the stealth test. Bitcoin change does this constantly.
+    const out = accumulation([one({ from: { address: 'SELF' }, to: { address: 'SELF' } })],
+      { hours: 24, now: NOW, minTransfers: 1 });
+    assert.deepEqual(out, [], 'a self-send became a wallet with two transfers');
+  });
+
+  test('a self-send does not pad a real wallet\'s transfer count', () => {
+    const rows = [
+      one({ id: 'a', to: { address: 'W' }, from: { address: 'c1' }, usd: 5_000_000 }),
+      one({ id: 'b', to: { address: 'W' }, from: { address: 'c2' }, usd: 5_000_000 }),
+      one({ id: 'c', to: { address: 'W' }, from: { address: 'W' }, usd: 9_000_000 }),
+    ];
+    const w = accumulation(rows, { hours: 24, now: NOW, minTransfers: 1 })
+      .find((x) => x.address === 'W');
+    assert.equal(w.transfers, 2, 'the self-send was counted');
+    assert.equal(w.netUsd, 10_000_000);
+    assert.equal(w.largestUsd, 5_000_000, 'the self-send set the largest piece');
+  });
+
+  test('a row with no usable value is not added into a total', () => {
+    for (const usd of [0, -5_000_000, null, NaN, 'abc']) {
+      assert.deepEqual(accumulation([one({ usd })], { hours: 24, now: NOW, minTransfers: 1 }), [],
+        `usd ${usd} produced a wallet`);
+    }
+  });
+});
