@@ -17,7 +17,7 @@ import { escapeHtml } from '../format.js';
 import {
   BANDS, bandDef, selectTransfers, fetchCoins, fetchTransfers,
   explorerTx, explorerAddress, chainLabel, directionOf, partyName,
-  shortAddress, money, tokens, isVoid,
+  shortAddress, money, tokens, isVoid, fetchWallets, activeFor,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -29,6 +29,15 @@ let coins = null;
 let feed = null;
 let loading = false;
 let lastAt = 0;
+/**
+ * 'transfers' is what moved; 'wallets' is who has been moving it.
+ *
+ * Two views of one store rather than two panels, because they answer the same
+ * question at two zoom levels and switching between them is the useful motion:
+ * see a wallet accumulating, then look at the transfers that built it.
+ */
+let view = 'wallets';
+let wallets = null;
 
 /** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
 function ago(seconds) {
@@ -105,6 +114,47 @@ function row(t) {
 }
 
 /**
+ * One wallet.
+ *
+ * Net first, because that is the number that means something: in minus out,
+ * over the window. A wallet that received and returned the same amount sits at
+ * zero and never reaches this list, which is exactly right — a router is not a
+ * whale, and on a raw feed routers are most of what you see.
+ */
+function walletRow(w) {
+  const buying = w.netUsd > 0;
+  const chain = w.chains[0];
+  const href = explorerAddress(chain, w.address);
+  const name = w.owner ? w.owner : shortAddress(w.address);
+  const held = w.symbols.slice(0, 3)
+    .map((s) => `${s.symbol} ${s.netUsd > 0 ? '+' : '−'}${money(Math.abs(s.netUsd))}`).join(' · ');
+
+  return `<div class="gam-row gam-grid cw-grid">
+    <div class="gam-size">
+      <span class="${buying ? 'cw-in' : 'cw-out'}">${escapeHtml((buying ? '+' : '−') + money(Math.abs(w.netUsd)))}</span>
+      <span class="cw-tokens">${escapeHtml(buying ? 'accumulated' : 'distributed')}</span>
+    </div>
+    <div class="gam-who">
+      <span class="gam-name">${href
+    ? `<a class="cw-party${w.owner ? ' is-known' : ''}" href="${escapeHtml(href)}"
+           target="_blank" rel="noopener noreferrer"
+           title="${escapeHtml(w.address)}">${escapeHtml(name)}</a>`
+    : escapeHtml(name)}</span>
+      <span class="cw-arrow">in ${escapeHtml(money(w.inUsd))} · out ${escapeHtml(money(w.outUsd))}</span>
+    </div>
+    <div class="gam-bet">
+      <span class="cw-dir">${w.transfers} transfer${w.transfers === 1 ? '' : 's'}${
+  w.oneWay ? ' · one way' : ''}</span>
+    </div>
+    <div class="gam-market">
+      <span class="gam-title">${escapeHtml(held)}</span>
+      <span class="gam-topic">${escapeHtml(w.chains.map(chainLabel).join(' + '))}</span>
+    </div>
+    <div class="gam-when" title="${escapeHtml(stamp(w.lastAt))}">${escapeHtml(activeFor(w.firstAt, w.lastAt))}</div>
+  </div>`;
+}
+
+/**
  * The coin picker.
  *
  * Every one of the top fifty is listed, including the ones that cannot be
@@ -156,9 +206,29 @@ function drawCoins() {
   };
 }
 
+function drawView() {
+  const picker = el('cwView');
+  if (!picker) return;
+  const tabs = [
+    { id: 'wallets', label: 'By whale' },
+    { id: 'transfers', label: 'Transfers' },
+  ];
+  picker.innerHTML = tabs.map((t) =>
+    `<button class="opt-tab${t.id === view ? ' active' : ''}"
+      data-view="${t.id}">${escapeHtml(t.label)}</button>`).join('');
+  picker.onclick = (e) => {
+    const id = e.target?.dataset?.view;
+    if (!id || id === view) return;
+    view = id;
+    load();
+  };
+}
+
 function drawBands() {
   const picker = el('cwBand');
   if (!picker) return;
+  // The size bands describe single transfers, so they only apply to that view.
+  picker.hidden = view !== 'transfers';
   picker.innerHTML = BANDS.map((b) =>
     `<button class="opt-tab${b.id === band ? ' active' : ''}"
       data-band="${b.id}">${escapeHtml(b.label)}</button>`).join('');
@@ -194,19 +264,30 @@ function draw() {
   const rows = el('cwRows');
   if (!rows) return;
 
+  drawView();
   drawBands();
   drawCoins();
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
 
-  const transfers = selectTransfers(feed?.rows, { band });
-
-  rows.innerHTML = transfers.length
-    ? `<div class="gam-head gam-grid cw-grid">
-         <div>Size</div><div>From → To</div><div>Direction</div><div>Asset · chain</div><div>When</div>
-       </div>${transfers.map(row).join('')}`
-    : `<div class="empty">${loading ? 'Loading…' : emptyMessage()}</div>`;
+  if (view === 'wallets') {
+    const list = wallets?.wallets ?? [];
+    rows.innerHTML = list.length
+      ? `<div class="gam-head gam-grid cw-grid">
+           <div>Net 30d</div><div>Wallet</div><div>Activity</div><div>What · where</div><div>Span</div>
+         </div>${list.map(walletRow).join('')}`
+      : `<div class="empty">${loading ? 'Loading…' : `No wallet has a net position
+         above ${escapeHtml(money(1_000_000))} in the record yet. This view adds up every
+         transfer the app has seen, so it fills as the record grows.`}</div>`;
+  } else {
+    const transfers = selectTransfers(feed?.rows, { band });
+    rows.innerHTML = transfers.length
+      ? `<div class="gam-head gam-grid cw-grid">
+           <div>Size</div><div>From → To</div><div>Direction</div><div>Asset · chain</div><div>When</div>
+         </div>${transfers.map(row).join('')}`
+      : `<div class="empty">${loading ? 'Loading…' : emptyMessage()}</div>`;
+  }
 
   const src = el('cwSrc');
   if (src) {
@@ -243,8 +324,18 @@ export async function renderCryptoWhales() {
 }
 
 async function load() {
-  loading = !feed;
+  loading = view === 'wallets' ? !wallets : !feed;
   draw();
+
+  if (view === 'wallets') {
+    const answer = await fetchWallets({ symbol });
+    loading = false;
+    if (answer?.wallets?.length || !wallets) wallets = answer;
+    lastAt = Date.now();
+    draw();
+    return;
+  }
+
   const next = await fetchTransfers({ symbol, band });
   loading = false;
   // A poll that failed leaves what was on screen: the feed missing one refresh

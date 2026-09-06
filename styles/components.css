@@ -708,3 +708,8 @@ body.light{--wave-strength:0.34}
 /* The burn hole is a placeholder, not a party — so it is neither a link nor
    emphasised, and reads as the absence it is. */
 .cw-void{color:var(--text4)}
+/* Accumulation and distribution. The only place in this panel with a direction
+   colour, because unlike a single transfer a net position over a month really
+   does have one. */
+.cw-in{color:var(--green)}
+.cw-out{color:var(--red)}

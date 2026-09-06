@@ -171,3 +171,115 @@ export async function prune({ now = Date.now() } = {}) {
   const cutoff = Math.floor((now - RETAIN_MS) / 1000);
   await query('DELETE FROM whale_transfers WHERE at < $1', [cutoff]);
 }
+
+/**
+ * The same question asked per wallet instead of per transfer.
+ *
+ * This is the one that turns a feed into a tracker. A single $50M transfer says
+ * almost nothing — it could be an exchange moving its own float between hot and
+ * cold storage, which happens every day. The same address taking coins in
+ * fourteen times over three weeks and sending none back says something a single
+ * row never can, and it is the whole reason the store exists rather than the
+ * panel simply re-reading the last hour.
+ *
+ * Net is `in - out`, in dollars at the time each transfer was recorded. Positive
+ * is accumulation, negative is distribution. An address that received and sent
+ * roughly the same amount nets out near zero, which is correct and is exactly
+ * what filters out the pass-through addresses that dominate a raw feed.
+ *
+ * Two things this deliberately does not do:
+ *
+ * **It does not join addresses across chains.** An Ethereum address and a Tron
+ * address are different keys with no on-chain link between them, so claiming
+ * they are one whale would be a guess. Where the source has given both the same
+ * entity name they are grouped by that name and the grouping is honest; where it
+ * has not, an address is a wallet and nothing more.
+ *
+ * **It does not call anything a whale.** Ranking by net flow is arithmetic.
+ * Deciding whose flow is *smart* needs each wallet's realised profit over its
+ * whole history, which is a different and far larger product.
+ */
+export async function byAddress({
+  symbol = null, sinceDays = 30, minNetUsd = 0, limit = 40, kinds = null, now = Date.now(),
+} = {}) {
+  if (!databaseAvailable()) return [];
+  await ensureTable();
+
+  const cutoff = Math.floor((now - sinceDays * 24 * 60 * 60 * 1000) / 1000);
+  const params = [cutoff];
+  let sql = 'SELECT * FROM whale_transfers WHERE at >= $1';
+  if (symbol) {
+    params.push(String(symbol).toUpperCase());
+    sql += ` AND symbol = $${params.length}`;
+  }
+  const { rows } = await query(sql, params);
+
+  /** Mint and burn holes are not wallets and must not head the ranking. */
+  const VOID = new Set([
+    '0x0000000000000000000000000000000000000000',
+    'T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb',
+  ]);
+
+  const wallets = new Map();
+  const touch = (address, owner, row, direction) => {
+    if (!address || VOID.has(address)) return;
+    let w = wallets.get(address);
+    if (!w) {
+      w = {
+        address,
+        owner: owner || null,
+        inUsd: 0,
+        outUsd: 0,
+        transfers: 0,
+        chains: new Set(),
+        symbols: new Map(),
+        firstAt: Infinity,
+        lastAt: 0,
+      };
+      wallets.set(address, w);
+    }
+    // A name learned on any row belongs to the wallet on all of them.
+    if (!w.owner && owner) w.owner = owner;
+
+    const usd = Number(row.usd) || 0;
+    if (direction === 'in') w.inUsd += usd; else w.outUsd += usd;
+    w.transfers += 1;
+    w.chains.add(row.blockchain);
+    w.symbols.set(row.symbol, (w.symbols.get(row.symbol) ?? 0) + (direction === 'in' ? usd : -usd));
+    w.firstAt = Math.min(w.firstAt, Number(row.at));
+    w.lastAt = Math.max(w.lastAt, Number(row.at));
+  };
+
+  for (const r of rows) {
+    if (kinds && !kinds.includes(r.kind)) continue;
+    touch(r.to_addr, r.to_owner, r, 'in');
+    touch(r.from_addr, r.from_owner, r, 'out');
+  }
+
+  return [...wallets.values()]
+    .map((w) => ({
+      address: w.address,
+      owner: w.owner,
+      netUsd: w.inUsd - w.outUsd,
+      inUsd: w.inUsd,
+      outUsd: w.outUsd,
+      transfers: w.transfers,
+      chains: [...w.chains],
+      // Largest exposure first: what the wallet is actually doing this in.
+      symbols: [...w.symbols.entries()]
+        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+        .map(([sym, net]) => ({ symbol: sym, netUsd: net })),
+      firstAt: w.firstAt === Infinity ? null : w.firstAt,
+      lastAt: w.lastAt || null,
+      /**
+       * A wallet that only ever received, or only ever sent.
+       *
+       * Worth flagging because it is the cleanest version of the signal: no
+       * round-tripping, no ambiguity about which way the position went.
+       */
+      oneWay: w.inUsd === 0 || w.outUsd === 0,
+    }))
+    .filter((w) => Math.abs(w.netUsd) >= minNetUsd)
+    .sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd))
+    .slice(0, limit);
+}

@@ -18,8 +18,24 @@
  * otherwise would be claiming completeness it does not have.
  */
 
-/** Anything smaller is not what this panel is for. */
-export const FLOOR_USD = 20_000_000;
+/**
+ * What is worth *recording*, which is not the same as what is worth showing.
+ *
+ * These were the same number and that was the mistake. At a twenty-million
+ * floor a wallet buying three million dollars ten times over a fortnight is
+ * invisible — every piece is discarded, so the position it was building can
+ * never be added up. The single transfer was the only thing that could ever
+ * qualify, which meant the panel could only ever answer "who moved a lot at
+ * once", never "who has been accumulating".
+ *
+ * So collection drops to a million and display keeps its own floor. It costs
+ * nothing: these rows arrive in the same responses already being fetched and
+ * were simply being thrown away.
+ */
+export const FLOOR_USD = 1_000_000;
+
+/** What the transfer list shows. The bands in the UI start here. */
+export const DISPLAY_FLOOR_USD = 20_000_000;
 
 /**
  * Nothing on any chain is one transfer of twenty-five billion dollars.

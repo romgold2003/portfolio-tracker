@@ -21,7 +21,10 @@ import {
   normaliseTransfer, fetchCoverage, fetchTransfers, resetCoverageCache,
 } from '../api/_lib/whalealert.js';
 import { topCoins, watchContracts, resetTopCoinsCache, resetPriceCache } from '../api/_lib/topcoins.js';
-import { priceFor, normalise as normaliseChain } from '../api/_lib/chainfeeds.js';
+import {
+  priceFor, normalise as normaliseChain,
+  FLOOR_USD as CHAIN_FLOOR, DISPLAY_FLOOR_USD as DISPLAY_FLOOR,
+} from '../api/_lib/chainfeeds.js';
 import * as store from '../api/_lib/whalestore.js';
 import {
   BANDS, bandDef, selectTransfers, directionOf, partyName, money, tokens,
@@ -220,9 +223,18 @@ describe('valuing a transfer, which is where the garbage gets in', () => {
     }));
   });
 
-  test('below the floor is not a whale', () => {
+  test('what is recorded and what is shown are two different floors', () => {
+    // $3M is not a headline, and it is exactly what a position gets built out
+    // of — so it is recorded even though the transfer list will not show it.
+    const small = normaliseChain({
+      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 3_000_000,
+      hash: '0xabc', at: 1_780_000_000,
+    });
+    assert.ok(small, 'a $3M transfer was thrown away and cannot be added up later');
+    assert.ok(CHAIN_FLOOR < DISPLAY_FLOOR, 'collection must reach below display');
+    // Under the collection floor, still nothing.
     assert.equal(normaliseChain({
-      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 19_999_999,
+      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 999_999,
       hash: '0xabc', at: 1_780_000_000,
     }), null);
   });
@@ -566,5 +578,80 @@ describe('the zero address is not a counterparty', () => {
     assert.equal(row.from.ownerType, null);
     // The real counterparty keeps its name.
     assert.equal(row.to.owner, 'CrossChainTeller');
+  });
+});
+
+describe('per wallet, not per transfer', () => {
+  const at = Math.floor(Date.now() / 1000);
+  const move = (id, from, to, usd, over = {}) => ({
+    id, at: at - 3600, blockchain: 'ethereum', symbol: 'ETH', kind: 'transfer',
+    amount: 1, usd, hash: id,
+    from: { address: from, owner: null, ownerType: null },
+    to: { address: to, owner: null, ownerType: null },
+    parts: 1, ...over,
+  });
+
+  test('a wallet that only receives is accumulating', async () => {
+    for (let i = 0; i < 10; i++) {
+      await store.record([move(`t${i}`, `0xseller${i}`, '0xWHALE', 3_000_000)]);
+    }
+    const [top] = await store.byAddress({ minNetUsd: 1_000_000, kinds: ['transfer'] });
+    assert.equal(top.address, '0xWHALE');
+    assert.equal(top.netUsd, 30_000_000);
+    assert.equal(top.transfers, 10);
+    assert.equal(top.oneWay, true, 'it never sent anything back');
+  });
+
+  test('a pass-through address nets out and stops dominating the list', async () => {
+    // Money in and straight back out is a router, not a whale. This is the
+    // behaviour that swamps a raw feed and that netting is here to remove.
+    await store.record([
+      move('a', '0xsrc', '0xPIPE', 50_000_000),
+      move('b', '0xPIPE', '0xdst', 50_000_000),
+    ]);
+    const wallets = await store.byAddress({ minNetUsd: 1_000_000, kinds: ['transfer'] });
+    assert.ok(!wallets.some((w) => w.address === '0xPIPE'),
+      'a pass-through address ranked as a whale');
+  });
+
+  test('sending more than it received reads as distribution', async () => {
+    await store.record([
+      move('c', '0xsrc', '0xSELLER', 5_000_000),
+      move('d', '0xSELLER', '0xexch', 40_000_000),
+    ]);
+    const seller = (await store.byAddress({ minNetUsd: 1_000_000, kinds: ['transfer'] }))
+      .find((w) => w.address === '0xSELLER');
+    assert.ok(seller.netUsd < 0, 'net was not negative');
+    assert.equal(seller.netUsd, -35_000_000);
+  });
+
+  test('mints and contract legs are not a wallet taking a position', async () => {
+    await store.record([
+      move('e', '0xsrc', '0xMINTY', 80_000_000, { kind: 'mint' }),
+      move('f', '0xsrc', '0xCONTRACTY', 90_000_000, { kind: 'contract' }),
+    ]);
+    const wallets = await store.byAddress({ minNetUsd: 1_000_000, kinds: ['transfer'] });
+    assert.ok(!wallets.some((w) => ['0xMINTY', '0xCONTRACTY'].includes(w.address)));
+  });
+
+  test('the burn hole never heads the ranking', async () => {
+    await store.record([move('g', '0xsrc', '0x0000000000000000000000000000000000000000', 9e8)]);
+    const wallets = await store.byAddress({ minNetUsd: 1_000_000, kinds: ['transfer'] });
+    assert.ok(!wallets.some((w) => /^0x0{40}$/.test(w.address)));
+  });
+
+  test('what it holds, and when it was last active', async () => {
+    await store.record([move('h', '0xsrc', '0xMIX', 8_000_000, { symbol: 'WBTC' })]);
+    const mix = (await store.byAddress({ minNetUsd: 1_000_000, kinds: ['transfer'] }))
+      .find((w) => w.address === '0xMIX');
+    assert.deepEqual(mix.symbols.map((s) => s.symbol), ['WBTC']);
+    assert.deepEqual(mix.chains, ['ethereum']);
+    assert.ok(mix.lastAt >= mix.firstAt);
+  });
+
+  test('a window that ends before the rows returns nothing, not everything', async () => {
+    await store.record([move('i', '0xsrc', '0xOLD', 40_000_000, { at: at - 40 * 86400 })]);
+    const recent = await store.byAddress({ sinceDays: 1, minNetUsd: 1_000_000, kinds: ['transfer'] });
+    assert.ok(!recent.some((w) => w.address === '0xOLD'));
   });
 });

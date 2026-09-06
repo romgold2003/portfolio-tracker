@@ -233,10 +233,15 @@ export async function watchContracts(options = {}) {
     if (!list.includes(contract)) list.push(contract);
   };
 
-  for (const coin of coins) {
-    for (const reader of coin.readers) add(reader.chain, reader.contract);
-  }
-
+  /**
+   * The dense contracts go FIRST, and that ordering is load-bearing.
+   *
+   * The sweep can only afford ten contracts per chain per poll. These were
+   * appended after the top fifty, which put them at positions twenty-something
+   * and meant the cap cut off the exact assets they were added for — WBTC and
+   * WETH, the two richest sources of large transfers on Ethereum, were never
+   * swept once. Adding them and then never reading them is the worst of both.
+   */
   try {
     const platforms = await platformsById({
       fetcher: options.fetcher ?? fetch,
@@ -251,6 +256,10 @@ export async function watchContracts(options = {}) {
       }
     }
   } catch { /* the top fifty on their own are still worth sweeping */ }
+
+  for (const coin of coins) {
+    for (const reader of coin.readers) add(reader.chain, reader.contract);
+  }
 
   return byChain;
 }

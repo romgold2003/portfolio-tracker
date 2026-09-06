@@ -24,7 +24,14 @@ import * as store from '../_lib/whalestore.js';
 
 const SESSION_COOKIE = 'pt_session';
 
-/** The floor the tracker cares about. Well above the provider's own $500k. */
+/**
+ * Two floors, and the difference between them is the point.
+ *
+ * CHAIN_FLOOR is what gets recorded — a million — because a position built in
+ * ten three-million-dollar pieces cannot be added up from rows that were never
+ * kept. DISPLAY_FLOOR is what the transfer list shows, which stays at twenty
+ * million so that view means what it always meant.
+ */
 const FLOOR_USD = 20_000_000;
 
 /**
@@ -140,6 +147,36 @@ export default async function handler(req, res) {
       return send(res, 200, { coins, chains, watchable, feed: feedConfigured() });
     } catch (err) {
       return fail(res, 502, `Could not build the coin list (${err.message}).`);
+    }
+  }
+
+  /**
+   * The per-wallet view: who has been accumulating, not what moved once.
+   *
+   * Polled the same way the feed is, because it reads the same store — the
+   * aggregation is over rows already there, so this costs a query and no
+   * upstream call at all.
+   */
+  if (resource === 'wallets') {
+    await topUp(Date.now());
+    const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+    if (symbol && !/^[A-Z0-9]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
+    const days = Math.min(Math.max(Number(url.searchParams.get('days')) || 30, 1), 30);
+    const minNet = Math.max(0, Number(url.searchParams.get('minNet')) || CHAIN_FLOOR);
+
+    try {
+      const wallets = await store.byAddress({
+        symbol: symbol || null,
+        sinceDays: days,
+        minNetUsd: minNet,
+        // Mints, burns and contract legs are not a wallet taking a position.
+        kinds: ['transfer'],
+        limit: 40,
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, { wallets, days, minNet, at: Date.now() });
+    } catch (err) {
+      return fail(res, 500, `Could not aggregate the store (${err.message}).`);
     }
   }
 

@@ -223,3 +223,30 @@ export async function fetchTransfers({ symbol, band = 'all', signal } = {}) {
     return { rows: [], counts: {}, provider: { configured: null, error: err.message } };
   }
 }
+
+/**
+ * The wallets behind the transfers, ranked by what they actually accumulated.
+ *
+ * The transfer list answers "what moved". This answers "who has been buying",
+ * which is the question a single row can never reach — a wallet taking coins in
+ * ten times over a fortnight is a position being built, and each of those ten
+ * pieces on its own is unremarkable.
+ */
+export async function fetchWallets({ symbol, days = 30, signal } = {}) {
+  const params = new URLSearchParams({ resource: 'wallets', days: String(days) });
+  if (symbol) params.set('symbol', symbol);
+  try {
+    return await get(params.toString(), signal);
+  } catch (err) {
+    return { wallets: [], error: err.message };
+  }
+}
+
+/** How long a wallet has been at it — the span, not the age. */
+export function activeFor(firstAt, lastAt) {
+  if (!firstAt || !lastAt) return '';
+  const days = Math.round((lastAt - firstAt) / 86400);
+  if (days >= 1) return `over ${days}d`;
+  const hours = Math.round((lastAt - firstAt) / 3600);
+  return hours >= 1 ? `over ${hours}h` : 'in minutes';
+}
