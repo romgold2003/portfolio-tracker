@@ -139,11 +139,22 @@ export function shortAddress(address) {
   return a.length > 16 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
 }
 
-/** $1.2B, $84.3M — the scale is the point, the last three digits are not. */
+/**
+ * $1.2B, $84.3M, $450k — the scale is the point, the last three digits are not.
+ *
+ * It used to render everything in millions, so a net of twelve thousand dollars
+ * came out as "$0.0M" and a list of them looked like a column of broken rows.
+ * Nothing was wrong with the arithmetic; the formatter simply had one unit.
+ */
 export function money(usd) {
   const n = Number(usd) || 0;
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  return `$${(n / 1e6).toFixed(1)}M`;
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const dollars = '$';
+  if (abs >= 1e9) return `${sign}${dollars}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}${dollars}${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${sign}${dollars}${Math.round(abs / 1e3)}k`;
+  return `${sign}${dollars}${Math.round(abs)}`;
 }
 
 /** 4,182.55 ETH — enough digits to be a quantity, not so many to be a hash. */

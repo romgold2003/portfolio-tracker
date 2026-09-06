@@ -657,3 +657,25 @@ describe('per wallet, not per transfer', () => {
     assert.ok(!recent.some((w) => w.address === '0xOLD'));
   });
 });
+
+describe('money reads at the scale of the number', () => {
+  test('it does not force everything into millions', () => {
+    // The first real wallet list came back with six rows reading "$0.0M".
+    // Nothing was wrong with the arithmetic — the formatter had one unit.
+    assert.equal(money(1_240_000_000), '$1.24B');
+    assert.equal(money(84_300_000), '$84.3M');
+    assert.equal(money(450_000), '$450k');
+    assert.equal(money(12_000), '$12k');
+    assert.equal(money(640), '$640');
+  });
+
+  test('a negative keeps its sign in front of the dollars', () => {
+    assert.equal(money(-4_049_468), '-$4.0M');
+    assert.equal(money(-12_000), '-$12k');
+  });
+
+  test('zero is zero, not $0.0M', () => {
+    assert.equal(money(0), '$0');
+    assert.equal(money(null), '$0');
+  });
+});

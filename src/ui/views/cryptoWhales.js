@@ -353,11 +353,12 @@ function draw() {
       ? `<div class="gam-head gam-grid cw-grid">
            <div>Net 30d</div><div>Wallet</div><div>Activity</div><div>What · where</div><div>Last</div>
          </div>${list.map(walletRow).join('')}`
-      : `<div class="empty">${loading ? 'Loading…' : `No wallet has moved more than
-         once in this window yet. A wallet seen a single time is an event rather
-         than a position — it is in the Transfers view. This one waits for
-         repeat activity, which is the thing worth knowing, and fills as the
-         record grows.`}</div>`;
+      : `<div class="empty">${loading ? 'Loading…' : `No wallet has taken a net
+         position over ${escapeHtml(money(500_000))} in this window yet. This view
+         wants repeat activity that ends somewhere — a wallet seen once is an
+         event rather than a position, and one that received and sent the same
+         amount was passing money through, not taking a side. Both are in the
+         Transfers view. This fills as the record grows.`}</div>`;
   } else {
     const transfers = selectTransfers(feed?.rows, { band });
     rows.innerHTML = transfers.length

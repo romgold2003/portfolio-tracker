@@ -22,6 +22,7 @@ import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
 import * as store from '../_lib/whalestore.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
+  PARTICIPANT_FLOOR_USD,
 } from '../_lib/whaleflow.js';
 
 
@@ -247,7 +248,23 @@ export default async function handler(req, res) {
       let prices = null;
       try { prices = await priceMap(); } catch { /* performance goes unscored */ }
 
+      /**
+       * A wallet has to have ended the window somewhere other than where it
+       * started, and by enough to matter.
+       *
+       * Six of eight rows in the first real list read "$0.0M" — and they were
+       * not rounding artefacts, they were exactly zero: $7,175,638 in and
+       * $7,175,638 straight back out. Bitcoin change addresses, hot-wallet
+       * relays, DEX routers. Money passing through is not money taking a side,
+       * which is what conviction 0.000 was already saying and nothing was
+       * acting on.
+       *
+       * The floor is the one consensus already uses, so the list and the
+       * summary above it now agree about who counts. Before this the list was
+       * full of wallets the consensus was correctly ignoring.
+       */
       const scored = wallets
+        .filter((w) => Math.abs(w.netUsd) >= PARTICIPANT_FLOOR_USD)
         .map((w) => ({ ...w, performance: prices ? performance(w, prices) : null }))
         .sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd));
 
