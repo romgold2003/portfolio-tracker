@@ -368,14 +368,39 @@
            Subject first, then size — which is the order the question is asked
            in: what is moving, and who is betting how much on it. -->
       <div id="newsGamble" hidden>
-        <div class="card gam-card" id="gambleCard">
-          <div class="card-lbl">
-            <span>Whale bets — <span id="gamTopicName">all macro</span></span>
-            <div class="opt-picker" id="gamBand"></div>
+
+        <!-- Two trackers, same question at two scales: who is betting big on
+             macro, and who is moving big money on-chain. -->
+        <div class="opt-picker gam-subtabs" id="gambleTabs">
+          <button class="opt-tab active" data-gtab="macro">Macro</button>
+          <button class="opt-tab" data-gtab="crypto">Crypto</button>
+        </div>
+
+        <div id="gambleMacro">
+          <div class="card gam-card" id="gambleCard">
+            <div class="card-lbl">
+              <span>Whale bets — <span id="gamTopicName">all macro</span></span>
+              <div class="opt-picker" id="gamBand"></div>
+            </div>
+            <div class="opt-picker gam-topics" id="gamTopics"></div>
+            <div id="gamRows"></div>
+            <p class="gam-src">Polymarket · on-chain, refreshed every 30s</p>
           </div>
-          <div class="opt-picker gam-topics" id="gamTopics"></div>
-          <div id="gamRows"></div>
-          <p class="gam-src">Polymarket · on-chain, refreshed every 30s</p>
+        </div>
+
+        <!-- Very large real transfers, from the chains a provider can actually
+             see. The coin list is CoinGecko's top fifty; which of those can be
+             watched is a separate question and the picker answers it. -->
+        <div id="gambleCrypto" hidden>
+          <div class="card gam-card" id="cryptoWhaleCard">
+            <div class="card-lbl">
+              <span>Whale transfers — <span id="cwName">all coins</span></span>
+              <div class="opt-picker" id="cwBand"></div>
+            </div>
+            <div class="cw-coins" id="cwCoins"></div>
+            <div id="cwRows"></div>
+            <p class="gam-src" id="cwSrc">Whale Alert · on-chain</p>
+          </div>
         </div>
       </div>
     </div>

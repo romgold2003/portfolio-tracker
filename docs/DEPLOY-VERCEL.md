@@ -115,6 +115,34 @@ Nothing, until they sign up again. Reset links only work for accounts created
 Everyone older keeps their recovery key, and "Forgot password" still offers
 "Use a recovery key instead" for them.
 
+## Optional: the crypto whale tracker
+
+News → Gamble → Crypto watches very large on-chain transfers. Two halves, and
+only one of them needs anything:
+
+- **The coin picker works with no configuration.** CoinGecko gives the top fifty
+  and the provider's own public status endpoint says which of them can be
+  watched and on which chains. On the day this was written that was 29 of the
+  50, across 14 chains.
+- **The transfers need a key.** Set `WHALE_ALERT_KEY` to a key from
+  [whale-alert.io](https://developer.whale-alert.io/). Without it the panel says
+  so rather than showing nothing, which are different problems.
+
+The free tier allows ten calls a minute and reports transfers over $500,000 —
+comfortably below this panel's $20M floor — but reaches back only about an hour.
+That is why every poll writes what it saw into the database and the panel reads
+from there: left running, the app accumulates the history the plan will not
+hand over in one request. The deployment asks the provider at most once a
+minute however many tabs are open.
+
+There is no free alternative worth adding beside it. Arkham sits behind a bot
+check, Blockchair answers per chain with no USD value and no entity labels, and
+ClankApp no longer resolves.
+
+**This was the twelfth of twelve functions.** `api/whales.js` routes on
+`?resource=` for that reason; anything on-chain that comes later has to go
+inside it rather than beside it.
+
 ## Optional: pin the decoy secret
 
 Add an environment variable `DECOY_SECRET` set to any long random string.

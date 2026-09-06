@@ -15,6 +15,8 @@ import { gaugeSvg } from './gauge.js';
 import { optionsProfile, etfFlows } from '../../services/options.js';
 import { renderExposure, renderEtfFlows, currentMarket, setMarket } from './exposure.js';
 import { renderGamble, startGamble, installNewsTabs } from './gamble.js';
+// The Crypto half of the Gamble tab. Its own source and its own cadence.
+import { installGambleTabs, startCryptoWhales } from './cryptoWhales.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -356,8 +358,10 @@ export async function renderNews() {
   // Its own source and its own cadence, so it neither waits on the five above
   // nor blocks them.
   installNewsTabs();
+  installGambleTabs({ onMacro: renderGamble });
   renderGamble();
   startGamble();
+  startCryptoWhales();
   startFedRefresh();
 
   const anything = value(fed) || value(econ) || value(mood) || value(opts) || value(etf);

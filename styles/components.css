@@ -641,6 +641,52 @@ body.light{--wave-strength:0.34}
 /* A subject with nothing in it at this size stays pressable, just quieter. */
 .opt-tab.is-empty{opacity:0.45}
 
+/* Crypto whale tracker. Deliberately the gam-* grid with three additions, so
+   the two trackers read the same way; only what a transfer has and a bet does
+   not — two ends, a token amount, a chain — gets its own rule. */
+.gam-subtabs{margin:0 0 14px}
+/* The direction column is fixed at the width of its longest real value —
+   "Exchange → Exchange" — because ellipsing it to "Exchange → Unkno…" hides
+   the half of the row that says which way the money went. */
+.cw-grid{grid-template-columns:112px minmax(0,1.1fr) 128px minmax(0,1.6fr) 46px}
+/* The dollars lead and the token count sits under them: same movement, two
+   different facts about it. */
+.cw-tokens{display:block;font-size:10px;font-weight:400;color:var(--text4);
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw-party{color:var(--text2);text-decoration:none}
+.cw-party:hover{color:var(--blue);text-decoration:underline}
+/* An address the provider actually recognised, versus one it did not. The
+   difference has to be visible: it is the difference between a fact and a gap. */
+.cw-party.is-known{color:var(--text);font-weight:600}
+.cw-arrow{color:var(--text3);font-size:11px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;min-width:0}
+.cw-dir{color:var(--text3);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw-hash{color:var(--text4);font-size:10px;text-decoration:none;
+  font-variant-numeric:tabular-nums}
+.cw-hash:hover{color:var(--blue);text-decoration:underline}
+/* Mint, burn, bridge — not transfers, and must not be read as one. */
+.cw-kind{margin-right:6px;padding:0 4px;border-radius:3px;background:var(--input);
+  color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:0.04em}
+/* The coin picker scrolls rather than wrapping to six rows of fifty buttons. */
+.cw-coins{display:flex;gap:5px;overflow-x:auto;padding:0 0 10px;margin:0 0 4px;
+  scrollbar-width:thin}
+.cw-coin{display:flex;align-items:center;gap:5px;flex:0 0 auto;cursor:pointer;
+  background:var(--input);border:1px solid transparent;border-radius:6px;
+  padding:5px 8px;font-family:inherit;font-size:11px;color:var(--text2)}
+.cw-coin:hover:not(:disabled){color:var(--text);border-color:var(--text4)}
+.cw-coin.active{border-color:var(--blue);color:var(--text)}
+/* Top fifty but not watchable: shown, greyed, and unpressable. Hiding it would
+   read as the app having forgotten the coin. */
+.cw-coin.is-off{opacity:0.35;cursor:not-allowed}
+.cw-logo{border-radius:50%;flex:0 0 auto}
+.cw-sym{font-weight:600}
+.cw-rank{color:var(--text4);font-size:9px}
+.cw-multi{font-size:9px;color:var(--text4)}
+@media (max-width:640px){
+  .cw-grid{grid-template-columns:96px minmax(0,1fr) 0 minmax(0,1.1fr) 38px}
+  .cw-dir{display:none}
+}
+
 /* New-trade form: size the position by cash or by share count. */
 .fg-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .size-toggle{display:flex;gap:2px;background:var(--input);border:0.5px solid var(--border2);

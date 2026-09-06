@@ -1,0 +1,422 @@
+/**
+ * The crypto whale tracker.
+ *
+ * Three things here are easy to get quietly wrong and each has a section:
+ * the coverage join, which decides whether the picker tells the truth about
+ * what can be watched; the store, which is the only reason the panel has a
+ * history rather than an hour; and the dedup, because a bridged stablecoin
+ * reported once per network would double the single number the panel is read
+ * for.
+ *
+ * The provider's own feed needs a key and is not reachable from a test, so the
+ * transport is faked and the *parsing* is what is checked — which is where the
+ * bugs would be anyway.
+ */
+import { test, beforeEach, describe } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { useDriver } from '../api/_lib/db.js';
+import { sqliteDriver } from './support/sqlite.mjs';
+import {
+  normaliseTransfer, fetchCoverage, fetchTransfers, resetCoverageCache,
+} from '../api/_lib/whalealert.js';
+import { topCoins, resetTopCoinsCache } from '../api/_lib/topcoins.js';
+import * as store from '../api/_lib/whalestore.js';
+import {
+  BANDS, bandDef, selectTransfers, directionOf, partyName, money, tokens,
+  explorerTx, explorerAddress, chainLabel,
+} from '../src/services/cryptoWhales.js';
+
+/** A fetch that answers with one canned body, and counts how often it is asked. */
+function stubFetch(bodies) {
+  const queue = [...bodies];
+  const calls = [];
+  const fn = async (url) => {
+    calls.push(String(url));
+    const body = queue.length > 1 ? queue.shift() : queue[0];
+    if (body instanceof Error) throw body;
+    return {
+      ok: body.status ? body.status < 400 : true,
+      status: body.status ?? 200,
+      json: async () => body.json,
+    };
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+const COVERAGE = [
+  { name: 'ethereum', symbols: ['ETH', 'USDT', 'USDC', 'LINK', 'SHIB'] },
+  { name: 'bitcoin', symbols: ['BTC', 'USDT'] },
+  { name: 'solana', symbols: ['SOL', 'USDT', 'USDC'] },
+  { name: 'ripple', symbols: ['XRP'] },
+  { name: 'tron', symbols: ['TRX', 'USDT'] },
+];
+
+beforeEach(() => {
+  useDriver(sqliteDriver());
+  store.resetTableCache();
+  resetCoverageCache();
+  resetTopCoinsCache();
+});
+
+describe('what the provider says it can see', () => {
+  test('a symbol maps to every chain it appears on', async () => {
+    const coverage = await fetchCoverage({ fetcher: stubFetch([{ json: COVERAGE }]) });
+    assert.deepEqual(coverage.bySymbol.get('USDT'), ['ethereum', 'bitcoin', 'solana', 'tron']);
+    assert.deepEqual(coverage.bySymbol.get('BTC'), ['bitcoin']);
+    assert.equal(coverage.bySymbol.get('AVAX'), undefined);
+    assert.deepEqual(coverage.chains, ['bitcoin', 'ethereum', 'ripple', 'solana', 'tron']);
+  });
+
+  test('it is asked once and then remembered', async () => {
+    const fetcher = stubFetch([{ json: COVERAGE }]);
+    await fetchCoverage({ fetcher });
+    await fetchCoverage({ fetcher });
+    assert.equal(fetcher.calls.length, 1);
+  });
+});
+
+describe('the top fifty, joined to that', () => {
+  const markets = [
+    { id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', image: 'b.png', market_cap_rank: 1 },
+    { id: 'tether', symbol: 'usdt', name: 'Tether', image: 'u.png', market_cap_rank: 3 },
+    { id: 'avalanche', symbol: 'avax', name: 'Avalanche', image: 'a.png', market_cap_rank: 12 },
+  ];
+
+  test('each coin says which chains it can be watched on, and how many', async () => {
+    const { coins, watchable } = await topCoins({
+      fetcher: stubFetch([{ json: markets }, { json: COVERAGE }]),
+    });
+
+    const bySymbol = Object.fromEntries(coins.map((c) => [c.symbol, c]));
+    assert.deepEqual(bySymbol.BTC.chains, ['bitcoin']);
+    assert.equal(bySymbol.BTC.support, 'single');
+    // A stablecoin is one asset on four ledgers, and the picker has to say so.
+    assert.deepEqual(bySymbol.USDT.chains, ['ethereum', 'bitcoin', 'solana', 'tron']);
+    assert.equal(bySymbol.USDT.support, 'multi');
+    assert.equal(watchable, 2);
+  });
+
+  test('a top-fifty coin with no coverage is kept and marked, not dropped', async () => {
+    const { coins } = await topCoins({
+      fetcher: stubFetch([{ json: markets }, { json: COVERAGE }]),
+    });
+    const avax = coins.find((c) => c.symbol === 'AVAX');
+    // Showing it greyed is information. Omitting it looks like a bug.
+    assert.ok(avax, 'AVAX was dropped from the list');
+    assert.equal(avax.support, 'none');
+    assert.deepEqual(avax.chains, []);
+    assert.equal(avax.rank, 12);
+  });
+
+  test('an unreachable coverage list is unknown, not unsupported', async () => {
+    // Saying "cannot be watched" because a second service was briefly down is
+    // a confident claim built on a missing answer.
+    const fetcher = async (url) => {
+      if (String(url).includes('coingecko')) {
+        return { ok: true, status: 200, json: async () => markets };
+      }
+      throw new Error('coverage is down');
+    };
+    const { coins, watchable } = await topCoins({ fetcher });
+    assert.ok(coins.every((c) => c.support === 'unknown'));
+    assert.equal(watchable, 0);
+  });
+});
+
+describe('reading one transfer', () => {
+  const raw = {
+    blockchain: 'ethereum',
+    symbol: 'usdt',
+    id: '997',
+    transaction_type: 'transfer',
+    hash: '0xabc',
+    from: { address: '0xaaa', owner: 'binance', owner_type: 'exchange' },
+    to: { address: '0xbbb', owner: '', owner_type: 'unknown' },
+    timestamp: 1_780_000_000,
+    amount: 42_000_000,
+    amount_usd: 42_000_000,
+    transaction_count: 1,
+  };
+
+  test('the fields come across, upper-cased where they are compared', () => {
+    const t = normaliseTransfer(raw);
+    assert.equal(t.symbol, 'USDT');
+    assert.equal(t.blockchain, 'ethereum');
+    assert.equal(t.usd, 42_000_000);
+    assert.equal(t.from.owner, 'binance');
+    assert.equal(t.from.ownerType, 'exchange');
+  });
+
+  test('an owner the provider does not know is null, never a guess', () => {
+    const t = normaliseTransfer(raw);
+    assert.equal(t.to.owner, null);
+    assert.equal(t.to.ownerType, null);
+    assert.equal(t.to.address, '0xbbb');
+  });
+
+  test('the id separates two transfers inside one transaction', () => {
+    const a = normaliseTransfer({ ...raw, id: '1' });
+    const b = normaliseTransfer({ ...raw, id: '2' });
+    assert.notEqual(a.id, b.id);
+    assert.ok(a.id.startsWith('ethereum:0xabc:'));
+  });
+
+  test('a row without a value, a hash or a time is not a row', () => {
+    assert.equal(normaliseTransfer({ ...raw, amount_usd: 0 }), null);
+    assert.equal(normaliseTransfer({ ...raw, hash: '' }), null);
+    assert.equal(normaliseTransfer({ ...raw, timestamp: null }), null);
+    assert.equal(normaliseTransfer(null), null);
+  });
+
+  test('a mint is carried through as a mint', () => {
+    assert.equal(normaliseTransfer({ ...raw, transaction_type: 'mint' }).kind, 'mint');
+  });
+});
+
+describe('asking the provider', () => {
+  const page = (n, cursor) => ({
+    json: {
+      result: 'success',
+      cursor,
+      transactions: Array.from({ length: n }, (_, i) => ({
+        blockchain: 'ethereum', symbol: 'eth', id: `${cursor ?? 'z'}${i}`,
+        transaction_type: 'transfer', hash: `0x${i}`,
+        from: { address: '0xa' }, to: { address: '0xb' },
+        timestamp: 1_780_000_000 + i, amount: 10, amount_usd: 25_000_000,
+      })),
+    },
+  });
+
+  test('it walks the cursor rather than widening the window', async () => {
+    const fetcher = stubFetch([page(2, 'next'), page(1, null)]);
+    const rows = await fetchTransfers({ start: 1, key: 'k', fetcher });
+    assert.equal(rows.length, 3);
+    assert.ok(fetcher.calls[1].includes('cursor=next'));
+  });
+
+  test('no key is a stated failure, not an empty list', async () => {
+    await assert.rejects(() => fetchTransfers({ start: 1, key: '', fetcher: stubFetch([page(0)]) }),
+      /WHALE_ALERT_KEY/);
+  });
+
+  test('a rate limit keeps what it already collected', async () => {
+    const fetcher = stubFetch([page(2, 'next'), { status: 429, json: {} }]);
+    const rows = await fetchTransfers({ start: 1, key: 'k', fetcher });
+    assert.equal(rows.length, 2);
+  });
+
+  test('a refusal dressed as a 200 still throws', async () => {
+    const fetcher = stubFetch([{ json: { result: 'error', message: 'window too wide' } }]);
+    await assert.rejects(() => fetchTransfers({ start: 1, key: 'k', fetcher }), /window too wide/);
+  });
+});
+
+describe('the store, which is why there is any history at all', () => {
+  const transfer = (over = {}) => ({
+    id: 'ethereum:0xabc:1', at: 1_780_000_000, blockchain: 'ethereum', symbol: 'USDT',
+    kind: 'transfer', amount: 42_000_000, usd: 42_000_000, hash: '0xabc',
+    from: { address: '0xa', owner: 'binance', ownerType: 'exchange' },
+    to: { address: '0xb', owner: null, ownerType: null },
+    parts: 1, ...over,
+  });
+
+  test('a transfer written twice is held once', async () => {
+    assert.equal(await store.record([transfer()]), 1);
+    assert.equal(await store.record([transfer()]), 0);
+    assert.equal((await store.read()).length, 1);
+  });
+
+  test('what goes in comes back out as numbers, not text', async () => {
+    await store.record([transfer()]);
+    const [row] = await store.read();
+    assert.equal(row.usd, 42_000_000);
+    assert.equal(row.amount, 42_000_000);
+    assert.equal(row.at, 1_780_000_000);
+    assert.equal(row.from.owner, 'binance');
+    assert.equal(row.to.owner, null);
+  });
+
+  test('an amount far past an integer column survives the round trip', async () => {
+    // 400 billion SHIB is not a ten-digit number, which is why these are text.
+    await store.record([transfer({ id: 'x', symbol: 'SHIB', amount: 412_000_000_000 })]);
+    const [row] = await store.read({ symbol: 'SHIB' });
+    assert.equal(row.amount, 412_000_000_000);
+  });
+
+  test('the band filter is arithmetic, not string comparison', async () => {
+    // '9000000' > '20000000' as text. Applying the floor in SQL against a text
+    // column would rank nine million above twenty.
+    await store.record([
+      transfer({ id: 'a', usd: 9_000_000 }),
+      transfer({ id: 'b', usd: 25_000_000 }),
+      transfer({ id: 'c', usd: 120_000_000 }),
+    ]);
+    const big = await store.read({ minUsd: 20_000_000, maxUsd: 100_000_000 });
+    assert.deepEqual(big.map((r) => r.usd), [25_000_000]);
+  });
+
+  test('it comes back newest first', async () => {
+    await store.record([
+      transfer({ id: 'a', at: 1_780_000_100 }),
+      transfer({ id: 'b', at: 1_780_000_300 }),
+      transfer({ id: 'c', at: 1_780_000_200 }),
+    ]);
+    assert.deepEqual((await store.read()).map((r) => r.at),
+      [1_780_000_300, 1_780_000_200, 1_780_000_100]);
+  });
+
+  test('the newest held is what the next poll asks from', async () => {
+    assert.equal(await store.latestAt(), null);
+    await store.record([transfer({ id: 'a', at: 100 }), transfer({ id: 'b', at: 900 })]);
+    assert.equal(await store.latestAt(), 900);
+  });
+
+  test('what has aged out is dropped', async () => {
+    const now = 1_780_000_000_000;
+    await store.record([
+      transfer({ id: 'old', at: Math.floor((now - store.RETAIN_MS - 1000) / 1000) }),
+      transfer({ id: 'new', at: Math.floor(now / 1000) }),
+    ]);
+    await store.prune({ now });
+    assert.deepEqual((await store.read()).map((r) => r.id), ['new']);
+  });
+
+  test('counts are per symbol, above the floor', async () => {
+    await store.record([
+      transfer({ id: 'a', symbol: 'BTC', usd: 30_000_000 }),
+      transfer({ id: 'b', symbol: 'BTC', usd: 60_000_000 }),
+      transfer({ id: 'c', symbol: 'ETH', usd: 25_000_000 }),
+      transfer({ id: 'd', symbol: 'ETH', usd: 1_000_000 }),
+    ]);
+    const counts = await store.countsBySymbol({ minUsd: 20_000_000 });
+    assert.equal(counts.get('BTC'), 2);
+    assert.equal(counts.get('ETH'), 1);
+  });
+});
+
+describe('which way the money went', () => {
+  const t = (from, to, kind = 'transfer') => ({ kind, from, to });
+  const ex = { ownerType: 'exchange', owner: 'binance' };
+  const wal = { ownerType: 'wallet', owner: null };
+  const none = { ownerType: null, owner: null };
+
+  test('both ends known gives the direction', () => {
+    assert.equal(directionOf(t(ex, wal)).label, 'Exchange → Wallet');
+    assert.equal(directionOf(t(wal, ex)).label, 'Wallet → Exchange');
+    assert.equal(directionOf(t(ex, ex)).label, 'Exchange → Exchange');
+  });
+
+  test('one end known says only what is known', () => {
+    assert.equal(directionOf(t(ex, none)).label, 'Exchange → Unknown');
+    assert.equal(directionOf(t(none, ex)).label, 'Unknown → Exchange');
+  });
+
+  test('neither end known is wallet to wallet, which is most of them', () => {
+    assert.equal(directionOf(t(none, none)).label, 'Wallet → Wallet');
+  });
+
+  test('a mint is not a direction', () => {
+    // It has no meaningful sender, so calling it Exchange → Wallet would be
+    // wrong twice over.
+    assert.equal(directionOf(t(none, ex, 'mint')).label, 'Mint');
+    assert.equal(directionOf(t(ex, none, 'burn')).label, 'Burn');
+  });
+
+  test('a named entity is used, an unnamed one falls back to the address', () => {
+    assert.equal(partyName({ owner: 'binance', address: '0xaaa' }), 'Binance');
+    assert.equal(partyName({ owner: null, address: '0x1234567890abcdef1234' }), '0x1234…1234');
+    assert.equal(partyName({ owner: null, address: null }), 'Unknown');
+  });
+});
+
+describe('choosing what to show', () => {
+  const row = (over) => ({
+    id: Math.random().toString(), at: 1_780_000_000, blockchain: 'ethereum',
+    symbol: 'USDT', kind: 'transfer', amount: 1, usd: 30_000_000,
+    from: {}, to: {}, parts: 1, ...over,
+  });
+
+  test('the bands do not overlap and together cover everything above the floor', () => {
+    const bands = BANDS.filter((b) => b.id !== 'all');
+    assert.deepEqual(bands.map((b) => b.min), [20e6, 50e6, 100e6]);
+    assert.deepEqual(bands.map((b) => b.max), [50e6, 100e6, Infinity]);
+    assert.equal(bandDef('nope').id, 'all');
+  });
+
+  test('a band keeps its own and nothing else', () => {
+    const rows = [row({ usd: 25e6 }), row({ usd: 60e6 }), row({ usd: 250e6 })];
+    assert.equal(selectTransfers(rows, { band: 'big' }).length, 1);
+    assert.equal(selectTransfers(rows, { band: 'huge' }).length, 1);
+    assert.equal(selectTransfers(rows, { band: 'mega' }).length, 1);
+    assert.equal(selectTransfers(rows, { band: 'all' }).length, 3);
+  });
+
+  test('one bridged movement seen on two chains is one row, noting both', () => {
+    const rows = [
+      row({ blockchain: 'ethereum', usd: 80_000_000, at: 1_780_000_000 }),
+      row({ blockchain: 'tron', usd: 80_000_000, at: 1_780_000_020 }),
+    ];
+    const out = selectTransfers(rows, { band: 'all' });
+    assert.equal(out.length, 1, 'the same movement was counted twice');
+    // The first seen is the row that is kept; the other network is recorded on
+    // it, so the card can say "Ethereum + Tron" rather than losing the crossing.
+    assert.equal(out[0].blockchain, 'ethereum');
+    assert.deepEqual(out[0].alsoOn ?? [], ['tron']);
+  });
+
+  test('two different whales moving the same amount on one chain stay two rows', () => {
+    const rows = [
+      row({ blockchain: 'ethereum', usd: 80_000_000, at: 1_780_000_000 }),
+      row({ blockchain: 'ethereum', usd: 80_000_000, at: 1_780_009_000 }),
+    ];
+    assert.equal(selectTransfers(rows, { band: 'all' }).length, 2);
+  });
+
+  test('newest first', () => {
+    const rows = [row({ at: 100 }), row({ at: 900 }), row({ at: 500 })];
+    assert.deepEqual(selectTransfers(rows, { band: 'all' }).map((r) => r.at), [900, 500, 100]);
+  });
+
+  test('nothing at all is an empty list, not a throw', () => {
+    assert.deepEqual(selectTransfers(null, { band: 'all' }), []);
+    assert.deepEqual(selectTransfers([], { band: 'all' }), []);
+  });
+});
+
+describe('the links, which are the proof', () => {
+  test('every chain the provider covers has an explorer', async () => {
+    // A row nobody can open and check independently is a claim, not evidence.
+    const live = await fetchCoverage({ fetcher: stubFetch([{ json: COVERAGE }]) });
+    for (const chain of live.chains) {
+      assert.ok(explorerTx(chain, '0xabc'), `no transaction explorer for ${chain}`);
+      assert.ok(explorerAddress(chain, '0xabc'), `no address explorer for ${chain}`);
+    }
+  });
+
+  test('the hash is escaped into the URL', () => {
+    assert.equal(explorerTx('ethereum', '0xab/../c'), 'https://etherscan.io/tx/0xab%2F..%2Fc');
+    assert.equal(explorerTx('nosuchchain', '0xabc'), null);
+  });
+
+  test('a chain reads as its name, not its slug', () => {
+    assert.equal(chainLabel('bitcoin_cash'), 'Bitcoin Cash');
+    assert.equal(chainLabel('ripple'), 'XRP Ledger');
+    assert.equal(chainLabel('newchain'), 'Newchain');
+  });
+});
+
+describe('the numbers on screen', () => {
+  test('dollars read at the scale that matters', () => {
+    assert.equal(money(24_500_000), '$24.5M');
+    assert.equal(money(1_240_000_000), '$1.24B');
+  });
+
+  test('token counts keep fewer digits the larger they get', () => {
+    assert.equal(tokens(1234.567, 'ETH'), '1,234.6 ETH');
+    assert.equal(tokens(9.4127, 'BTC'), '9.41 BTC');
+    assert.equal(tokens(412_000_000_000, 'SHIB'), '412,000,000,000 SHIB');
+    assert.equal(tokens(null, 'BTC'), '');
+  });
+});
