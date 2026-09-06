@@ -1,11 +1,16 @@
 /**
  * Which whales hold the most, and in what.
  *
- * One table, ranked by the dollar size of a position. There was a transfer list
- * beside it and it is gone on purpose: a transfer is an event, and an event
- * told you almost nothing — an exchange shifting its own float between hot and
- * cold storage looked exactly like conviction. A position is a decision, and
- * that is the only thing worth ranking.
+ * Two sections, stacked, both live and both moving together. On top the tape:
+ * the large transfers as they land. Under it the standings: who holds the most
+ * and in what, added up over the chosen window.
+ *
+ * They are not alternatives and were briefly built as though they were, behind
+ * a toggle, which was wrong — the point is watching a sale hit the tape and
+ * seeing the ranking move under it in the same glance. A transfer on its own
+ * says little, since an exchange shifting its float between hot and cold
+ * storage looks exactly like conviction; the ranking says what it added up to.
+ * Each answers what the other cannot.
  *
  * A whale in three coins appears three times, because those are three positions
  * of different sizes that happen to share an owner and flattening them into one
@@ -18,7 +23,8 @@
  */
 import { escapeHtml } from '../format.js';
 import {
-  BANDS, bandDef, fetchCoins, explorerAddress, chainLabel,
+  BANDS, bandDef, fetchCoins, fetchTransfers, selectTransfers,
+  explorerTx, explorerAddress, chainLabel, directionOf, partyName, isVoid,
   shortAddress, money, tokens, fetchFlow, FLOW_WINDOWS, TREND_TONE,
 } from '../../services/cryptoWhales.js';
 
@@ -56,6 +62,66 @@ function ago(seconds) {
 
 /** The full moment, for the title attribute — "when it was made", exactly. */
 const stamp = (seconds) => new Date(seconds * 1000).toLocaleString();
+
+/**
+ * One end of a transfer.
+ *
+ * Linked to the explorer so the address can be opened and its whole history
+ * read — which is the on-chain equivalent of the macro panel linking a wallet
+ * to its Polymarket profile, and is there for the same reason: the interesting
+ * question is never one transfer, it is whether this address has been busy.
+ */
+function party(end, chain) {
+  const name = partyName(end);
+  // The burn hole gets no link and no emphasis: there is nothing to look at.
+  if (isVoid(end)) return '<span class="cw-void" title="No counterparty: the tokens were created or destroyed">—</span>';
+  const href = explorerAddress(chain, end?.address);
+  const title = end?.address ? `${end.address}${end.owner ? ` · ${end.owner}` : ''}` : 'not attributed';
+  const known = end?.owner ? ' is-known' : '';
+
+  return href
+    ? `<a class="cw-party${known}" href="${escapeHtml(href)}" target="_blank"
+         rel="noopener noreferrer" title="${escapeHtml(title)}">${escapeHtml(name)}</a>`
+    : `<span class="cw-party${known}" title="${escapeHtml(title)}">${escapeHtml(name)}</span>`;
+}
+
+/**
+ * One row.
+ *
+ * Nothing here is coloured by direction. An exchange inflow is read as bearish
+ * and an outflow as bullish by convention, but it is only a convention — a
+ * whale moving coins onto an exchange may be posting collateral — and a green
+ * or red row would make the app assert something it does not know.
+ */
+function row(t) {
+  const href = explorerTx(t.blockchain, t.hash);
+  const chains = [t.blockchain, ...(t.alsoOn ?? [])].map(chainLabel).join(' + ');
+  const kindBadge = t.kind && t.kind !== 'transfer'
+    ? `<span class="cw-kind">${escapeHtml(t.kind)}</span>` : '';
+
+  return `<div class="gam-row gam-grid cw-grid">
+    <div class="gam-size">
+      ${escapeHtml(money(t.usd))}
+      <span class="cw-tokens">${escapeHtml(tokens(t.amount, t.symbol))}</span>
+    </div>
+    <div class="gam-who">
+      <span class="gam-name">${party(t.from, t.blockchain)}</span>
+      <span class="cw-arrow">→ ${party(t.to, t.blockchain)}</span>
+    </div>
+    <div class="gam-bet">
+      <span class="cw-dir">${escapeHtml(t.direction.label)}</span>
+    </div>
+    <div class="gam-market">
+      <span class="gam-title">${escapeHtml(t.symbol)} on ${escapeHtml(chains)}${
+  t.parts > 1 ? ` · ${t.parts} parts` : ''}</span>
+      <span class="gam-topic">${kindBadge}${href
+    ? `<a class="cw-hash" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"
+          title="${escapeHtml(t.hash)}">${escapeHtml(shortAddress(t.hash))}</a>`
+    : escapeHtml(shortAddress(t.hash))}</span>
+    </div>
+    <div class="gam-when" title="${escapeHtml(stamp(t.at))}">${escapeHtml(ago(t.at))}</div>
+  </div>`;
+}
 
 /** One ranked position: a whale, a coin, and what it did over the window. */
 function walletRow(r) {
@@ -279,14 +345,34 @@ function draw() {
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
 
+  const transfers = selectTransfers(feed?.rows, { band });
   const list = flow?.ranked ?? [];
-  rows.innerHTML = list.length
+
+  const tape = transfers.length
+    ? `<div class="gam-head gam-grid cw-grid">
+         <div>Size</div><div>From → To</div><div>Direction</div><div>Asset · chain</div><div>When</div>
+       </div>${transfers.map(row).join('')}`
+    : `<div class="empty">${loading ? 'Loading…' : `No ${escapeHtml(bandDef(band).label)}
+       transfers recorded yet.`}</div>`;
+
+  const standings = list.length
     ? `<div class="gam-head cw-rank-grid">
          <div>#</div><div>Whale</div><div>Coin</div><div>Position</div><div>Last</div>
        </div>${list.map(walletRow).join('')}`
     : `<div class="empty">${loading ? 'Loading…' : `No whale holds a position in the
        ${escapeHtml(bandDef(band).label)} range over this window yet. Try a wider band or a
        longer window — the record only goes back as far as the app has been collecting.`}</div>`;
+
+  rows.innerHTML = `
+    <div class="cw-section">
+      <div class="cw-section-hd">Whale transactions<span>as they land</span></div>
+      ${tape}
+    </div>
+    <div class="cw-section">
+      <div class="cw-section-hd">Whale ranking<span>net position over ${
+  escapeHtml(FLOW_WINDOWS.find((w) => w.id === win)?.label ?? win)}</span></div>
+      ${standings}
+    </div>`;
 
   // One handler on the container, so redrawing cannot leave a stale one behind.
   rows.onclick = (e) => {
@@ -333,11 +419,15 @@ export async function renderCryptoWhales() {
 }
 
 async function load() {
-  loading = !flow;
+  loading = !flow && !feed;
   draw();
 
-  const answer = await fetchFlow({ symbol, window: win, band });
+  const [answer, next] = await Promise.all([
+    fetchFlow({ symbol, window: win, band }),
+    fetchTransfers({ symbol, band }),
+  ]);
   loading = false;
+  if (next?.rows?.length || !feed || next?.provider) feed = next;
   /**
    * A refresh that came back empty replaces what was there, and it should: the
    * band or the window may have just changed, and holding the previous answer
