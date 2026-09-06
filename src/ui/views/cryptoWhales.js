@@ -152,7 +152,9 @@ function walletRow(w) {
       <span class="gam-title">${escapeHtml(held)}</span>
       <span class="gam-topic">${escapeHtml(w.chains.map(chainLabel).join(' + '))}</span>
     </div>
-    <div class="gam-when" title="${escapeHtml(stamp(w.lastAt))}">${escapeHtml(activeFor(w.firstAt, w.lastAt))}</div>
+    <div class="gam-when" title="${escapeHtml(`last seen ${stamp(w.lastAt)}${
+  w.firstAt && w.firstAt !== w.lastAt ? ` · first seen ${stamp(w.firstAt)}` : ''}`)}">${
+  escapeHtml(ago(w.lastAt))}<span class="cw-span">${escapeHtml(activeFor(w.firstAt, w.lastAt))}</span></div>
   </div>`;
 }
 
@@ -349,11 +351,13 @@ function draw() {
     const list = flow?.wallets ?? [];
     rows.innerHTML = list.length
       ? `<div class="gam-head gam-grid cw-grid">
-           <div>Net 30d</div><div>Wallet</div><div>Activity</div><div>What · where</div><div>Span</div>
+           <div>Net 30d</div><div>Wallet</div><div>Activity</div><div>What · where</div><div>Last</div>
          </div>${list.map(walletRow).join('')}`
-      : `<div class="empty">${loading ? 'Loading…' : `No wallet has a net position
-         above ${escapeHtml(money(500_000))} in the record yet. This view adds up every
-         transfer the app has seen, so it fills as the record grows.`}</div>`;
+      : `<div class="empty">${loading ? 'Loading…' : `No wallet has moved more than
+         once in this window yet. A wallet seen a single time is an event rather
+         than a position — it is in the Transfers view. This one waits for
+         repeat activity, which is the thing worth knowing, and fills as the
+         record grows.`}</div>`;
   } else {
     const transfers = selectTransfers(feed?.rows, { band });
     rows.innerHTML = transfers.length

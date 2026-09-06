@@ -247,13 +247,24 @@ export async function fetchWallets({ symbol, days = 30, signal } = {}) {
   }
 }
 
-/** How long a wallet has been at it — the span, not the age. */
+/**
+ * How long the wallet has been at it — the span, not the age.
+ *
+ * The second fact about a row, under how long ago it last moved. A position
+ * built over nine days and one built in ninety seconds are different things
+ * even when the total is identical, and "in minutes" said neither: it was
+ * technically true of every span under an hour and told nobody anything.
+ */
 export function activeFor(firstAt, lastAt) {
   if (!firstAt || !lastAt) return '';
-  const days = Math.round((lastAt - firstAt) / 86400);
+  const secs = lastAt - firstAt;
+  // One moment, not a span. A single burst needs no second line.
+  if (secs < 60) return '';
+  const days = Math.floor(secs / 86400);
   if (days >= 1) return `over ${days}d`;
-  const hours = Math.round((lastAt - firstAt) / 3600);
-  return hours >= 1 ? `over ${hours}h` : 'in minutes';
+  const hours = Math.floor(secs / 3600);
+  if (hours >= 1) return `over ${hours}h`;
+  return `over ${Math.floor(secs / 60)}m`;
 }
 
 /** The windows the accumulation layers work over. */

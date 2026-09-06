@@ -68,8 +68,23 @@ const POSITIONAL = new Set(['transfer']);
  * coins arriving at an address. Coins arriving is accumulation in the only
  * sense the chain can prove, and calling it a purchase would assert a
  * counterparty and an intent that are not in the data.
+ *
+ * **`minTransfers` is what stops this listing every transfer twice.** Every
+ * transfer credits a receiver and debits a sender, so a wallet seen exactly
+ * once always arrives paired with its own mirror image: +$102.8M against
+ * −$102.8M, the same event written from both ends, netting to nothing and
+ * filling half the list with rows that say what the transfer list already said.
+ *
+ * A wallet with one transfer has no position to speak of — it has an event, and
+ * events belong in the transfer list. Requiring two makes the mirrors collapse
+ * on their own: a buyer taking from ten sellers appears once with ten
+ * transfers, while each seller, having done one thing, does not appear at all.
+ * That asymmetry is the signal, and it only shows once single events are out of
+ * the way.
  */
-export function accumulation(rows, { hours = 24 * 7, now = Date.now(), symbol = null } = {}) {
+export function accumulation(rows, {
+  hours = 24 * 7, now = Date.now(), symbol = null, minTransfers = 1,
+} = {}) {
   const cutoff = Math.floor(now / 1000) - hours * 3600;
   const wallets = new Map();
 
@@ -117,7 +132,7 @@ export function accumulation(rows, { hours = 24 * 7, now = Date.now(), symbol = 
     touch(r.from?.address ?? r.from_addr, r.from?.owner ?? r.from_owner, r, 'out');
   }
 
-  return [...wallets.values()].map((w) => ({
+  return [...wallets.values()].filter((w) => w.transfers >= minTransfers).map((w) => ({
     address: w.address,
     owner: w.owner,
     receivedUsd: w.receivedUsd,

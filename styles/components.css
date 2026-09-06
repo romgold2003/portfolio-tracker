@@ -731,3 +731,6 @@ body.light{--wave-strength:0.34}
   text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px}
 .cw-stealth-body{font-size:12px;color:var(--text2);line-height:1.5}
 .cw-stealth-note{font-size:10px;color:var(--text4);margin-top:4px}
+/* Under the "how long ago", how long the wallet has been at it — the second
+   fact, kept quiet so the first one reads at a glance. */
+.cw-span{display:block;font-size:9px;color:var(--text4)}

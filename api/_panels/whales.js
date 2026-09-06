@@ -236,7 +236,13 @@ export default async function handler(req, res) {
     try {
       // Every transfer in the longest window; the layers slice it themselves.
       const rows = await store.read({ symbol: symbol || null, minUsd: 0, limit: 20_000 });
-      const wallets = accumulation(rows, { hours: win.hours, symbol: symbol || null });
+      /**
+       * Two transfers minimum, so a wallet seen once does not arrive paired
+       * with its own mirror image. See the note on accumulation().
+       */
+      const wallets = accumulation(rows, {
+        hours: win.hours, symbol: symbol || null, minTransfers: 2,
+      });
 
       let prices = null;
       try { prices = await priceMap(); } catch { /* performance goes unscored */ }
