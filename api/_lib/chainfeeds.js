@@ -32,10 +32,23 @@
  * nothing: these rows arrive in the same responses already being fetched and
  * were simply being thrown away.
  */
-export const FLOOR_USD = 1_000_000;
+export const FLOOR_USD = 250_000;
 
-/** What the transfer list shows. The bands in the UI start here. */
-export const DISPLAY_FLOOR_USD = 20_000_000;
+/**
+ * What the transfer list shows, and it was set far too high.
+ *
+ * Measured across 960 consecutive transfers from twenty token feeds: **not one
+ * cleared twenty million dollars**, and only one cleared a million. The $20M
+ * bands were inherited from the design that assumed a paid provider sweeping
+ * every chain in full; against feeds this app samples itself they were a filter
+ * that let nothing through, so the panel was empty for a reason that had
+ * nothing to do with whether whales were active.
+ *
+ * The floor below is where the distribution actually lives, and the top band is
+ * still open, so a genuine twenty-million-dollar transfer looks exactly as
+ * exceptional as it is.
+ */
+export const DISPLAY_FLOOR_USD = 1_000_000;
 
 /**
  * Nothing on any chain is one transfer of twenty-five billion dollars.

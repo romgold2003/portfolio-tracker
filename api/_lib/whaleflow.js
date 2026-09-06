@@ -215,8 +215,15 @@ export function performance(wallet, prices, { now = Date.now() } = {}) {
 
 /* ── consensus ─────────────────────────────────────────────────────────── */
 
-/** A wallet has to move this much before it counts as having a position. */
-export const PARTICIPANT_FLOOR_USD = 1_000_000;
+/**
+ * A wallet has to move this much before it counts as having a position.
+ *
+ * Half a million rather than a million, because the pieces got smaller: the
+ * measured distribution puts almost everything under a million, so a
+ * million-dollar participation floor was excluding most of the wallets the
+ * consensus is supposed to be counting.
+ */
+export const PARTICIPANT_FLOOR_USD = 500_000;
 
 /**
  * What the whales collectively did to one asset over one window.
@@ -282,12 +289,17 @@ export function consensus(wallets, { floor = PARTICIPANT_FLOOR_USD } = {}) {
  *
  * The whole reason for this file. The test is exact and has no judgement in it:
  * the net accumulation across participating wallets clears a meaningful total,
- * and **no single transfer in it would have appeared in the transaction
- * tracker**. If one did, it is not stealth — it is a big move with some smaller
- * ones around it, and the other panel already showed it.
+ * and **no single transfer in it reached the headline size**. If one did, it is
+ * not stealth — it is a big move with some smaller ones around it.
+ *
+ * `displayFloor` stays at twenty million even though the transfer list now
+ * starts at one, and that is deliberate. The claim being made is "this was
+ * assembled without anything that would have turned a head", and twenty million
+ * is the size that turns a head. Tying it to whatever the list happens to show
+ * would weaken the alert every time that floor moved.
  */
 export function stealth(wallets, {
-  displayFloor = 20_000_000, minNetUsd = 25_000_000, minTransfers = 8,
+  displayFloor = 20_000_000, minNetUsd = 10_000_000, minTransfers = 8,
   minTransfersPerWallet = 2,
 } = {}) {
   /**

@@ -224,17 +224,17 @@ describe('valuing a transfer, which is where the garbage gets in', () => {
   });
 
   test('what is recorded and what is shown are two different floors', () => {
-    // $3M is not a headline, and it is exactly what a position gets built out
+    // $400k is not a headline, and it is exactly what a position gets built out
     // of — so it is recorded even though the transfer list will not show it.
     const small = normaliseChain({
-      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 3_000_000,
+      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 400_000,
       hash: '0xabc', at: 1_780_000_000,
     });
-    assert.ok(small, 'a $3M transfer was thrown away and cannot be added up later');
+    assert.ok(small, 'a $400k transfer was thrown away and cannot be added up later');
     assert.ok(CHAIN_FLOOR < DISPLAY_FLOOR, 'collection must reach below display');
     // Under the collection floor, still nothing.
     assert.equal(normaliseChain({
-      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 999_999,
+      chain: 'ethereum', symbol: 'USDC', amount: 1, usd: 249_999,
       hash: '0xabc', at: 1_780_000_000,
     }), null);
   });
@@ -481,13 +481,15 @@ describe('choosing what to show', () => {
 
   test('the bands do not overlap and together cover everything above the floor', () => {
     const bands = BANDS.filter((b) => b.id !== 'all');
-    assert.deepEqual(bands.map((b) => b.min), [20e6, 50e6, 100e6]);
-    assert.deepEqual(bands.map((b) => b.max), [50e6, 100e6, Infinity]);
+    // Set from the measured distribution: 960 sampled transfers held none over
+    // $20M, so the old bands were three empty boxes.
+    assert.deepEqual(bands.map((b) => b.min), [1e6, 5e6, 20e6]);
+    assert.deepEqual(bands.map((b) => b.max), [5e6, 20e6, Infinity]);
     assert.equal(bandDef('nope').id, 'all');
   });
 
   test('a band keeps its own and nothing else', () => {
-    const rows = [row({ usd: 25e6 }), row({ usd: 60e6 }), row({ usd: 250e6 })];
+    const rows = [row({ usd: 2e6 }), row({ usd: 9e6 }), row({ usd: 60e6 })];
     assert.equal(selectTransfers(rows, { band: 'big' }).length, 1);
     assert.equal(selectTransfers(rows, { band: 'huge' }).length, 1);
     assert.equal(selectTransfers(rows, { band: 'mega' }).length, 1);

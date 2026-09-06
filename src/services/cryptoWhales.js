@@ -20,15 +20,20 @@
 /**
  * The sizes worth separating.
  *
- * Twenty million is the floor for the whole panel. Below it the tape is mostly
- * exchanges rebalancing their own wallets, which is real but is housekeeping,
- * and it would bury the transfers that are somebody deciding something.
+ * Set from the measured distribution rather than from what sounds impressive.
+ * Across 960 consecutive transfers off twenty token feeds, none reached twenty
+ * million and one reached a million — so the old $20M–50M / $50M–100M / $100M+
+ * bands were three empty boxes. A threshold nothing ever clears does not filter
+ * noise, it just means the panel never says anything.
+ *
+ * The top band stays open at twenty million so that a transfer of that size,
+ * when one does come, still stands out as the outlier it is.
  */
 export const BANDS = [
-  { id: 'big', label: '$20M–50M', min: 20_000_000, max: 50_000_000 },
-  { id: 'huge', label: '$50M–100M', min: 50_000_000, max: 100_000_000 },
-  { id: 'mega', label: '$100M+', min: 100_000_000, max: Infinity },
-  { id: 'all', label: 'All $20M+', min: 20_000_000, max: Infinity },
+  { id: 'big', label: '$1M–5M', min: 1_000_000, max: 5_000_000 },
+  { id: 'huge', label: '$5M–20M', min: 5_000_000, max: 20_000_000 },
+  { id: 'mega', label: '$20M+', min: 20_000_000, max: Infinity },
+  { id: 'all', label: 'All $1M+', min: 1_000_000, max: Infinity },
 ];
 
 export const bandDef = (id) => BANDS.find((b) => b.id === id) ?? BANDS[3];

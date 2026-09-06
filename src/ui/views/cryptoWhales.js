@@ -352,7 +352,7 @@ function draw() {
            <div>Net 30d</div><div>Wallet</div><div>Activity</div><div>What · where</div><div>Span</div>
          </div>${list.map(walletRow).join('')}`
       : `<div class="empty">${loading ? 'Loading…' : `No wallet has a net position
-         above ${escapeHtml(money(1_000_000))} in the record yet. This view adds up every
+         above ${escapeHtml(money(500_000))} in the record yet. This view adds up every
          transfer the app has seen, so it fills as the record grows.`}</div>`;
   } else {
     const transfers = selectTransfers(feed?.rows, { band });
@@ -372,7 +372,7 @@ function draw() {
     src.innerHTML = lastAt
       ? `${escapeHtml(names.join(' · ') || 'on-chain')}${
         feed?.provider?.whaleAlert ? ' · Whale Alert' : ''} — ${watchable} of the top 50
-         watchable · $20M floor · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}
+         watchable · $1M floor · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}
          ${names.some((n) => n.endsWith('*')) ? '<br>* sampled each poll rather than swept in full' : ''}`
       : 'Reading the chains…';
   }

@@ -247,9 +247,11 @@ describe('consensus', () => {
   });
 
   test('wallets under the floor are not participants', () => {
-    const c = consensus(wallets([['a', 50e6], ['b', 900_000], ['c', -400_000]]));
+    const c = consensus(wallets([['a', 50e6], ['b', 400_000], ['c', -100_000]]));
     assert.equal(c.participants, 1);
-    assert.ok(PARTICIPANT_FLOOR_USD >= 1_000_000);
+    // Half a million: the measured distribution puts almost everything under a
+    // million, so a million-dollar floor excluded most of what should count.
+    assert.equal(PARTICIPANT_FLOOR_USD, 500_000);
   });
 
   test('an empty book is neutral, not a crash', () => {
