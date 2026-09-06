@@ -27,7 +27,7 @@ const trade = (over = {}) => ({
   outcome: 'No',
   title: 'Will the Fed decrease interest rates by 25 bps in September?',
   size: 1_000_000,
-  price: 0.15,
+  price: 0.40,
   timestamp: 1788525804,
   ...over,
 });
@@ -73,8 +73,8 @@ describe('what counts as macro', () => {
 
 describe('what a trade is worth', () => {
   test('shares times price, which is the cash that changed hands', () => {
-    // A million shares at fifteen cents is $150,000 of conviction.
-    assert.equal(cashOf(trade()), 150_000);
+    // A million shares at forty cents is $400,000 of conviction.
+    assert.equal(cashOf(trade()), 400_000);
     assert.equal(cashOf({ size: 500_000, price: 0.9 }), 450_000);
   });
 
@@ -87,22 +87,43 @@ describe('what a trade is worth', () => {
 
 describe('the size bands', () => {
   const rows = [
-    trade({ size: 1_000_000, price: 0.12, timestamp: 5 }),   // 120k
-    trade({ size: 1_000_000, price: 0.30, timestamp: 4 }),   // 300k
-    trade({ size: 1_000_000, price: 0.75, timestamp: 3 }),   // 750k
+    trade({ size: 1_000_000, price: 0.12, timestamp: 6 }),   // 120k — under the floor
+    trade({ size: 1_000_000, price: 0.30, timestamp: 5 }),   // 300k
+    trade({ size: 1_000_000, price: 0.75, timestamp: 4 }),   // 750k
+    trade({ size: 1_000_000, price: 1.00, timestamp: 3 }),   // 1M
+    trade({ size: 4_000_000, price: 0.60, timestamp: 2 }),   // 2.4M
   ];
 
   test('each band takes only its own', () => {
-    assert.deepEqual(selectTrades(rows, { band: 'small' }).map((t) => t.usd), [120_000]);
     assert.deepEqual(selectTrades(rows, { band: 'mid' }).map((t) => t.usd), [300_000]);
     assert.deepEqual(selectTrades(rows, { band: 'large' }).map((t) => t.usd), [750_000]);
+    assert.deepEqual(selectTrades(rows, { band: 'mega' }).map((t) => t.usd),
+      [1_000_000, 2_400_000]);
+  });
+
+  test('a bet under the floor is in no band at all', () => {
+    // $120k used to have a band of its own. It deliberately no longer does, so
+    // it must not fall into the lowest one instead.
+    const all = BANDS.flatMap((b) => selectTrades(rows, { band: b.id }).map((t) => t.usd));
+    assert.ok(!all.includes(120_000), '$120k leaked into a band');
   });
 
   test('the boundaries fall one way only, so nothing is counted twice', () => {
-    // Exactly $250,000 belongs to the middle band, not to both.
-    const edge = [trade({ size: 1_000_000, price: 0.25 })];
-    assert.equal(selectTrades(edge, { band: 'small' }).length, 0);
-    assert.equal(selectTrades(edge, { band: 'mid' }).length, 1);
+    // Exactly $500,000 belongs to the upper band, not to both.
+    const edge = [trade({ size: 1_000_000, price: 0.50 })];
+    assert.equal(selectTrades(edge, { band: 'mid' }).length, 0);
+    assert.equal(selectTrades(edge, { band: 'large' }).length, 1);
+    // And exactly $1M belongs to the top one.
+    const top = [trade({ size: 1_000_000, price: 1.00 })];
+    assert.equal(selectTrades(top, { band: 'large' }).length, 0);
+    assert.equal(selectTrades(top, { band: 'mega' }).length, 1);
+  });
+
+  test('the three bands asked for, in order, with no gaps', () => {
+    assert.deepEqual(BANDS.map((b) => b.label), ['$250k–500k', '$500k–1M', '$1M+']);
+    for (let i = 1; i < BANDS.length; i++) {
+      assert.equal(BANDS[i].min, BANDS[i - 1].max, 'a gap between the bands');
+    }
   });
 
   test('the bands start where the feed is asked to start', () => {
@@ -117,69 +138,69 @@ describe('the size bands', () => {
 
 describe('the rows it hands the panel', () => {
   test('the wallet is kept whole and also shortened for display', () => {
-    const [t] = selectTrades([trade()], { band: 'small' });
+    const [t] = selectTrades([trade()], { band: 'mid' });
     assert.equal(t.wallet, '0x3a8ad0f1b2c3d4e5f60718293a4b5c6d7e8f7699');
     assert.equal(t.shortWallet, '0x3a8a…7699');
   });
 
   test('the pseudonym is the name, and the wallet stands in when there is none', () => {
-    const [named] = selectTrades([trade()], { band: 'small' });
+    const [named] = selectTrades([trade()], { band: 'mid' });
     assert.equal(named.trader, 'Fabulous-Online');
 
-    const [anon] = selectTrades([trade({ pseudonym: '', name: '' })], { band: 'small' });
+    const [anon] = selectTrades([trade({ pseudonym: '', name: '' })], { band: 'mid' });
     assert.equal(anon.trader, '0x3a8a…7699', 'a nameless whale is still identifiable');
   });
 
   test('a row with no wallet is dropped, not shown blank', () => {
     // The panel exists to say who placed the bet. A row that cannot is not a
     // smaller answer, it is a different one.
-    assert.equal(selectTrades([trade({ proxyWallet: '' })], { band: 'small' }).length, 0);
-    assert.equal(selectTrades([trade({ title: '' })], { band: 'small' }).length, 0);
+    assert.equal(selectTrades([trade({ proxyWallet: '' })], { band: 'mid' }).length, 0);
+    assert.equal(selectTrades([trade({ title: '' })], { band: 'mid' }).length, 0);
   });
 
   test('newest first', () => {
     const rows = [
-      trade({ timestamp: 100, size: 1_000_000, price: 0.11 }),
-      trade({ timestamp: 300, size: 1_000_000, price: 0.12 }),
-      trade({ timestamp: 200, size: 1_000_000, price: 0.13 }),
+      trade({ timestamp: 100, size: 1_000_000, price: 0.30 }),
+      trade({ timestamp: 300, size: 1_000_000, price: 0.35 }),
+      trade({ timestamp: 200, size: 1_000_000, price: 0.40 }),
     ];
-    assert.deepEqual(selectTrades(rows, { band: 'small' }).map((t) => t.at), [300, 200, 100]);
+    assert.deepEqual(selectTrades(rows, { band: 'mid' }).map((t) => t.at), [300, 200, 100]);
   });
 
   test('a sell is carried as a sell', () => {
-    const [t] = selectTrades([trade({ side: 'SELL', outcome: 'Yes' })], { band: 'small' });
+    const [t] = selectTrades([trade({ side: 'SELL', outcome: 'Yes' })], { band: 'mid' });
     assert.equal(t.side, 'SELL');
     assert.equal(t.outcome, 'Yes');
   });
 
   test('an unknown side is not trusted into the output', () => {
-    const [t] = selectTrades([trade({ side: '<script>' })], { band: 'small' });
+    const [t] = selectTrades([trade({ side: '<script>' })], { band: 'mid' });
     assert.equal(t.side, 'BUY', 'anything not SELL is BUY, never the raw field');
   });
 
   test('nothing to show is an empty list, not a throw', () => {
-    assert.deepEqual(selectTrades(null, { band: 'small' }), []);
-    assert.deepEqual(selectTrades([], { band: 'small' }), []);
+    assert.deepEqual(selectTrades(null, { band: 'mid' }), []);
+    assert.deepEqual(selectTrades([], { band: 'mid' }), []);
   });
 });
 
 describe('filtering to one subject', () => {
   const rows = [
-    trade({ title: 'Will the Fed decrease interest rates by 25 bps?', size: 1e6, price: 0.12 }),
-    trade({ title: 'Will the U.S. invade Iran before 2027?', size: 1e6, price: 0.13 }),
-    trade({ title: 'Clarity Act (H.R.3633) signed into law in 2026?', size: 1e6, price: 0.14 }),
-    trade({ title: 'LoL: KT Rolster vs Dplus KIA', size: 1e6, price: 0.15 }),
+    trade({ title: 'Will the Fed decrease interest rates by 25 bps?', size: 1e6, price: 0.30 }),
+    trade({ title: 'Will the U.S. invade Iran before 2027?', size: 1e6, price: 0.35 }),
+    trade({ title: 'Clarity Act (H.R.3633) signed into law in 2026?', size: 1e6, price: 0.40 }),
+    trade({ title: 'LoL: KT Rolster vs Dplus KIA', size: 1e6, price: 0.45 }),
   ];
 
   test('a subject takes only its own, and "all" takes every macro one', () => {
-    assert.equal(selectTrades(rows, { band: 'small', topic: 'fed' }).length, 1);
-    assert.equal(selectTrades(rows, { band: 'small', topic: 'geo' }).length, 1);
-    assert.equal(selectTrades(rows, { band: 'small', topic: 'all' }).length, 3);
+    assert.equal(selectTrades(rows, { band: 'mid', topic: 'fed' }).length, 1);
+    assert.equal(selectTrades(rows, { band: 'mid', topic: 'geo' }).length, 1);
+    assert.equal(selectTrades(rows, { band: 'mid', topic: 'all' }).length, 3);
   });
 
   test('the sport stays out whichever subject is asked for', () => {
     for (const t of TOPIC_TABS) {
-      const titles = selectTrades(rows, { band: 'small', topic: t.id }).map((r) => r.title);
+      const titles = selectTrades(rows, { band: 'mid', topic: t.id }).map((r) => r.title);
       assert.ok(!titles.some((x) => x.startsWith('LoL')), `sport leaked into "${t.id}"`);
     }
   });
@@ -190,7 +211,7 @@ describe('filtering to one subject', () => {
     for (const t of TOPIC_TABS) {
       assert.equal(
         counts.get(t.id),
-        selectTrades(rows, { band: 'small', topic: t.id, limit: Infinity }).length,
+        selectTrades(rows, { band: 'mid', topic: t.id, limit: Infinity }).length,
         `"${t.id}" counted wrong`,
       );
     }
@@ -208,37 +229,21 @@ describe('filtering to one subject', () => {
   });
 
   test('an unknown subject shows nothing rather than everything', () => {
-    assert.equal(selectTrades(rows, { band: 'small', topic: 'sport' }).length, 0);
+    assert.equal(selectTrades(rows, { band: 'mid', topic: 'sport' }).length, 0);
   });
 });
 
-describe('the $50k–100k band', () => {
-  const rows = [
-    trade({ size: 1e6, price: 0.06, timestamp: 6 }),   // 60k
-    trade({ size: 1e6, price: 0.12, timestamp: 5 }),   // 120k
-    trade({ size: 1e6, price: 0.75, timestamp: 4 }),   // 750k
-  ];
-
-  test('takes only what falls in it', () => {
-    assert.deepEqual(selectTrades(rows, { band: 'entry' }).map((t) => t.usd), [60_000]);
-  });
-
-  test('adding it did not move anything out of the bands above', () => {
-    assert.deepEqual(selectTrades(rows, { band: 'small' }).map((t) => t.usd), [120_000]);
-    assert.deepEqual(selectTrades(rows, { band: 'large' }).map((t) => t.usd), [750_000]);
-  });
-
-  test('$100,000 exactly belongs upward, so nothing is counted twice', () => {
-    const edge = [trade({ size: 1e6, price: 0.1 })];
-    assert.equal(selectTrades(edge, { band: 'entry' }).length, 0);
-    assert.equal(selectTrades(edge, { band: 'small' }).length, 1);
-  });
-
-  test('below the floor nothing is shown at all', () => {
-    // $49,000 is under what the feed is even asked for; if one arrives it is
-    // not quietly promoted into the smallest band.
-    const under = [trade({ size: 1e6, price: 0.049 })];
-    for (const b of BANDS) assert.equal(selectTrades(under, { band: b.id }).length, 0);
+describe('the floor, now that the small bands are gone', () => {
+  test('a bet under $250k is shown in no band at all', () => {
+    // $60k and $120k each used to have a band. Removing those bands must not
+    // quietly promote their trades into the lowest remaining one.
+    for (const price of [0.06, 0.12, 0.24]) {
+      const under = [trade({ size: 1e6, price })];
+      for (const b of BANDS) {
+        assert.equal(selectTrades(under, { band: b.id }).length, 0,
+          `$${price * 1e6} leaked into ${b.label}`);
+      }
+    }
   });
 
   test('the bands are contiguous from the floor upward', () => {

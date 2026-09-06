@@ -18,7 +18,7 @@ import {
 const el = (id) => document.getElementById(id);
 
 /** Subject and size. Both survive a re-render, like the other panels. */
-let band = 'small';
+let band = 'mid';
 let topic = 'all';
 let lastRows = null;
 

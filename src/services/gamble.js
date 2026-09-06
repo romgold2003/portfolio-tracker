@@ -25,22 +25,21 @@
 const ENDPOINT = 'https://data-api.polymarket.com/trades';
 
 /** Nothing below this is worth a row, and it is the feed's own filter. */
-export const FLOOR_USD = 50_000;
+export const FLOOR_USD = 250_000;
 
 /**
  * The feed is asked twice, at two floors.
  *
  * It answers with the most recent N trades above whatever floor it is given, so
- * one request at $50k is not a superset of one at $100k — it is a shorter
- * window. Measured: 500 trades above $100k reach back twenty-five days and hold
- * fifteen, three and three in the upper bands; the same 500 above $50k reach
- * back nine and hold one, two and none. Lowering the single floor would have
- * emptied the bands this panel was built for.
+ * one request at a low floor is not a superset of one at a high floor — it is a
+ * shorter window. Measured on the earlier floors: 500 trades above $100k reached
+ * back twenty-five days, the same 500 above $50k only nine, which emptied the
+ * large bands rather than filling the small one.
  *
- * So the high floor keeps the reach the large bands need, the low one fills the
- * new small band, and the overlap is dropped.
+ * So the high floor keeps the reach the $1M+ band needs, the low one fills
+ * $250k–500k, and the overlap is dropped.
  */
-const FLOORS = [100_000, FLOOR_USD];
+const FLOORS = [1_000_000, FLOOR_USD];
 
 /**
  * The bands to read the flow in.
@@ -50,10 +49,9 @@ const FLOORS = [100_000, FLOOR_USD];
  * in bands is how the same list answers "who is nibbling" and "who has decided".
  */
 export const BANDS = [
-  { id: 'entry', label: '$50k–100k', min: 50_000, max: 100_000 },
-  { id: 'small', label: '$100k–250k', min: 100_000, max: 250_000 },
   { id: 'mid', label: '$250k–500k', min: 250_000, max: 500_000 },
-  { id: 'large', label: '$500k+', min: 500_000, max: Infinity },
+  { id: 'large', label: '$500k–1M', min: 500_000, max: 1_000_000 },
+  { id: 'mega', label: '$1M+', min: 1_000_000, max: Infinity },
 ];
 
 export const bandDef = (id) => BANDS.find((b) => b.id === id) ?? BANDS[0];
@@ -146,7 +144,7 @@ const shortWallet = (w) => (typeof w === 'string' && w.length > 12
  * point of the panel is who placed the bet, and a row that cannot say is not a
  * smaller answer but a different one.
  */
-export function selectTrades(rows, { band = 'small', topic: wanted = 'all', limit = 40 } = {}) {
+export function selectTrades(rows, { band = 'mid', topic: wanted = 'all', limit = 40 } = {}) {
   if (!Array.isArray(rows)) return [];
   const { min, max } = bandDef(band);
   const out = [];
