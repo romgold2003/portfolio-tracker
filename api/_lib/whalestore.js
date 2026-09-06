@@ -52,8 +52,15 @@ async function ensureTable() {
   ready = true;
 }
 
-/** A month. Long enough for the largest timeframe, short enough to stay small. */
-export const RETAIN_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * Thirteen months, because the panel now offers a year.
+ *
+ * It was thirty days, which quietly made the 3M, 1Y and All windows lies — they
+ * would have asked for a year and been handed a month without saying so. The
+ * cost of keeping the rest is nothing: these are short text rows, and a busy
+ * day writes a few hundred.
+ */
+export const RETAIN_MS = 397 * 24 * 60 * 60 * 1000;
 
 /**
  * Write what a poll saw, ignoring anything already held.

@@ -1,24 +1,25 @@
 /**
- * Very large on-chain transfers — who moved what, where, and when.
+ * Which whales hold the most, and in what.
  *
- * Drawn to match the macro whale tracker beside it: the same band buttons, the
- * same grid, the same row rhythm, the same "an empty band is a real answer"
- * behaviour. Someone who has learned to read one should not have to learn to
- * read the other, so this reuses the gam-* classes rather than inventing a
- * second visual language for the same idea.
+ * One table, ranked by the dollar size of a position. There was a transfer list
+ * beside it and it is gone on purpose: a transfer is an event, and an event
+ * told you almost nothing — an exchange shifting its own float between hot and
+ * cold storage looked exactly like conviction. A position is a decision, and
+ * that is the only thing worth ranking.
  *
- * What is genuinely different gets the extra room: a transfer has two ends and
- * a bet has one, so where the macro row shows a single wallet this one shows a
- * direction, and the size column carries the token amount under the dollars
- * because "eight hundred million dollars" and "ten thousand BTC" are two
- * different facts about the same movement.
+ * A whale in three coins appears three times, because those are three positions
+ * of different sizes that happen to share an owner and flattening them into one
+ * row would hide the sizes. Opening a row shows that whale's whole book, so the
+ * repetition explains itself rather than looking like duplication.
+ *
+ * The size bands filter the position and the windows decide how far back to
+ * add up. Both are honest about what they cannot do: the record only reaches
+ * as far as the app has been collecting, so "1Y" is a request, not a promise.
  */
 import { escapeHtml } from '../format.js';
 import {
-  BANDS, bandDef, selectTransfers, fetchCoins, fetchTransfers,
-  explorerTx, explorerAddress, chainLabel, directionOf, partyName,
-  shortAddress, money, tokens, isVoid, activeFor,
-  fetchFlow, FLOW_WINDOWS, TREND_TONE,
+  BANDS, bandDef, fetchCoins, explorerAddress, chainLabel,
+  shortAddress, money, tokens, fetchFlow, FLOW_WINDOWS, TREND_TONE,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -37,9 +38,10 @@ let lastAt = 0;
  * question at two zoom levels and switching between them is the useful motion:
  * see a wallet accumulating, then look at the transfers that built it.
  */
-let view = 'wallets';
 let flow = null;
-let win = '7d';
+/** Which rank is open, showing that whale's whole book. */
+let openRank = null;
+let win = '1m';
 
 /** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
 function ago(seconds) {
@@ -55,100 +57,55 @@ function ago(seconds) {
 /** The full moment, for the title attribute — "when it was made", exactly. */
 const stamp = (seconds) => new Date(seconds * 1000).toLocaleString();
 
-/**
- * One end of a transfer.
- *
- * Linked to the explorer so the address can be opened and its whole history
- * read — which is the on-chain equivalent of the macro panel linking a wallet
- * to its Polymarket profile, and is there for the same reason: the interesting
- * question is never one transfer, it is whether this address has been busy.
- */
-function party(end, chain) {
-  const name = partyName(end);
-  // The burn hole gets no link and no emphasis: there is nothing to look at.
-  if (isVoid(end)) return '<span class="cw-void" title="No counterparty: the tokens were created or destroyed">—</span>';
-  const href = explorerAddress(chain, end?.address);
-  const title = end?.address ? `${end.address}${end.owner ? ` · ${end.owner}` : ''}` : 'not attributed';
-  const known = end?.owner ? ' is-known' : '';
-
-  return href
-    ? `<a class="cw-party${known}" href="${escapeHtml(href)}" target="_blank"
-         rel="noopener noreferrer" title="${escapeHtml(title)}">${escapeHtml(name)}</a>`
-    : `<span class="cw-party${known}" title="${escapeHtml(title)}">${escapeHtml(name)}</span>`;
-}
-
-/**
- * One row.
- *
- * Nothing here is coloured by direction. An exchange inflow is read as bearish
- * and an outflow as bullish by convention, but it is only a convention — a
- * whale moving coins onto an exchange may be posting collateral — and a green
- * or red row would make the app assert something it does not know.
- */
-function row(t) {
-  const href = explorerTx(t.blockchain, t.hash);
-  const chains = [t.blockchain, ...(t.alsoOn ?? [])].map(chainLabel).join(' + ');
-  const kindBadge = t.kind && t.kind !== 'transfer'
-    ? `<span class="cw-kind">${escapeHtml(t.kind)}</span>` : '';
-
-  return `<div class="gam-row gam-grid cw-grid">
-    <div class="gam-size">
-      ${escapeHtml(money(t.usd))}
-      <span class="cw-tokens">${escapeHtml(tokens(t.amount, t.symbol))}</span>
-    </div>
-    <div class="gam-who">
-      <span class="gam-name">${party(t.from, t.blockchain)}</span>
-      <span class="cw-arrow">→ ${party(t.to, t.blockchain)}</span>
-    </div>
-    <div class="gam-bet">
-      <span class="cw-dir">${escapeHtml(t.direction.label)}</span>
-    </div>
-    <div class="gam-market">
-      <span class="gam-title">${escapeHtml(t.symbol)} on ${escapeHtml(chains)}${
-  t.parts > 1 ? ` · ${t.parts} parts` : ''}</span>
-      <span class="gam-topic">${kindBadge}${href
-    ? `<a class="cw-hash" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"
-          title="${escapeHtml(t.hash)}">${escapeHtml(shortAddress(t.hash))}</a>`
-    : escapeHtml(shortAddress(t.hash))}</span>
-    </div>
-    <div class="gam-when" title="${escapeHtml(stamp(t.at))}">${escapeHtml(ago(t.at))}</div>
-  </div>`;
-}
-
-/**
- * One wallet.
- *
- * Net first, because that is the number that means something: in minus out,
- * over the window. A wallet that received and returned the same amount sits at
- * zero and never reaches this list, which is exactly right — a router is not a
- * whale, and on a raw feed routers are most of what you see.
- */
+/** One ranked position: a whale, a coin, and what it did over the window. */
 function walletRow(r) {
   const buying = r.netUsd > 0;
   const chain = r.chains[0];
   const href = explorerAddress(chain, r.address);
   const name = r.owner ? r.owner : shortAddress(r.address);
-  // What else this whale is in, so a repeated name is explained on its own row.
-  const also = r.walletPositions > 1
-    ? `also in ${r.walletPositions - 1} other` : 'only position';
+  const open = openRank === r.rank;
+  const more = (r.holdings?.length ?? 1) - 1;
 
-  return `<div class="gam-row cw-rank-grid">
-    <div class="cw-num">${r.rank}</div>
-    <div class="gam-who">
-      <span class="gam-name">${href
-    ? `<a class="cw-party${r.owner ? ' is-known' : ''}" href="${escapeHtml(href)}"
-           target="_blank" rel="noopener noreferrer"
-           title="${escapeHtml(r.address)}">${escapeHtml(name)}</a>`
-    : escapeHtml(name)}</span>
-      <span class="cw-arrow">${escapeHtml(chainLabel(chain))} · ${escapeHtml(also)}</span>
-    </div>
-    <div class="cw-asset">${escapeHtml(r.symbol)}</div>
-    <div class="cw-amount ${buying ? 'cw-in' : 'cw-out'}">
-      ${escapeHtml((buying ? '+' : '') + money(r.netUsd))}
-      <span class="cw-tokens">${escapeHtml(tokens(Math.abs(r.netUnits), r.symbol))}</span>
-    </div>
-    <div class="gam-when" title="${escapeHtml(`last seen ${stamp(r.lastAt)}`)}">${
+  /**
+   * What this whale holds in everything else, shown only when the row is open.
+   *
+   * The ranking is per position, so a whale in three coins appears three times
+   * and each of those rows is only a third of the story. Opening one tells the
+   * rest without making the table itself wider or the ranking mean something
+   * other than what it says.
+   */
+  const drawer = open ? `<div class="cw-drawer">
+    <div class="cw-drawer-hd">Everything ${escapeHtml(name)} moved in this window</div>
+    ${(r.holdings ?? []).map((h) => `<div class="cw-hold${h.symbol === r.symbol ? ' is-this' : ''}">
+        <span class="cw-hold-sym">${escapeHtml(h.symbol)}</span>
+        <span class="cw-hold-amt ${h.netUsd > 0 ? 'cw-in' : 'cw-out'}">${
+  escapeHtml((h.netUsd > 0 ? '+' : '') + money(h.netUsd))}</span>
+        <span class="cw-hold-units">${escapeHtml(tokens(Math.abs(h.netUnits), h.symbol))}</span>
+      </div>`).join('')}
+    <div class="cw-drawer-ft">${r.transfers} transfer${r.transfers === 1 ? '' : 's'} ·
+      ${escapeHtml(r.chains.map(chainLabel).join(', '))} ·
+      total ${escapeHtml((r.walletNetUsd > 0 ? '+' : '') + money(r.walletNetUsd))}${href
+    ? ` · <a class="cw-hash" href="${escapeHtml(href)}" target="_blank"
+           rel="noopener noreferrer">open on the explorer</a>` : ''}</div>
+  </div>` : '';
+
+  return `<div class="cw-row-wrap${open ? ' is-open' : ''}">
+    <div class="gam-row cw-rank-grid cw-clickable" data-rank="${r.rank}"
+         title="Click to see everything this whale moved">
+      <div class="cw-num">${r.rank}</div>
+      <div class="gam-who">
+        <span class="gam-name">${escapeHtml(name)}</span>
+        <span class="cw-arrow">${escapeHtml(chainLabel(chain))}${
+  more > 0 ? ` · also in ${more} other coin${more === 1 ? '' : 's'}` : ''}</span>
+      </div>
+      <div class="cw-asset">${escapeHtml(r.symbol)}</div>
+      <div class="cw-amount ${buying ? 'cw-in' : 'cw-out'}">
+        ${escapeHtml((buying ? '+' : '') + money(r.netUsd))}
+        <span class="cw-tokens">${escapeHtml(tokens(Math.abs(r.netUnits), r.symbol))}</span>
+      </div>
+      <div class="gam-when" title="${escapeHtml(`last seen ${stamp(r.lastAt)}`)}">${
   escapeHtml(ago(r.lastAt))}<span class="cw-span">${r.transfers} tx</span></div>
+    </div>${drawer}
   </div>`;
 }
 
@@ -261,7 +218,7 @@ function drawSummary() {
 function drawWindow() {
   const picker = el('cwWindow');
   if (!picker) return;
-  picker.style.display = view === 'wallets' ? '' : 'none';
+  picker.style.display = '';
   picker.innerHTML = FLOW_WINDOWS.map((w) =>
     `<button class="opt-tab${w.id === win ? ' active' : ''}"
       data-win="${w.id}">${escapeHtml(w.label)}</button>`).join('');
@@ -273,29 +230,11 @@ function drawWindow() {
   };
 }
 
-function drawView() {
-  const picker = el('cwView');
-  if (!picker) return;
-  const tabs = [
-    { id: 'wallets', label: 'By whale' },
-    { id: 'transfers', label: 'Transfers' },
-  ];
-  picker.innerHTML = tabs.map((t) =>
-    `<button class="opt-tab${t.id === view ? ' active' : ''}"
-      data-view="${t.id}">${escapeHtml(t.label)}</button>`).join('');
-  picker.onclick = (e) => {
-    const id = e.target?.dataset?.view;
-    if (!id || id === view) return;
-    view = id;
-    load();
-  };
-}
-
 function drawBands() {
   const picker = el('cwBand');
   if (!picker) return;
-  // The size bands describe single transfers, so they only apply to that view.
-  picker.style.display = view === 'transfers' ? '' : 'none';
+  // The bands filter a whale's position now, so they always apply.
+  picker.style.display = '';
   picker.innerHTML = BANDS.map((b) =>
     `<button class="opt-tab${b.id === band ? ' active' : ''}"
       data-band="${b.id}">${escapeHtml(b.label)}</button>`).join('');
@@ -303,6 +242,7 @@ function drawBands() {
     const id = e.target?.dataset?.band;
     if (!id || id === band) return;
     band = id;
+    openRank = null;
     load();
   };
 }
@@ -331,33 +271,32 @@ function draw() {
   const rows = el('cwRows');
   if (!rows) return;
 
-  drawView();
   drawWindow();
   drawBands();
   drawCoins();
-  if (view === 'wallets') drawSummary();
-  else { const b = el('cwSummary'); if (b) b.innerHTML = ''; }
+  drawSummary();
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
 
-  if (view === 'wallets') {
-    const list = flow?.ranked ?? [];
-    rows.innerHTML = list.length
-      ? `<div class="gam-head cw-rank-grid">
-           <div>#</div><div>Whale</div><div>Coin</div><div>Position</div><div>Last</div>
-         </div>${list.map(walletRow).join('')}`
-      : `<div class="empty">${loading ? 'Loading…' : `No wallet has moved more than
-         ${escapeHtml(money(flow?.whaleFloor ?? 10_000_000))} in this window yet.
-         Try a longer window, or the Transfers view for everything smaller.`}</div>`;
-  } else {
-    const transfers = selectTransfers(feed?.rows, { band });
-    rows.innerHTML = transfers.length
-      ? `<div class="gam-head gam-grid cw-grid">
-           <div>Size</div><div>From → To</div><div>Direction</div><div>Asset · chain</div><div>When</div>
-         </div>${transfers.map(row).join('')}`
-      : `<div class="empty">${loading ? 'Loading…' : emptyMessage()}</div>`;
-  }
+  const list = flow?.ranked ?? [];
+  rows.innerHTML = list.length
+    ? `<div class="gam-head cw-rank-grid">
+         <div>#</div><div>Whale</div><div>Coin</div><div>Position</div><div>Last</div>
+       </div>${list.map(walletRow).join('')}`
+    : `<div class="empty">${loading ? 'Loading…' : `No whale holds a position in the
+       ${escapeHtml(bandDef(band).label)} range over this window yet. Try a wider band or a
+       longer window — the record only goes back as far as the app has been collecting.`}</div>`;
+
+  // One handler on the container, so redrawing cannot leave a stale one behind.
+  rows.onclick = (e) => {
+    const row = e.target.closest('[data-rank]');
+    // A link inside a row is a link, not a request to open the row.
+    if (!row || e.target.closest('a')) return;
+    const r = Number(row.dataset.rank);
+    openRank = openRank === r ? null : r;
+    draw();
+  };
 
   const src = el('cwSrc');
   if (src) {
@@ -394,24 +333,17 @@ export async function renderCryptoWhales() {
 }
 
 async function load() {
-  loading = view === 'wallets' ? !flow : !feed;
+  loading = !flow;
   draw();
 
-  if (view === 'wallets') {
-    const answer = await fetchFlow({ symbol, window: win });
-    loading = false;
-    if (answer?.wallets?.length || !flow || answer?.error == null) flow = answer;
-    lastAt = Date.now();
-    draw();
-    return;
-  }
-
-  const next = await fetchTransfers({ symbol, band });
+  const answer = await fetchFlow({ symbol, window: win, band });
   loading = false;
-  // A poll that failed leaves what was on screen: the feed missing one refresh
-  // has not changed what was true a minute ago.
-  if (next?.rows?.length || !feed || next?.provider?.configured === false) feed = next;
-  else if (next) feed = { ...feed, counts: next.counts, provider: next.provider };
+  /**
+   * A refresh that came back empty replaces what was there, and it should: the
+   * band or the window may have just changed, and holding the previous answer
+   * would show a filter's results under a different filter's label.
+   */
+  if (answer?.error == null || !flow) flow = answer;
   lastAt = Date.now();
   draw();
 }

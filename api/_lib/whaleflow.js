@@ -35,10 +35,13 @@
 
 /** The windows the panel offers, in hours. */
 export const WINDOWS = [
-  { id: '1h', label: '1h', hours: 1 },
-  { id: '24h', label: '24h', hours: 24 },
-  { id: '7d', label: '7d', hours: 24 * 7 },
-  { id: '30d', label: '30d', hours: 24 * 30 },
+  { id: '1w', label: '1W', hours: 24 * 7 },
+  { id: '1m', label: '1M', hours: 24 * 31 },
+  { id: '3m', label: '3M', hours: 24 * 92 },
+  { id: '1y', label: '1Y', hours: 24 * 366 },
+  // Everything recorded. Not a claim about a year — a claim about the record,
+  // which began the first time the collector ran and grows from there.
+  { id: 'all', label: 'All', hours: Infinity },
 ];
 
 /**
@@ -49,7 +52,7 @@ export const WINDOWS = [
  * because a neighbour was deleted is a trap waiting for the next edit.
  */
 export const windowDef = (id) => WINDOWS.find((w) => w.id === id)
-  ?? WINDOWS.find((w) => w.id === '7d');
+  ?? WINDOWS.find((w) => w.id === '1m');
 
 /** Addresses that are not wallets: the holes tokens are minted from and burnt into. */
 const VOID = new Set([
@@ -90,9 +93,10 @@ const POSITIONAL = new Set(['transfer']);
  * the way.
  */
 export function accumulation(rows, {
-  hours = 24 * 7, now = Date.now(), symbol = null, minTransfers = 1,
+  hours = 24 * 31, now = Date.now(), symbol = null, minTransfers = 1,
 } = {}) {
-  const cutoff = Math.floor(now / 1000) - hours * 3600;
+  // Infinity means the whole record, so nothing is cut off.
+  const cutoff = Number.isFinite(hours) ? Math.floor(now / 1000) - hours * 3600 : -Infinity;
   const wallets = new Map();
 
   const touch = (address, owner, row, direction) => {
@@ -385,8 +389,16 @@ export function stealth(wallets, {
 
 /* ── the ranked table ──────────────────────────────────────────────────── */
 
-/** What it takes to be called a whale here. */
-export const WHALE_FLOOR_USD = 10_000_000;
+/**
+ * The smallest position worth a row.
+ *
+ * There used to be a separate ten-million floor on the whale as well as a floor
+ * on the position, and the two could not both be right: a $1M–5M band asks for
+ * positions between one and five million, and a ten-million qualifier emptied
+ * that band by construction. The band is the filter. This is only the point
+ * below which a holding is not a position at all.
+ */
+export const WHALE_FLOOR_USD = 1_000_000;
 
 /**
  * One row per whale per coin, biggest first.
@@ -412,16 +424,15 @@ export const WHALE_FLOOR_USD = 10_000_000;
  * claim, and the column says which one it is making.
  */
 export function ranked(wallets, {
-  floor = WHALE_FLOOR_USD, limit = 50, minPosition = 500_000,
+  min = WHALE_FLOOR_USD, max = Infinity, limit = 50,
 } = {}) {
   const rows = [];
 
   for (const w of wallets ?? []) {
-    // Qualify on everything the wallet did, not on one coin at a time.
-    if (Math.abs(w.netUsd) < floor) continue;
-
     for (const s of w.symbols ?? []) {
-      if (Math.abs(s.netUsd) < minPosition) continue;
+      // Each holding is judged on its own size, which is what the bands ask.
+      const size = Math.abs(s.netUsd);
+      if (!(size >= min) || size >= max) continue;
       rows.push({
         address: w.address,
         owner: w.owner,
@@ -435,6 +446,10 @@ export function ranked(wallets, {
         /** The wallet's whole position, so a row can say what else it holds. */
         walletNetUsd: w.netUsd,
         walletPositions: (w.symbols ?? []).length,
+        /** The whole book for this wallet, so a row can open into it. */
+        holdings: (w.symbols ?? []).map((x) => ({
+          symbol: x.symbol, netUsd: x.netUsd, netUnits: x.netUnits,
+        })),
       });
     }
   }

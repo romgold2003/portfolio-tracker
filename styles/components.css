@@ -748,3 +748,21 @@ body.light{--wave-strength:0.34}
 @media (max-width:640px){
   .cw-rank-grid{grid-template-columns:22px minmax(0,1fr) 48px 96px 44px}
 }
+
+/* A ranked row opens into everything its whale moved. The ranking is per
+   position, so one row is only part of the story; the drawer tells the rest
+   without widening the table or changing what the ranking means. */
+.cw-clickable{cursor:pointer}
+.cw-clickable:hover{background:var(--input)}
+.cw-row-wrap.is-open .cw-clickable{background:var(--input)}
+.cw-drawer{border-top:0.5px solid var(--border2);padding:8px 12px 10px;background:var(--input)}
+.cw-drawer-hd{font-size:10px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:0.04em;margin-bottom:6px}
+.cw-hold{display:grid;grid-template-columns:64px 110px minmax(0,1fr);gap:0 10px;
+  align-items:baseline;padding:3px 0;font-size:12px}
+/* The holding this row is ranked on, so the drawer says where you already were. */
+.cw-hold.is-this{font-weight:600}
+.cw-hold-sym{color:var(--text)}
+.cw-hold-amt{font-variant-numeric:tabular-nums;text-align:right}
+.cw-hold-units{color:var(--text4);font-size:10px;font-variant-numeric:tabular-nums}
+.cw-drawer-ft{margin-top:6px;font-size:10px;color:var(--text4)}

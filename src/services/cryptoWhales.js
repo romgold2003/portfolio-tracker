@@ -18,7 +18,12 @@
  */
 
 /**
- * The sizes worth separating.
+ * The sizes worth separating — now the filter on a whale's position rather
+ * than on a single transfer, which is the only place a size band means much:
+ * one transfer is an event, a position is a decision.
+ *
+ * Original note follows.
+ *
  *
  * Set from the measured distribution rather than from what sounds impressive.
  * Across 960 consecutive transfers off twenty token feeds, none reached twenty
@@ -280,8 +285,8 @@ export function activeFor(firstAt, lastAt) {
 
 /** The windows the accumulation layers work over. */
 export const FLOW_WINDOWS = [
-  { id: '1h', label: '1h' }, { id: '24h', label: '24h' },
-  { id: '7d', label: '7d' }, { id: '30d', label: '30d' },
+  { id: '1w', label: '1W' }, { id: '1m', label: '1M' }, { id: '3m', label: '3M' },
+  { id: '1y', label: '1Y' }, { id: 'all', label: 'All' },
 ];
 
 /**
@@ -291,8 +296,10 @@ export const FLOW_WINDOWS = [
  * app already recorded — so asking separately would re-aggregate the same rows
  * four times for the same answer.
  */
-export async function fetchFlow({ symbol, window = '7d', signal } = {}) {
-  const params = new URLSearchParams({ resource: 'flow', window });
+export async function fetchFlow({ symbol, window = '1m', band = 'all', signal } = {}) {
+  const { min, max } = bandDef(band);
+  const params = new URLSearchParams({ resource: 'flow', window, min: String(min) });
+  if (Number.isFinite(max)) params.set('max', String(max));
   if (symbol) params.set('symbol', symbol);
   try {
     return await get(params.toString(), signal);

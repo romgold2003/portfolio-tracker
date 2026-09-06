@@ -232,11 +232,16 @@ export default async function handler(req, res) {
     await topUp(Date.now());
     const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
     if (symbol && !/^[A-Z0-9]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
-    const win = windowDef(url.searchParams.get('window') || '7d');
+    const win = windowDef(url.searchParams.get('window') || '1m');
+    // The size band is the filter on a whale's position, so it comes from the
+    // request rather than being fixed.
+    const bandMin = Math.max(WHALE_FLOOR_USD, Number(url.searchParams.get('min')) || 0);
+    const rawMax = Number(url.searchParams.get('max'));
+    const bandMax = Number.isFinite(rawMax) && rawMax > bandMin ? rawMax : Infinity;
 
     try {
       // Every transfer in the longest window; the layers slice it themselves.
-      const rows = await store.read({ symbol: symbol || null, minUsd: 0, limit: 20_000 });
+      const rows = await store.read({ symbol: symbol || null, minUsd: 0, limit: 50_000 });
       /**
        * Two transfers minimum, so a wallet seen once does not arrive paired
        * with its own mirror image. See the note on accumulation().
@@ -271,11 +276,12 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 'no-store');
       return send(res, 200, {
         window: win.id,
+        band: { min: bandMin, max: Number.isFinite(bandMax) ? bandMax : null },
         windows: WINDOWS.map((w) => ({ id: w.id, label: w.label })),
         symbol: symbol || null,
         wallets: scored.slice(0, 40),
         // One row per whale per coin, biggest position first, fifty deep.
-        ranked: ranked(wallets),
+        ranked: ranked(wallets, { min: bandMin, max: bandMax }),
         whaleFloor: WHALE_FLOOR_USD,
         consensus: consensus(wallets),
         stealth: stealth(wallets, { displayFloor: FLOOR_USD }),

@@ -47,17 +47,26 @@ const stealthBook = (wallet = '0xWHALE', n = 10, each = 3_000_000) =>
   }));
 
 describe('the windows', () => {
-  test('the four kept, shortest first', () => {
-    // 6h went: between an hour and a day it told nobody anything the other two
-    // did not, and every extra tab is one more thing to read past.
-    assert.deepEqual(WINDOWS.map((w) => w.id), ['1h', '24h', '7d', '30d']);
-    assert.equal(windowDef('24h').hours, 24);
-    assert.equal(windowDef('30d').hours, 720);
+  test('the five asked for, shortest first', () => {
+    assert.deepEqual(WINDOWS.map((w) => w.id), ['1w', '1m', '3m', '1y', 'all']);
+    assert.equal(windowDef('1w').hours, 168);
+    assert.equal(windowDef('1y').hours, 24 * 366);
+  });
+
+  test('"all" reaches back over the whole record, not a fixed span', () => {
+    assert.equal(windowDef('all').hours, Infinity);
+    // A row from years ago is still inside it.
+    const ancient = [{
+      id: 'x', at: 1, blockchain: 'ethereum', symbol: 'ETH', kind: 'transfer',
+      amount: 1, usd: 5e6, hash: 'h', from: { address: 'A' }, to: { address: 'B' }, parts: 1,
+    }];
+    assert.equal(accumulation(ancient, { hours: Infinity, now: NOW, minTransfers: 1 }).length, 2);
+    assert.equal(accumulation(ancient, { hours: 168, now: NOW, minTransfers: 1 }).length, 0);
   });
 
   test('an unknown window falls back rather than returning nothing', () => {
-    assert.equal(windowDef('nonsense').id, '7d');
-    assert.equal(windowDef('6h').id, '7d', 'the removed window falls back cleanly');
+    assert.equal(windowDef('nonsense').id, '1m');
+    assert.equal(windowDef('6h').id, '1m', 'a removed window falls back cleanly');
   });
 
   test('a window only counts what falls inside it', () => {
@@ -343,7 +352,7 @@ describe('the ranked table — one row per whale per coin', () => {
   };
 
   test('Joseph, then John twice, and Bob nowhere', () => {
-    const out = ranked([john, bob, joseph], { floor: 1e6 });
+    const out = ranked([john, bob, joseph], { min: 1e6 });
     assert.deepEqual(out.map((r) => [r.owner, r.symbol, r.netUsd]), [
       ['Joseph', 'BTC', 1e7],
       ['John', 'BTC', 2e6],
@@ -354,17 +363,23 @@ describe('the ranked table — one row per whale per coin', () => {
   });
 
   test('rank is the position in the table, counting from one', () => {
-    assert.deepEqual(ranked([john, joseph], { floor: 1e6 }).map((r) => r.rank), [1, 2, 3]);
+    assert.deepEqual(ranked([john, joseph], { min: 1e6 }).map((r) => r.rank), [1, 2, 3]);
   });
 
-  test('a whale qualifies on everything it moved, then ranks per coin', () => {
-    // John's two positions are each under the $10M floor, but he is not judged
-    // per coin — he never reaches it on the total either, so he is out.
-    assert.deepEqual(ranked([john, joseph]).map((r) => r.owner), ['Joseph']);
-    // Raise his total past the floor and both his coins appear.
-    const bigJohn = { ...john, netUsd: 12e6 };
-    assert.deepEqual(ranked([bigJohn, joseph]).map((r) => [r.owner, r.symbol]),
-      [['Joseph', 'BTC'], ['John', 'BTC'], ['John', 'SOL']]);
+  test('the size band is the filter, and each holding is judged on its own', () => {
+    // A $1M-5M band asks for positions between one and five million. A separate
+    // ten-million floor on the whale would have emptied it by construction.
+    assert.deepEqual(ranked([john, bob, joseph], { min: 1e6, max: 5e6 })
+      .map((r) => [r.owner, r.symbol]), [['John', 'BTC'], ['John', 'SOL']]);
+    assert.deepEqual(ranked([john, bob, joseph], { min: 5e6, max: 20e6 })
+      .map((r) => r.owner), ['Joseph']);
+    assert.deepEqual(ranked([john, bob, joseph], { min: 20e6 }), []);
+  });
+
+  test('a row carries the whole book, so it can open into it', () => {
+    const [first] = ranked([john], { min: 1e6 });
+    assert.deepEqual(first.holdings.map((h) => h.symbol), ['BTC', 'SOL']);
+    assert.equal(first.holdings.reduce((s, h) => s + h.netUsd, 0), 3e6);
   });
 
   test('a large sale ranks beside a large purchase, not below it', () => {
@@ -395,10 +410,11 @@ describe('the ranked table — one row per whale per coin', () => {
   });
 
   test('each row says how many other positions its whale holds', () => {
-    const [first, second] = ranked([{ ...john, netUsd: 12e6 }], { floor: 1e6 });
+    const [first, second] = ranked([john], { min: 1e6 });
     assert.equal(first.walletPositions, 2);
     assert.equal(second.walletPositions, 2);
-    assert.equal(WHALE_FLOOR_USD, 10_000_000);
+    // The floor is only "not a position at all"; the band does the filtering.
+    assert.equal(WHALE_FLOOR_USD, 1_000_000);
   });
 
   test('nothing to rank is an empty table, not a crash', () => {
