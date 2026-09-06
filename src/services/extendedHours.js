@@ -16,6 +16,9 @@
  * correct for them rather than broken.
  */
 import { cloudEnabled } from './cloud.js';
+import {
+  marketHoliday, sessionBounds, REGULAR_OPEN, PRE_MARKET_OPEN,
+} from '../config/marketCalendar.js';
 
 /**
  * How stale an extended print may be before it is ignored.
@@ -47,19 +50,21 @@ export function resetExtendedCache() {
 }
 
 /**
- * Is the US regular session open right now?
+ * What time it is in New York, and on which of its dates.
  *
- * Weekdays, half past nine to four, New York time — read from the browser's own
- * timezone database rather than by juggling offsets, so it is right on both
- * sides of a daylight-saving change without knowing when those are.
- *
- * Public holidays are not modelled. On Thanksgiving this says open when the
- * market is shut, and the only consequence is a label; nothing is priced off it.
+ * Read from the browser's own timezone database rather than by juggling
+ * offsets, so it is right on both sides of a daylight-saving change without
+ * knowing when those are. The date comes back too, because the calendar has to
+ * be asked about New York's day and not the viewer's — at one in the morning in
+ * Tel Aviv it is still the previous afternoon there, and asking about the wrong
+ * one would move every holiday by a day for half the world.
  */
 function newYorkClock(now) {
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York',
-    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour: 'numeric',
     minute: 'numeric',
     hour12: false,
@@ -67,16 +72,23 @@ function newYorkClock(now) {
 
   const get = (type) => parts.find((p) => p.type === type)?.value;
   return {
-    day: get('weekday'),
+    date: `${get('year')}-${get('month')}-${get('day')}`,
     // Midnight comes back as 24 from some engines.
     minutes: (Number(get('hour')) % 24) * 60 + Number(get('minute')),
   };
 }
 
+/**
+ * Is the US regular session open right now?
+ *
+ * Weekends, public holidays and the one o'clock closes all come from
+ * marketCalendar. Before it existed this was weekday-and-clock only, and said
+ * the market was open at eleven on Christmas morning.
+ */
 export function regularSessionOpen(now = new Date()) {
-  const { day, minutes } = newYorkClock(now);
-  if (day === 'Sat' || day === 'Sun') return false;
-  return minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+  const { date, minutes } = newYorkClock(now);
+  if (marketHoliday(date)) return false;
+  return minutes >= REGULAR_OPEN && minutes < sessionBounds(date).close;
 }
 
 /**
@@ -97,11 +109,17 @@ export function regularSessionOpen(now = new Date()) {
  * So between eight in the evening and four the next morning the figures are
  * held where the day left them. The next pre-market session re-bases everything
  * against that day's close, which is the reset.
+ *
+ * A holiday is over before it starts — nothing trades, so there is nothing to
+ * refresh from and the last real session's figures are what should stand. An
+ * early close takes the after-hours session with it: a one o'clock close
+ * settles at five, not at eight, and holding from five rather than eight is
+ * what stops three hours of an empty tape being read as a quiet market.
  */
 export function tradingDayOver(now = new Date()) {
-  const { day, minutes } = newYorkClock(now);
-  if (day === 'Sat' || day === 'Sun') return true;
-  return minutes >= 20 * 60 || minutes < 4 * 60;
+  const { date, minutes } = newYorkClock(now);
+  if (marketHoliday(date)) return true;
+  return minutes >= sessionBounds(date).settled || minutes < PRE_MARKET_OPEN;
 }
 
 /**
