@@ -180,7 +180,10 @@ export default async function handler(req, res) {
   const sources = [
     {
       id: 'futures',
-      label: 'Fed funds futures',
+      // Named for the tool rather than the instrument, because that is what it
+      // is: the FedWatch calculation, run here on the same fed funds futures
+      // CME runs it on. Labelling it "Fed funds futures" hid that it was there.
+      label: 'CME FedWatch',
       dist: fromFutures(decision.changeBps),
       live: futuresLive,
       asOf: quotedAt,
