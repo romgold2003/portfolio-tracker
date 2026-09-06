@@ -17,7 +17,8 @@ import { escapeHtml } from '../format.js';
 import {
   BANDS, bandDef, selectTransfers, fetchCoins, fetchTransfers,
   explorerTx, explorerAddress, chainLabel, directionOf, partyName,
-  shortAddress, money, tokens, isVoid, fetchWallets, activeFor,
+  shortAddress, money, tokens, isVoid, activeFor,
+  fetchFlow, FLOW_WINDOWS, TREND_TONE,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -37,7 +38,8 @@ let lastAt = 0;
  * see a wallet accumulating, then look at the transfers that built it.
  */
 let view = 'wallets';
-let wallets = null;
+let flow = null;
+let win = '7d';
 
 /** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
 function ago(seconds) {
@@ -206,6 +208,75 @@ function drawCoins() {
   };
 }
 
+/**
+ * What the whales collectively did, above the list of who did it.
+ *
+ * The trend word is arithmetic, not a mood: it comes from how one-sided the
+ * money was and how many wallets were on the heavy side. Both are shown beside
+ * it so it can be argued with, and a reading built on fewer than three wallets
+ * says so rather than presenting itself as a consensus.
+ */
+function drawSummary() {
+  const box = el('cwSummary');
+  if (!box) return;
+  const c = flow?.consensus;
+  const s = flow?.stealth;
+
+  if (!c || !c.participants) {
+    box.innerHTML = flow?.observed?.transfers
+      ? `<div class="cw-note">Watching ${flow.observed.transfers} recorded transfers.
+         No wallet has a net position over $1M in this window yet.</div>`
+      : '';
+    return;
+  }
+
+  const tone = TREND_TONE[c.trend] ?? '';
+  const stealthBlock = s ? `
+    <div class="cw-stealth">
+      <div class="cw-stealth-hd">Stealth accumulation detected</div>
+      <div class="cw-stealth-body">
+        <b>${s.wallets}</b> wallet${s.wallets === 1 ? '' : 's'} ·
+        <b>${s.transfers}</b> transfers ·
+        combined net <b class="cw-in">+${escapeHtml(money(s.netUsd))}</b> ·
+        largest single transfer only ${escapeHtml(money(s.largestUsd))}
+        <div class="cw-stealth-note">Not one of them would have appeared in the
+          transaction tracker. ${escapeHtml(s.symbols.slice(0, 3)
+    .map((x) => `${x.symbol} ${money(x.usd)}`).join(' · '))}</div>
+      </div>
+    </div>` : '';
+
+  box.innerHTML = `
+    <div class="cw-summary">
+      <div class="cw-trend ${tone}">${escapeHtml(c.trend)}${
+  c.thin ? '<span class="cw-thin">thin — under 3 wallets</span>' : ''}</div>
+      <div class="cw-stats">
+        <span>Net flow <b class="${c.netUsd >= 0 ? 'cw-in' : 'cw-out'}">${
+  escapeHtml((c.netUsd >= 0 ? '+' : '−') + money(Math.abs(c.netUsd)))}</b></span>
+        <span>Accumulating <b>${c.accumulating}</b></span>
+        <span>Distributing <b>${c.distributing}</b></span>
+        <span>Still holding <b>${c.holding}</b></span>
+        <span>Transfers <b>${c.transfers}</b></span>
+        <span title="Net over gross: how one-sided the money was">Tilt <b>${
+  (c.tilt * 100).toFixed(0)}%</b></span>
+      </div>
+    </div>${stealthBlock}`;
+}
+
+function drawWindow() {
+  const picker = el('cwWindow');
+  if (!picker) return;
+  picker.hidden = view !== 'wallets';
+  picker.innerHTML = FLOW_WINDOWS.map((w) =>
+    `<button class="opt-tab${w.id === win ? ' active' : ''}"
+      data-win="${w.id}">${escapeHtml(w.label)}</button>`).join('');
+  picker.onclick = (e) => {
+    const id = e.target?.dataset?.win;
+    if (!id || id === win) return;
+    win = id;
+    load();
+  };
+}
+
 function drawView() {
   const picker = el('cwView');
   if (!picker) return;
@@ -265,14 +336,17 @@ function draw() {
   if (!rows) return;
 
   drawView();
+  drawWindow();
   drawBands();
   drawCoins();
+  if (view === 'wallets') drawSummary();
+  else { const b = el('cwSummary'); if (b) b.innerHTML = ''; }
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
 
   if (view === 'wallets') {
-    const list = wallets?.wallets ?? [];
+    const list = flow?.wallets ?? [];
     rows.innerHTML = list.length
       ? `<div class="gam-head gam-grid cw-grid">
            <div>Net 30d</div><div>Wallet</div><div>Activity</div><div>What · where</div><div>Span</div>
@@ -324,13 +398,13 @@ export async function renderCryptoWhales() {
 }
 
 async function load() {
-  loading = view === 'wallets' ? !wallets : !feed;
+  loading = view === 'wallets' ? !flow : !feed;
   draw();
 
   if (view === 'wallets') {
-    const answer = await fetchWallets({ symbol });
+    const answer = await fetchFlow({ symbol, window: win });
     loading = false;
-    if (answer?.wallets?.length || !wallets) wallets = answer;
+    if (answer?.wallets?.length || !flow || answer?.error == null) flow = answer;
     lastAt = Date.now();
     draw();
     return;

@@ -250,3 +250,35 @@ export function activeFor(firstAt, lastAt) {
   const hours = Math.round((lastAt - firstAt) / 3600);
   return hours >= 1 ? `over ${hours}h` : 'in minutes';
 }
+
+/** The windows the accumulation layers work over. */
+export const FLOW_WINDOWS = [
+  { id: '1h', label: '1h' }, { id: '6h', label: '6h' }, { id: '24h', label: '24h' },
+  { id: '7d', label: '7d' }, { id: '30d', label: '30d' },
+];
+
+/**
+ * Accumulation, consensus and stealth, in one request.
+ *
+ * They are four readings of one book — every number comes from transfers the
+ * app already recorded — so asking separately would re-aggregate the same rows
+ * four times for the same answer.
+ */
+export async function fetchFlow({ symbol, window = '7d', signal } = {}) {
+  const params = new URLSearchParams({ resource: 'flow', window });
+  if (symbol) params.set('symbol', symbol);
+  try {
+    return await get(params.toString(), signal);
+  } catch (err) {
+    return { wallets: [], consensus: null, stealth: null, error: err.message };
+  }
+}
+
+/** The five trends, and the colour each earns. Neutral earns none. */
+export const TREND_TONE = {
+  'Strong Accumulation': 'cw-in',
+  Accumulation: 'cw-in',
+  Neutral: '',
+  Distribution: 'cw-out',
+  'Strong Distribution': 'cw-out',
+};

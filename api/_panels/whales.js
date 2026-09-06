@@ -20,6 +20,9 @@ import { topCoins, priceMap, watchContracts } from '../_lib/topcoins.js';
 import { fetchTransfers, feedConfigured } from '../_lib/whalealert.js';
 import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
 import * as store from '../_lib/whalestore.js';
+import {
+  WINDOWS, windowDef, accumulation, performance, consensus, stealth,
+} from '../_lib/whaleflow.js';
 
 
 const SESSION_COOKIE = 'pt_session';
@@ -177,6 +180,50 @@ export default async function handler(req, res) {
       return send(res, 200, { wallets, days, minNet, at: Date.now() });
     } catch (err) {
       return fail(res, 500, `Could not aggregate the store (${err.message}).`);
+    }
+  }
+
+  /**
+   * The intelligence layers, all of them over the same recorded transfers.
+   *
+   * One request rather than four, because they are four readings of one book
+   * and asking separately would re-aggregate the same rows each time.
+   */
+  if (resource === 'flow') {
+    await topUp(Date.now());
+    const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+    if (symbol && !/^[A-Z0-9]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
+    const win = windowDef(url.searchParams.get('window') || '7d');
+
+    try {
+      // Every transfer in the longest window; the layers slice it themselves.
+      const rows = await store.read({ symbol: symbol || null, minUsd: 0, limit: 20_000 });
+      const wallets = accumulation(rows, { hours: win.hours, symbol: symbol || null });
+
+      let prices = null;
+      try { prices = await priceMap(); } catch { /* performance goes unscored */ }
+
+      const scored = wallets
+        .map((w) => ({ ...w, performance: prices ? performance(w, prices) : null }))
+        .sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd));
+
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, {
+        window: win.id,
+        windows: WINDOWS.map((w) => ({ id: w.id, label: w.label })),
+        symbol: symbol || null,
+        wallets: scored.slice(0, 40),
+        consensus: consensus(wallets),
+        stealth: stealth(wallets, { displayFloor: FLOOR_USD }),
+        observed: {
+          transfers: rows.length,
+          /** How much history there is to reason over, said plainly. */
+          since: rows.length ? Math.min(...rows.map((r) => r.at)) : null,
+        },
+        at: Date.now(),
+      });
+    } catch (err) {
+      return fail(res, 500, `Could not read the flow (${err.message}).`);
     }
   }
 

@@ -713,3 +713,21 @@ body.light{--wave-strength:0.34}
    does have one. */
 .cw-in{color:var(--green)}
 .cw-out{color:var(--red)}
+
+/* The consensus block: what the whales collectively did, above who did it. */
+.cw-summary{border:0.5px solid var(--border2);border-radius:8px;padding:10px 12px;margin:0 0 10px}
+.cw-trend{font-size:15px;font-weight:600;color:var(--text);display:flex;
+  align-items:baseline;gap:8px;margin-bottom:6px}
+/* A reading built on one or two wallets is a fact about them, not a consensus. */
+.cw-thin{font-size:10px;font-weight:400;color:var(--text4)}
+.cw-stats{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11px;color:var(--text3)}
+.cw-stats b{color:var(--text);font-variant-numeric:tabular-nums;margin-left:3px}
+.cw-note{font-size:11px;color:var(--text4);margin:0 0 10px}
+/* The alert this whole layer exists for: a position built out of pieces that
+   were each too small for the transaction tracker to report. */
+.cw-stealth{border:0.5px solid var(--border-blue);background:var(--blue-bg);
+  border-radius:8px;padding:10px 12px;margin:0 0 12px}
+.cw-stealth-hd{font-size:11px;font-weight:600;color:var(--blue);
+  text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px}
+.cw-stealth-body{font-size:12px;color:var(--text2);line-height:1.5}
+.cw-stealth-note{font-size:10px;color:var(--text4);margin-top:4px}
