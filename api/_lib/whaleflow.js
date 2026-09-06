@@ -36,13 +36,20 @@
 /** The windows the panel offers, in hours. */
 export const WINDOWS = [
   { id: '1h', label: '1h', hours: 1 },
-  { id: '6h', label: '6h', hours: 6 },
   { id: '24h', label: '24h', hours: 24 },
   { id: '7d', label: '7d', hours: 24 * 7 },
   { id: '30d', label: '30d', hours: 24 * 30 },
 ];
 
-export const windowDef = (id) => WINDOWS.find((w) => w.id === id) ?? WINDOWS[3];
+/**
+ * Falls back by name, not by index.
+ *
+ * It used to return WINDOWS[3], which was the week until 6h was removed and
+ * became the month the moment the array shifted — a default that changes
+ * because a neighbour was deleted is a trap waiting for the next edit.
+ */
+export const windowDef = (id) => WINDOWS.find((w) => w.id === id)
+  ?? WINDOWS.find((w) => w.id === '7d');
 
 /** Addresses that are not wallets: the holes tokens are minted from and burnt into. */
 const VOID = new Set([
@@ -353,4 +360,66 @@ export function stealth(wallets, {
     firstAt: Math.min(...quiet.map((w) => w.firstAt ?? Infinity)),
     lastAt: Math.max(...quiet.map((w) => w.lastAt ?? 0)),
   };
+}
+
+/* ── the ranked table ──────────────────────────────────────────────────── */
+
+/** What it takes to be called a whale here. */
+export const WHALE_FLOOR_USD = 10_000_000;
+
+/**
+ * One row per whale per coin, biggest first.
+ *
+ * The wallet list answered "who moved money", which put a wallet holding two
+ * coins on one line and made the actual question — how big is this position, in
+ * what — something you had to read out of a summary string. So the row is a
+ * pair now: a whale and a coin.
+ *
+ * A whale qualifies once, on the total it moved across everything; its
+ * positions then rank individually. Somebody with ten million in Bitcoin and
+ * two million in Solana appears twice, ten places apart, which is the honest
+ * shape: those are two positions of very different size that happen to share an
+ * owner.
+ *
+ * Ranked on the absolute value, so a large sale sits beside a large purchase
+ * rather than at the bottom of the table. The sign carries the direction and
+ * the colour carries it again.
+ *
+ * The amount is **what moved in this window**, not what the wallet holds. The
+ * chain will say what an address holds if asked, but that is one request per
+ * address and this table is fifty rows; more importantly it is a different
+ * claim, and the column says which one it is making.
+ */
+export function ranked(wallets, {
+  floor = WHALE_FLOOR_USD, limit = 50, minPosition = 500_000,
+} = {}) {
+  const rows = [];
+
+  for (const w of wallets ?? []) {
+    // Qualify on everything the wallet did, not on one coin at a time.
+    if (Math.abs(w.netUsd) < floor) continue;
+
+    for (const s of w.symbols ?? []) {
+      if (Math.abs(s.netUsd) < minPosition) continue;
+      rows.push({
+        address: w.address,
+        owner: w.owner,
+        symbol: s.symbol,
+        netUsd: s.netUsd,
+        netUnits: s.netUnits,
+        chains: w.chains,
+        transfers: w.transfers,
+        lastAt: w.lastAt,
+        firstAt: w.firstAt,
+        /** The wallet's whole position, so a row can say what else it holds. */
+        walletNetUsd: w.netUsd,
+        walletPositions: (w.symbols ?? []).length,
+      });
+    }
+  }
+
+  return rows
+    .sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd))
+    .slice(0, limit)
+    .map((r, i) => ({ ...r, rank: i + 1 }));
 }

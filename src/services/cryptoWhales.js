@@ -280,7 +280,7 @@ export function activeFor(firstAt, lastAt) {
 
 /** The windows the accumulation layers work over. */
 export const FLOW_WINDOWS = [
-  { id: '1h', label: '1h' }, { id: '6h', label: '6h' }, { id: '24h', label: '24h' },
+  { id: '1h', label: '1h' }, { id: '24h', label: '24h' },
   { id: '7d', label: '7d' }, { id: '30d', label: '30d' },
 ];
 

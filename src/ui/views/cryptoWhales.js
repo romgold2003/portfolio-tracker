@@ -123,38 +123,32 @@ function row(t) {
  * zero and never reaches this list, which is exactly right — a router is not a
  * whale, and on a raw feed routers are most of what you see.
  */
-function walletRow(w) {
-  const buying = w.netUsd > 0;
-  const chain = w.chains[0];
-  const href = explorerAddress(chain, w.address);
-  const name = w.owner ? w.owner : shortAddress(w.address);
-  const held = w.symbols.slice(0, 3)
-    .map((s) => `${s.symbol} ${s.netUsd > 0 ? '+' : '−'}${money(Math.abs(s.netUsd))}`).join(' · ');
+function walletRow(r) {
+  const buying = r.netUsd > 0;
+  const chain = r.chains[0];
+  const href = explorerAddress(chain, r.address);
+  const name = r.owner ? r.owner : shortAddress(r.address);
+  // What else this whale is in, so a repeated name is explained on its own row.
+  const also = r.walletPositions > 1
+    ? `also in ${r.walletPositions - 1} other` : 'only position';
 
-  return `<div class="gam-row gam-grid cw-grid">
-    <div class="gam-size">
-      <span class="${buying ? 'cw-in' : 'cw-out'}">${escapeHtml((buying ? '+' : '−') + money(Math.abs(w.netUsd)))}</span>
-      <span class="cw-tokens">${escapeHtml(buying ? 'accumulated' : 'distributed')}</span>
-    </div>
+  return `<div class="gam-row cw-rank-grid">
+    <div class="cw-num">${r.rank}</div>
     <div class="gam-who">
       <span class="gam-name">${href
-    ? `<a class="cw-party${w.owner ? ' is-known' : ''}" href="${escapeHtml(href)}"
+    ? `<a class="cw-party${r.owner ? ' is-known' : ''}" href="${escapeHtml(href)}"
            target="_blank" rel="noopener noreferrer"
-           title="${escapeHtml(w.address)}">${escapeHtml(name)}</a>`
+           title="${escapeHtml(r.address)}">${escapeHtml(name)}</a>`
     : escapeHtml(name)}</span>
-      <span class="cw-arrow">in ${escapeHtml(money(w.inUsd))} · out ${escapeHtml(money(w.outUsd))}</span>
+      <span class="cw-arrow">${escapeHtml(chainLabel(chain))} · ${escapeHtml(also)}</span>
     </div>
-    <div class="gam-bet">
-      <span class="cw-dir">${w.transfers} transfer${w.transfers === 1 ? '' : 's'}${
-  w.oneWay ? ' · one way' : ''}</span>
+    <div class="cw-asset">${escapeHtml(r.symbol)}</div>
+    <div class="cw-amount ${buying ? 'cw-in' : 'cw-out'}">
+      ${escapeHtml((buying ? '+' : '') + money(r.netUsd))}
+      <span class="cw-tokens">${escapeHtml(tokens(Math.abs(r.netUnits), r.symbol))}</span>
     </div>
-    <div class="gam-market">
-      <span class="gam-title">${escapeHtml(held)}</span>
-      <span class="gam-topic">${escapeHtml(w.chains.map(chainLabel).join(' + '))}</span>
-    </div>
-    <div class="gam-when" title="${escapeHtml(`last seen ${stamp(w.lastAt)}${
-  w.firstAt && w.firstAt !== w.lastAt ? ` · first seen ${stamp(w.firstAt)}` : ''}`)}">${
-  escapeHtml(ago(w.lastAt))}<span class="cw-span">${escapeHtml(activeFor(w.firstAt, w.lastAt))}</span></div>
+    <div class="gam-when" title="${escapeHtml(`last seen ${stamp(r.lastAt)}`)}">${
+  escapeHtml(ago(r.lastAt))}<span class="cw-span">${r.transfers} tx</span></div>
   </div>`;
 }
 
@@ -267,7 +261,7 @@ function drawSummary() {
 function drawWindow() {
   const picker = el('cwWindow');
   if (!picker) return;
-  picker.hidden = view !== 'wallets';
+  picker.style.display = view === 'wallets' ? '' : 'none';
   picker.innerHTML = FLOW_WINDOWS.map((w) =>
     `<button class="opt-tab${w.id === win ? ' active' : ''}"
       data-win="${w.id}">${escapeHtml(w.label)}</button>`).join('');
@@ -301,7 +295,7 @@ function drawBands() {
   const picker = el('cwBand');
   if (!picker) return;
   // The size bands describe single transfers, so they only apply to that view.
-  picker.hidden = view !== 'transfers';
+  picker.style.display = view === 'transfers' ? '' : 'none';
   picker.innerHTML = BANDS.map((b) =>
     `<button class="opt-tab${b.id === band ? ' active' : ''}"
       data-band="${b.id}">${escapeHtml(b.label)}</button>`).join('');
@@ -348,17 +342,14 @@ function draw() {
   if (name) name.textContent = symbol ? symbol : 'all coins';
 
   if (view === 'wallets') {
-    const list = flow?.wallets ?? [];
+    const list = flow?.ranked ?? [];
     rows.innerHTML = list.length
-      ? `<div class="gam-head gam-grid cw-grid">
-           <div>Net 30d</div><div>Wallet</div><div>Activity</div><div>What · where</div><div>Last</div>
+      ? `<div class="gam-head cw-rank-grid">
+           <div>#</div><div>Whale</div><div>Coin</div><div>Position</div><div>Last</div>
          </div>${list.map(walletRow).join('')}`
-      : `<div class="empty">${loading ? 'Loading…' : `No wallet has taken a net
-         position over ${escapeHtml(money(500_000))} in this window yet. This view
-         wants repeat activity that ends somewhere — a wallet seen once is an
-         event rather than a position, and one that received and sent the same
-         amount was passing money through, not taking a side. Both are in the
-         Transfers view. This fills as the record grows.`}</div>`;
+      : `<div class="empty">${loading ? 'Loading…' : `No wallet has moved more than
+         ${escapeHtml(money(flow?.whaleFloor ?? 10_000_000))} in this window yet.
+         Try a longer window, or the Transfers view for everything smaller.`}</div>`;
   } else {
     const transfers = selectTransfers(feed?.rows, { band });
     rows.innerHTML = transfers.length

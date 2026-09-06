@@ -734,3 +734,17 @@ body.light{--wave-strength:0.34}
 /* Under the "how long ago", how long the wallet has been at it — the second
    fact, kept quiet so the first one reads at a glance. */
 .cw-span{display:block;font-size:9px;color:var(--text4)}
+
+/* The ranked whale table: one row per whale per coin, biggest first. Its own
+   grid rather than the transfer one, because the columns are a different
+   question — who, in what, how much — and reusing five columns that meant
+   something else was what made it hard to read. */
+.cw-rank-grid{display:grid;grid-template-columns:28px minmax(0,1.4fr) 64px 132px 58px;
+  align-items:center;gap:0 10px;padding:9px 2px}
+.cw-num{font-size:11px;color:var(--text4);font-variant-numeric:tabular-nums}
+.cw-asset{font-size:12px;font-weight:600;color:var(--text)}
+.cw-amount{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.cw-amount .cw-tokens{font-weight:400;text-align:right}
+@media (max-width:640px){
+  .cw-rank-grid{grid-template-columns:22px minmax(0,1fr) 48px 96px 44px}
+}

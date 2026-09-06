@@ -22,7 +22,7 @@ import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
 import * as store from '../_lib/whalestore.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
-  PARTICIPANT_FLOOR_USD,
+  PARTICIPANT_FLOOR_USD, ranked, WHALE_FLOOR_USD,
 } from '../_lib/whaleflow.js';
 
 
@@ -274,6 +274,9 @@ export default async function handler(req, res) {
         windows: WINDOWS.map((w) => ({ id: w.id, label: w.label })),
         symbol: symbol || null,
         wallets: scored.slice(0, 40),
+        // One row per whale per coin, biggest position first, fifty deep.
+        ranked: ranked(wallets),
+        whaleFloor: WHALE_FLOOR_USD,
         consensus: consensus(wallets),
         stealth: stealth(wallets, { displayFloor: FLOOR_USD }),
         observed: {

@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
-  MIN_OBSERVATIONS, PARTICIPANT_FLOOR_USD,
+  MIN_OBSERVATIONS, PARTICIPANT_FLOOR_USD, ranked, WHALE_FLOOR_USD,
 } from '../api/_lib/whaleflow.js';
 
 const NOW = 1_790_000_000_000;
@@ -47,14 +47,17 @@ const stealthBook = (wallet = '0xWHALE', n = 10, each = 3_000_000) =>
   }));
 
 describe('the windows', () => {
-  test('the five asked for, shortest first', () => {
-    assert.deepEqual(WINDOWS.map((w) => w.id), ['1h', '6h', '24h', '7d', '30d']);
+  test('the four kept, shortest first', () => {
+    // 6h went: between an hour and a day it told nobody anything the other two
+    // did not, and every extra tab is one more thing to read past.
+    assert.deepEqual(WINDOWS.map((w) => w.id), ['1h', '24h', '7d', '30d']);
     assert.equal(windowDef('24h').hours, 24);
     assert.equal(windowDef('30d').hours, 720);
   });
 
   test('an unknown window falls back rather than returning nothing', () => {
     assert.equal(windowDef('nonsense').id, '7d');
+    assert.equal(windowDef('6h').id, '7d', 'the removed window falls back cleanly');
   });
 
   test('a window only counts what falls inside it', () => {
@@ -315,5 +318,91 @@ describe('stealth accumulation — the case this was built for', () => {
       .map((r) => ({ ...r, from: r.to, to: r.from }));
     const s = stealth(accumulation(rows, { hours: 168, now: NOW }), { displayFloor: 20_000_000 });
     assert.equal(s, null);
+  });
+});
+
+describe('the ranked table — one row per whale per coin', () => {
+  /** Romy's own example, in his numbers. */
+  const john = {
+    address: '0xjohn', owner: 'John', netUsd: 3e6, transfers: 4, chains: ['ethereum'],
+    lastAt: 100, firstAt: 1,
+    symbols: [
+      { symbol: 'BTC', netUsd: 2e6, netUnits: 25 },
+      { symbol: 'SOL', netUsd: 1e6, netUnits: 4000 },
+    ],
+  };
+  const bob = {
+    address: '0xbob', owner: 'Bob', netUsd: 5e5, transfers: 2, chains: ['ethereum'],
+    lastAt: 100, firstAt: 1,
+    symbols: [{ symbol: 'ETH', netUsd: 5e5, netUnits: 200 }],
+  };
+  const joseph = {
+    address: '0xjoseph', owner: 'Joseph', netUsd: 1e7, transfers: 6, chains: ['bitcoin'],
+    lastAt: 100, firstAt: 1,
+    symbols: [{ symbol: 'BTC', netUsd: 1e7, netUnits: 125 }],
+  };
+
+  test('Joseph, then John twice, and Bob nowhere', () => {
+    const out = ranked([john, bob, joseph], { floor: 1e6 });
+    assert.deepEqual(out.map((r) => [r.owner, r.symbol, r.netUsd]), [
+      ['Joseph', 'BTC', 1e7],
+      ['John', 'BTC', 2e6],
+      ['John', 'SOL', 1e6],
+    ]);
+    // Bob moved half a million; he is not a whale at any floor here.
+    assert.ok(!out.some((r) => r.owner === 'Bob'));
+  });
+
+  test('rank is the position in the table, counting from one', () => {
+    assert.deepEqual(ranked([john, joseph], { floor: 1e6 }).map((r) => r.rank), [1, 2, 3]);
+  });
+
+  test('a whale qualifies on everything it moved, then ranks per coin', () => {
+    // John's two positions are each under the $10M floor, but he is not judged
+    // per coin — he never reaches it on the total either, so he is out.
+    assert.deepEqual(ranked([john, joseph]).map((r) => r.owner), ['Joseph']);
+    // Raise his total past the floor and both his coins appear.
+    const bigJohn = { ...john, netUsd: 12e6 };
+    assert.deepEqual(ranked([bigJohn, joseph]).map((r) => [r.owner, r.symbol]),
+      [['Joseph', 'BTC'], ['John', 'BTC'], ['John', 'SOL']]);
+  });
+
+  test('a large sale ranks beside a large purchase, not below it', () => {
+    const seller = {
+      address: '0xsell', owner: 'Seller', netUsd: -4e7, transfers: 9, chains: ['ethereum'],
+      lastAt: 100, firstAt: 1, symbols: [{ symbol: 'ETH', netUsd: -4e7, netUnits: -10000 }],
+    };
+    const out = ranked([joseph, seller]);
+    assert.equal(out[0].owner, 'Seller', 'the biggest move was not first');
+    assert.ok(out[0].netUsd < 0, 'the sign is kept so the direction still reads');
+  });
+
+  test('a dust position inside a real whale is not given a row', () => {
+    const mixed = {
+      ...joseph,
+      symbols: [{ symbol: 'BTC', netUsd: 1e7, netUnits: 125 },
+        { symbol: 'SHIB', netUsd: 4_000, netUnits: 1e9 }],
+    };
+    assert.deepEqual(ranked([mixed]).map((r) => r.symbol), ['BTC']);
+  });
+
+  test('the table stops at fifty', () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      address: `0x${i}`, owner: null, netUsd: 2e7 + i, transfers: 3, chains: ['ethereum'],
+      lastAt: 100, firstAt: 1, symbols: [{ symbol: 'ETH', netUsd: 2e7 + i, netUnits: 5000 }],
+    }));
+    assert.equal(ranked(many).length, 50);
+  });
+
+  test('each row says how many other positions its whale holds', () => {
+    const [first, second] = ranked([{ ...john, netUsd: 12e6 }], { floor: 1e6 });
+    assert.equal(first.walletPositions, 2);
+    assert.equal(second.walletPositions, 2);
+    assert.equal(WHALE_FLOOR_USD, 10_000_000);
+  });
+
+  test('nothing to rank is an empty table, not a crash', () => {
+    assert.deepEqual(ranked([]), []);
+    assert.deepEqual(ranked(null), []);
   });
 });
