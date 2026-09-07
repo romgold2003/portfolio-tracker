@@ -28,7 +28,7 @@ import {
   shortAddress, money, tokens, fetchFlow, FLOW_WINDOWS, TREND_TONE,
   fetchHolders, fetchLeverage, HOLDER_KIND,
   fetchVerdict, VERDICT_TONE,
-  fetchNetflow, SIGNAL_TONE,
+  fetchNetflow, SIGNAL_TONE, fetchTopHolders, STATUS_TONE,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -58,6 +58,10 @@ let reading = null;
 let netflow = null;
 /** Which period row is expanded into its per-exchange breakdown. */
 let openPeriod = null;
+/** The top-holder card. Unlike netflow, this one follows the coin picker. */
+let topHolders = null;
+/** Rising with each load, so a slow answer cannot overwrite a newer one. */
+let loadToken = 0;
 let win = '1m';
 
 /** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
@@ -340,6 +344,99 @@ function holderRows() {
  * Nothing here says bought or sold. Coins arriving on an exchange have not been
  * sold and may never be; they have only been put where selling is possible.
  */
+/**
+ * The largest holders of the selected coin, and what happened when one left.
+ *
+ * Follows the coin picker, unlike the netflow card beside it — "who holds the
+ * most ETH" is a question about ETH.
+ *
+ * The lower table is the one worth reading carefully. A whale can leave the top
+ * twenty-five because it sold or because somebody else bought more, and only
+ * the first is behaviour; the events come from balances falling, never from
+ * ranks changing. And a deposit to an exchange is never called a sale, because
+ * whatever happened inside is on no ledger available here.
+ */
+function drawTopHolders() {
+  const box = el('cwTop');
+  if (!box) return;
+
+  const hd = `<div class="cw-card-hd">Top holder whales<span>${
+  symbol ? `${escapeHtml(symbol)} · current snapshot` : 'pick a coin above'}</span></div>`;
+
+  if (!symbol) {
+    box.innerHTML = `${hd}<div class="cw-card-empty">Select a coin in the picker to see
+      who holds the most of it.</div>`;
+    return;
+  }
+  if (topHolders?.unsupported) {
+    box.innerHTML = `${hd}<div class="cw-card-empty">${escapeHtml(topHolders.unsupported)}</div>`;
+    return;
+  }
+
+  const list = topHolders?.holders ?? [];
+  const events = topHolders?.events ?? [];
+
+  const rows = list.length ? list.map((h) => `<div class="cw-th-row">
+      <span class="cw-th-rank">${h.rank}</span>
+      <span class="cw-th-who">${(() => {
+    const href = explorerAddress(topHolders.chain, h.address);
+    const label = h.name || shortAddress(h.address);
+    return href
+      ? `<a class="cw-party${h.name ? ' is-known' : ''}" href="${escapeHtml(href)}"
+             target="_blank" rel="noopener noreferrer"
+             title="${escapeHtml(h.address)}">${escapeHtml(label)}</a>`
+      : escapeHtml(label);
+  })()}</span>
+      <span class="cw-th-units">${escapeHtml(tokens(h.units, h.symbol ?? symbol))}</span>
+      <span class="cw-th-usd">${escapeHtml(h.usd == null ? '—' : money(h.usd))}</span>
+      <span class="cw-th-pct">${h.pctSupply == null ? '—' : `${h.pctSupply}%`}</span>
+    </div>`).join('')
+    : `<div class="cw-card-empty">${loading ? 'Reading holders…'
+      : 'No holder list for this coin yet.'}</div>`;
+
+  /** What was left out, so the filtering is visible rather than silent. */
+  const excluded = (topHolders?.excluded ?? []).length
+    ? `<div class="cw-th-excl">Not ranked: ${
+      escapeHtml([...new Set(topHolders.excluded.map((x) => x.kindLabel))].join(' · '))}
+      — none of them is somebody taking a position.</div>`
+    : '';
+
+  const eventRows = events.length ? events.map((e) => {
+    const href = e.hash ? explorerTx(e.chain, e.hash) : null;
+    const tone = STATUS_TONE[e.status] ?? '';
+    return `<div class="cw-ev">
+      <div class="cw-ev-path">
+        <span class="cw-ev-who">${escapeHtml(e.name || shortAddress(e.holder))}</span>
+        <span class="cw-ev-arrow">→</span>
+        <span class="cw-ev-dest">${escapeHtml(e.destination ?? 'unknown')}</span>
+        ${e.gotAsset
+    ? `<span class="cw-ev-swap">${escapeHtml(e.soldAsset)} → ${escapeHtml(e.gotAsset)}</span>`
+    : `<span class="cw-ev-swap">${escapeHtml(e.soldAsset ?? '')}</span>`}
+      </div>
+      <div class="cw-ev-meta">
+        <span class="cw-ev-amt">${escapeHtml(tokens(e.unitsMoved, e.symbol))} ·
+          ${escapeHtml(money(e.usdMoved))} · ${e.pct.toFixed(1)}% of holding</span>
+        <span class="cw-ev-status ${tone}">${escapeHtml(e.status)}</span>
+      </div>
+      <div class="cw-ev-note">${escapeHtml(e.note)}${e.at ? ` · ${escapeHtml(ago(e.at))} ago` : ''}${href
+    ? ` · <a class="cw-hash" href="${escapeHtml(href)}" target="_blank"
+           rel="noopener noreferrer">${escapeHtml(shortAddress(e.hash))}</a>` : ''}</div>
+    </div>`;
+  }).join('')
+    : `<div class="cw-card-empty">No top holder has materially reduced yet. This needs two
+       days of holder snapshots before it can say anything.</div>`;
+
+  box.innerHTML = `${hd}
+    <div class="cw-th-head">
+      <span>#</span><span>Holder</span><span>Amount</span><span>Value</span><span>Supply</span>
+    </div>
+    ${rows}
+    ${excluded}
+    <div class="cw-th-sub">Recent top holder changes<span>only when the holder itself
+      reduced — not when somebody else outgrew it</span></div>
+    ${eventRows}`;
+}
+
 function drawNetflow() {
   const box = el('cwNetflow');
   if (!box) return;
@@ -559,6 +656,7 @@ function draw() {
   drawSummary();
   drawRankCard();
   drawNetflow();
+  drawTopHolders();
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
@@ -656,16 +754,38 @@ async function load() {
   loading = !flow && !feed;
   draw();
 
-  const [read, next, market] = await Promise.all([
-    fetchVerdict({ symbol, window: win, band }),
-    fetchTransfers({ symbol, band }),
+  /**
+   * Each card draws when its own answer lands, not when the slowest does.
+   *
+   * These were awaited together, so every card waited on whichever request was
+   * slowest — and one of them triggers the chain poll, which takes the better
+   * part of a minute on a cold start. The holder card had its data in three
+   * seconds and sat blank for forty, which is indistinguishable from broken.
+   *
+   * The token guards against a stale answer landing after the coin or window
+   * has already changed: only the newest load is allowed to write.
+   */
+  const mine = ++loadToken;
+  const settle = (fn) => (value) => { if (mine === loadToken) { fn(value); loading = false; draw(); } };
+
+  const jobs = [
+    fetchVerdict({ symbol, window: win, band }).then(settle((read) => {
+      if (read?.error == null || !reading) reading = read;
+    })),
+    fetchTransfers({ symbol, band }).then(settle((next) => {
+      if (next?.rows?.length || !feed || next?.provider) feed = next;
+    })),
     // No symbol: this one is about the market, whatever coin is selected.
-    fetchNetflow(),
-  ]);
-  loading = false;
-  if (next?.rows?.length || !feed || next?.provider) feed = next;
-  if (read?.error == null || !reading) reading = read;
-  if (market?.error == null || !netflow) netflow = market;
+    fetchNetflow().then(settle((market) => {
+      if (market?.error == null || !netflow) netflow = market;
+    })),
+    // A symbol: this one is about that coin, and means nothing without it.
+    fetchTopHolders({ symbol }).then(settle((top) => {
+      if (top?.error == null || !topHolders) topHolders = top;
+    })),
+  ];
+  await Promise.allSettled(jobs);
+  if (mine !== loadToken) return;
   /**
    * One request now carries what three used to.
    *

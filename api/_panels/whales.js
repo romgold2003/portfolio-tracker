@@ -25,6 +25,7 @@ import { positionsFor } from '../_lib/leverage.js';
 import { loadExchanges, netflow, exchangeOf, VENUES } from '../_lib/exchanges.js';
 import { verdictFor, isStable } from '../_lib/verdict.js';
 import * as netflowCard from '../_lib/netflowcard.js';
+import { rankHolders, exitEvents } from '../_lib/topholders.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
@@ -581,6 +582,91 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       return fail(res, 502, `Could not read the exchange flow (${err.message}).`);
+    }
+  }
+
+  /**
+   * The top holders of one coin, and what happened when one of them left.
+   *
+   * **This one does follow the coin picker** — the opposite of the netflow
+   * card, and deliberately so: "who holds the most ETH" is a question about
+   * ETH, and answering it for the market would be meaningless.
+   */
+  if (resource === 'topholders') {
+    const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+    if (!symbol) return send(res, 200, { holders: [], events: [], symbol: null, needsCoin: true });
+    if (!/^[A-Z0-9_]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
+
+    try {
+      const now = Date.now();
+      let byAddress = null;
+      try { byAddress = await loadExchanges(); } catch { /* venues go unnamed */ }
+
+      const { coins } = await topCoins();
+      const coin = coins.find((c) => c.symbol === symbol);
+      const reader = (coin?.readers ?? []).find((r) => r.contract);
+      const hosts = { ethereum: 'eth.blockscout.com', polygon: 'polygon.blockscout.com' };
+      const host = reader ? hosts[reader.chain] : null;
+
+      if (!host || !reader?.contract) {
+        return send(res, 200, {
+          symbol,
+          holders: [],
+          events: [],
+          /** Said plainly rather than returned as an empty list. */
+          unsupported: `${symbol} has no token contract on a chain this app can read holders for.`,
+        });
+      }
+
+      const [info, rows, prices] = await Promise.all([
+        holders.fetchTokenInfo({ host, token: reader.contract }),
+        holders.fetchHolders({ host, chain: reader.chain, token: reader.contract }),
+        priceMap().catch(() => null),
+      ]);
+
+      const price = prices ? priceFor(symbol, prices) : null;
+      const ranked25 = rankHolders(rows, {
+        price,
+        totalSupply: info?.totalSupply ?? null,
+        byAddress,
+        creator: info?.creator ?? null,
+        limit: 25,
+      });
+
+      /**
+       * The lower table. Balance falls come from the holder record and the
+       * route comes from the transfer record; the join is the address.
+       */
+      const [changes, transfers] = await Promise.all([
+        holders.changes({ days: 30, symbol, minUsd: 250_000, minPct: 1 }).catch(() => []),
+        store.read({ symbol, minUsd: 0, limit: 10_000 }).catch(() => []),
+      ]);
+      const events = exitEvents({
+        changes,
+        transfers: linkSwaps(transfers),
+        byAddress,
+        symbol,
+        limit: 20,
+      });
+
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, {
+        symbol,
+        chain: reader.chain,
+        contract: reader.contract,
+        price,
+        totalSupply: info?.totalSupply ?? null,
+        holders: ranked25,
+        /** Everything, so the card can say what it filtered out of the ranking. */
+        excluded: rankHolders(rows, {
+          price, totalSupply: info?.totalSupply ?? null, byAddress,
+          creator: info?.creator ?? null, limit: 50, investorsOnly: false,
+        }).filter((h) => h.kind !== 'whale').slice(0, 8),
+        events,
+        at: now,
+      });
+    } catch (err) {
+      return fail(res, 502, `Could not read the holders (${err.message}).`);
     }
   }
 

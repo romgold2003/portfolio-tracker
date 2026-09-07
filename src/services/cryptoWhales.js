@@ -430,3 +430,29 @@ export async function fetchNetflow({ signal } = {}) {
 
 /** Green for bullish, red for bearish, nothing for neutral. */
 export const SIGNAL_TONE = { Bullish: 'cw-in', Bearish: 'cw-out', Neutral: '' };
+
+/**
+ * The top holders of one coin, and what happened when one left.
+ *
+ * **Takes a symbol, unlike the netflow card.** "Who holds the most ETH" is a
+ * question about ETH; answering it for the market would mean nothing.
+ */
+export async function fetchTopHolders({ symbol, signal } = {}) {
+  const params = new URLSearchParams({ resource: 'topholders' });
+  if (symbol) params.set('symbol', symbol);
+  try {
+    return await get(params.toString(), signal);
+  } catch (err) {
+    return { holders: [], events: [], error: err.message };
+  }
+}
+
+/** A confirmed sale reads differently from a suspected one, and must. */
+export const STATUS_TONE = {
+  'Sold / swapped': 'cw-out',
+  'Transferred to exchange': 'cw-warn',
+  'Moved to another chain': '',
+  'Sent to a contract': '',
+  'Wallet transfer — no sale detected': '',
+  'Reduction seen, route unknown': '',
+};

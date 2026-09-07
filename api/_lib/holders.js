@@ -125,6 +125,15 @@ export async function fetchHolders({
       symbol: info.symbol,
       holder: address,
       name,
+      /**
+       * Carried through, not just consumed here.
+       *
+       * Without it a downstream classifier sees a named address with no way to
+       * know it is code, and "Aave v3 LINK" and "TransparentUpgradeableProxy"
+       * both ranked as whales — a lending pool and a proxy contract sitting in
+       * a table of people with opinions.
+       */
+      isContract: !!row?.address?.is_contract,
       kind: classify({ address, name, isContract: !!row?.address?.is_contract, creator: info.creator }),
       units,
       usd: price ? units * price : 0,
@@ -161,10 +170,14 @@ export async function fetchTokenInfo({ host, token, signal, fetcher = fetch }) {
   const symbol = String(m?.symbol ?? '').toUpperCase();
   if (!symbol) return null;
 
+  const decimals = Number(m?.decimals) || 18;
   const info = {
     symbol,
-    decimals: Number(m?.decimals) || 18,
+    decimals,
     creator: a?.creator_address_hash ?? null,
+    /** In whole tokens, so a share of supply can be worked out. */
+    totalSupply: Number(m?.total_supply) / 10 ** decimals || null,
+    address: token,
   };
   tokenInfo.set(key, info);
   return info;
