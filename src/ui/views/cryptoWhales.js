@@ -312,7 +312,7 @@ function drawNetflow() {
     return `<div class="cw-nf-wrap${open ? ' is-open' : ''}">
       <div class="cw-nf-row cw-clickable" data-period="${p.id}"
            title="Click for the split by exchange">
-        <span class="cw-nf-period">${escapeHtml(p.label)}${
+        <span class="cw-nf-period">${escapeHtml(p.label)}${p.rolling ? `<span class="cw-nf-live" title="Rolling twenty-four hours, recomputed through the day — every other row is a daily snapshot">●</span>` : ''}${
   short ? '<span class="cw-nf-partial" title="The record does not reach back this far yet">*</span>' : ''}</span>
         <span class="cw-nf-in">${escapeHtml(money(p.inUsd))}</span>
         <span class="cw-nf-out">${escapeHtml(money(p.outUsd))}</span>
@@ -337,7 +337,7 @@ function drawNetflow() {
     ? `Published exchange wallet balances, daily${netflow.balances.since
       ? ` since ${escapeHtml(netflow.balances.since)}` : ''} — every asset, every size.
        Priced at one date throughout, so a coin repricing is never read as a coin moving.
-       ${(netflow.balances.venues ?? []).length} exchanges.`
+       ${(netflow.balances.venues ?? []).length} exchanges.${census.some((p) => p.rolling) ? ` The 24H row is a rolling day across ${census.find((p) => p.rolling).venueCount} exchanges, recomputed through the day — the rest are daily snapshots.` : ''}`
     : `This app's own record of large transfers, ${recordHours
       ? `reaching back ${recordHours < 48 ? `${Math.max(1, Math.round(recordHours))}h`
         : `${Math.round(recordHours / 24)}d`}` : 'which is still filling'}.
@@ -635,7 +635,8 @@ export async function renderCryptoWhales() {
  */
 const FRESHNESS = {
   feed: 60_000,
-  netflow: 20 * 60_000,
+  // The 24H row is a rolling figure now, so this is worth asking for often.
+  netflow: 3 * 60_000,
   holders: 10 * 60_000,
 };
 

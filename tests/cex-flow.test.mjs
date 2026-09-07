@@ -18,7 +18,7 @@ import { useDriver } from '../api/_lib/db.js';
 import { sqliteDriver } from './support/sqlite.mjs';
 import {
   pricesFrom, flowBetween, dailyFlows, periods, store, resetTableCache,
-  startOfYear, dayOf, HISTORY_PERIODS, listExchanges,
+  startOfYear, dayOf, HISTORY_PERIODS, listExchanges, liveDay, resetLiveCache,
 } from '../api/_lib/cexflow.js';
 
 const DAY = 86_400_000;
@@ -301,5 +301,101 @@ describe('an exchange that publishes twice in one day', () => {
   test('and the rows can actually be stored', async () => {
     const written = await store('Twice', dailyFlows(twice), { now: NOW });
     assert.equal(written, 2);
+  });
+});
+
+describe('the rolling day, which does not wait for tomorrow', () => {
+  // Every other period comes from daily snapshots, so "24H" really meant the
+  // day before yesterday against yesterday. This one moves through the day.
+  const listing = (cexs) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ cexs }),
+  });
+
+  beforeEach(() => resetLiveCache());
+
+  test('their inflow is our inflow: positive means money arriving, which is bearish', async () => {
+    // The single easiest thing here to get backwards.
+    const d = await liveDay({
+      fetcher: async () => listing([{ name: 'Binance', slug: 'b', inflows_24h: 500e6 }]),
+      now: NOW,
+    });
+    assert.equal(d.inUsd, 500e6);
+    assert.equal(d.outUsd, 0);
+    assert.equal(d.netUsd, 500e6);
+    assert.equal(d.signal, 'Bearish');
+  });
+
+  test('money leaving the exchanges is bullish', async () => {
+    const d = await liveDay({
+      fetcher: async () => listing([{ name: 'Binance', slug: 'b', inflows_24h: -500e6 }]),
+      now: NOW,
+    });
+    assert.equal(d.outUsd, 500e6);
+    assert.equal(d.netUsd, -500e6);
+    assert.equal(d.signal, 'Bullish');
+  });
+
+  test('the two sides come from which venues gained and which lost', async () => {
+    const d = await liveDay({
+      fetcher: async () => listing([
+        { name: 'A', slug: 'a', inflows_24h: 300e6 },
+        { name: 'B', slug: 'b', inflows_24h: -100e6 },
+        { name: 'C', slug: 'c', inflows_24h: -50e6 },
+      ]),
+      now: NOW,
+    });
+    assert.equal(d.inUsd, 300e6);
+    assert.equal(d.outUsd, 150e6);
+    assert.equal(d.netUsd, 150e6);
+    assert.equal(d.venueCount, 3);
+    assert.equal(d.venues[0].venue, 'A', 'biggest mover first');
+  });
+
+  test('it uses every exchange that reports one, not only those with a history', async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({ name: `E${i}`, inflows_24h: 1e6 }));
+    const d = await liveDay({ fetcher: async () => listing(many), now: NOW });
+    assert.equal(d.venueCount, 80);
+  });
+
+  test('an exchange reporting nothing is skipped, not counted as zero flow', async () => {
+    const d = await liveDay({
+      fetcher: async () => listing([
+        { name: 'A', inflows_24h: 100e6 },
+        { name: 'B', inflows_24h: 0 },
+        { name: 'C' },
+      ]),
+      now: NOW,
+    });
+    assert.equal(d.venueCount, 1);
+  });
+
+  test('it is marked rolling, so the card can say so', async () => {
+    const d = await liveDay({
+      fetcher: async () => listing([{ name: 'A', inflows_24h: 1e6 }]), now: NOW,
+    });
+    assert.equal(d.rolling, true);
+    assert.equal(d.id, '24h');
+  });
+
+  test('it is cached, so a page load does not re-fetch it every time', async () => {
+    let calls = 0;
+    const fetcher = async () => { calls += 1; return listing([{ name: 'A', inflows_24h: 1e6 }]); };
+    await liveDay({ fetcher, now: NOW });
+    await liveDay({ fetcher, now: NOW + 60_000 });
+    assert.equal(calls, 1, 'the second read should have come from the cache');
+    await liveDay({ fetcher, now: NOW + 10 * 60_000 });
+    assert.equal(calls, 2, 'and the cache should expire');
+  });
+
+  test('a refusal throws rather than reporting a flat market', async () => {
+    // Zero flow and "we could not ask" are completely different facts.
+    await assert.rejects(() => liveDay({
+      fetcher: async () => ({ ok: false, status: 503 }), now: NOW,
+    }), /503/);
+    await assert.rejects(() => liveDay({
+      fetcher: async () => listing([]), now: NOW,
+    }), /no exchange/);
   });
 });

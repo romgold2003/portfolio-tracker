@@ -334,6 +334,78 @@ export async function listExchanges({ fetcher = fetch, limit = 16 } = {}) {
   };
 }
 
+/* ── the rolling day, which does not wait for tomorrow ─────────────────── */
+
+/**
+ * The last twenty-four hours, moving, rather than the last published day.
+ *
+ * Every other period here comes from daily balance snapshots, so they change
+ * once a day and the "24H" row was really "the day before yesterday against
+ * yesterday". The same source also publishes a **rolling** twenty-four hour
+ * figure per exchange, recomputed through the day, and that is what a 24H row
+ * should be.
+ *
+ * It is net per exchange rather than two sides, so the two sides are recovered
+ * the way they are everywhere else in this file: exchanges that gained are the
+ * inflow, exchanges that lost are the outflow. That is a real decomposition —
+ * it says which venues took money in while others paid it out — and it is the
+ * same arithmetic the daily rows already use.
+ *
+ * Eighty exchanges rather than the sixteen with a usable history, because this
+ * field needs no history at all.
+ */
+let liveCache = { at: 0, value: null };
+const LIVE_TTL_MS = 4 * 60_000;
+
+export async function liveDay({ fetcher = fetch, now = Date.now(), force = false } = {}) {
+  if (!force && liveCache.value && now - liveCache.at < LIVE_TTL_MS) return liveCache.value;
+
+  const res = await fetcher(CEX_LIST, { signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) throw new Error(`the exchange list answered ${res.status}`);
+  const body = await res.json();
+
+  let inUsd = 0;
+  let outUsd = 0;
+  let venues = 0;
+  const moved = [];
+
+  for (const c of body?.cexs ?? []) {
+    const flow = Number(c?.inflows_24h);
+    if (!Number.isFinite(flow) || flow === 0) continue;
+    venues += 1;
+    // Their "inflow" is money arriving at the exchange, which is our positive
+    // and the bearish direction. The convention matches; it is checked in test.
+    if (flow > 0) inUsd += flow; else outUsd += -flow;
+    moved.push({ venue: c.name, netUsd: flow });
+  }
+
+  if (!venues) throw new Error('no exchange reported a rolling day');
+
+  const netUsd = inUsd - outUsd;
+  const value = {
+    id: '24h',
+    label: '24H',
+    inUsd,
+    outUsd,
+    netUsd,
+    signal: signalOf(netUsd, inUsd + outUsd),
+    covered: true,
+    rolling: true,
+    venues: moved
+      .map((v) => ({ ...v, inUsd: v.netUsd > 0 ? v.netUsd : 0, outUsd: v.netUsd < 0 ? -v.netUsd : 0 }))
+      .map((v) => ({ ...v, signal: signalOf(v.netUsd, Math.abs(v.netUsd)) }))
+      .sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd)),
+    venueCount: venues,
+    at: now,
+  };
+
+  liveCache = { at: now, value };
+  return value;
+}
+
+/** Only for the tests, which drive the clock themselves. */
+export function resetLiveCache() { liveCache = { at: 0, value: null }; }
+
 /** One exchange's series. Forty megabytes; never call this from a request. */
 export async function fetchSeries(slug, { fetcher = fetch } = {}) {
   const res = await fetcher(CEX_SERIES + encodeURIComponent(slug),

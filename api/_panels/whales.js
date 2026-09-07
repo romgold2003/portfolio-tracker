@@ -82,6 +82,9 @@ let lastPoll = { failed: [], written: 0, at: 0 };
  */
 const REFRESH_BUDGET_MS = 6_000;
 
+/** The rolling day is one small fetch; it should never hold the card up. */
+const LIVE_DAY_BUDGET_MS = 3_000;
+
 /**
  * Start a top-up, but never let the answer wait longer than the budget.
  *
@@ -611,6 +614,25 @@ export default async function handler(req, res) {
        */
       const balances = await cexflow.periods({ now })
         .catch(() => ({ periods: [], venues: [], since: null }));
+
+      /**
+       * The 24H row is the rolling day, not the last published one.
+       *
+       * Everything else here comes from daily snapshots and changes once a
+       * day, which made "24H" mean the day before yesterday against
+       * yesterday. The rolling figure is recomputed through the day and
+       * covers eighty exchanges rather than the sixteen with a usable
+       * history, so it replaces that row when it can be had.
+       *
+       * Bounded and swallowed: a slow or unhappy upstream costs the freshest
+       * row and nothing else, and the snapshot row stays in its place.
+       */
+      const rolling = await withBudget(cexflow.liveDay({ now }), LIVE_DAY_BUDGET_MS, null)
+        .catch(() => null);
+      if (rolling && balances.periods.length) {
+        const at = balances.periods.findIndex((p) => p.id === '24h');
+        if (at >= 0) balances.periods[at] = rolling;
+      }
 
       /**
        * The sample is only computed when the census cannot answer.
