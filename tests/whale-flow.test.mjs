@@ -374,9 +374,8 @@ describe('the ranked table — one row per whale per coin', () => {
     assert.deepEqual(ranked([john, bob, joseph], { min: 5e6, max: 20e6 })
       .map((r) => r.owner), ['Joseph']);
     assert.deepEqual(ranked([john, bob, joseph], { min: 20e6 }), []);
-    // The shipped floor is five million: John's two- and one-million positions
-    // are below it and Joseph's ten is not.
-    assert.deepEqual(ranked([john, bob, joseph]).map((r) => r.owner), ['Joseph']);
+    // The shipped floor is twenty-five million, so none of these three reach it.
+    assert.deepEqual(ranked([john, bob, joseph]), []);
   });
 
   test('a row carries the whole book, so it can open into it', () => {
@@ -398,7 +397,8 @@ describe('the ranked table — one row per whale per coin', () => {
   test('a dust position inside a real whale is not given a row', () => {
     const mixed = {
       ...joseph,
-      symbols: [{ symbol: 'BTC', netUsd: 1e7, netUnits: 125 },
+      netUsd: 4e7,
+      symbols: [{ symbol: 'BTC', netUsd: 4e7, netUnits: 500 },
         { symbol: 'SHIB', netUsd: 4_000, netUnits: 1e9 }],
     };
     assert.deepEqual(ranked([mixed]).map((r) => r.symbol), ['BTC']);
@@ -406,8 +406,8 @@ describe('the ranked table — one row per whale per coin', () => {
 
   test('the table stops at fifty', () => {
     const many = Array.from({ length: 80 }, (_, i) => ({
-      address: `0x${i}`, owner: null, netUsd: 2e7 + i, transfers: 3, chains: ['ethereum'],
-      lastAt: 100, firstAt: 1, symbols: [{ symbol: 'ETH', netUsd: 2e7 + i, netUnits: 5000 }],
+      address: `0x${i}`, owner: null, netUsd: 4e7 + i, transfers: 3, chains: ['ethereum'],
+      lastAt: 100, firstAt: 1, symbols: [{ symbol: 'ETH', netUsd: 4e7 + i, netUnits: 5000 }],
     }));
     assert.equal(ranked(many).length, 50);
   });
@@ -418,7 +418,7 @@ describe('the ranked table — one row per whale per coin', () => {
     assert.equal(first.walletPositions, 2);
     assert.equal(second.walletPositions, 2);
     // The floor is only "not a position at all"; the band does the filtering.
-    assert.equal(WHALE_FLOOR_USD, 5_000_000);
+    assert.equal(WHALE_FLOOR_USD, 25_000_000);
   });
 
   test('nothing to rank is an empty table, not a crash', () => {
@@ -462,5 +462,48 @@ describe('movements that are not movements', () => {
       assert.deepEqual(accumulation([one({ usd })], { hours: 24, now: NOW, minTransfers: 1 }), [],
         `usd ${usd} produced a wallet`);
     }
+  });
+});
+
+describe('a pool is not a whale', () => {
+  const S = Math.floor(NOW / 1000);
+  const leg = (from, to, symbol, usd, id) => ({
+    id, at: S - 3600, blockchain: 'ethereum', symbol, kind: 'transfer',
+    amount: 100, usd, hash: '0xswap', parts: 1, from, to,
+  });
+
+  test('the other side of a swap is not ranked as an accumulator', () => {
+    // A pool takes in exactly what the trader gave up, so it shows as an
+    // enormous accumulator of whatever is being sold — three of seven rows in
+    // a book with two swaps in it.
+    const pool = { address: '0xPOOL', owner: 'UniswapV3Pool', ownerType: 'contract' };
+    const trader = { address: '0xTRADER', owner: null, ownerType: null };
+    const rows = [
+      leg(trader, pool, 'USDT', 42_000_000, 'in'),
+      leg(pool, trader, 'ETH', 41_700_000, 'out'),
+    ];
+    const wallets = accumulation(rows, { hours: 24, now: NOW, minTransfers: 1 });
+    assert.deepEqual(wallets.map((w) => w.address), ['0xTRADER']);
+  });
+
+  test('the trader on the other side is still counted, both legs of it', () => {
+    const pool = { address: '0xPOOL', owner: 'UniswapV3Pool', ownerType: 'contract' };
+    const trader = { address: '0xTRADER', owner: null, ownerType: null };
+    const [w] = accumulation([
+      leg(trader, pool, 'USDT', 42_000_000, 'in'),
+      leg(pool, trader, 'ETH', 41_700_000, 'out'),
+    ], { hours: 24, now: NOW, minTransfers: 1 });
+    assert.equal(w.transfers, 2);
+    // Sold USDT, bought ETH — the two legs read as one trade.
+    assert.deepEqual(w.symbols.map((s) => [s.symbol, Math.sign(s.netUsd)]),
+      [['USDT', -1], ['ETH', 1]]);
+  });
+
+  test('an ordinary named entity is not swept up with the contracts', () => {
+    const named = { address: '0xFUND', owner: 'Some Fund', ownerType: 'entity' };
+    const other = { address: '0xB', owner: null, ownerType: null };
+    const wallets = accumulation([leg(other, named, 'BTC', 9_000_000, 'x')],
+      { hours: 24, now: NOW, minTransfers: 1 });
+    assert.ok(wallets.some((w) => w.address === '0xFUND'));
   });
 });

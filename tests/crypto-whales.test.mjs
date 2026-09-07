@@ -483,23 +483,22 @@ describe('choosing what to show', () => {
     const bands = BANDS.filter((b) => b.id !== 'all');
     // Set from the record twice. First they were three empty boxes; then the
     // lowest held nine of fourteen positions and crowded out everything above.
-    assert.deepEqual(bands.map((b) => b.min), [5e6, 10e6, 25e6, 100e6]);
-    assert.deepEqual(bands.map((b) => b.max), [10e6, 25e6, 100e6, Infinity]);
+    assert.deepEqual(bands.map((b) => b.min), [25e6, 100e6, 250e6]);
+    assert.deepEqual(bands.map((b) => b.max), [100e6, 250e6, Infinity]);
     // By name, not by index: BANDS[3] was "all" until a fourth band was added
     // and silently became "$100M+".
     assert.equal(bandDef('nope').id, 'all');
-    assert.equal(bandDef('all').min, 5e6);
+    assert.equal(bandDef('all').min, 25e6);
   });
 
   test('a band keeps its own and nothing else', () => {
-    const rows = [row({ usd: 7e6 }), row({ usd: 15e6 }), row({ usd: 60e6 }), row({ usd: 200e6 })];
+    const rows = [row({ usd: 60e6 }), row({ usd: 150e6 }), row({ usd: 400e6 })];
     assert.equal(selectTransfers(rows, { band: 'big' }).length, 1);
     assert.equal(selectTransfers(rows, { band: 'huge' }).length, 1);
     assert.equal(selectTransfers(rows, { band: 'mega' }).length, 1);
-    assert.equal(selectTransfers(rows, { band: 'giga' }).length, 1);
-    assert.equal(selectTransfers(rows, { band: 'all' }).length, 4);
+    assert.equal(selectTransfers(rows, { band: 'all' }).length, 3);
     // Under the lowest band it is in no band at all, not quietly in the first.
-    assert.equal(selectTransfers([row({ usd: 3e6 })], { band: 'all' }).length, 0);
+    assert.equal(selectTransfers([row({ usd: 20e6 })], { band: 'all' }).length, 0);
   });
 
   test('one bridged movement seen on two chains is one row, noting both', () => {

@@ -108,17 +108,16 @@ function row(t) {
       <span class="gam-name">${party(t.from, t.blockchain)}</span>
       <span class="cw-arrow">→ ${party(t.to, t.blockchain)}</span>
     </div>
-    <div class="cw-swap">${t.swap
-    ? `<span class="cw-swap-out">${escapeHtml(t.swap.from)}</span><span
-         class="cw-swap-arrow">→</span><span class="cw-swap-in">${escapeHtml(t.swap.to)}</span>`
-    // Most transfers move one asset and are not a trade. An em dash says so
-    // without inviting the row to be read as a swap of something for itself.
-    : '<span class="cw-swap-none">—</span>'}</div>
     <div class="gam-bet">
       <span class="cw-dir">${escapeHtml(t.direction.label)}</span>
     </div>
     <div class="gam-market">
-      <span class="gam-title">${escapeHtml(t.symbol)} on ${escapeHtml(chains)}${
+      <span class="gam-title">${t.swap
+    // A trade: what was given up, and what came back for it.
+    ? `<span class="cw-swap-out">${escapeHtml(t.swap.from)}</span><span
+         class="cw-swap-arrow"> → </span><span class="cw-swap-in">${escapeHtml(t.swap.to)}</span>`
+    // Not a trade — one asset moved, so the asset is the whole answer.
+    : escapeHtml(t.symbol)} on ${escapeHtml(chains)}${
   t.parts > 1 ? ` · ${t.parts} parts` : ''}</span>
       <span class="gam-topic">${kindBadge}${href
     ? `<a class="cw-hash" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"
@@ -389,8 +388,8 @@ function draw() {
 
   const tape = transfers.length
     ? `<div class="gam-head gam-grid cw-grid">
-         <div>Size</div><div>From → To</div><div>Traded</div><div>Direction</div>
-         <div>Asset · chain</div><div>When</div>
+         <div>Size</div><div>From → To</div><div>Direction</div>
+         <div>Traded · chain</div><div>When</div>
        </div>${transfers.map(row).join('')}`
     : `<div class="empty">${loading ? 'Loading…' : `No ${escapeHtml(bandDef(band).label)}
        transfers recorded yet.`}</div>`;

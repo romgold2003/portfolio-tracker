@@ -99,8 +99,24 @@ export function accumulation(rows, {
   const cutoff = Number.isFinite(hours) ? Math.floor(now / 1000) - hours * 3600 : -Infinity;
   const wallets = new Map();
 
-  const touch = (address, owner, row, direction) => {
+  const touch = (address, owner, row, direction, ownerType) => {
     if (!address || VOID.has(address)) return;
+    /**
+     * A pool is not a whale.
+     *
+     * Every swap has one on the other side of it, and it takes in exactly what
+     * the trader gave up — so a liquidity pool shows as an enormous accumulator
+     * of whatever is being sold and an enormous distributor of whatever is
+     * being bought, in the same window, from the same trades. It ranked third,
+     * fifth and seventh in a book with two swaps in it.
+     *
+     * Most of these never reach here: chainfeeds marks a transfer touching a
+     * contract as `contract` and this function only counts plain transfers. This
+     * catches the rest — where the indexer named the address without flagging
+     * it — because a contract taking the other side of somebody's trade is
+     * never the somebody worth ranking.
+     */
+    if (String(ownerType ?? '').toLowerCase() === 'contract') return;
     let w = wallets.get(address);
     if (!w) {
       w = {
@@ -160,8 +176,8 @@ export function accumulation(rows, {
      */
     if (to && from && to === from) continue;
 
-    touch(to, r.to?.owner ?? r.to_owner, r, 'in');
-    touch(from, r.from?.owner ?? r.from_owner, r, 'out');
+    touch(to, r.to?.owner ?? r.to_owner, r, 'in', r.to?.ownerType ?? r.to_type);
+    touch(from, r.from?.owner ?? r.from_owner, r, 'out', r.from?.ownerType ?? r.from_type);
   }
 
   return [...wallets.values()].filter((w) => w.transfers >= minTransfers).map((w) => ({
@@ -398,7 +414,7 @@ export function stealth(wallets, {
  * construction. The band is the filter. This is only the point below which a
  * holding is not a position at all, and it tracks the lowest band.
  */
-export const WHALE_FLOOR_USD = 5_000_000;
+export const WHALE_FLOOR_USD = 25_000_000;
 
 /**
  * One row per whale per coin, biggest first.

@@ -34,21 +34,22 @@
  * two thirds of the table and the least interesting two thirds, so the sizes
  * worth telling apart were crowded into what was left.
  *
- * Five million is where a position stops being somebody rebalancing and starts
- * being somebody deciding. The $100M+ band is empty most of the time and is
- * meant to be: it is the one that says something unusual just happened, and it
- * can only say that by being quiet the rest of the time.
+ * They now start at twenty-five million. The two upper bands are empty most of
+ * the time and are meant to be — a band that says "something unusual just
+ * happened" can only say it by being quiet the rest of the time — but the floor
+ * is high against what the record currently holds, so the table will be short
+ * until the collector has run for longer. That is the deliberate trade: fewer
+ * rows, every one of them worth reading.
  *
  * The **collection** floor is untouched at $250k and must stay there. It is not
  * a display setting — a five-million-dollar position built quietly out of
  * quarter-million pieces only exists if the pieces were kept.
  */
 export const BANDS = [
-  { id: 'big', label: '$5M–10M', min: 5_000_000, max: 10_000_000 },
-  { id: 'huge', label: '$10M–25M', min: 10_000_000, max: 25_000_000 },
-  { id: 'mega', label: '$25M–100M', min: 25_000_000, max: 100_000_000 },
-  { id: 'giga', label: '$100M+', min: 100_000_000, max: Infinity },
-  { id: 'all', label: 'All $5M+', min: 5_000_000, max: Infinity },
+  { id: 'big', label: '$25M–100M', min: 25_000_000, max: 100_000_000 },
+  { id: 'huge', label: '$100M–250M', min: 100_000_000, max: 250_000_000 },
+  { id: 'mega', label: '$250M+', min: 250_000_000, max: Infinity },
+  { id: 'all', label: 'All $25M+', min: 25_000_000, max: Infinity },
 ];
 
 /**
