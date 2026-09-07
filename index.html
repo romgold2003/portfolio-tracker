@@ -411,12 +411,14 @@
                  to the table underneath and to nothing above it. -->
             <div class="cw-section-hd">Live whale activity<span id="cwCount"></span></div>
             <div class="cw-filters">
-              <select class="cw-select" id="cwCoin" aria-label="Cryptocurrency">
-                <option value="">All coins</option>
-              </select>
               <div class="opt-picker" id="cwWindow"></div>
               <div class="opt-picker" id="cwBand"></div>
             </div>
+            <!-- The top fifty by market cap, horizontally, with their ranks.
+                 A strip rather than a dropdown because the useful thing is
+                 seeing at a glance which coins have transfers and where they
+                 rank, without opening anything. -->
+            <div class="cw-coins" id="cwCoins"></div>
 
             <div id="cwRows"></div>
             <p class="gam-src" id="cwSrc">Reading the chains…</p>

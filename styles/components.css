@@ -792,12 +792,21 @@ body.light{--wave-strength:0.34}
    ends they describe. */
 /* Which coin, over what period, at what size — one row, in that order. */
 .cw-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
-.cw-select{flex:0 1 250px;min-width:0;background:var(--input);color:var(--text2);
-  border:1px solid var(--border2);border-radius:6px;padding:5px 8px;
-  font-family:inherit;font-size:11px;cursor:pointer}
-.cw-select:hover{color:var(--text);border-color:var(--text4)}
-.cw-select:focus{outline:none;border-color:var(--blue);color:var(--text)}
-.cw-select option:disabled{color:var(--text4)}
+/* The coin picker scrolls rather than wrapping to six rows of fifty buttons. */
+.cw-coins{display:flex;gap:5px;overflow-x:auto;padding:0 0 10px;margin:0 0 6px;
+  scrollbar-width:thin}
+.cw-coin{display:flex;align-items:center;gap:5px;flex:0 0 auto;cursor:pointer;
+  background:var(--input);border:1px solid transparent;border-radius:6px;
+  padding:5px 8px;font-family:inherit;font-size:11px;color:var(--text2)}
+.cw-coin:hover:not(:disabled){color:var(--text);border-color:var(--text4)}
+.cw-coin.active{border-color:var(--blue);color:var(--text)}
+/* Top fifty but not watchable: shown, greyed, and unpressable. Hiding it would
+   read as the app having forgotten the coin. */
+.cw-coin.is-off{opacity:0.35;cursor:not-allowed}
+.cw-logo{border-radius:50%;flex:0 0 auto}
+.cw-sym{font-weight:600}
+.cw-rank{color:var(--text4);font-size:9px}
+.cw-multi{font-size:9px;color:var(--text4)}
 /* The two ends on one line, the chain and the hash quietly under them: the
    proof stays clickable without spending a whole column on it. */
 .cw-path{display:flex;flex-direction:column;gap:1px;min-width:0}

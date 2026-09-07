@@ -250,35 +250,56 @@ function drawNetflow() {
 /* ── the three selectors ───────────────────────────────────────────────── */
 
 /**
- * The coin selector, from CoinGecko's top fifty by market cap.
+ * The coin picker: the top fifty by market cap, horizontally, with their ranks.
  *
- * Nothing here is hardcoded: the list, the ranks and the counts all come from
- * ?resource=coins, so it follows the market as it reorders itself.
+ * Nothing here is hardcoded — the list, the ranks, the logos and the counts all
+ * come from ?resource=coins, so it follows the market as it reorders itself.
  *
- * Coins with no chain this app can read are listed and disabled rather than
- * dropped. Being told that a top-ten coin cannot be watched is information;
- * silently omitting it looks like the app forgot about it.
+ * Every one of the fifty is shown, including the ones that cannot be watched,
+ * and that is the point of showing them. Being told that a top-ten coin has no
+ * chain this app can read is information; silently omitting it looks like the
+ * app forgot about the coin.
  */
 function drawCoins() {
-  const box = el('cwCoin');
+  const box = el('cwCoins');
   if (!box || !coins) return;
 
   const counts = feed?.counts ?? {};
   const option = (c) => {
     const watchable = c.chains.length > 0;
     const n = counts[c.symbol] ?? 0;
-    const label = `#${c.rank}  ${c.symbol} — ${c.name}${
-      watchable ? (n ? `  (${n})` : '') : '  · not readable'}`;
-    return `<option value="${escapeHtml(c.symbol)}"${c.symbol === symbol ? ' selected' : ''}${
-      watchable ? '' : ' disabled'}>${escapeHtml(label)}</option>`;
+    const classes = ['cw-coin'];
+    if (c.symbol === symbol) classes.push('active');
+    if (!watchable) classes.push('is-off');
+    const readers = (c.readers ?? []).map((r) => r.label ?? chainLabel(r.chain));
+    const via = (c.viaProvider ?? []).map(chainLabel);
+    const title = watchable
+      ? [`${c.name} · #${c.rank}`,
+        readers.length ? `read directly on ${readers.join(', ')}` : null,
+        via.length ? `via Whale Alert on ${via.join(', ')}` : null,
+        c.support === 'partial' ? 'sampled, not swept' : null].filter(Boolean).join(' · ')
+      : `${c.name} · #${c.rank} · no chain this app can read`;
+
+    return `<button class="${classes.join(' ')}" data-symbol="${escapeHtml(c.symbol)}"
+      ${watchable ? '' : 'disabled'} title="${escapeHtml(title)}">
+      <img class="cw-logo" src="${escapeHtml(c.logo)}" alt="" loading="lazy" width="16" height="16">
+      <span class="cw-sym">${escapeHtml(c.symbol)}</span>
+      <span class="cw-rank">#${c.rank}</span>
+      ${n ? `<span class="gam-count">${n}</span>` : ''}
+      ${c.chains.length > 1 ? '<span class="cw-multi" title="Aggregated across networks">⛓</span>' : ''}
+    </button>`;
   };
 
-  box.innerHTML = `<option value=""${symbol ? '' : ' selected'}>All coins</option>${
-    (coins.coins ?? []).map(option).join('')}`;
+  box.innerHTML = `<button class="cw-coin${symbol ? '' : ' active'}" data-symbol="">
+      <span class="cw-sym">All coins</span>
+    </button>${coins.coins.map(option).join('')}`;
 
-  box.onchange = () => {
-    if (box.value === symbol) return;
-    symbol = box.value;
+  box.onclick = (e) => {
+    const button = e.target.closest('[data-symbol]');
+    if (!button || button.disabled) return;
+    const next = button.dataset.symbol;
+    if (next === symbol) return;
+    symbol = next;
     load();
   };
 }
