@@ -442,10 +442,19 @@ function draw() {
     // whether the one they care about is among them.
     const names = (coins?.chains ?? []).map((c) => c.label + (c.complete ? '' : '*'));
     const watchable = coins?.watchable ?? 0;
+    /**
+     * Said out loud when the answer did not wait for the sweep it started.
+     *
+     * A page load no longer blocks on reading five chains — that is what made
+     * the first request into a cold function time out — so it can be showing a
+     * store that is a minute behind. A minute behind is fine. Looking current
+     * while being behind is not.
+     */
+    const behind = feed?.provider?.refreshing ? ' · reading the chains now' : '';
     src.innerHTML = lastAt
       ? `${escapeHtml(names.join(' · ') || 'on-chain')}${
         feed?.provider?.whaleAlert ? ' · Whale Alert' : ''} — ${watchable} of the top 50
-         watchable · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}
+         watchable · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}${behind}
          ${names.some((n) => n.endsWith('*')) ? '<br>* sampled each poll rather than swept in full' : ''}`
       : 'Reading the chains…';
   }

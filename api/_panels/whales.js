@@ -25,6 +25,7 @@ import { loadExchanges, exchangeOf } from '../_lib/exchanges.js';
 import * as netflowCard from '../_lib/netflowcard.js';
 import { rankHolders, exitEvents } from '../_lib/topholders.js';
 import { classifyActivity, linkSwaps } from '../_lib/activity.js';
+import { withBudget } from '../_lib/budget.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 
 const SESSION_COOKIE = 'pt_session';
@@ -59,6 +60,35 @@ const MAX_LOOKBACK_S = 60 * 60;
 
 let lastPollAt = 0;
 let lastPoll = { failed: [], written: 0, at: 0 };
+
+/**
+ * How long a page load will wait for fresher data before answering without it.
+ *
+ * Production answered 504 on the first request into a cold function. The feed
+ * awaited a full sweep of five chains — about twenty-five seconds warm, longer
+ * when the price map and the platform map are both cold — and Vercel cuts the
+ * function at sixty. The reader got nothing, from a store that already held
+ * thirty-three perfectly good rows.
+ *
+ * The store is filled by the scheduled collector every ten minutes, so a page
+ * load has no business blocking on a sweep at all. It starts one, waits this
+ * long in case it is quick, and then answers with what is held. The sweep keeps
+ * running and whatever it writes before the function is frozen is kept — every
+ * transfer is written on its own, so a sweep cut halfway leaves real rows
+ * behind rather than a broken half-write.
+ */
+const REFRESH_BUDGET_MS = 6_000;
+
+/**
+ * Start a top-up, but never let the answer wait longer than the budget.
+ *
+ * The throttle inside topUp claims the slot before its first await, so a second
+ * request arriving during a sweep does not start another one.
+ */
+async function refresh(now) {
+  if (now - lastPollAt < POLL_MS) return lastPoll;
+  return withBudget(topUp(now), REFRESH_BUDGET_MS, { ...lastPoll, slow: true });
+}
 
 /**
  * Top the store up, at most once a minute, and never at the cost of the answer.
@@ -291,7 +321,7 @@ export default async function handler(req, res) {
    * depending on what was clicked somewhere else on the page.
    */
   if (resource === 'netflow') {
-    await topUp(Date.now());
+    await refresh(Date.now());
     try {
       const now = Date.now();
       const byAddress = await loadExchanges();
@@ -400,7 +430,7 @@ export default async function handler(req, res) {
   if (resource !== 'feed') return fail(res, 400, 'No such resource.');
 
   const now = Date.now();
-  const poll = await topUp(now);
+  const poll = await refresh(now);
 
   const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
   if (symbol && !/^[A-Z0-9]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
@@ -495,6 +525,8 @@ export default async function handler(req, res) {
           ? poll.failed.map((f) => `${f.chain}: ${f.error}`).join('; ')
           : null,
         polledAt: poll.at,
+        /** True when the answer did not wait for the sweep it started. */
+        refreshing: poll.slow === true,
         stored: rows.length,
       },
     });
