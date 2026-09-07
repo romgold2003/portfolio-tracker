@@ -28,3 +28,34 @@
 .live-pill.off{background:var(--amber-bg);border-color:var(--amber-br);color:var(--amber)}
 .live-pill.off .live-dot{background:var(--amber);animation:none}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.35}}
+
+/* ── Phones ───────────────────────────────────────────────────────────────
+   The sidebar was a fixed 210px at every width. On a 375px screen that left
+   the content 165 pixels, which is not a layout, it is a column of wrapped
+   words — and layout.css had no media query at all, so nothing ever caught it.
+
+   It becomes a top bar instead. Nothing is hidden: a phone still needs the
+   settings, the theme switch and sign-out, so those wrap onto their own row
+   rather than being dropped. */
+@media (max-width:720px){
+  /* The document scrolls, not an inner pane — which is what a phone expects
+     and what lets the address bar collapse on scroll. */
+  .shell{flex-direction:column;height:auto;min-height:100vh}
+  .main{padding:16px 14px;overflow-y:visible}
+
+  .sidebar{width:auto;flex-direction:column;flex-shrink:1;
+    border-right:0;border-bottom:0.5px solid var(--border)}
+  .logo-area{padding:12px 14px 10px}
+
+  /* The five sections in a row, scrolled sideways rather than wrapped: five
+     items is one comfortable swipe and wrapping them would cost two rows. */
+  .nav-links{display:flex;gap:4px;padding:8px;flex:0 0 auto;
+    overflow-x:auto;scrollbar-width:none}
+  .nav-links::-webkit-scrollbar{display:none}
+  .nl{width:auto;flex:0 0 auto;white-space:nowrap;margin-bottom:0}
+
+  .sidebar-bot{display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+    padding:8px 12px}
+  .sidebar-bot > *{margin:0!important}
+  .settings-btn,.voice-btn{width:auto!important;margin:0!important}
+}

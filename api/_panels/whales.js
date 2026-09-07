@@ -269,14 +269,17 @@ export function resetPollClock() {
 }
 
 /**
- * How long a holder card will wait for the "still holding?" answers.
+ * How long the scheduled collector spends filling in "still holding?".
  *
- * The indexer takes about fifteen seconds per holder and there are
- * twenty-five of them, so the first view of a coin cannot have them all. It
- * gets what fits, keeps them for the day, and the next refresh has the rest.
- * The balances themselves are never delayed by this.
+ * This used to be the request's budget, and it cost the reader ten seconds on
+ * every single load — measured on production across five consecutive calls,
+ * none of which was faster than ten seconds, while the count of answered
+ * holders crawled from twelve to fifteen. The indexer takes about fifteen
+ * seconds per address and there are twenty-five of them, so no request was
+ * ever going to finish the job. The collector has the time and nobody is
+ * watching it.
  */
-const HOLDER_BUDGET_MS = 9_000;
+const HOLDER_BUDGET_MS = 25_000;
 
 /** How many holders to ask about at once. Enough to be quick, few enough to be polite. */
 const HOLDER_CONCURRENCY = 6;
@@ -288,6 +291,53 @@ const HOLDER_CONCURRENCY = 6;
  * Failures are per holder: an indexer refusing one address costs that address
  * its answer and nothing else. That is why this settles rather than races.
  */
+/**
+ * Fill in the holder movements for one coin, whichever one is next.
+ *
+ * The coins that can be read at all are the ones with a token contract on a
+ * chain this app indexes. Which of them a given poll takes is the clock
+ * divided by the poll interval, modulo the list — so it advances every ten
+ * minutes and does not depend on remembering anything between invocations.
+ */
+async function enrichNextCoin(now) {
+  const hosts = { ethereum: 'eth.blockscout.com', polygon: 'polygon.blockscout.com' };
+
+  const { coins } = await topCoins();
+  const readable = coins
+    .map((c) => ({ symbol: c.symbol, reader: (c.readers ?? []).find((r) => r.contract) }))
+    .filter((c) => c.reader && hosts[c.reader.chain]);
+  if (!readable.length) return { skipped: 'no readable coins' };
+
+  const turn = Math.floor(now / POLL_MS) % readable.length;
+  const pick = readable[turn];
+  const host = hosts[pick.reader.chain];
+
+  const [info, rows, prices] = await Promise.all([
+    holders.fetchTokenInfo({ host, token: pick.reader.contract }).catch(() => null),
+    holders.fetchHolders({ host, chain: pick.reader.chain, token: pick.reader.contract })
+      .catch(() => []),
+    priceMap().catch(() => null),
+  ]);
+
+  let byAddress = null;
+  try { byAddress = await loadExchanges(); } catch { /* venues go unnamed */ }
+
+  const ranked = rankHolders(rows, {
+    price: prices ? priceFor(pick.symbol, prices) : null,
+    totalSupply: info?.totalSupply ?? null,
+    byAddress,
+    creator: info?.creator ?? null,
+    limit: 25,
+  });
+  if (!ranked.length) return { symbol: pick.symbol, filled: 0, of: 0 };
+
+  const filled = await enrichHolders({
+    host, chain: pick.reader.chain, token: pick.reader.contract, ranked, now,
+  });
+
+  return { symbol: pick.symbol, filled: filled.size, of: ranked.length };
+}
+
 async function enrichHolders({ host, chain, token, ranked, now }) {
   const cached = await holderhistory.readCache({ chain, token, now }).catch(() => new Map());
   const todo = ranked.filter((h) => !cached.has(String(h.address).toLowerCase()));
@@ -493,9 +543,27 @@ export default async function handler(req, res) {
     if (!expected) return fail(res, 503, 'No collector secret is configured.');
     if (!timingSafeEqual(given, expected)) return fail(res, 401, 'Wrong key.');
 
-    const poll = await topUp(Date.now(), { force: true });
+    const now = Date.now();
+    const poll = await topUp(now, { force: true });
+
+    /**
+     * And one coin's holder movements, rotating.
+     *
+     * Twenty-five addresses at fifteen seconds each is too much for one poll,
+     * so each poll takes one coin and the next takes the one after it. The
+     * rotation is driven by the clock rather than by stored state, so it keeps
+     * turning across cold starts instead of restarting at the first coin
+     * forever.
+     */
+    let holderWork = null;
+    try {
+      holderWork = await withBudget(enrichNextCoin(now), HOLDER_BUDGET_MS, { skipped: 'budget' });
+    } catch { /* a slow indexer must not fail the whole poll */ }
+
     res.setHeader('Cache-Control', 'no-store');
-    return send(res, 200, { written: poll.written, failed: poll.failed, at: poll.at });
+    return send(res, 200, {
+      written: poll.written, failed: poll.failed, at: poll.at, holders: holderWork,
+    });
   }
 
   const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
@@ -643,12 +711,22 @@ export default async function handler(req, res) {
        * day. A first view of a coin may come back with some of them unfilled;
        * the next refresh has the rest. Nothing waits.
        */
-      const moves = await withBudget(
-        enrichHolders({ host, chain: reader.chain, token: reader.contract, ranked: ranked25, now }),
-        HOLDER_BUDGET_MS,
-        await holderhistory.readCache({ chain: reader.chain, token: reader.contract, now })
-          .catch(() => new Map()),
-      ).catch(() => new Map());
+      const moves = await holderhistory
+        .readCache({ chain: reader.chain, token: reader.contract, now })
+        .catch(() => new Map());
+
+      /**
+       * Anything still missing is started but never waited for.
+       *
+       * A warm function finishes some of it before it is frozen, which is a
+       * bonus rather than the plan: the collector below is what actually fills
+       * this. The reader gets the balances now either way.
+       */
+      if (ranked25.some((h) => !moves.has(String(h.address).toLowerCase()))) {
+        enrichHolders({
+          host, chain: reader.chain, token: reader.contract, ranked: ranked25, now,
+        }).catch(() => {});
+      }
 
       for (const h of ranked25) {
         const m = moves.get(String(h.address).toLowerCase());
