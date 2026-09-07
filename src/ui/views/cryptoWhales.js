@@ -108,6 +108,12 @@ function row(t) {
       <span class="gam-name">${party(t.from, t.blockchain)}</span>
       <span class="cw-arrow">→ ${party(t.to, t.blockchain)}</span>
     </div>
+    <div class="cw-swap">${t.swap
+    ? `<span class="cw-swap-out">${escapeHtml(t.swap.from)}</span><span
+         class="cw-swap-arrow">→</span><span class="cw-swap-in">${escapeHtml(t.swap.to)}</span>`
+    // Most transfers move one asset and are not a trade. An em dash says so
+    // without inviting the row to be read as a swap of something for itself.
+    : '<span class="cw-swap-none">—</span>'}</div>
     <div class="gam-bet">
       <span class="cw-dir">${escapeHtml(t.direction.label)}</span>
     </div>
@@ -131,6 +137,13 @@ function walletRow(r) {
   const name = r.owner ? r.owner : shortAddress(r.address);
   const open = openRank === r.rank;
   const more = (r.holdings?.length ?? 1) - 1;
+  /**
+   * How far today's value has drifted from what it cost.
+   *
+   * Shown only when it is worth showing: on a stablecoin, or on anything bought
+   * minutes ago, the two numbers are the same and printing both would be noise.
+   */
+  const moved = r.costUsd && Math.abs(r.netUsd - r.costUsd) / Math.abs(r.costUsd);
 
   /**
    * What this whale holds in everything else, shown only when the row is open.
@@ -146,7 +159,9 @@ function walletRow(r) {
         <span class="cw-hold-sym">${escapeHtml(h.symbol)}</span>
         <span class="cw-hold-amt ${h.netUsd > 0 ? 'cw-in' : 'cw-out'}">${
   escapeHtml((h.netUsd > 0 ? '+' : '') + money(h.netUsd))}</span>
-        <span class="cw-hold-units">${escapeHtml(tokens(Math.abs(h.netUnits), h.symbol))}</span>
+        <span class="cw-hold-units">${escapeHtml(tokens(Math.abs(h.netUnits), h.symbol))}${
+  h.costUsd && Math.abs(h.netUsd - h.costUsd) / Math.abs(h.costUsd) > 0.01
+    ? ` · cost ${escapeHtml(money(Math.abs(h.costUsd)))}` : ''}</span>
       </div>`).join('')}
     <div class="cw-drawer-ft">${r.transfers} transfer${r.transfers === 1 ? '' : 's'} ·
       ${escapeHtml(r.chains.map(chainLabel).join(', '))} ·
@@ -167,7 +182,8 @@ function walletRow(r) {
       <div class="cw-asset">${escapeHtml(r.symbol)}</div>
       <div class="cw-amount ${buying ? 'cw-in' : 'cw-out'}">
         ${escapeHtml((buying ? '+' : '') + money(r.netUsd))}
-        <span class="cw-tokens">${escapeHtml(tokens(Math.abs(r.netUnits), r.symbol))}</span>
+        <span class="cw-tokens">${escapeHtml(tokens(Math.abs(r.netUnits), r.symbol))}${
+  moved > 0.01 ? ` · ${escapeHtml(moved > 0 ? `cost ${money(Math.abs(r.costUsd))}` : '')}` : ''}</span>
       </div>
       <div class="gam-when" title="${escapeHtml(`last seen ${stamp(r.lastAt)}`)}">${
   escapeHtml(ago(r.lastAt))}<span class="cw-span">${r.transfers} tx</span></div>
@@ -235,6 +251,28 @@ function drawCoins() {
  * it so it can be argued with, and a reading built on fewer than three wallets
  * says so rather than presenting itself as a consensus.
  */
+/**
+ * What the chosen window actually reached back over.
+ *
+ * A window longer than the record returns exactly what the shorter one did, and
+ * with nothing said the buttons look broken — which is what they looked like:
+ * the record was a day old, so 1W, 1M, 3M, 1Y and All were all the same seven
+ * rows. Saying how far back the collecting goes turns an apparently dead button
+ * into an honest one.
+ */
+function windowNote() {
+  const label = FLOW_WINDOWS.find((w) => w.id === win)?.label ?? win;
+  const since = flow?.observed?.since;
+  if (!since) return `over ${label}`;
+  const days = Math.floor((Date.now() / 1000 - since) / 86400);
+  const span = days >= 1 ? `${days}d` : `${Math.max(1, Math.round((Date.now() / 1000 - since) / 3600))}h`;
+  const hours = FLOW_WINDOWS.findIndex((w) => w.id === win);
+  const covered = { 0: 7, 1: 31, 2: 92, 3: 366, 4: Infinity }[hours] ?? 31;
+  return days < covered
+    ? `over ${label} — but the record only goes back ${span}`
+    : `over ${label}`;
+}
+
 function drawSummary() {
   const box = el('cwSummary');
   if (!box) return;
@@ -350,14 +388,15 @@ function draw() {
 
   const tape = transfers.length
     ? `<div class="gam-head gam-grid cw-grid">
-         <div>Size</div><div>From → To</div><div>Direction</div><div>Asset · chain</div><div>When</div>
+         <div>Size</div><div>From → To</div><div>Traded</div><div>Direction</div>
+         <div>Asset · chain</div><div>When</div>
        </div>${transfers.map(row).join('')}`
     : `<div class="empty">${loading ? 'Loading…' : `No ${escapeHtml(bandDef(band).label)}
        transfers recorded yet.`}</div>`;
 
   const standings = list.length
     ? `<div class="gam-head cw-rank-grid">
-         <div>#</div><div>Whale</div><div>Coin</div><div>Position</div><div>Last</div>
+         <div>#</div><div>Whale</div><div>Coin</div><div>Value now</div><div>Last</div>
        </div>${list.map(walletRow).join('')}`
     : `<div class="empty">${loading ? 'Loading…' : `No whale holds a position in the
        ${escapeHtml(bandDef(band).label)} range over this window yet. Try a wider band or a
@@ -369,8 +408,8 @@ function draw() {
       ${tape}
     </div>
     <div class="cw-section">
-      <div class="cw-section-hd">Whale ranking<span>net position over ${
-  escapeHtml(FLOW_WINDOWS.find((w) => w.id === win)?.label ?? win)}</span></div>
+      <div class="cw-section-hd">Whale ranking<span>ranked on today's value · ${
+  escapeHtml(windowNote())}</span></div>
       ${standings}
     </div>`;
 

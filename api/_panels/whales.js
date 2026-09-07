@@ -22,7 +22,7 @@ import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
 import * as store from '../_lib/whalestore.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
-  PARTICIPANT_FLOOR_USD, ranked, WHALE_FLOOR_USD,
+  PARTICIPANT_FLOOR_USD, ranked, WHALE_FLOOR_USD, linkSwaps,
 } from '../_lib/whaleflow.js';
 
 
@@ -281,7 +281,7 @@ export default async function handler(req, res) {
         symbol: symbol || null,
         wallets: scored.slice(0, 40),
         // One row per whale per coin, biggest position first, fifty deep.
-        ranked: ranked(wallets, { min: bandMin, max: bandMax }),
+        ranked: ranked(wallets, { min: bandMin, max: bandMax, prices }),
         whaleFloor: WHALE_FLOOR_USD,
         consensus: consensus(wallets),
         stealth: stealth(wallets, { displayFloor: FLOOR_USD }),
@@ -310,7 +310,15 @@ export default async function handler(req, res) {
   const maxUsd = Number.isFinite(rawMax) && rawMax > minUsd ? rawMax : Infinity;
 
   try {
-    const rows = await store.read({ symbol: symbol || null, minUsd, maxUsd, limit: 200 });
+    /**
+     * Read the whole recent book, then filter.
+     *
+     * The size filter has to come after the swap link, not before: the other
+     * half of a trade is frequently a different size and would be filtered out,
+     * leaving a leg that knows it was a swap and cannot say what for.
+     */
+    const all = linkSwaps(await store.read({ symbol: symbol || null, minUsd: 0, limit: 4_000 }));
+    const rows = all.filter((r) => r.usd >= minUsd && r.usd < maxUsd).slice(0, 200);
     const counts = await store.countsBySymbol({ minUsd: FLOOR_USD });
 
     /**

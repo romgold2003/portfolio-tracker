@@ -648,7 +648,7 @@ body.light{--wave-strength:0.34}
 /* The direction column is fixed at the width of its longest real value —
    "Exchange → Exchange" — because ellipsing it to "Exchange → Unkno…" hides
    the half of the row that says which way the money went. */
-.cw-grid{grid-template-columns:112px minmax(0,1.1fr) 128px minmax(0,1.6fr) 46px}
+.cw-grid{grid-template-columns:112px minmax(0,1fr) 104px 122px minmax(0,1.3fr) 46px}
 /* The dollars lead and the token count sits under them: same movement, two
    different facts about it. */
 .cw-tokens{display:block;font-size:10px;font-weight:400;color:var(--text4);
@@ -683,8 +683,10 @@ body.light{--wave-strength:0.34}
 .cw-rank{color:var(--text4);font-size:9px}
 .cw-multi{font-size:9px;color:var(--text4)}
 @media (max-width:640px){
-  .cw-grid{grid-template-columns:96px minmax(0,1fr) 0 minmax(0,1.1fr) 38px}
-  .cw-dir{display:none}
+  .cw-grid{grid-template-columns:96px minmax(0,1fr) 88px 0 minmax(0,1fr) 38px}
+  /* The direction goes before the trade does: what was swapped for what is the
+     rarer and more specific fact, so it is the one worth the narrow space. */
+  .cw-dir,.gam-head div:nth-child(4){display:none}
 }
 
 /* New-trade form: size the position by cash or by share count. */
@@ -775,3 +777,12 @@ body.light{--wave-strength:0.34}
   letter-spacing:0.05em;padding-bottom:2px}
 .cw-section-hd span{font-size:10px;font-weight:400;color:var(--text4);
   text-transform:none;letter-spacing:0}
+
+/* What was traded for what, recovered from the legs sharing a transaction.
+   Out is what left the trader, in is what came back. */
+.cw-swap{display:flex;align-items:baseline;gap:4px;font-size:11px;min-width:0}
+.cw-swap-out{color:var(--text3)}
+.cw-swap-arrow{color:var(--text4);font-size:10px}
+.cw-swap-in{color:var(--text);font-weight:600}
+/* Not a trade — one asset moved. Quiet, so the real swaps stand out. */
+.cw-swap-none{color:var(--text4)}

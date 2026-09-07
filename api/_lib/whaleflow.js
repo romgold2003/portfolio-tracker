@@ -424,31 +424,56 @@ export const WHALE_FLOOR_USD = 1_000_000;
  * claim, and the column says which one it is making.
  */
 export function ranked(wallets, {
-  min = WHALE_FLOOR_USD, max = Infinity, limit = 50,
+  min = WHALE_FLOOR_USD, max = Infinity, limit = 50, prices = null,
 } = {}) {
+  /**
+   * What the position is worth now, not what it cost.
+   *
+   * Each row was recorded at the dollar value of the moment it moved, which is
+   * the right way to store it and the wrong way to rank it: a table of what
+   * things used to be worth is a table about the past. The token quantity is
+   * kept alongside, so today's price turns it back into today's number.
+   *
+   * Both are carried. The ranking and the headline use the current value; the
+   * cost sits beside it, because "bought $18M of it, holds $20M" is two facts
+   * and losing either one loses half the story.
+   */
+  const worthNow = (symbol, units, fallback) => {
+    const price = prices?.get?.(symbol);
+    if (!price || !Number.isFinite(units)) return fallback;
+    return units * price;
+  };
   const rows = [];
 
   for (const w of wallets ?? []) {
     for (const s of w.symbols ?? []) {
-      // Each holding is judged on its own size, which is what the bands ask.
-      const size = Math.abs(s.netUsd);
+      // Each holding is judged on its own size, at what it is worth now.
+      const nowUsd = worthNow(s.symbol, s.netUnits, s.netUsd);
+      const size = Math.abs(nowUsd);
       if (!(size >= min) || size >= max) continue;
       rows.push({
         address: w.address,
         owner: w.owner,
         symbol: s.symbol,
-        netUsd: s.netUsd,
+        /** Today's value — what the table ranks and shows. */
+        netUsd: nowUsd,
+        /** What it was worth as it moved, kept so the two can be compared. */
+        costUsd: s.netUsd,
         netUnits: s.netUnits,
         chains: w.chains,
         transfers: w.transfers,
         lastAt: w.lastAt,
         firstAt: w.firstAt,
         /** The wallet's whole position, so a row can say what else it holds. */
-        walletNetUsd: w.netUsd,
+        walletNetUsd: (w.symbols ?? [])
+          .reduce((sum, x) => sum + worthNow(x.symbol, x.netUnits, x.netUsd), 0),
         walletPositions: (w.symbols ?? []).length,
         /** The whole book for this wallet, so a row can open into it. */
         holdings: (w.symbols ?? []).map((x) => ({
-          symbol: x.symbol, netUsd: x.netUsd, netUnits: x.netUnits,
+          symbol: x.symbol,
+          netUsd: worthNow(x.symbol, x.netUnits, x.netUsd),
+          costUsd: x.netUsd,
+          netUnits: x.netUnits,
         })),
       });
     }
@@ -458,4 +483,66 @@ export function ranked(wallets, {
     .sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd))
     .slice(0, limit)
     .map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/* ── swaps ─────────────────────────────────────────────────────────────── */
+
+/**
+ * What was traded for what, recovered from the transaction the legs share.
+ *
+ * A row is one asset moving, so no single row can say "USDT for Bitcoin". The
+ * transaction can: a swap emits two transfers inside one hash, the trader
+ * sending one asset into a pool and the pool sending another back out, and the
+ * store already keeps the hash on every row.
+ *
+ * The join is the pool address, and **which end is the pool decides the
+ * direction**, which is the whole difficulty. A swap is a cycle — the trader
+ * sends USDT to the pool, the pool sends WETH to the trader — so following the
+ * addresses alone finds the cycle twice and reads it as "WETH for USDT" exactly
+ * as readily as "USDT for WETH". Half the answers would be backwards.
+ *
+ * So the shared address has to be a known contract for the link to be made at
+ * all. A pool is a contract and a trader is not, which settles it: the asset
+ * going into the contract was sold, the asset coming out was bought. Where
+ * neither end is a recognised contract the direction genuinely cannot be told
+ * from the chain, and nothing is claimed rather than a coin flip being printed
+ * as a fact.
+ *
+ * Both legs get the same answer, so whichever one the panel is drawing says the
+ * same thing about the trade. A transaction moving one asset is not a swap and
+ * is left alone rather than being described as trading something for itself.
+ */
+export function linkSwaps(rows) {
+  const byTx = new Map();
+  for (const r of rows ?? []) {
+    const key = `${r.blockchain}:${r.hash}`;
+    if (!byTx.has(key)) byTx.set(key, []);
+    byTx.get(key).push(r);
+  }
+
+  for (const legs of byTx.values()) {
+    if (legs.length < 2) continue;
+
+    for (const into of legs) {
+      const pool = into.to?.address ?? into.to_addr;
+      if (!pool) continue;
+
+      // What left the same address, in something else, in the same transaction.
+      const outOf = legs.find((l) => l !== into
+        && l.symbol !== into.symbol
+        && (l.from?.address ?? l.from_addr) === pool);
+      if (!outOf) continue;
+
+      // The pool must be recognisable as a contract, or the direction is a
+      // coin flip. See the note above.
+      const isPool = (into.to?.ownerType ?? into.to_type) === 'contract'
+        || (outOf.from?.ownerType ?? outOf.from_type) === 'contract';
+      if (!isPool) continue;
+
+      const swap = { from: into.symbol, to: outOf.symbol };
+      into.swap = swap;
+      outOf.swap = swap;
+    }
+  }
+  return rows ?? [];
 }
