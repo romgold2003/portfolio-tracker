@@ -857,6 +857,8 @@ body.light{--wave-strength:0.34}
    which is the order the question is actually asked in, and the opposite of how
    this panel grew. */
 .cw-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 16px}
+/* Two while the third slot is unspecified, so they do not stretch oddly. */
+.cw-cards-2{grid-template-columns:repeat(2,1fr)}
 .cw-card{border:0.5px solid var(--border2);border-radius:10px;padding:12px 14px;min-width:0}
 .cw-card-hd{display:flex;flex-direction:column;gap:1px;margin-bottom:10px}
 .cw-card-hd{font-size:11px;font-weight:600;color:var(--text2);
@@ -888,4 +890,33 @@ body.light{--wave-strength:0.34}
 
 @media (max-width:1100px){
   .cw-cards{grid-template-columns:1fr}
+}
+
+/* Market-wide exchange netflow. Its own card, above the three, because it is
+   the one thing on the page that is never filtered by the coin picker. */
+.cw-card-wide{margin:0 0 12px}
+.cw-nf-head,.cw-nf-row{display:grid;
+  grid-template-columns:70px minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr) 76px;
+  align-items:baseline;gap:0 12px}
+.cw-nf-head{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;
+  color:var(--text4);padding-bottom:5px;border-bottom:0.5px solid var(--input)}
+.cw-nf-row{padding:9px 4px;font-size:13px;border-bottom:0.5px solid var(--input)}
+.cw-nf-wrap.is-open .cw-nf-row{background:var(--input)}
+.cw-nf-period{font-weight:600;color:var(--text)}
+/* The record cannot reach back this far yet, and the row says so rather than
+   quietly repeating a shorter period's answer. */
+.cw-nf-partial{color:var(--text4);font-weight:400}
+.cw-nf-in,.cw-nf-out{color:var(--text3);font-variant-numeric:tabular-nums}
+.cw-nf-net{font-weight:600;font-variant-numeric:tabular-nums}
+.cw-nf-sig{font-size:11px;font-weight:600;text-align:right}
+/* The split by exchange, so a market call driven by one venue shows it. */
+.cw-nf-drawer{background:var(--input);padding:6px 4px 8px}
+.cw-nf-vrow{display:grid;
+  grid-template-columns:70px minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr) 76px;
+  align-items:baseline;gap:0 12px;padding:3px 0;font-size:11px}
+.cw-nf-venue{color:var(--text2)}
+.cw-nf-foot{margin-top:9px;font-size:10px;color:var(--text4);line-height:1.5}
+@media (max-width:640px){
+  .cw-nf-head,.cw-nf-row,.cw-nf-vrow{grid-template-columns:52px minmax(0,1fr) 0 minmax(0,1fr) 62px}
+  .cw-nf-out,.cw-nf-head span:nth-child(3){display:none}
 }

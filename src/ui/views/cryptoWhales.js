@@ -27,7 +27,8 @@ import {
   explorerTx, explorerAddress, chainLabel, directionOf, partyName, isVoid,
   shortAddress, money, tokens, fetchFlow, FLOW_WINDOWS, TREND_TONE,
   fetchHolders, fetchLeverage, HOLDER_KIND,
-  fetchVerdict, fetchFlows, VERDICT_TONE,
+  fetchVerdict, VERDICT_TONE,
+  fetchNetflow, SIGNAL_TONE,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -53,7 +54,10 @@ let openRank = null;
 let openLeverage = null;
 let holders = null;
 let reading = null;
-let flowsByWindow = null;
+/** The market-wide netflow card. Never filtered by the coin picker. */
+let netflow = null;
+/** Which period row is expanded into its per-exchange breakdown. */
+let openPeriod = null;
 let win = '1m';
 
 /** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
@@ -325,6 +329,91 @@ function holderRows() {
  * fifty rows in a card next to two other cards was how the page got confusing
  * in the first place.
  */
+/**
+ * Exchange netflow for the whole market.
+ *
+ * Independent of everything else on the page — no coin filter, no window
+ * picker, five fixed periods. It answers one question and it is the only thing
+ * here that answers it: across every asset, is crypto capital moving onto
+ * exchanges or off them?
+ *
+ * Nothing here says bought or sold. Coins arriving on an exchange have not been
+ * sold and may never be; they have only been put where selling is possible.
+ */
+function drawNetflow() {
+  const box = el('cwNetflow');
+  if (!box) return;
+
+  const periods = netflow?.periods ?? [];
+  if (!periods.length) {
+    box.innerHTML = `<div class="cw-card-hd">Exchange netflow<span>whole market ·
+      all assets in USD</span></div>
+      <div class="cw-card-empty">${loading ? 'Reading the exchanges…'
+  : 'No exchange-tagged flow recorded yet.'}</div>`;
+    return;
+  }
+
+  const since = netflow?.since ?? null;
+  const recordHours = since ? (Date.now() / 1000 - since) / 3600 : 0;
+  const HOURS = { '24h': 24, '7d': 168, '1m': 744, '6m': 4392, '1y': 8784 };
+
+  const row = (p) => {
+    const open = openPeriod === p.id;
+    const tone = SIGNAL_TONE[p.signal] ?? '';
+    const short = recordHours && recordHours < (HOURS[p.id] ?? 0);
+
+    /** The per-exchange split, so a market call built on one venue shows it. */
+    const drawer = open ? `<div class="cw-nf-drawer">
+      ${p.venues.length ? p.venues.map((x) => `<div class="cw-nf-vrow">
+          <span class="cw-nf-venue">${escapeHtml(x.venue)}</span>
+          <span class="cw-nf-in">${escapeHtml(money(x.inUsd))}</span>
+          <span class="cw-nf-out">${escapeHtml(money(x.outUsd))}</span>
+          <span class="cw-nf-net ${SIGNAL_TONE[x.signal] ?? ''}">${
+  escapeHtml((x.netUsd > 0 ? '+' : x.netUsd < 0 ? '−' : '') + money(Math.abs(x.netUsd)))}</span>
+          <span class="cw-nf-sig ${SIGNAL_TONE[x.signal] ?? ''}">${escapeHtml(x.signal)}</span>
+        </div>`).join('')
+    : '<div class="cw-card-empty">No exchange moved anything in this period.</div>'}
+    </div>` : '';
+
+    return `<div class="cw-nf-wrap${open ? ' is-open' : ''}">
+      <div class="cw-nf-row cw-clickable" data-period="${p.id}"
+           title="Click for the split by exchange">
+        <span class="cw-nf-period">${escapeHtml(p.label)}${
+  short ? '<span class="cw-nf-partial" title="The record does not reach back this far yet">*</span>' : ''}</span>
+        <span class="cw-nf-in">${escapeHtml(money(p.inUsd))}</span>
+        <span class="cw-nf-out">${escapeHtml(money(p.outUsd))}</span>
+        <span class="cw-nf-net ${tone}">${
+  escapeHtml((p.netUsd > 0 ? '+' : p.netUsd < 0 ? '−' : '') + money(Math.abs(p.netUsd)))}</span>
+        <span class="cw-nf-sig ${tone}">${escapeHtml(p.signal)}</span>
+      </div>${drawer}
+    </div>`;
+  };
+
+  const stamp = netflow?.at ? new Date(netflow.at).toLocaleTimeString() : '—';
+
+  box.innerHTML = `<div class="cw-card-hd">Exchange netflow<span>whole market · all
+      assets in USD · not filtered by coin</span></div>
+    <div class="cw-nf-head">
+      <span>Period</span><span>Inflow</span><span>Outflow</span><span>Netflow</span><span>Signal</span>
+    </div>
+    ${periods.map(row).join('')}
+    <div class="cw-nf-foot">
+      Onto exchanges is selling pressure · off them is accumulation. Neither is a
+      confirmed trade.${recordHours && recordHours < 8784
+  ? ` <span class="cw-nf-partial">*</span> record reaches ${recordHours < 48
+    ? `${Math.max(1, Math.round(recordHours))}h` : `${Math.round(recordHours / 24)}d`}` : ''}
+      <br>Updated ${escapeHtml(stamp)} · ${netflow?.labels ?? 0} exchange addresses
+      across ${(netflow?.venues ?? []).length} venues
+    </div>`;
+
+  box.onclick = (e) => {
+    const hit = e.target.closest('[data-period]');
+    if (!hit) return;
+    openPeriod = openPeriod === hit.dataset.period ? null : hit.dataset.period;
+    drawNetflow();
+  };
+}
+
 function drawRankCard() {
   const box = el('cwRank');
   if (!box) return;
@@ -388,80 +477,6 @@ function drawSummary() {
         net <b class="cw-in">+${escapeHtml(money(s.netUsd))}</b><br>largest single transfer only
         ${escapeHtml(money(s.largestUsd))}</div>
     </div>` : ''}`;
-}
-
-function drawFlows() {
-  const box = el('cwFlows');
-  if (!box) return;
-  const windows = flowsByWindow?.windows ?? [];
-  const per = flowsByWindow?.flows ?? {};
-  if (!windows.length) { box.innerHTML = ''; return; }
-
-  /**
-   * How much of each window the record can actually answer for.
-   *
-   * The dollars are the value each transfer had **when it moved**, not today's
-   * price, so a three-month figure is three months of real flow rather than
-   * three months of volume repriced at this morning's number. What it cannot
-   * do is reach back before the collector started, and a window that asks it
-   * to says so rather than quietly repeating the shorter one's answer.
-   */
-  const since = flowsByWindow?.since ?? null;
-  const recordHours = since ? (Date.now() / 1000 - since) / 3600 : 0;
-
-  /**
-   * The headline pair comes from the window on the picker, so the big numbers
-   * and the highlighted row are always the same measurement.
-   */
-  const chosen = per[win] ?? [];
-  const totalIn = chosen.reduce((a, f) => a + f.inUsd, 0);
-  const totalOut = chosen.reduce((a, f) => a + f.outUsd, 0);
-  const totalNet = totalIn - totalOut;
-  const totalGross = totalIn + totalOut;
-
-  /** One line per window: what went on, what came off, and the balance. */
-  const line = (w) => {
-    const list = per[w.id] ?? [];
-    const inUsd = list.reduce((a, f) => a + f.inUsd, 0);
-    const outUsd = list.reduce((a, f) => a + f.outUsd, 0);
-    const net = inUsd - outUsd;
-    const gross = inUsd + outUsd;
-    const pct = gross > 0 ? Math.round((net / gross) * 1000) / 10 : 0;
-    const bullish = net < 0;
-    return `<div class="cw-flow-row${gross > 0 ? '' : ' is-quiet'}${w.id === win ? ' is-chosen' : ''}">
-      <span class="cw-flow-win">${escapeHtml(w.label)}</span>
-      <span class="cw-flow-in">in ${escapeHtml(money(inUsd))}</span>
-      <span class="cw-flow-out">out ${escapeHtml(money(outUsd))}</span>
-      <span class="cw-flow-net ${gross > 0 ? (bullish ? 'cw-in' : 'cw-out') : ''}">${
-  gross > 0 ? `${net > 0 ? '+' : ''}${escapeHtml(money(net))} · ${pct > 0 ? '+' : ''}${pct}%` : '—'}</span>
-      <span class="cw-flow-read">${gross > 0
-    ? `${bullish ? 'leaving exchanges' : 'arriving on exchanges'}${
-      Number.isFinite(w.hours) && recordHours && recordHours < w.hours
-        ? ` · record only reaches ${recordHours < 48
-          ? `${Math.max(1, Math.round(recordHours))}h`
-          : `${Math.round(recordHours / 24)}d`}` : ''}`
-    : 'nothing recorded'}</span>
-    </div>`;
-  };
-
-  box.innerHTML = `<div class="cw-card-hd">Exchange netflow<span>on = selling pressure ·
-      off = accumulation</span></div>
-    <div class="cw-inout">
-      <div class="cw-inout-cell">
-        <span class="cw-inout-lbl">Moved on</span>
-        <span class="cw-inout-val cw-out">${escapeHtml(money(totalIn))}</span>
-      </div>
-      <div class="cw-inout-cell">
-        <span class="cw-inout-lbl">Moved off</span>
-        <span class="cw-inout-val cw-in">${escapeHtml(money(totalOut))}</span>
-      </div>
-      <div class="cw-inout-cell">
-        <span class="cw-inout-lbl">Net</span>
-        <span class="cw-inout-val ${totalGross > 0 ? (totalNet < 0 ? 'cw-in' : 'cw-out') : ''}">${
-  totalGross > 0 ? escapeHtml((totalNet > 0 ? '+' : '') + money(totalNet)) : '—'}</span>
-      </div>
-    </div>
-    <div class="cw-flows">${windows.map(line).join('')}</div>`;
 }
 
 /**
@@ -542,8 +557,8 @@ function draw() {
   drawBands();
   drawCoins();
   drawSummary();
-  drawFlows();
   drawRankCard();
+  drawNetflow();
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
@@ -641,15 +656,16 @@ async function load() {
   loading = !flow && !feed;
   draw();
 
-  const [read, next, strip] = await Promise.all([
+  const [read, next, market] = await Promise.all([
     fetchVerdict({ symbol, window: win, band }),
     fetchTransfers({ symbol, band }),
-    fetchFlows({ symbol }),
+    // No symbol: this one is about the market, whatever coin is selected.
+    fetchNetflow(),
   ]);
   loading = false;
   if (next?.rows?.length || !feed || next?.provider) feed = next;
   if (read?.error == null || !reading) reading = read;
-  if (strip?.error == null || !flowsByWindow) flowsByWindow = strip;
+  if (market?.error == null || !netflow) netflow = market;
   /**
    * One request now carries what three used to.
    *

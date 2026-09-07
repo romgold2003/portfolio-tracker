@@ -411,3 +411,22 @@ export const VERDICT_TONE = {
   Distribution: 'cw-out',
   'Strong distribution': 'cw-out',
 };
+
+/**
+ * Market-wide exchange netflow. **Deliberately takes no symbol.**
+ *
+ * Every other fetch here narrows to whatever coin is selected. This one must
+ * not: it answers "is capital moving onto exchanges or off them across the
+ * market", and passing a symbol would turn it into a different question wearing
+ * the same label.
+ */
+export async function fetchNetflow({ signal } = {}) {
+  try {
+    return await get('resource=netflow', signal);
+  } catch (err) {
+    return { periods: [], error: err.message };
+  }
+}
+
+/** Green for bullish, red for bearish, nothing for neutral. */
+export const SIGNAL_TONE = { Bullish: 'cw-in', Bearish: 'cw-out', Neutral: '' };

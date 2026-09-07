@@ -24,6 +24,7 @@ import * as holders from '../_lib/holders.js';
 import { positionsFor } from '../_lib/leverage.js';
 import { loadExchanges, netflow, exchangeOf, VENUES } from '../_lib/exchanges.js';
 import { verdictFor, isStable } from '../_lib/verdict.js';
+import * as netflowCard from '../_lib/netflowcard.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
@@ -152,6 +153,20 @@ async function topUp(now, { force = false } = {}) {
       failed.push({ chain: 'holders', error: err.message });
     }
   }
+
+  /**
+   * Roll the last couple of days into the daily aggregate.
+   *
+   * Two days rather than one so a poll either side of midnight still closes
+   * out the day it just left. The rollup is what makes the six month and one
+   * year rows answerable without walking every raw transfer on a refresh.
+   */
+  try {
+    const byAddress = await loadExchanges();
+    const recent = await store.read({ minUsd: 0, limit: 50_000 });
+    await netflowCard.roll(recent, { byAddress, days: 2, now });
+    await netflowCard.prune({ now });
+  } catch { /* the card falls back to the raw rows */ }
 
   try { await store.prune({ now }); } catch { /* pruning is housekeeping */ }
   try { await holders.prune({ now }); } catch { /* pruning is housekeeping */ }
@@ -536,6 +551,36 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       return fail(res, 502, `Could not read the exchange labels (${err.message}).`);
+    }
+  }
+
+  /**
+   * Market-wide exchange netflow. **Takes no symbol on purpose.**
+   *
+   * The coin picker elsewhere answers "what is happening to BTC". This answers
+   * "what is happening to the market", and accepting a symbol here would let
+   * the two be confused — the same card quietly answering a different question
+   * depending on what was clicked somewhere else on the page.
+   */
+  if (resource === 'netflow') {
+    await topUp(Date.now());
+    try {
+      const now = Date.now();
+      const byAddress = await loadExchanges();
+      const rows = await store.read({ minUsd: 0, limit: 50_000 });
+      const periods = await netflowCard.build({ rows, byAddress, now });
+
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, {
+        periods,
+        venues: [...new Set([...byAddress.values()].map((v) => v.venue))].sort(),
+        labels: byAddress.size,
+        /** So the card can say how much of a long period it can really answer for. */
+        since: rows.length ? Math.min(...rows.map((r) => r.at)) : null,
+        at: now,
+      });
+    } catch (err) {
+      return fail(res, 502, `Could not read the exchange flow (${err.message}).`);
     }
   }
 
