@@ -29,9 +29,15 @@
   serve a video from, still shows it.
 -->
 <div class="signin-hero" id="signinHero" aria-hidden="true">
+  <!--
+    No src and no preload here on purpose. With both, the browser began
+    downloading sixteen megabytes while parsing the page — for every visitor,
+    including the signed-in ones who never see this screen. The file is named
+    in signinHero.js and only when the backdrop is actually shown.
+  -->
   <video class="signin-hero-video" id="signinHeroVideo"
-         autoplay loop muted playsinline preload="auto"
-         src="assets/signin-hero.mp4"></video>
+         loop muted playsinline preload="none"
+         data-src="assets/signin-hero.mp4"></video>
   <div class="signin-hero-noise"></div>
   <div class="signin-hero-fade"></div>
 </div>

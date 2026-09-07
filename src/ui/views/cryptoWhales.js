@@ -340,7 +340,8 @@ function drawCoins() {
     const next = button.dataset.symbol;
     if (next === symbol) return;
     symbol = next;
-    load();
+    // The tape is filtered by the coin; the holder card notices on its own.
+    load({ force: 'feed' });
   };
 }
 
@@ -354,7 +355,7 @@ function drawWindow() {
     const id = e.target?.dataset?.win;
     if (!id || id === win) return;
     win = id;
-    load();
+    load({ force: 'feed' });
   };
 }
 
@@ -368,7 +369,7 @@ function drawBands() {
     const id = e.target?.dataset?.band;
     if (!id || id === band) return;
     band = id;
-    load();
+    load({ force: 'feed' });
   };
 }
 
@@ -542,7 +543,33 @@ export async function renderCryptoWhales() {
   await load();
 }
 
-async function load() {
+/**
+ * How often each source is worth asking again.
+ *
+ * All three used to be refetched together every sixty seconds, which asked the
+ * server three questions a minute when only one of them had a new answer. The
+ * two heavy ones are the ones that change least:
+ *
+ *   the tape      — the collector adds to it every ten minutes
+ *   netflow       — exchange balances are published once a day
+ *   top holders   — the holder snapshot is taken once a day
+ *
+ * So each is asked on its own clock. A selector changing forces the sources it
+ * actually affects, immediately, so the page still feels instant to touch.
+ */
+const FRESHNESS = {
+  feed: 60_000,
+  netflow: 20 * 60_000,
+  holders: 10 * 60_000,
+};
+
+/** When each source last answered, so a tick can skip what is still fresh. */
+const fetchedAt = { feed: 0, netflow: 0, holders: 0 };
+
+/** The coin the holder card was last asked about, which is its other trigger. */
+let holdersFor = null;
+
+async function load({ force = null } = {}) {
   loading = !feed;
   draw();
 
@@ -559,32 +586,50 @@ async function load() {
    * already changed: only the newest load is allowed to write.
    */
   const mine = ++loadToken;
-  const settle = (fn) => (value) => {
+  const settle = (key, fn) => (value) => {
     if (mine !== loadToken) return;
     fn(value);
+    fetchedAt[key] = Date.now();
     loading = false;
     draw();
   };
 
-  await Promise.allSettled([
-    // All three selectors: this is the tape they belong to.
-    fetchTransfers({ symbol, band, window: win }).then(settle((next) => {
+  const now = Date.now();
+  const due = (key) => force === 'all' || force === key
+    || now - fetchedAt[key] >= FRESHNESS[key];
+
+  const jobs = [];
+
+  // All three selectors: this is the tape they belong to.
+  if (due('feed')) {
+    jobs.push(fetchTransfers({ symbol, band, window: win }).then(settle('feed', (next) => {
       /**
        * A refresh that came back empty replaces what was there, and it should:
        * a selector may have just changed, and holding the previous answer would
        * show one filter's results under another filter's label.
        */
       if (next?.rows || !feed) feed = next;
-    })),
-    // No symbol: this one is about the market, whatever coin is selected.
-    fetchNetflow().then(settle((market) => {
+    })));
+  }
+
+  // No symbol and no timeframe: this one is about the market, always.
+  if (due('netflow')) {
+    jobs.push(fetchNetflow().then(settle('netflow', (market) => {
       if (market?.error == null || !netflow) netflow = market;
-    })),
-    // A symbol, and only a symbol — a timeframe means nothing to a snapshot.
-    fetchTopHolders({ symbol }).then(settle((top) => {
+    })));
+  }
+
+  // A symbol, and only a symbol — a timeframe means nothing to a snapshot, but
+  // a different coin is a different question and cannot wait for the clock.
+  if (due('holders') || holdersFor !== symbol) {
+    holdersFor = symbol;
+    jobs.push(fetchTopHolders({ symbol }).then(settle('holders', (top) => {
       if (top?.error == null || !topHolders) topHolders = top;
-    })),
-  ]);
+    })));
+  }
+
+  if (!jobs.length) return;
+  await Promise.allSettled(jobs);
 
   if (mine !== loadToken) return;
   lastAt = Date.now();

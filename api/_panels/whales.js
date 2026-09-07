@@ -374,7 +374,6 @@ export default async function handler(req, res) {
     try {
       const now = Date.now();
       const byAddress = await loadExchanges();
-      const rows = await store.read({ minUsd: 0, limit: 50_000 });
 
       /**
        * Two measurements of the same thing, and the better one wins.
@@ -391,10 +390,20 @@ export default async function handler(req, res) {
        * because two different measurements both called "netflow" would be the
        * easiest way on this page to mislead somebody.
        */
-      const [observed, balances] = await Promise.all([
-        netflowCard.build({ rows, byAddress, now }),
-        cexflow.periods({ now }).catch(() => ({ periods: [], venues: [], since: null })),
-      ]);
+      const balances = await cexflow.periods({ now })
+        .catch(() => ({ periods: [], venues: [], since: null }));
+
+      /**
+       * The sample is only computed when the census cannot answer.
+       *
+       * Building it means reading fifty thousand rows and aggregating them into
+       * five periods, on every refresh, for numbers the card then does not use.
+       * The census is a strictly better measurement wherever it exists, so the
+       * fallback is calculated when it is actually a fallback.
+       */
+      const needFallback = !balances.periods.some((p) => p.netUsd != null);
+      const rows = needFallback ? await store.read({ minUsd: 0, limit: 50_000 }) : [];
+      const observed = needFallback ? await netflowCard.build({ rows, byAddress, now }) : [];
 
       res.setHeader('Cache-Control', 'no-store');
       return send(res, 200, {
