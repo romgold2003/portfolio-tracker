@@ -317,6 +317,33 @@ function holderRows() {
  * verdict's clothes. This counts four independent ones and shows each, so a
  * call built on two can never look like a call built on four.
  */
+/**
+ * The ranking, as a card.
+ *
+ * Only the top few, because this is the headline — who is biggest right now —
+ * and the full table underneath is where you go to read it properly. Putting
+ * fifty rows in a card next to two other cards was how the page got confusing
+ * in the first place.
+ */
+function drawRankCard() {
+  const box = el('cwRank');
+  if (!box) return;
+  const list = (reading?.ranked ?? []).slice(0, 5);
+
+  box.innerHTML = `<div class="cw-card-hd">Top whales<span>${
+  escapeHtml(bandDef(band).label)} · ${escapeHtml(windowNote())}</span></div>${
+  list.length
+    ? `<div class="cw-mini">${list.map((r, i) => `<div class="cw-mini-row">
+        <span class="cw-mini-n">${i + 1}</span>
+        <span class="cw-mini-who">${escapeHtml(r.owner || shortAddress(r.address))}</span>
+        <span class="cw-mini-sym">${escapeHtml(r.symbol)}</span>
+        <span class="cw-mini-amt ${r.netUsd > 0 ? 'cw-in' : 'cw-out'}">${
+  escapeHtml((r.netUsd > 0 ? '+' : '') + money(r.netUsd))}</span>
+      </div>`).join('')}</div>`
+    : `<div class="cw-card-empty">${loading ? 'Loading…'
+      : `Nothing in the ${escapeHtml(bandDef(band).label)} range over this window yet.`}</div>`}`;
+}
+
 function drawSummary() {
   const box = el('cwSummary');
   if (!box) return;
@@ -344,6 +371,7 @@ function drawSummary() {
   }).join('');
 
   box.innerHTML = `
+    <div class="cw-card-hd">What is happening<span>4 independent signals</span></div>
     <div class="cw-verdict">
       <div class="cw-verdict-hd">
         <span class="cw-verdict-word ${tone}">${escapeHtml(v.trend)}</span>
@@ -357,7 +385,7 @@ function drawSummary() {
     ${s ? `<div class="cw-stealth">
       <div class="cw-stealth-hd">Stealth accumulation</div>
       <div class="cw-stealth-body"><b>${s.wallets}</b> wallets · <b>${s.transfers}</b> transfers ·
-        net <b class="cw-in">+${escapeHtml(money(s.netUsd))}</b> · largest single transfer only
+        net <b class="cw-in">+${escapeHtml(money(s.netUsd))}</b><br>largest single transfer only
         ${escapeHtml(money(s.largestUsd))}</div>
     </div>` : ''}`;
 }
@@ -381,6 +409,16 @@ function drawFlows() {
   const since = flowsByWindow?.since ?? null;
   const recordHours = since ? (Date.now() / 1000 - since) / 3600 : 0;
 
+  /**
+   * The headline pair comes from the window on the picker, so the big numbers
+   * and the highlighted row are always the same measurement.
+   */
+  const chosen = per[win] ?? [];
+  const totalIn = chosen.reduce((a, f) => a + f.inUsd, 0);
+  const totalOut = chosen.reduce((a, f) => a + f.outUsd, 0);
+  const totalNet = totalIn - totalOut;
+  const totalGross = totalIn + totalOut;
+
   /** One line per window: what went on, what came off, and the balance. */
   const line = (w) => {
     const list = per[w.id] ?? [];
@@ -390,7 +428,7 @@ function drawFlows() {
     const gross = inUsd + outUsd;
     const pct = gross > 0 ? Math.round((net / gross) * 1000) / 10 : 0;
     const bullish = net < 0;
-    return `<div class="cw-flow-row${gross > 0 ? '' : ' is-quiet'}">
+    return `<div class="cw-flow-row${gross > 0 ? '' : ' is-quiet'}${w.id === win ? ' is-chosen' : ''}">
       <span class="cw-flow-win">${escapeHtml(w.label)}</span>
       <span class="cw-flow-in">in ${escapeHtml(money(inUsd))}</span>
       <span class="cw-flow-out">out ${escapeHtml(money(outUsd))}</span>
@@ -406,8 +444,23 @@ function drawFlows() {
     </div>`;
   };
 
-  box.innerHTML = `<div class="cw-section-hd">Exchange flow<span>coins leaving is
-      accumulation · arriving is selling pressure</span></div>
+  box.innerHTML = `<div class="cw-card-hd">Exchange netflow<span>on = selling pressure ·
+      off = accumulation</span></div>
+    <div class="cw-inout">
+      <div class="cw-inout-cell">
+        <span class="cw-inout-lbl">Moved on</span>
+        <span class="cw-inout-val cw-out">${escapeHtml(money(totalIn))}</span>
+      </div>
+      <div class="cw-inout-cell">
+        <span class="cw-inout-lbl">Moved off</span>
+        <span class="cw-inout-val cw-in">${escapeHtml(money(totalOut))}</span>
+      </div>
+      <div class="cw-inout-cell">
+        <span class="cw-inout-lbl">Net</span>
+        <span class="cw-inout-val ${totalGross > 0 ? (totalNet < 0 ? 'cw-in' : 'cw-out') : ''}">${
+  totalGross > 0 ? escapeHtml((totalNet > 0 ? '+' : '') + money(totalNet)) : '—'}</span>
+      </div>
+    </div>
     <div class="cw-flows">${windows.map(line).join('')}</div>`;
 }
 
@@ -490,6 +543,7 @@ function draw() {
   drawCoins();
   drawSummary();
   drawFlows();
+  drawRankCard();
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
@@ -509,9 +563,9 @@ function draw() {
     ? `<div class="gam-head cw-rank-grid">
          <div>#</div><div>Whale</div><div>Coin</div><div>Value now</div><div>Last</div>
        </div>${list.map(walletRow).join('')}`
-    : `<div class="empty">${loading ? 'Loading…' : `No whale holds a position in the
-       ${escapeHtml(bandDef(band).label)} range over this window yet. Try a wider band or a
-       longer window — the record only goes back as far as the app has been collecting.`}</div>`;
+    : `<div class="empty">${loading ? 'Loading…' : `No whale holds a position in the ${escapeHtml(bandDef(band).label)} range over
+       this window yet. Try a wider band or a longer window — the record only goes
+       back as far as the app has been collecting.`}</div>`;
 
   rows.innerHTML = `
     <div class="cw-section">

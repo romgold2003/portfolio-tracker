@@ -835,18 +835,57 @@ body.light{--wave-strength:0.34}
 
 /* Exchange flow across every window at once. */
 .cw-flows{border:0.5px solid var(--border2);border-radius:8px;padding:6px 12px;margin:0 0 12px}
-.cw-flow-row{display:grid;grid-template-columns:44px 110px 110px 168px minmax(0,1fr);
+.cw-flow-row{display:grid;grid-template-columns:34px minmax(0,1fr) 96px;
   align-items:baseline;gap:0 10px;font-size:12px;padding:5px 0;
   border-top:0.5px solid var(--input)}
 .cw-flow-row:first-child{border-top:0}
 .cw-flow-row.is-quiet{opacity:0.4}
 .cw-flow-win{font-weight:600;color:var(--text)}
-.cw-flow-in,.cw-flow-out{color:var(--text3);font-variant-numeric:tabular-nums}
+.cw-flow-in{color:var(--text3);font-variant-numeric:tabular-nums;font-size:11px}
+.cw-flow-out{display:none}
 .cw-flow-net{font-weight:600;font-variant-numeric:tabular-nums}
-.cw-flow-read{color:var(--text4);font-size:11px}
+.cw-flow-read{display:none}
 @media (max-width:640px){
   .cw-sig{grid-template-columns:16px minmax(0,1fr) 92px}
   .cw-sig-note{display:none}
   .cw-flow-row{grid-template-columns:40px minmax(0,1fr) 128px}
   .cw-flow-out,.cw-flow-read{display:none}
+}
+
+/* Three cards across the top: what is happening, the money crossing exchanges,
+   and who is doing it. The tables underneath are the evidence for all three —
+   which is the order the question is actually asked in, and the opposite of how
+   this panel grew. */
+.cw-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 16px}
+.cw-card{border:0.5px solid var(--border2);border-radius:10px;padding:12px 14px;min-width:0}
+.cw-card-hd{display:flex;flex-direction:column;gap:1px;margin-bottom:10px}
+.cw-card-hd{font-size:11px;font-weight:600;color:var(--text2);
+  text-transform:uppercase;letter-spacing:0.05em}
+.cw-card-hd span{font-size:10px;font-weight:400;color:var(--text4);
+  text-transform:none;letter-spacing:0}
+.cw-card-empty{font-size:11px;color:var(--text4);padding:6px 0}
+/* Inside a card the verdict has no border of its own — the card is the border. */
+.cw-card .cw-verdict{border:0;border-radius:0;padding:0;margin:0}
+.cw-card .cw-flows{border:0;padding:0;margin:0}
+.cw-card .cw-stealth{margin:10px 0 0;padding:8px 10px}
+
+/* On and off, as the two numbers the card exists to show. */
+.cw-inout{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.cw-inout-cell{display:flex;flex-direction:column;gap:2px}
+.cw-inout-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text4)}
+.cw-inout-val{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+/* The window the picker is on, so the headline pair and the row agree. */
+.cw-flow-row.is-chosen{background:var(--input);border-radius:4px}
+
+/* The ranking card is a preview; the full table is underneath. */
+.cw-mini{display:grid;gap:4px}
+.cw-mini-row{display:grid;grid-template-columns:14px minmax(0,1fr) 46px 84px;
+  align-items:baseline;gap:0 6px;font-size:12px}
+.cw-mini-n{color:var(--text4);font-size:10px}
+.cw-mini-who{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cw-mini-sym{color:var(--text);font-weight:600;font-size:11px}
+.cw-mini-amt{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+
+@media (max-width:1100px){
+  .cw-cards{grid-template-columns:1fr}
 }
