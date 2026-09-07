@@ -187,6 +187,26 @@ export function resetTableCache() { ready = false; }
 
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 
+/**
+ * Correct an answer worked out before the rules were right.
+ *
+ * A row cached earlier today can hold a balance of a fraction below zero and
+ * no fromNothing flag, and would keep reading as "Holding" until the cache
+ * turned over tomorrow. Fixing it on the way out means the correction applies
+ * to what is already stored, not only to what is computed next.
+ */
+function normalise(moves) {
+  for (const m of Object.values(moves ?? {})) {
+    if (!m?.covered || m.unitsThen == null) continue;
+    if (m.unitsThen <= 0) {
+      m.unitsThen = 0;
+      m.fromNothing = true;
+      m.pct = null;
+    }
+  }
+  return moves;
+}
+
 /** What was worked out today for this token, so it is worked out once. */
 export async function readCache({ chain, token, now = Date.now() } = {}) {
   if (!databaseAvailable()) return new Map();
@@ -197,7 +217,7 @@ export async function readCache({ chain, token, now = Date.now() } = {}) {
   );
   const out = new Map();
   for (const r of rows ?? []) {
-    try { out.set(String(r.holder).toLowerCase(), JSON.parse(r.moves)); } catch { /* skip */ }
+    try { out.set(String(r.holder).toLowerCase(), normalise(JSON.parse(r.moves))); } catch { /* skip */ }
   }
   return out;
 }

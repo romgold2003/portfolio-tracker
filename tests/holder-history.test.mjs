@@ -385,3 +385,37 @@ describe('a wallet that started the window with nothing', () => {
     assert.equal(m.unitsThen, undefined);
   });
 });
+
+describe('answers cached before the rules were right', () => {
+  test('a stored negative sliver is corrected on the way out', async () => {
+    // Fixing it on read means the correction reaches what is already stored,
+    // not only what is computed next — otherwise the card keeps saying
+    // "Holding" until the cache turns over the following day.
+    await writeCache({
+      chain: 'ethereum',
+      token: '0xTOK',
+      holder: '0xa',
+      now: NOW,
+      moves: { '90d': { covered: true, unitsThen: -9.313225746154785e-10, pct: null, transfers: 34 } },
+    });
+    const got = await readCache({ chain: 'ethereum', token: '0xTOK', now: NOW });
+    const m = got.get('0xa')['90d'];
+    assert.equal(m.unitsThen, 0);
+    assert.equal(m.fromNothing, true);
+    assert.equal(describeHolding(m).status, 'New position');
+  });
+
+  test('a healthy stored answer is left exactly as it was', async () => {
+    await writeCache({
+      chain: 'ethereum',
+      token: '0xTOK',
+      holder: '0xb',
+      now: NOW,
+      moves: { '30d': { covered: true, unitsThen: 1000, pct: -12, transfers: 3 } },
+    });
+    const m = (await readCache({ chain: 'ethereum', token: '0xTOK', now: NOW })).get('0xb')['30d'];
+    assert.equal(m.unitsThen, 1000);
+    assert.equal(m.pct, -12);
+    assert.equal(describeHolding(m).status, 'Reducing');
+  });
+});
