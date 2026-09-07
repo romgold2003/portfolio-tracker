@@ -1,0 +1,50 @@
+# Exchange flow going back years, from what the exchanges publish themselves.
+#
+# Separate from collect-whales.yml and on a much slower schedule, because it is
+# doing a different job. That one asks the deployment to sweep the chains every
+# ten minutes for transfers happening now. This one downloads several hundred
+# megabytes of published balance history, reduces it to one small row per
+# exchange per day, and posts that back.
+#
+# It runs here rather than on Vercel for the obvious reason: each exchange's
+# series is about forty megabytes and a function has sixty seconds. A runner has
+# neither limit, and Actions minutes are free on a public repository.
+#
+# Once a day is plenty. The underlying data only moves once a day.
+
+name: Collect exchange flow history
+
+on:
+  schedule:
+    # 06:20 UTC, after the day's balances have settled. Off the hour because
+    # GitHub queues everything scheduled on it.
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: collect-cex-flow
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fetch the balance history and post the daily flows
+        env:
+          BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
+          KEY: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "CRON_SECRET is not set on this repository — nothing to do."
+            echo "It is the same secret collect-whales.yml uses."
+            exit 0
+          fi
+
+          node scripts/collect-cex-flow.mjs "$BASE" "$KEY"

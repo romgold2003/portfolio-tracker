@@ -14,7 +14,7 @@
  * Signed-in only. The data is public but the key behind it is not, and an open
  * proxy on someone else's rate limit is not a thing to leave lying around.
  */
-import { fail, methodIs, readCookies, send } from '../_lib/http.js';
+import { fail, methodIs, readCookies, readJson, send } from '../_lib/http.js';
 import { userForToken } from '../_lib/accounts.js';
 import { topCoins, priceMap, watchContracts } from '../_lib/topcoins.js';
 import { fetchTransfers, feedConfigured } from '../_lib/whalealert.js';
@@ -26,6 +26,7 @@ import * as netflowCard from '../_lib/netflowcard.js';
 import { rankHolders, exitEvents } from '../_lib/topholders.js';
 import { classifyActivity, linkSwaps } from '../_lib/activity.js';
 import { withBudget } from '../_lib/budget.js';
+import * as cexflow from '../_lib/cexflow.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 
 const SESSION_COOKIE = 'pt_session';
@@ -266,10 +267,58 @@ export function resetPollClock() {
 }
 
 export default async function handler(req, res) {
-  if (!methodIs(req, res, 'GET')) return;
-
   const url = new URL(req.url, 'http://localhost');
   const resource = url.searchParams.get('resource') || 'feed';
+
+  /**
+   * The one path that is written to rather than read from.
+   *
+   * The exchange balance history is forty megabytes per exchange — every token,
+   * every day, since 2022 — which cannot be fetched inside a function that is
+   * allowed sixty seconds and a few hundred megabytes. So the scheduled
+   * collector does that work where there is room for it, reduces each exchange
+   * to one small row per day, and posts the result here.
+   *
+   * Guarded by the same shared secret as the poll, and it accepts nothing else:
+   * a day, a venue, and two numbers.
+   */
+  if (resource === 'cexflow' && req.method === 'POST') {
+    const expected = process.env.CRON_SECRET || '';
+    const given = url.searchParams.get('key') || '';
+    if (!expected) return fail(res, 503, 'No collector secret is configured.');
+    if (!timingSafeEqual(given, expected)) return fail(res, 401, 'Wrong key.');
+
+    let body;
+    try { body = await readJson(req); } catch { return fail(res, 400, 'That is not JSON.'); }
+
+    const venue = String(body?.venue ?? '').trim();
+    if (!venue || venue.length > 60) return fail(res, 400, 'That is not a venue.');
+
+    const rows = Array.isArray(body?.days) ? body.days : null;
+    if (!rows) return fail(res, 400, 'No days were sent.');
+    if (rows.length > 1_000) return fail(res, 400, 'Too many days in one request.');
+
+    /** Rebuilt field by field, so nothing arrives in the table unexamined. */
+    const clean = [];
+    for (const r of rows) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r?.day ?? ''))) continue;
+      const inUsd = Number(r.inUsd);
+      const outUsd = Number(r.outUsd);
+      if (!Number.isFinite(inUsd) || !Number.isFinite(outUsd)) continue;
+      if (inUsd < 0 || outUsd < 0) continue;
+      clean.push({ day: r.day, inUsd, outUsd });
+    }
+
+    try {
+      const written = await cexflow.store(venue, clean, { now: Date.now() });
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, { venue, written, skipped: rows.length - clean.length });
+    } catch (err) {
+      return fail(res, 500, `Could not store the exchange history (${err.message}).`);
+    }
+  }
+
+  if (!methodIs(req, res, 'GET')) return;
 
   /**
    * The scheduled collector, and the reason the record is worth anything.
@@ -326,15 +375,39 @@ export default async function handler(req, res) {
       const now = Date.now();
       const byAddress = await loadExchanges();
       const rows = await store.read({ minUsd: 0, limit: 50_000 });
-      const periods = await netflowCard.build({ rows, byAddress, now });
+
+      /**
+       * Two measurements of the same thing, and the better one wins.
+       *
+       * `balances` is what the exchanges publish about their own wallets, daily,
+       * back to 2022 — every asset, every size. It is a census, and it can
+       * answer "since the first of January" on the day the app is installed.
+       *
+       * `observed` is the transfers this app caught itself: five chains, a
+       * quarter-million-dollar floor, and only since collecting started. It is a
+       * sample, and for anything longer than a day the census beats it.
+       *
+       * Both are returned. The card prefers the census and says which it used,
+       * because two different measurements both called "netflow" would be the
+       * easiest way on this page to mislead somebody.
+       */
+      const [observed, balances] = await Promise.all([
+        netflowCard.build({ rows, byAddress, now }),
+        cexflow.periods({ now }).catch(() => ({ periods: [], venues: [], since: null })),
+      ]);
 
       res.setHeader('Cache-Control', 'no-store');
       return send(res, 200, {
-        periods,
+        periods: observed,
         venues: [...new Set([...byAddress.values()].map((v) => v.venue))].sort(),
         labels: byAddress.size,
         /** So the card can say how much of a long period it can really answer for. */
         since: rows.length ? Math.min(...rows.map((r) => r.at)) : null,
+        balances: {
+          periods: balances.periods,
+          venues: balances.venues,
+          since: balances.since,
+        },
         at: now,
       });
     } catch (err) {

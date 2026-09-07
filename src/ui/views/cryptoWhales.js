@@ -177,12 +177,30 @@ function drawNetflow() {
   const box = el('cwNetflow');
   if (!box) return;
 
-  const periods = netflow?.periods ?? [];
+  /**
+   * Two measurements of one thing, and the better one is shown.
+   *
+   * `balances` is what the exchanges publish about their own wallets, daily,
+   * back years — every asset, every size, and it can answer "since the first of
+   * January" on the day the app is installed. It is a census.
+   *
+   * `periods` is the transfers this app caught itself: five chains, a large
+   * floor, and only since collecting started. It is a sample, and for anything
+   * longer than a day the census beats it comfortably.
+   *
+   * Which one produced the numbers is printed under the table, because two
+   * different measurements both called "netflow" would be the easiest way on
+   * this page to mislead somebody.
+   */
+  const census = (netflow?.balances?.periods ?? []).filter((p) => p.netUsd != null);
+  const usingCensus = census.length > 0;
+  const periods = usingCensus ? census : (netflow?.periods ?? []);
+
   if (!periods.length) {
     box.innerHTML = `<div class="cw-card-hd">Exchange netflow<span>whole market ·
       all assets in USD</span></div>
       <div class="cw-card-empty">${loading ? 'Reading the exchanges…'
-  : 'No exchange-tagged flow recorded yet.'}</div>`;
+  : 'No exchange flow recorded yet.'}</div>`;
     return;
   }
 
@@ -193,7 +211,15 @@ function drawNetflow() {
   const row = (p) => {
     const open = openPeriod === p.id;
     const tone = SIGNAL_TONE[p.signal] ?? '';
-    const short = recordHours && recordHours < (HOURS[p.id] ?? 0);
+    /**
+     * A period the record cannot reach across is marked, not hidden.
+     *
+     * The census carries its own answer to this; the sample has to be measured
+     * against how long the app has been collecting.
+     */
+    const short = usingCensus
+      ? p.covered === false
+      : !!(recordHours && recordHours < (HOURS[p.id] ?? 0));
 
     /** The per-exchange split, so a market call built on one venue shows it. */
     const drawer = open ? `<div class="cw-nf-drawer">
@@ -203,7 +229,7 @@ function drawNetflow() {
           <span class="cw-nf-out">${escapeHtml(money(x.outUsd))}</span>
           <span class="cw-nf-net ${SIGNAL_TONE[x.signal] ?? ''}">${
   escapeHtml((x.netUsd > 0 ? '+' : x.netUsd < 0 ? '−' : '') + money(Math.abs(x.netUsd)))}</span>
-          <span class="cw-nf-sig ${SIGNAL_TONE[x.signal] ?? ''}">${escapeHtml(x.signal)}</span>
+          <span class="cw-nf-sig ${SIGNAL_TONE[x.signal] ?? ''}">${escapeHtml(x.signal ?? '')}</span>
         </div>`).join('')
     : '<div class="cw-card-empty">No exchange moved anything in this period.</div>'}
     </div>` : '';
@@ -217,12 +243,30 @@ function drawNetflow() {
         <span class="cw-nf-out">${escapeHtml(money(p.outUsd))}</span>
         <span class="cw-nf-net ${tone}">${
   escapeHtml((p.netUsd > 0 ? '+' : p.netUsd < 0 ? '−' : '') + money(Math.abs(p.netUsd)))}</span>
-        <span class="cw-nf-sig ${tone}">${escapeHtml(p.signal)}</span>
+        <span class="cw-nf-sig ${tone}">${escapeHtml(p.signal ?? '')}</span>
       </div>${drawer}
     </div>`;
   };
 
   const at = netflow?.at ? new Date(netflow.at).toLocaleTimeString() : '—';
+
+  /**
+   * Where the numbers came from, said plainly under the table.
+   *
+   * The census reaches back years and covers every asset and every size; the
+   * sample reaches back as far as this app has been running. Reading a number
+   * without knowing which of those produced it is how a reader ends up trusting
+   * a week of data as though it were a year of it.
+   */
+  const provenance = usingCensus
+    ? `Published exchange wallet balances, daily${netflow.balances.since
+      ? ` since ${escapeHtml(netflow.balances.since)}` : ''} — every asset, every size.
+       Priced at one date throughout, so a coin repricing is never read as a coin moving.
+       ${(netflow.balances.venues ?? []).length} exchanges.`
+    : `This app's own record of large transfers, ${recordHours
+      ? `reaching back ${recordHours < 48 ? `${Math.max(1, Math.round(recordHours))}h`
+        : `${Math.round(recordHours / 24)}d`}` : 'which is still filling'}.
+       ${netflow?.labels ?? 0} exchange addresses across ${(netflow?.venues ?? []).length} venues.`;
 
   box.innerHTML = `<div class="cw-card-hd">Exchange netflow<span>whole market · all
       assets in USD · never filtered by the selectors below</span></div>
@@ -232,11 +276,7 @@ function drawNetflow() {
     ${periods.map(row).join('')}
     <div class="cw-nf-foot">
       Onto exchanges is selling pressure · off them is accumulation. Neither is a
-      confirmed trade.${recordHours && recordHours < 8784
-  ? ` <span class="cw-nf-partial">*</span> record reaches ${recordHours < 48
-    ? `${Math.max(1, Math.round(recordHours))}h` : `${Math.round(recordHours / 24)}d`}` : ''}
-      <br>Updated ${escapeHtml(at)} · ${netflow?.labels ?? 0} exchange addresses
-      across ${(netflow?.venues ?? []).length} venues
+      confirmed trade.<br>${provenance}<br>Updated ${escapeHtml(at)}
     </div>`;
 
   box.onclick = (e) => {
