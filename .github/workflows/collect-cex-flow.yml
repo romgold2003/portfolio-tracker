@@ -12,7 +12,7 @@
 #
 # Once a day is plenty. The underlying data only moves once a day.
 
-name: Collect exchange flow history
+name: Collect market history
 
 on:
   schedule:
@@ -48,3 +48,15 @@ jobs:
           fi
 
           node scripts/collect-cex-flow.mjs "$BASE" "$KEY"
+
+      - name: Build the stablecoin dominance history
+        env:
+          BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
+          KEY: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$KEY" ]; then exit 0; fi
+
+          # One paced request per coin for the denominator. Slow on purpose:
+          # CoinGecko's free tier is generous but not unlimited, and this job
+          # has twenty-five minutes and needs about two.
+          node scripts/collect-stablecoins.mjs "$BASE" "$KEY"

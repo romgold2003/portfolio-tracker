@@ -27,6 +27,8 @@ import { rankHolders, exitEvents } from '../_lib/topholders.js';
 import { classifyActivity, linkSwaps } from '../_lib/activity.js';
 import { withBudget } from '../_lib/budget.js';
 import * as cexflow from '../_lib/cexflow.js';
+import * as stablecoins from '../_lib/stablecoins.js';
+import * as holderhistory from '../_lib/holderhistory.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 
 const SESSION_COOKIE = 'pt_session';
@@ -266,6 +268,117 @@ export function resetPollClock() {
   lastPoll = { failed: [], written: 0, at: 0 };
 }
 
+/**
+ * How long a holder card will wait for the "still holding?" answers.
+ *
+ * The indexer takes about fifteen seconds per holder and there are
+ * twenty-five of them, so the first view of a coin cannot have them all. It
+ * gets what fits, keeps them for the day, and the next refresh has the rest.
+ * The balances themselves are never delayed by this.
+ */
+const HOLDER_BUDGET_MS = 9_000;
+
+/** How many holders to ask about at once. Enough to be quick, few enough to be polite. */
+const HOLDER_CONCURRENCY = 6;
+
+/**
+ * Work out what each ranked holder has done over the windows, reusing whatever
+ * was already worked out today.
+ *
+ * Failures are per holder: an indexer refusing one address costs that address
+ * its answer and nothing else. That is why this settles rather than races.
+ */
+async function enrichHolders({ host, chain, token, ranked, now }) {
+  const cached = await holderhistory.readCache({ chain, token, now }).catch(() => new Map());
+  const todo = ranked.filter((h) => !cached.has(String(h.address).toLowerCase()));
+
+  for (let i = 0; i < todo.length; i += HOLDER_CONCURRENCY) {
+    const batch = todo.slice(i, i + HOLDER_CONCURRENCY);
+    await Promise.allSettled(batch.map(async (h) => {
+      /**
+       * Paged for the longest window, not the shortest.
+       *
+       * Stopping at thirty days left the ninety-day column permanently
+       * unanswerable for every wallet busy enough to need a second page.
+       */
+      const longest = Math.max(...holderhistory.WINDOWS.map((w) => w.days));
+      const { transfers, complete } = await holderhistory.fetchTransfers({
+        host, holder: h.address, token, reachBack: longest, maxPages: 5, now,
+      });
+
+      const moves = {};
+      for (const w of holderhistory.WINDOWS) {
+        moves[w.id] = holderhistory.movementOf({
+          transfers,
+          unitsNow: h.units,
+          address: h.address,
+          days: w.days,
+          now,
+          complete,
+        });
+      }
+
+      cached.set(String(h.address).toLowerCase(), moves);
+      await holderhistory.writeCache({ chain, token, holder: h.address, moves, now })
+        .catch(() => {});
+    }));
+  }
+
+  // Cheap, and it stops the table growing a row per holder per coin per day.
+  holderhistory.prune({ now }).catch(() => {});
+  return cached;
+}
+
+/**
+ * Stablecoin dominance: the number now, ranked against the year behind it.
+ *
+ * The reading is the point of the box. Stablecoins are money that entered
+ * crypto and has not been spent, so a high share means buying power waiting
+ * and a low share means it has already gone in.
+ *
+ * Today comes from the live market caps every time, so the number is never
+ * stale and never waits on a collector. The stored series is used only for the
+ * half that actually needs history — whether that number is high or low.
+ *
+ * Bounded, because the live half asks CoinGecko and CoinGecko rate limits. It
+ * held the whole netflow answer for ninety-seven seconds once. The stored
+ * value is the fallback, which is a day old at worst.
+ */
+const DOMINANCE_BUDGET_MS = 4_000;
+
+async function liveDominance(now) {
+  const [stored, coins] = await Promise.all([
+    stablecoins.read({ now }).catch(() => null),
+    topCoins().then((t) => t.coins).catch(() => []),
+  ]);
+
+  const live = await stablecoins.current({ coins, now }).catch(() => null);
+  if (!live) return forWire(stored);
+  if (!stored) return live;
+
+  // The stored answer carries the ranking; the live one carries the number.
+  return {
+    ...stored,
+    ...live,
+    position: stablecoins.positionOf(live.dominance,
+      (stored.values ?? []).map((d) => ({ dominance: d }))) ?? stored.position,
+    values: undefined,
+  };
+}
+
+/**
+ * The full year of readings is for ranking against, never for the wire.
+ *
+ * It went out once — three hundred and sixty-five numbers the card has no use
+ * for, on every refresh — because the stripping only happened on the path
+ * where the live value had also arrived.
+ */
+function forWire(stables) {
+  if (!stables) return null;
+  const { values, ...rest } = stables;
+  return rest;
+}
+
 export default async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const resource = url.searchParams.get('resource') || 'feed';
@@ -315,6 +428,44 @@ export default async function handler(req, res) {
       return send(res, 200, { venue, written, skipped: rows.length - clean.length });
     } catch (err) {
       return fail(res, 500, `Could not store the exchange history (${err.message}).`);
+    }
+  }
+
+  /**
+   * The stablecoin dominance history, posted by the same daily collector.
+   *
+   * The numerator is one large published series and the denominator is one
+   * request per coin. Neither belongs in a request, so both are done where
+   * there is time and only the day-rows come back here.
+   */
+  if (resource === 'stablecoins' && req.method === 'POST') {
+    const expected = process.env.CRON_SECRET || '';
+    const given = url.searchParams.get('key') || '';
+    if (!expected) return fail(res, 503, 'No collector secret is configured.');
+    if (!timingSafeEqual(given, expected)) return fail(res, 401, 'Wrong key.');
+
+    let body;
+    try { body = await readJson(req); } catch { return fail(res, 400, 'That is not JSON.'); }
+
+    const rows = Array.isArray(body?.days) ? body.days : null;
+    if (!rows) return fail(res, 400, 'No days were sent.');
+    if (rows.length > 1_000) return fail(res, 400, 'Too many days in one request.');
+
+    const clean = [];
+    for (const r of rows) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r?.day ?? ''))) continue;
+      const stableUsd = Number(r.stableUsd);
+      const totalUsd = Number(r.totalUsd);
+      if (!(stableUsd > 0) || !(totalUsd > 0)) continue;
+      clean.push({ day: r.day, stableUsd, totalUsd });
+    }
+
+    try {
+      const written = await stablecoins.store(clean, { now: Date.now() });
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, { written, skipped: rows.length - clean.length });
+    } catch (err) {
+      return fail(res, 500, `Could not store the dominance history (${err.message}).`);
     }
   }
 
@@ -417,6 +568,16 @@ export default async function handler(req, res) {
           venues: balances.venues,
           since: balances.since,
         },
+        /**
+         * Stablecoin dominance rides along with this one.
+         *
+         * It belongs here rather than in its own request: both are questions
+         * about the whole market, neither is touched by any selector, and both
+         * change once a day. A second round trip for one number on the same
+         * clock would be a round trip for nothing.
+         */
+        stables: await withBudget(liveDominance(now), DOMINANCE_BUDGET_MS,
+          forWire(await stablecoins.read({ now }).catch(() => null))),
         at: now,
       });
     } catch (err) {
@@ -471,6 +632,28 @@ export default async function handler(req, res) {
         creator: info?.creator ?? null,
         limit: 25,
       });
+
+      /**
+       * Whether each of them is still holding — answered today.
+       *
+       * A balance is a running total of transfers, so it can be walked
+       * backwards from what is held now. That needs one indexed request per
+       * holder and the indexer takes about fifteen seconds, so it runs a few at
+       * a time, under a budget, and the answers are kept for the rest of the
+       * day. A first view of a coin may come back with some of them unfilled;
+       * the next refresh has the rest. Nothing waits.
+       */
+      const moves = await withBudget(
+        enrichHolders({ host, chain: reader.chain, token: reader.contract, ranked: ranked25, now }),
+        HOLDER_BUDGET_MS,
+        await holderhistory.readCache({ chain: reader.chain, token: reader.contract, now })
+          .catch(() => new Map()),
+      ).catch(() => new Map());
+
+      for (const h of ranked25) {
+        const m = moves.get(String(h.address).toLowerCase());
+        if (m) h.moves = m;
+      }
 
       /**
        * The lower table. Balance falls come from the holder record and the

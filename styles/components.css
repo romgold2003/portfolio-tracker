@@ -749,7 +749,8 @@ body.light{--wave-strength:0.34}
 }
 
 /* Top holder whales: who holds the most of the selected coin right now. */
-.cw-th-head,.cw-th-row{display:grid;grid-template-columns:20px minmax(0,1fr) 78px 68px 44px;
+.cw-th-head,.cw-th-row{display:grid;
+  grid-template-columns:20px minmax(0,1fr) 74px 62px 40px 78px;
   align-items:baseline;gap:0 6px;font-size:11px}
 .cw-th-head{font-size:9px;text-transform:uppercase;letter-spacing:0.04em;
   color:var(--text4);padding-bottom:4px;border-bottom:0.5px solid var(--input)}
@@ -828,3 +829,30 @@ body.light{--wave-strength:0.34}
   .cw-act-grid{grid-template-columns:92px minmax(0,1.4fr) 0 118px 54px}
   .cw-flow,.gam-head.cw-act-grid div:nth-child(3){display:none}
 }
+
+/* Stablecoin dominance, beside the panel's title. Small on purpose: it is one
+   slow number and a piece of context, not a table. */
+.cw-dom{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0}
+.cw-dom-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text4)}
+.cw-dom-val{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+.cw-dom-arrow{margin-left:3px;font-size:9px}
+.cw-dom-read{font-size:10px;color:var(--text3);white-space:nowrap;text-transform:none;
+  letter-spacing:0}
+.cw-dom-wait{font-size:10px;color:var(--text4)}
+/* A year of it, so the number has a shape behind it rather than a claim. */
+.cw-dom-spark{width:74px;height:22px;flex:0 0 auto}
+.cw-dom-spark polyline{fill:none;stroke:var(--text4);stroke-width:1.5;
+  vector-effect:non-scaling-stroke;stroke-linejoin:round}
+@media (max-width:900px){
+  /* The reading is the part worth keeping when there is no room for both. */
+  .cw-dom-spark,.cw-dom-lbl{display:none}
+}
+
+/* Is this whale still holding? The answer the card exists to give, so it gets
+   a column rather than a tooltip. */
+.cw-th-move{text-align:right;font-size:10px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.cw-th-movepct{display:block;font-size:9px;font-weight:400;color:var(--text4);
+  font-variant-numeric:tabular-nums}
+/* Not yet worked out, which is different from nothing to report. */
+.cw-th-wait{color:var(--text4);font-weight:400}

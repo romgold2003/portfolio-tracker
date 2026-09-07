@@ -30,6 +30,7 @@ import {
   explorerTx, explorerAddress, chainLabel,
   shortAddress, money, tokens,
   fetchNetflow, SIGNAL_TONE, fetchTopHolders, STATUS_TONE,
+  STANCE_TONE, percent, describeHolding, movePct,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -116,6 +117,21 @@ function drawTopHolders() {
       <span class="cw-th-units">${escapeHtml(tokens(h.units, h.symbol ?? symbol))}</span>
       <span class="cw-th-usd">${escapeHtml(h.usd == null ? '—' : money(h.usd))}</span>
       <span class="cw-th-pct">${h.pctSupply == null ? '—' : `${h.pctSupply}%`}</span>
+      ${(() => {
+    /**
+     * Still holding, or not. Walked back from today's balance through this
+     * wallet's own transfers, so it is answerable on the first view rather
+     * than after two days of snapshots.
+     */
+    const move = h.moves?.['30d'];
+    const d = describeHolding(move);
+    if (!d.status) {
+      return '<span class="cw-th-move cw-th-wait" title="Reading this wallet&#39;s history">…</span>';
+    }
+    const amount = movePct(move);
+    return `<span class="cw-th-move ${d.tone}" title="${escapeHtml(d.note)}">${
+      escapeHtml(d.status)}${amount ? `<span class="cw-th-movepct">${escapeHtml(amount)}</span>` : ''}</span>`;
+  })()}
     </div>`).join('')
     : `<div class="cw-card-empty">${loading ? 'Reading holders…'
       : 'No holder list for this coin yet.'}</div>`;
@@ -154,7 +170,7 @@ function drawTopHolders() {
 
   box.innerHTML = `${hd}
     <div class="cw-th-head">
-      <span>#</span><span>Holder</span><span>Amount</span><span>Value</span><span>Supply</span>
+      <span>#</span><span>Holder</span><span>Amount</span><span>Value</span><span>Supply</span><span>30d</span>
     </div>
     ${rows}
     ${excluded}
@@ -173,6 +189,65 @@ function drawTopHolders() {
  * Nothing here says bought or sold. Coins arriving on an exchange have not been
  * sold and may never be; they have only been put where selling is possible.
  */
+/**
+ * Stablecoin dominance: how much of the market is sitting in dollars.
+ *
+ * The reading is the whole point of the box. Stablecoins are money that has
+ * entered crypto and not yet been spent, so a **high** share means buying power
+ * is waiting on the sidelines with somewhere to go, and a **low** share means
+ * it has already been deployed and there is less left to push prices further.
+ *
+ * A percentage on its own would say nothing. Eleven percent is only high
+ * against what it has been, so what is shown is where today sits inside its own
+ * year — and until there is a year to sit inside, the percentile is left out
+ * rather than invented from a fortnight.
+ */
+function drawDominance() {
+  const box = el('cwDominance');
+  if (!box) return;
+
+  const s = netflow?.stables;
+  if (!s) {
+    box.innerHTML = loading
+      ? '<span class="cw-dom-wait">stablecoin dominance…</span>' : '';
+    return;
+  }
+
+  const p = s.position;
+  const tone = STANCE_TONE[p?.stance] ?? '';
+  const arrow = s.changed30d == null ? ''
+    : s.changed30d > 0.05 ? '▲' : s.changed30d < -0.05 ? '▼' : '·';
+
+  /** A year of dominance as a line, so the level has a shape behind it. */
+  const spark = (s.spark ?? []).length > 4 ? (() => {
+    const xs = s.spark;
+    const lo = Math.min(...xs);
+    const hi = Math.max(...xs);
+    const span = hi - lo || 1;
+    const points = xs.map((y, i) => `${(i / (xs.length - 1)) * 100},${
+      28 - ((y - lo) / span) * 24}`).join(' ');
+    return `<svg class="cw-dom-spark" viewBox="0 0 100 30" preserveAspectRatio="none"
+        aria-hidden="true"><polyline points="${points}" /></svg>`;
+  })() : '';
+
+  const title = [
+    `${money(s.stableUsd)} of ${money(s.totalUsd)} on ${s.day}`,
+    p ? `${p.percentile}th percentile of the last ${p.days} days (${
+      percent(p.low)}–${percent(p.high)})` : 'not enough history to rank it yet',
+    s.changed30d == null ? null
+      : `${s.changed30d > 0 ? '+' : ''}${s.changed30d.toFixed(2)} points in 30 days`,
+    'Stablecoin market cap over total crypto market cap. High is dry powder.',
+  ].filter(Boolean).join('\n');
+
+  box.innerHTML = `<span class="cw-dom-lbl">Stablecoin dominance</span>
+    <span class="cw-dom-val ${tone}" title="${escapeHtml(title)}">${
+  escapeHtml(percent(s.dominance))}<span class="cw-dom-arrow">${arrow}</span></span>
+    ${spark}
+    <span class="cw-dom-read ${tone}" title="${escapeHtml(title)}">${
+  p ? `${escapeHtml(p.reads)} · ${p.percentile}th pct`
+    : `building history — ${s.since ? `since ${escapeHtml(s.since)}` : 'day one'}`}</span>`;
+}
+
 function drawNetflow() {
   const box = el('cwNetflow');
   if (!box) return;
@@ -475,6 +550,7 @@ function draw() {
   drawWindow();
   drawBands();
   drawNetflow();
+  drawDominance();
   drawTopHolders();
 
   const name = el('cwName');

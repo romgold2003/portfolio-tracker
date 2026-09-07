@@ -311,3 +311,54 @@ export const ACTION_TONE = {
   'Internal Transfer': '',
   Unknown: '',
 };
+
+/**
+ * How much of the market is sitting in dollars, and what that reads as.
+ *
+ * Green when there is buying power waiting, red when it has already been
+ * spent. Neutral earns no colour, like every other reading on this page.
+ */
+export const STANCE_TONE = { Bullish: 'cw-in', Bearish: 'cw-out', Neutral: '' };
+
+/** "11.6%" — two significant places, because the third is noise on a slow signal. */
+export const percent = (n) => (Number.isFinite(n) ? `${n.toFixed(2)}%` : '—');
+
+/** Below this a change is the dust of an active wallet, not a decision. */
+const HOLD_MATERIAL_PCT = 2;
+
+/**
+ * Is this whale still holding?
+ *
+ * Worked out from the balance walked backwards through its own transfers, so
+ * it can be answered the first time anybody asks rather than after two days of
+ * snapshots. "Holding" is the common answer and is not hedged.
+ *
+ * A smaller position is never called a sale. Tokens leaving a wallet are not a
+ * sale — the same rule the rest of this page runs on — so this says the
+ * position shrank and stops there.
+ */
+export function describeHolding(move) {
+  if (!move) return { status: '', tone: '', note: 'Still being worked out.' };
+  if (!move.covered) {
+    return {
+      status: '—',
+      tone: '',
+      note: 'This wallet moves too often for one page of history to reach back that far.',
+    };
+  }
+  if (move.pct == null || Math.abs(move.pct) < HOLD_MATERIAL_PCT) {
+    return move.transfers === 0
+      ? { status: 'Untouched', tone: '', note: 'Not one movement in this window.' }
+      : { status: 'Holding', tone: '', note: 'Moved, but the position is the size it was.' };
+  }
+  return move.pct > 0
+    ? { status: 'Adding', tone: 'cw-in', note: 'The position grew over this window.' }
+    : { status: 'Reducing', tone: 'cw-out', note: 'The position shrank. Where it went is a separate question.' };
+}
+
+/** "+12.4%", "−8.1%", or nothing when there is no answer to give. */
+export function movePct(move) {
+  if (!move?.covered || move.pct == null) return '';
+  if (Math.abs(move.pct) < 0.05) return '0%';
+  return `${move.pct > 0 ? '+' : '−'}${Math.abs(move.pct).toFixed(1)}%`;
+}
