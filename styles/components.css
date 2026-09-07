@@ -813,3 +813,40 @@ body.light{--wave-strength:0.34}
   .cw-hold-grid{grid-template-columns:minmax(0,1fr) 0 44px 104px 0}
   .cw-hold-grid > div:nth-child(2),.cw-hold-now{display:none}
 }
+
+/* The verdict: one answer, with the four signals under it so a call built on
+   two can never look like a call built on four. */
+.cw-verdict{border:0.5px solid var(--border2);border-radius:8px;padding:12px 14px;margin:0 0 10px}
+.cw-verdict-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+.cw-verdict-word{font-size:18px;font-weight:600;color:var(--text)}
+.cw-verdict-count{font-size:11px;color:var(--text3)}
+.cw-flag{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--red-bg);
+  color:var(--red);border:0.5px solid var(--red-br)}
+.cw-sigs{display:grid;gap:3px}
+.cw-sig{display:grid;grid-template-columns:16px 168px 104px minmax(0,1fr);
+  align-items:baseline;gap:0 8px;font-size:12px}
+/* A signal with nothing to say abstains rather than voting neutral, and looks
+   like it: present, quiet, not counted. */
+.cw-sig.is-quiet{opacity:0.45}
+.cw-sig-dot{font-size:9px;text-align:center}
+.cw-sig-name{color:var(--text2)}
+.cw-sig-val{font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+.cw-sig-note{color:var(--text4);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Exchange flow across every window at once. */
+.cw-flows{border:0.5px solid var(--border2);border-radius:8px;padding:6px 12px;margin:0 0 12px}
+.cw-flow-row{display:grid;grid-template-columns:44px 110px 110px 168px minmax(0,1fr);
+  align-items:baseline;gap:0 10px;font-size:12px;padding:5px 0;
+  border-top:0.5px solid var(--input)}
+.cw-flow-row:first-child{border-top:0}
+.cw-flow-row.is-quiet{opacity:0.4}
+.cw-flow-win{font-weight:600;color:var(--text)}
+.cw-flow-in,.cw-flow-out{color:var(--text3);font-variant-numeric:tabular-nums}
+.cw-flow-net{font-weight:600;font-variant-numeric:tabular-nums}
+.cw-flow-read{color:var(--text4);font-size:11px}
+@media (max-width:640px){
+  .cw-sig{grid-template-columns:16px minmax(0,1fr) 92px}
+  .cw-sig-note{display:none}
+  .cw-flow-row{grid-template-columns:40px minmax(0,1fr) 128px}
+  .cw-flow-out,.cw-flow-read{display:none}
+}

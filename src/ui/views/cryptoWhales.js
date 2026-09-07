@@ -27,6 +27,7 @@ import {
   explorerTx, explorerAddress, chainLabel, directionOf, partyName, isVoid,
   shortAddress, money, tokens, fetchFlow, FLOW_WINDOWS, TREND_TONE,
   fetchHolders, fetchLeverage, HOLDER_KIND,
+  fetchVerdict, fetchFlows, VERDICT_TONE,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -51,6 +52,8 @@ let openRank = null;
 /** The opened row's leverage: null while it is being asked for. */
 let openLeverage = null;
 let holders = null;
+let reading = null;
+let flowsByWindow = null;
 let win = '1m';
 
 /** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
@@ -258,36 +261,6 @@ function drawCoins() {
 }
 
 /**
- * What the whales collectively did, above the list of who did it.
- *
- * The trend word is arithmetic, not a mood: it comes from how one-sided the
- * money was and how many wallets were on the heavy side. Both are shown beside
- * it so it can be argued with, and a reading built on fewer than three wallets
- * says so rather than presenting itself as a consensus.
- */
-/**
- * What the chosen window actually reached back over.
- *
- * A window longer than the record returns exactly what the shorter one did, and
- * with nothing said the buttons look broken — which is what they looked like:
- * the record was a day old, so 1W, 1M, 3M, 1Y and All were all the same seven
- * rows. Saying how far back the collecting goes turns an apparently dead button
- * into an honest one.
- */
-function windowNote() {
-  const label = FLOW_WINDOWS.find((w) => w.id === win)?.label ?? win;
-  const since = flow?.observed?.since;
-  if (!since) return `over ${label}`;
-  const days = Math.floor((Date.now() / 1000 - since) / 86400);
-  const span = days >= 1 ? `${days}d` : `${Math.max(1, Math.round((Date.now() / 1000 - since) / 3600))}h`;
-  const hours = FLOW_WINDOWS.findIndex((w) => w.id === win);
-  const covered = { 0: 7, 1: 31, 2: 92, 3: 366, 4: Infinity }[hours] ?? 31;
-  return days < covered
-    ? `over ${label} — but the record only goes back ${span}`
-    : `over ${label}`;
-}
-
-/**
  * Holders whose balance moved, insiders first.
  *
  * A team multisig shedding tokens and an anonymous whale shedding tokens look
@@ -336,51 +309,107 @@ function holderRows() {
   }).join('')}`;
 }
 
+/**
+ * The answer, and the working behind it.
+ *
+ * This replaced a summary line that reported one number — how one-sided the
+ * whale flow was — and called it a trend. That was one signal wearing a
+ * verdict's clothes. This counts four independent ones and shows each, so a
+ * call built on two can never look like a call built on four.
+ */
 function drawSummary() {
   const box = el('cwSummary');
   if (!box) return;
-  const c = flow?.consensus;
-  const s = flow?.stealth;
 
-  if (!c || !c.participants) {
-    box.innerHTML = flow?.observed?.transfers
-      ? `<div class="cw-note">Watching ${flow.observed.transfers} recorded transfers.
-         No wallet has a net position over $1M in this window yet.</div>`
-      : '';
+  const v = reading?.verdict;
+  if (!v) {
+    box.innerHTML = loading ? '<div class="cw-note">Reading the chains…</div>' : '';
     return;
   }
 
-  const tone = TREND_TONE[c.trend] ?? '';
-  const stealthBlock = s ? `
-    <div class="cw-stealth">
-      <div class="cw-stealth-hd">Stealth accumulation detected</div>
-      <div class="cw-stealth-body">
-        <b>${s.wallets}</b> wallet${s.wallets === 1 ? '' : 's'} ·
-        <b>${s.transfers}</b> transfers ·
-        combined net <b class="cw-in">+${escapeHtml(money(s.netUsd))}</b> ·
-        largest single transfer only ${escapeHtml(money(s.largestUsd))}
-        <div class="cw-stealth-note">Not one of them would have appeared in the
-          transaction tracker. ${escapeHtml(s.symbols.slice(0, 3)
-    .map((x) => `${x.symbol} ${money(x.usd)}`).join(' · '))}</div>
-      </div>
-    </div>` : '';
+  const tone = VERDICT_TONE[v.trend] ?? '';
+  const s = reading?.stealth;
+
+  const rows = v.signals.map((sg) => {
+    const quiet = sg.vote === 0;
+    const amount = Number.isFinite(sg.value) && !quiet
+      ? (sg.value > 0 ? '+' : '') + money(sg.value) : '—';
+    return `<div class="cw-sig${quiet ? ' is-quiet' : ''}">
+      <span class="cw-sig-dot ${quiet ? '' : sg.vote > 0 ? 'cw-in' : 'cw-out'}">${
+  quiet ? '·' : sg.vote > 0 ? '▲' : '▼'}</span>
+      <span class="cw-sig-name">${escapeHtml(sg.label)}</span>
+      <span class="cw-sig-val ${quiet ? '' : sg.vote > 0 ? 'cw-in' : 'cw-out'}">${escapeHtml(amount)}</span>
+      <span class="cw-sig-note">${escapeHtml(quiet ? 'nothing to say yet' : sg.detail ?? sg.reads)}</span>
+    </div>`;
+  }).join('');
 
   box.innerHTML = `
-    <div class="cw-summary">
-      <div class="cw-trend ${tone}">${escapeHtml(c.trend)}${
-  c.thin ? '<span class="cw-thin">thin — under 3 wallets</span>' : ''}</div>
-      <div class="cw-stats">
-        <span>Net flow <b class="${c.netUsd >= 0 ? 'cw-in' : 'cw-out'}">${
-  escapeHtml((c.netUsd >= 0 ? '+' : '−') + money(Math.abs(c.netUsd)))}</b></span>
-        <span>Accumulating <b>${c.accumulating}</b></span>
-        <span>Distributing <b>${c.distributing}</b></span>
-        <span>Still holding <b>${c.holding}</b></span>
-        <span>Transfers <b>${c.transfers}</b></span>
-        <span title="Net over gross: how one-sided the money was">Tilt <b>${
-  (c.tilt * 100).toFixed(0)}%</b></span>
-        <span class="cw-scope" title="The trend counts every wallet over $500k, not only the ones large enough for the table below">across all wallets over $500k</span>
+    <div class="cw-verdict">
+      <div class="cw-verdict-hd">
+        <span class="cw-verdict-word ${tone}">${escapeHtml(v.trend)}</span>
+        <span class="cw-verdict-count">${v.heard
+    ? `${Math.max(v.bullish, v.bearish)} of ${v.heard} signals agree`
+    : 'no signal has enough data yet'}${v.heard && v.heard < 3 ? ' · thin' : ''}</span>
+        ${v.insiderSelling ? '<span class="cw-flag">insider selling</span>' : ''}
       </div>
-    </div>${stealthBlock}`;
+      <div class="cw-sigs">${rows}</div>
+    </div>
+    ${s ? `<div class="cw-stealth">
+      <div class="cw-stealth-hd">Stealth accumulation</div>
+      <div class="cw-stealth-body"><b>${s.wallets}</b> wallets · <b>${s.transfers}</b> transfers ·
+        net <b class="cw-in">+${escapeHtml(money(s.netUsd))}</b> · largest single transfer only
+        ${escapeHtml(money(s.largestUsd))}</div>
+    </div>` : ''}`;
+}
+
+function drawFlows() {
+  const box = el('cwFlows');
+  if (!box) return;
+  const windows = flowsByWindow?.windows ?? [];
+  const per = flowsByWindow?.flows ?? {};
+  if (!windows.length) { box.innerHTML = ''; return; }
+
+  /** One line per window: what went on, what came off, and the balance. */
+  const line = (w) => {
+    const list = per[w.id] ?? [];
+    const inUsd = list.reduce((a, f) => a + f.inUsd, 0);
+    const outUsd = list.reduce((a, f) => a + f.outUsd, 0);
+    const net = inUsd - outUsd;
+    const gross = inUsd + outUsd;
+    const pct = gross > 0 ? Math.round((net / gross) * 1000) / 10 : 0;
+    const bullish = net < 0;
+    return `<div class="cw-flow-row${gross > 0 ? '' : ' is-quiet'}">
+      <span class="cw-flow-win">${escapeHtml(w.label)}</span>
+      <span class="cw-flow-in">in ${escapeHtml(money(inUsd))}</span>
+      <span class="cw-flow-out">out ${escapeHtml(money(outUsd))}</span>
+      <span class="cw-flow-net ${gross > 0 ? (bullish ? 'cw-in' : 'cw-out') : ''}">${
+  gross > 0 ? `${net > 0 ? '+' : ''}${escapeHtml(money(net))} · ${pct > 0 ? '+' : ''}${pct}%` : '—'}</span>
+      <span class="cw-flow-read">${gross > 0
+    ? (bullish ? 'leaving exchanges' : 'arriving on exchanges') : 'nothing recorded'}</span>
+    </div>`;
+  };
+
+  box.innerHTML = `<div class="cw-section-hd">Exchange flow<span>coins leaving is
+      accumulation · arriving is selling pressure</span></div>
+    <div class="cw-flows">${windows.map(line).join('')}</div>`;
+}
+
+/**
+ * What the chosen window actually reached back over.
+ *
+ * A window longer than the record returns exactly what the shorter one did, and
+ * with nothing said the buttons look broken. Saying how far back the collecting
+ * goes turns an apparently dead button into an honest one.
+ */
+function windowNote() {
+  const label = FLOW_WINDOWS.find((w) => w.id === win)?.label ?? win;
+  const since = reading?.observed?.since ?? flow?.observed?.since;
+  if (!since) return `over ${label}`;
+  const secs = Date.now() / 1000 - since;
+  const days = Math.floor(secs / 86400);
+  const span = days >= 1 ? `${days}d` : `${Math.max(1, Math.round(secs / 3600))}h`;
+  const covered = { '1w': 7, '1m': 31, '3m': 92, '1y': 366, all: Infinity }[win] ?? 31;
+  return days < covered ? `over ${label} — record goes back ${span}` : `over ${label}`;
 }
 
 function drawWindow() {
@@ -443,6 +472,7 @@ function draw() {
   drawBands();
   drawCoins();
   drawSummary();
+  drawFlows();
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
@@ -540,20 +570,24 @@ async function load() {
   loading = !flow && !feed;
   draw();
 
-  const [answer, next, held] = await Promise.all([
-    fetchFlow({ symbol, window: win, band }),
+  const [read, next, strip] = await Promise.all([
+    fetchVerdict({ symbol, window: win, band }),
     fetchTransfers({ symbol, band }),
-    fetchHolders({ symbol, window: win }),
+    fetchFlows({ symbol }),
   ]);
   loading = false;
   if (next?.rows?.length || !feed || next?.provider) feed = next;
-  if (held?.error == null || !holders) holders = held;
+  if (read?.error == null || !reading) reading = read;
+  if (strip?.error == null || !flowsByWindow) flowsByWindow = strip;
   /**
+   * One request now carries what three used to.
+   *
    * A refresh that came back empty replaces what was there, and it should: the
    * band or the window may have just changed, and holding the previous answer
-   * would show a filter's results under a different filter's label.
+   * would show one filter's results under another filter's label.
    */
-  if (answer?.error == null || !flow) flow = answer;
+  flow = reading ? { ranked: reading.ranked, observed: reading.observed } : flow;
+  holders = reading ? { moves: reading.holders } : holders;
   lastAt = Date.now();
   draw();
 }

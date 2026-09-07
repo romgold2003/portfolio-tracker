@@ -371,3 +371,43 @@ export const HOLDER_KIND = {
   contract: { label: 'Contract', tone: '', title: 'A contract, not a person: a pool, a bridge or a staking vault' },
   wallet: { label: 'Wallet', tone: '', title: 'An ordinary address with no attribution' },
 };
+
+/**
+ * The whole reading for one asset, in one request.
+ *
+ * The verdict, the exchange flows behind it, the holders, the ranking and the
+ * stealth alert are four views of one book. Asked separately they would
+ * re-aggregate the same rows and, worse, could answer from four different
+ * moments — so the page that shows them together fetches them together.
+ */
+export async function fetchVerdict({ symbol, window = '1m', band = 'all', signal } = {}) {
+  const { min, max } = bandDef(band);
+  const params = new URLSearchParams({ resource: 'verdict', window, min: String(min) });
+  if (Number.isFinite(max)) params.set('max', String(max));
+  if (symbol) params.set('symbol', symbol);
+  try {
+    return await get(params.toString(), signal);
+  } catch (err) {
+    return { error: err.message, verdict: null, flows: [], holders: [], ranked: [] };
+  }
+}
+
+/** Exchange netflow across every window at once, for the comparison strip. */
+export async function fetchFlows({ symbol, signal } = {}) {
+  const params = new URLSearchParams({ resource: 'flows' });
+  if (symbol) params.set('symbol', symbol);
+  try {
+    return await get(params.toString(), signal);
+  } catch (err) {
+    return { flows: {}, error: err.message };
+  }
+}
+
+/** How a verdict should read on screen. Neutral earns no colour. */
+export const VERDICT_TONE = {
+  'Strong accumulation': 'cw-in',
+  Accumulation: 'cw-in',
+  Neutral: '',
+  Distribution: 'cw-out',
+  'Strong distribution': 'cw-out',
+};

@@ -22,6 +22,8 @@ import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
 import * as store from '../_lib/whalestore.js';
 import * as holders from '../_lib/holders.js';
 import { positionsFor } from '../_lib/leverage.js';
+import { loadExchanges, netflow, exchangeOf, VENUES } from '../_lib/exchanges.js';
+import { verdictFor, isStable } from '../_lib/verdict.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
@@ -413,6 +415,119 @@ export default async function handler(req, res) {
     }
   }
 
+  /**
+   * The whole reading for one asset, in one request.
+   *
+   * Exchange flow, holder changes, whale positions and the verdict that weighs
+   * them are four views of one book. Asking separately would re-read the same
+   * rows four times and, worse, could answer from four different moments.
+   */
+  if (resource === 'verdict') {
+    const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+    if (symbol && !/^[A-Z0-9]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
+    const win = windowDef(url.searchParams.get('window') || '1m');
+    await topUp(Date.now());
+
+    try {
+      const rows = await store.read({ minUsd: 0, limit: 50_000 });
+
+      /**
+       * The label set is allowed to fail on its own. Without it the exchange
+       * and stablecoin signals abstain, which is a thinner verdict and not a
+       * wrong one — as opposed to guessing that an unlabelled address is an
+       * exchange, which would be.
+       */
+      let byAddress = null;
+      try { byAddress = await loadExchanges(); } catch { /* those signals abstain */ }
+
+      const days = Number.isFinite(win.hours) ? Math.ceil(win.hours / 24) : holders.RETAIN_DAYS;
+      const [holderMoves, prices] = await Promise.all([
+        holders.changes({ days, symbol: symbol || null }).catch(() => []),
+        priceMap().catch(() => null),
+      ]);
+
+      const flows = byAddress
+        ? netflow(rows, { byAddress, hours: win.hours, symbol: symbol || null })
+        : [];
+
+      /** Stablecoins are read together: it is buying power, not a position. */
+      const stableRows = byAddress
+        ? netflow(rows, { byAddress, hours: win.hours }).filter((f) => isStable(f.symbol))
+        : [];
+      const stables = stableRows.length
+        ? stableRows.reduce((a, f) => ({
+          symbol: 'stablecoins',
+          inUsd: a.inUsd + f.inUsd,
+          outUsd: a.outUsd + f.outUsd,
+          netUsd: a.netUsd + f.netUsd,
+          grossUsd: a.grossUsd + f.grossUsd,
+          transfers: a.transfers + f.transfers,
+        }), { inUsd: 0, outUsd: 0, netUsd: 0, grossUsd: 0, transfers: 0 })
+        : null;
+
+      const wallets = accumulation(rows, {
+        hours: win.hours, symbol: symbol || null, minTransfers: 2,
+      });
+
+      const verdict = verdictFor({
+        symbol: symbol || null,
+        flow: flows.find((f) => !symbol || f.symbol === symbol) ?? null,
+        stables,
+        holders: holderMoves,
+        wallets,
+      });
+
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, {
+        window: win.id,
+        windows: WINDOWS.map((w) => ({ id: w.id, label: w.label })),
+        symbol: symbol || null,
+        verdict,
+        flows: flows.slice(0, 12),
+        stables,
+        holders: holderMoves.slice(0, 25),
+        ranked: ranked(wallets, {
+          min: Math.max(WHALE_FLOOR_USD, Number(url.searchParams.get('min')) || 0),
+          max: (() => {
+            const m = Number(url.searchParams.get('max'));
+            return Number.isFinite(m) && m > 0 ? m : Infinity;
+          })(),
+          prices,
+        }),
+        stealth: stealth(wallets, { displayFloor: FLOOR_USD }),
+        labels: byAddress ? byAddress.size : 0,
+        venues: Object.values(VENUES),
+        observed: {
+          transfers: rows.length,
+          since: rows.length ? Math.min(...rows.map((r) => r.at)) : null,
+        },
+        at: Date.now(),
+      });
+    } catch (err) {
+      return fail(res, 500, `Could not build the reading (${err.message}).`);
+    }
+  }
+
+  /** Exchange netflow on its own, for every window at once. */
+  if (resource === 'flows') {
+    const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+    if (symbol && !/^[A-Z0-9]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
+    await topUp(Date.now());
+
+    try {
+      const rows = await store.read({ minUsd: 0, limit: 50_000 });
+      const byAddress = await loadExchanges();
+      const out = {};
+      for (const w of WINDOWS) {
+        out[w.id] = netflow(rows, { byAddress, hours: w.hours, symbol: symbol || null });
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, { windows: WINDOWS.map((w) => ({ id: w.id, label: w.label })), flows: out });
+    } catch (err) {
+      return fail(res, 502, `Could not read the exchange labels (${err.message}).`);
+    }
+  }
+
   if (resource !== 'feed') return fail(res, 400, 'No such resource.');
 
   const now = Date.now();
@@ -434,6 +549,23 @@ export default async function handler(req, res) {
      * leaving a leg that knows it was a swap and cannot say what for.
      */
     const all = linkSwaps(await store.read({ symbol: symbol || null, minUsd: 0, limit: 4_000 }));
+
+    /**
+     * Name the exchanges on the way out.
+     *
+     * Applied at read time rather than when the row was written, so it
+     * reaches every transfer already in the store rather than only the ones
+     * recorded after the label set existed.
+     */
+    try {
+      const byAddress = await loadExchanges();
+      for (const r of all) {
+        const to = exchangeOf(r.to?.address, byAddress);
+        const from = exchangeOf(r.from?.address, byAddress);
+        if (to) { r.to.owner = to.name; r.to.ownerType = "exchange"; }
+        if (from) { r.from.owner = from.name; r.from.ownerType = "exchange"; }
+      }
+    } catch { /* unlabelled is the honest fallback */ }
     const rows = all.filter((r) => r.usd >= minUsd && r.usd < maxUsd).slice(0, 200);
     const counts = await store.countsBySymbol({ minUsd: FLOOR_USD });
 
