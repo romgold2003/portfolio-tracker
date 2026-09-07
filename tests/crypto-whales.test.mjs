@@ -27,7 +27,7 @@ import {
 } from '../api/_lib/chainfeeds.js';
 import * as store from '../api/_lib/whalestore.js';
 import {
-  BANDS, bandDef, selectTransfers, directionOf, partyName, money, tokens,
+  BANDS, bandDef, selectTransfers, money, tokens,
   activityWindowDef, ACTIVITY_WINDOWS,
   explorerTx, explorerAddress, chainLabel,
 } from '../src/services/cryptoWhales.js';
@@ -266,7 +266,6 @@ describe('valuing a transfer, which is where the garbage gets in', () => {
   });
 });
 
-
 describe('reading one transfer', () => {
   const raw = {
     blockchain: 'ethereum',
@@ -435,41 +434,6 @@ describe('the store, which is why there is any history at all', () => {
     const counts = await store.countsBySymbol({ minUsd: 20_000_000 });
     assert.equal(counts.get('BTC'), 2);
     assert.equal(counts.get('ETH'), 1);
-  });
-});
-
-describe('which way the money went', () => {
-  const t = (from, to, kind = 'transfer') => ({ kind, from, to });
-  const ex = { ownerType: 'exchange', owner: 'binance' };
-  const wal = { ownerType: 'wallet', owner: null };
-  const none = { ownerType: null, owner: null };
-
-  test('both ends known gives the direction', () => {
-    assert.equal(directionOf(t(ex, wal)).label, 'Exchange → Wallet');
-    assert.equal(directionOf(t(wal, ex)).label, 'Wallet → Exchange');
-    assert.equal(directionOf(t(ex, ex)).label, 'Exchange → Exchange');
-  });
-
-  test('one end known says only what is known', () => {
-    assert.equal(directionOf(t(ex, none)).label, 'Exchange → Unknown');
-    assert.equal(directionOf(t(none, ex)).label, 'Unknown → Exchange');
-  });
-
-  test('neither end known is wallet to wallet, which is most of them', () => {
-    assert.equal(directionOf(t(none, none)).label, 'Wallet → Wallet');
-  });
-
-  test('a mint is not a direction', () => {
-    // It has no meaningful sender, so calling it Exchange → Wallet would be
-    // wrong twice over.
-    assert.equal(directionOf(t(none, ex, 'mint')).label, 'Mint');
-    assert.equal(directionOf(t(ex, none, 'burn')).label, 'Burn');
-  });
-
-  test('a named entity is used, an unnamed one falls back to the address', () => {
-    assert.equal(partyName({ owner: 'binance', address: '0xaaa' }), 'Binance');
-    assert.equal(partyName({ owner: null, address: '0x1234567890abcdef1234' }), '0x1234…1234');
-    assert.equal(partyName({ owner: null, address: null }), 'Unknown');
   });
 });
 

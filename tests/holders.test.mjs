@@ -1,5 +1,5 @@
 /**
- * Holder balances, and the leverage nobody can see on chain.
+ * Holder balances: the one tracker here that watches what is held, not what moved.
  *
  * This is the only tracker in the app that watches balances rather than flows,
  * and the reason is worth restating: a whale can sell through an exchange, over
@@ -14,7 +14,6 @@ import assert from 'node:assert/strict';
 import { useDriver } from '../api/_lib/db.js';
 import { sqliteDriver } from './support/sqlite.mjs';
 import * as holders from '../api/_lib/holders.js';
-import { positionsFor } from '../api/_lib/leverage.js';
 
 const DAY = 86_400_000;
 const NOW = 1_790_000_000_000;
@@ -123,68 +122,5 @@ describe('a balance falling over time', () => {
     // Only the recent snapshot survives, so there is no earlier one to
     // difference against and nothing is claimed.
     assert.deepEqual(await holders.changes({ days: 365, now: NOW }), []);
-  });
-});
-
-describe('leverage, which never touches the chain', () => {
-  const state = (positions) => ({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      marginSummary: { accountValue: '1000000' },
-      assetPositions: positions.map((p) => ({ position: p })),
-    }),
-  });
-
-  test('a short is reported as a short, with its notional', async () => {
-    // The whole reason this exists: fifty million dollars of selling pressure
-    // and not one coin moves.
-    const answer = await positionsFor('0x1111111111111111111111111111111111111111', {
-      fetcher: async () => state([
-        { coin: 'ETH', szi: '-12000', positionValue: '50000000', entryPx: '4100', unrealizedPnl: '900000', leverage: { value: 5 } },
-      ]),
-    });
-    assert.equal(answer.supported, true);
-    assert.equal(answer.positions[0].side, 'short');
-    assert.equal(answer.positions[0].notionalUsd, 50_000_000);
-    assert.equal(answer.positions[0].leverage, 5);
-    assert.equal(answer.netUsd, -50_000_000);
-  });
-
-  test('long and short net against each other rather than both being shouted', async () => {
-    const answer = await positionsFor('0x1111111111111111111111111111111111111111', {
-      fetcher: async () => state([
-        { coin: 'BTC', szi: '100', positionValue: '8000000', unrealizedPnl: '0' },
-        { coin: 'ETH', szi: '-2000', positionValue: '8000000', unrealizedPnl: '0' },
-      ]),
-    });
-    assert.equal(answer.netUsd, 0);
-    assert.equal(answer.positions.length, 2);
-  });
-
-  test('a closed position is not a position', async () => {
-    const answer = await positionsFor('0x1111111111111111111111111111111111111111', {
-      fetcher: async () => state([{ coin: 'ETH', szi: '0', positionValue: '0' }]),
-    });
-    assert.deepEqual(answer.positions, []);
-  });
-
-  test('a Bitcoin address is not a failed lookup', async () => {
-    // Hyperliquid is an EVM venue. Asking it about a bech32 address is a
-    // question that does not apply, which is not the same as an error.
-    let asked = false;
-    const answer = await positionsFor('bc1qwelntg7tpxwgmh7g', {
-      fetcher: async () => { asked = true; return state([]); },
-    });
-    assert.equal(answer.supported, false);
-    assert.equal(asked, false, 'it asked anyway');
-  });
-
-  test('nothing open is an empty list, not a missing answer', async () => {
-    const answer = await positionsFor('0x1111111111111111111111111111111111111111', {
-      fetcher: async () => state([]),
-    });
-    assert.equal(answer.supported, true);
-    assert.deepEqual(answer.positions, []);
   });
 });

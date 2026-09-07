@@ -251,3 +251,65 @@ export function classifyActivity(t, { byAddress = null, subject = null } = {}) {
     note: 'Moved between wallets — nothing observable happened to it',
   };
 }
+
+/* ── pairing the two legs of a swap ─────────────────────────────────────── */
+
+/**
+ * What was traded for what, recovered from the transaction the legs share.
+ *
+ * A row is one asset moving, so no single row can say "USDT for Bitcoin". The
+ * transaction can: a swap emits two transfers inside one hash, the trader
+ * sending one asset into a pool and the pool sending another back out, and the
+ * store already keeps the hash on every row.
+ *
+ * The join is the pool address, and **which end is the pool decides the
+ * direction**, which is the whole difficulty. A swap is a cycle — the trader
+ * sends USDT to the pool, the pool sends WETH to the trader — so following the
+ * addresses alone finds the cycle twice and reads it as "WETH for USDT" exactly
+ * as readily as "USDT for WETH". Half the answers would be backwards.
+ *
+ * So the shared address has to be a known contract for the link to be made at
+ * all. A pool is a contract and a trader is not, which settles it: the asset
+ * going into the contract was sold, the asset coming out was bought. Where
+ * neither end is a recognised contract the direction genuinely cannot be told
+ * from the chain, and nothing is claimed rather than a coin flip being printed
+ * as a fact.
+ *
+ * Both legs get the same answer, so whichever one the panel is drawing says the
+ * same thing about the trade. A transaction moving one asset is not a swap and
+ * is left alone rather than being described as trading something for itself.
+ */
+export function linkSwaps(rows) {
+  const byTx = new Map();
+  for (const r of rows ?? []) {
+    const key = `${r.blockchain}:${r.hash}`;
+    if (!byTx.has(key)) byTx.set(key, []);
+    byTx.get(key).push(r);
+  }
+
+  for (const legs of byTx.values()) {
+    if (legs.length < 2) continue;
+
+    for (const into of legs) {
+      const pool = into.to?.address ?? into.to_addr;
+      if (!pool) continue;
+
+      // What left the same address, in something else, in the same transaction.
+      const outOf = legs.find((l) => l !== into
+        && l.symbol !== into.symbol
+        && (l.from?.address ?? l.from_addr) === pool);
+      if (!outOf) continue;
+
+      // The pool must be recognisable as a contract, or the direction is a
+      // coin flip. See the note above.
+      const isPool = (into.to?.ownerType ?? into.to_type) === 'contract'
+        || (outOf.from?.ownerType ?? outOf.from_type) === 'contract';
+      if (!isPool) continue;
+
+      const swap = { from: into.symbol, to: outOf.symbol };
+      into.swap = swap;
+      outOf.swap = swap;
+    }
+  }
+  return rows ?? [];
+}
