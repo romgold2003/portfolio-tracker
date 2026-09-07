@@ -522,7 +522,18 @@ export default async function handler(req, res) {
         out[w.id] = netflow(rows, { byAddress, hours: w.hours, symbol: symbol || null });
       }
       res.setHeader('Cache-Control', 'no-store');
-      return send(res, 200, { windows: WINDOWS.map((w) => ({ id: w.id, label: w.label })), flows: out });
+      return send(res, 200, {
+        windows: WINDOWS.map((w) => ({ id: w.id, label: w.label, hours: w.hours })),
+        flows: out,
+        /**
+         * How far back the record actually goes.
+         *
+         * Without it five identical rows read as a broken control. They are
+         * not: a window longer than the record returns exactly what the
+         * shorter one did, and the only honest thing is to say so.
+         */
+        since: rows.length ? Math.min(...rows.map((r) => r.at)) : null,
+      });
     } catch (err) {
       return fail(res, 502, `Could not read the exchange labels (${err.message}).`);
     }

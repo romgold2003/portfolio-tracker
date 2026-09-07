@@ -369,6 +369,18 @@ function drawFlows() {
   const per = flowsByWindow?.flows ?? {};
   if (!windows.length) { box.innerHTML = ''; return; }
 
+  /**
+   * How much of each window the record can actually answer for.
+   *
+   * The dollars are the value each transfer had **when it moved**, not today's
+   * price, so a three-month figure is three months of real flow rather than
+   * three months of volume repriced at this morning's number. What it cannot
+   * do is reach back before the collector started, and a window that asks it
+   * to says so rather than quietly repeating the shorter one's answer.
+   */
+  const since = flowsByWindow?.since ?? null;
+  const recordHours = since ? (Date.now() / 1000 - since) / 3600 : 0;
+
   /** One line per window: what went on, what came off, and the balance. */
   const line = (w) => {
     const list = per[w.id] ?? [];
@@ -385,7 +397,12 @@ function drawFlows() {
       <span class="cw-flow-net ${gross > 0 ? (bullish ? 'cw-in' : 'cw-out') : ''}">${
   gross > 0 ? `${net > 0 ? '+' : ''}${escapeHtml(money(net))} · ${pct > 0 ? '+' : ''}${pct}%` : '—'}</span>
       <span class="cw-flow-read">${gross > 0
-    ? (bullish ? 'leaving exchanges' : 'arriving on exchanges') : 'nothing recorded'}</span>
+    ? `${bullish ? 'leaving exchanges' : 'arriving on exchanges'}${
+      Number.isFinite(w.hours) && recordHours && recordHours < w.hours
+        ? ` · record only reaches ${recordHours < 48
+          ? `${Math.max(1, Math.round(recordHours))}h`
+          : `${Math.round(recordHours / 24)}d`}` : ''}`
+    : 'nothing recorded'}</span>
     </div>`;
   };
 
