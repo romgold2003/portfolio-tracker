@@ -25,23 +25,42 @@
  * Original note follows.
  *
  *
- * Set from the measured distribution rather than from what sounds impressive.
- * Across 960 consecutive transfers off twenty token feeds, none reached twenty
- * million and one reached a million — so the old $20M–50M / $50M–100M / $100M+
- * bands were three empty boxes. A threshold nothing ever clears does not filter
- * noise, it just means the panel never says anything.
+ * Measured against the record twice, and moved both times.
  *
- * The top band stays open at twenty million so that a transfer of that size,
- * when one does come, still stands out as the outlier it is.
+ * They began at $20M–50M / $50M–100M / $100M+, which turned out to be three
+ * empty boxes: across 960 consecutive transfers not one reached twenty million.
+ * They then went to $1M–5M and below, which was the opposite mistake — of the
+ * fourteen positions the record held, **nine sat in that lowest band**. It was
+ * two thirds of the table and the least interesting two thirds, so the sizes
+ * worth telling apart were crowded into what was left.
+ *
+ * Five million is where a position stops being somebody rebalancing and starts
+ * being somebody deciding. The $100M+ band is empty most of the time and is
+ * meant to be: it is the one that says something unusual just happened, and it
+ * can only say that by being quiet the rest of the time.
+ *
+ * The **collection** floor is untouched at $250k and must stay there. It is not
+ * a display setting — a five-million-dollar position built quietly out of
+ * quarter-million pieces only exists if the pieces were kept.
  */
 export const BANDS = [
-  { id: 'big', label: '$1M–5M', min: 1_000_000, max: 5_000_000 },
-  { id: 'huge', label: '$5M–20M', min: 5_000_000, max: 20_000_000 },
-  { id: 'mega', label: '$20M+', min: 20_000_000, max: Infinity },
-  { id: 'all', label: 'All $1M+', min: 1_000_000, max: Infinity },
+  { id: 'big', label: '$5M–10M', min: 5_000_000, max: 10_000_000 },
+  { id: 'huge', label: '$10M–25M', min: 10_000_000, max: 25_000_000 },
+  { id: 'mega', label: '$25M–100M', min: 25_000_000, max: 100_000_000 },
+  { id: 'giga', label: '$100M+', min: 100_000_000, max: Infinity },
+  { id: 'all', label: 'All $5M+', min: 5_000_000, max: Infinity },
 ];
 
-export const bandDef = (id) => BANDS.find((b) => b.id === id) ?? BANDS[3];
+/**
+ * Falls back by name, not by index — the same trap windowDef fell into.
+ *
+ * It returned BANDS[3], which was "all" until a fourth band was added and
+ * silently became "$100M+": an unknown band would then have shown almost
+ * nothing instead of everything. A default that moves because a neighbour was
+ * inserted is a bug waiting for the next edit.
+ */
+export const bandDef = (id) => BANDS.find((b) => b.id === id)
+  ?? BANDS.find((b) => b.id === 'all');
 
 /**
  * Where each chain's transactions can be looked at.

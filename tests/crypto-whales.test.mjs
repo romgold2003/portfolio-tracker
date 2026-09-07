@@ -481,19 +481,25 @@ describe('choosing what to show', () => {
 
   test('the bands do not overlap and together cover everything above the floor', () => {
     const bands = BANDS.filter((b) => b.id !== 'all');
-    // Set from the measured distribution: 960 sampled transfers held none over
-    // $20M, so the old bands were three empty boxes.
-    assert.deepEqual(bands.map((b) => b.min), [1e6, 5e6, 20e6]);
-    assert.deepEqual(bands.map((b) => b.max), [5e6, 20e6, Infinity]);
+    // Set from the record twice. First they were three empty boxes; then the
+    // lowest held nine of fourteen positions and crowded out everything above.
+    assert.deepEqual(bands.map((b) => b.min), [5e6, 10e6, 25e6, 100e6]);
+    assert.deepEqual(bands.map((b) => b.max), [10e6, 25e6, 100e6, Infinity]);
+    // By name, not by index: BANDS[3] was "all" until a fourth band was added
+    // and silently became "$100M+".
     assert.equal(bandDef('nope').id, 'all');
+    assert.equal(bandDef('all').min, 5e6);
   });
 
   test('a band keeps its own and nothing else', () => {
-    const rows = [row({ usd: 2e6 }), row({ usd: 9e6 }), row({ usd: 60e6 })];
+    const rows = [row({ usd: 7e6 }), row({ usd: 15e6 }), row({ usd: 60e6 }), row({ usd: 200e6 })];
     assert.equal(selectTransfers(rows, { band: 'big' }).length, 1);
     assert.equal(selectTransfers(rows, { band: 'huge' }).length, 1);
     assert.equal(selectTransfers(rows, { band: 'mega' }).length, 1);
-    assert.equal(selectTransfers(rows, { band: 'all' }).length, 3);
+    assert.equal(selectTransfers(rows, { band: 'giga' }).length, 1);
+    assert.equal(selectTransfers(rows, { band: 'all' }).length, 4);
+    // Under the lowest band it is in no band at all, not quietly in the first.
+    assert.equal(selectTransfers([row({ usd: 3e6 })], { band: 'all' }).length, 0);
   });
 
   test('one bridged movement seen on two chains is one row, noting both', () => {

@@ -374,6 +374,9 @@ describe('the ranked table — one row per whale per coin', () => {
     assert.deepEqual(ranked([john, bob, joseph], { min: 5e6, max: 20e6 })
       .map((r) => r.owner), ['Joseph']);
     assert.deepEqual(ranked([john, bob, joseph], { min: 20e6 }), []);
+    // The shipped floor is five million: John's two- and one-million positions
+    // are below it and Joseph's ten is not.
+    assert.deepEqual(ranked([john, bob, joseph]).map((r) => r.owner), ['Joseph']);
   });
 
   test('a row carries the whole book, so it can open into it', () => {
@@ -411,10 +414,11 @@ describe('the ranked table — one row per whale per coin', () => {
 
   test('each row says how many other positions its whale holds', () => {
     const [first, second] = ranked([john], { min: 1e6 });
+    void second;
     assert.equal(first.walletPositions, 2);
     assert.equal(second.walletPositions, 2);
     // The floor is only "not a position at all"; the band does the filtering.
-    assert.equal(WHALE_FLOOR_USD, 1_000_000);
+    assert.equal(WHALE_FLOOR_USD, 5_000_000);
   });
 
   test('nothing to rank is an empty table, not a crash', () => {

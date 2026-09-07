@@ -393,12 +393,12 @@ export function stealth(wallets, {
  * The smallest position worth a row.
  *
  * There used to be a separate ten-million floor on the whale as well as a floor
- * on the position, and the two could not both be right: a $1M–5M band asks for
- * positions between one and five million, and a ten-million qualifier emptied
- * that band by construction. The band is the filter. This is only the point
- * below which a holding is not a position at all.
+ * on the position, and the two could not both be right: a band asks for
+ * positions inside a range, and a qualifier above that range empties it by
+ * construction. The band is the filter. This is only the point below which a
+ * holding is not a position at all, and it tracks the lowest band.
  */
-export const WHALE_FLOOR_USD = 1_000_000;
+export const WHALE_FLOOR_USD = 5_000_000;
 
 /**
  * One row per whale per coin, biggest first.

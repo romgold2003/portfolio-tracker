@@ -315,6 +315,7 @@ function drawSummary() {
         <span>Transfers <b>${c.transfers}</b></span>
         <span title="Net over gross: how one-sided the money was">Tilt <b>${
   (c.tilt * 100).toFixed(0)}%</b></span>
+        <span class="cw-scope" title="The trend counts every wallet over $500k, not only the ones large enough for the table below">across all wallets over $500k</span>
       </div>
     </div>${stealthBlock}`;
 }

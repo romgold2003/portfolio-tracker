@@ -786,3 +786,7 @@ body.light{--wave-strength:0.34}
 .cw-swap-in{color:var(--text);font-weight:600}
 /* Not a trade — one asset moved. Quiet, so the real swaps stand out. */
 .cw-swap-none{color:var(--text4)}
+/* The trend is measured over a wider population than the table lists, on
+   purpose — more participants is a better read. It says so rather than looking
+   like a summary of the rows underneath it. */
+.cw-scope{color:var(--text4);font-style:italic}
