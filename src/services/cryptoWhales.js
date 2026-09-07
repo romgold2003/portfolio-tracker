@@ -336,3 +336,38 @@ export const TREND_TONE = {
   Distribution: 'cw-out',
   'Strong Distribution': 'cw-out',
 };
+
+/**
+ * Holders whose balance has moved, and what kind of holder they are.
+ *
+ * The one measure here that does not depend on catching a transfer. A whale can
+ * sell through an exchange, over the counter, or by shorting a perpetual and
+ * never moving a coin — but if it held forty million tokens and now holds
+ * twenty-five, the balance says so whichever route it took.
+ */
+export async function fetchHolders({ symbol, window = '1m', signal } = {}) {
+  const params = new URLSearchParams({ resource: 'holders', window });
+  if (symbol) params.set('symbol', symbol);
+  try {
+    return await get(params.toString(), signal);
+  } catch (err) {
+    return { moves: [], error: err.message };
+  }
+}
+
+/** One wallet's leveraged positions, asked for when a row is opened. */
+export async function fetchLeverage(address, { signal } = {}) {
+  try {
+    return await get(`resource=leverage&address=${encodeURIComponent(address)}`, signal);
+  } catch {
+    return null;
+  }
+}
+
+/** What a holder is, said in a word the panel can show. */
+export const HOLDER_KIND = {
+  deployer: { label: 'Deployer', tone: 'is-insider', title: 'The address that created the token contract' },
+  team: { label: 'Team / treasury', tone: 'is-insider', title: 'A multisig, timelock or vesting contract — how teams hold allocations' },
+  contract: { label: 'Contract', tone: '', title: 'A contract, not a person: a pool, a bridge or a staking vault' },
+  wallet: { label: 'Wallet', tone: '', title: 'An ordinary address with no attribution' },
+};

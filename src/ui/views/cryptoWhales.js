@@ -26,6 +26,7 @@ import {
   BANDS, bandDef, fetchCoins, fetchTransfers, selectTransfers,
   explorerTx, explorerAddress, chainLabel, directionOf, partyName, isVoid,
   shortAddress, money, tokens, fetchFlow, FLOW_WINDOWS, TREND_TONE,
+  fetchHolders, fetchLeverage, HOLDER_KIND,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -47,6 +48,9 @@ let lastAt = 0;
 let flow = null;
 /** Which rank is open, showing that whale's whole book. */
 let openRank = null;
+/** The opened row's leverage: null while it is being asked for. */
+let openLeverage = null;
+let holders = null;
 let win = '1m';
 
 /** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
@@ -162,6 +166,17 @@ function walletRow(r) {
   h.costUsd && Math.abs(h.netUsd - h.costUsd) / Math.abs(h.costUsd) > 0.01
     ? ` · cost ${escapeHtml(money(Math.abs(h.costUsd)))}` : ''}</span>
       </div>`).join('')}
+    ${openLeverage === null
+    ? '<div class="cw-lev cw-lev-wait">Checking Hyperliquid…</div>'
+    : openLeverage?.positions?.length
+      ? `<div class="cw-lev"><span class="cw-lev-hd">Leveraged on Hyperliquid</span>${
+        openLeverage.positions.map((p) => `<span class="cw-lev-pos ${
+          p.side === 'short' ? 'cw-out' : 'cw-in'}">${escapeHtml(p.side)} ${
+          escapeHtml(p.coin)} ${escapeHtml(money(p.notionalUsd))}${
+          p.leverage ? ` · ${p.leverage}x` : ''}</span>`).join('')}</div>`
+      : openLeverage?.supported === false
+        ? ''
+        : '<div class="cw-lev cw-lev-none">No open position on Hyperliquid</div>'}
     <div class="cw-drawer-ft">${r.transfers} transfer${r.transfers === 1 ? '' : 's'} ·
       ${escapeHtml(r.chains.map(chainLabel).join(', '))} ·
       total ${escapeHtml((r.walletNetUsd > 0 ? '+' : '') + money(r.walletNetUsd))}${href
@@ -270,6 +285,55 @@ function windowNote() {
   return days < covered
     ? `over ${label} — but the record only goes back ${span}`
     : `over ${label}`;
+}
+
+/**
+ * Holders whose balance moved, insiders first.
+ *
+ * A team multisig shedding tokens and an anonymous whale shedding tokens look
+ * identical in a list sorted by size, and they do not mean remotely the same
+ * thing — so insiders sort to the top regardless of how much they moved.
+ */
+function holderRows() {
+  const moves = holders?.moves ?? [];
+  if (!moves.length) {
+    return `<div class="empty">${loading ? 'Loading…' : `No holder balance has moved
+      enough to report yet. This compares snapshots taken a day apart, so it says
+      nothing until the collector has run across two days.`}</div>`;
+  }
+
+  const sorted = [...moves].sort((a, b) => (b.insider ? 1 : 0) - (a.insider ? 1 : 0)
+    || Math.abs(b.usdDelta) - Math.abs(a.usdDelta));
+
+  return `<div class="gam-head cw-hold-grid">
+      <div>Holder</div><div>Kind</div><div>Coin</div><div>Change</div><div>Holds now</div>
+    </div>${sorted.map((m) => {
+    const selling = m.usdDelta < 0;
+    const kind = HOLDER_KIND[m.kind] ?? HOLDER_KIND.wallet;
+    const href = explorerAddress(m.chain, m.holder);
+    const name = m.name || shortAddress(m.holder);
+    return `<div class="gam-row cw-hold-grid${m.insider ? ' is-insider-row' : ''}">
+      <div class="gam-who">
+        <span class="gam-name">${href
+    ? `<a class="cw-party${m.name ? ' is-known' : ''}" href="${escapeHtml(href)}"
+           target="_blank" rel="noopener noreferrer"
+           title="${escapeHtml(m.holder)}">${escapeHtml(name)}</a>`
+    : escapeHtml(name)}</span>
+        <span class="cw-arrow">${escapeHtml(chainLabel(m.chain))} · ${
+  escapeHtml(m.from)} → ${escapeHtml(m.to)}</span>
+      </div>
+      <div><span class="cw-kindtag ${kind.tone}" title="${escapeHtml(kind.title)}">${
+  escapeHtml(kind.label)}</span></div>
+      <div class="cw-asset">${escapeHtml(m.symbol)}</div>
+      <div class="cw-amount ${selling ? 'cw-out' : 'cw-in'}">
+        ${escapeHtml((selling ? '' : '+') + money(m.usdDelta))}
+        <span class="cw-tokens">${m.pct > 0 ? '+' : ''}${m.pct.toFixed(1)}% of holding</span>
+      </div>
+      <div class="cw-amount cw-hold-now">${escapeHtml(money(m.usdNow))}
+        <span class="cw-tokens">${escapeHtml(tokens(m.unitsAfter, m.symbol))}</span>
+      </div>
+    </div>`;
+  }).join('')}`;
 }
 
 function drawSummary() {
@@ -411,6 +475,11 @@ function draw() {
       <div class="cw-section-hd">Whale ranking<span>ranked on today's value · ${
   escapeHtml(windowNote())}</span></div>
       ${standings}
+    </div>
+    <div class="cw-section">
+      <div class="cw-section-hd">Holder changes<span>balances rather than transfers —
+        this catches a sale however it was made</span></div>
+      ${holderRows()}
     </div>`;
 
   // One handler on the container, so redrawing cannot leave a stale one behind.
@@ -420,7 +489,17 @@ function draw() {
     if (!row || e.target.closest('a')) return;
     const r = Number(row.dataset.rank);
     openRank = openRank === r ? null : r;
+    openLeverage = null;
     draw();
+
+    // Asked only for the row actually opened, and only once.
+    const opened = (flow?.ranked ?? []).find((x) => x.rank === openRank);
+    if (opened) {
+      fetchLeverage(opened.address).then((answer) => {
+        // The row may have been closed, or another opened, while this was away.
+        if (openRank === r) { openLeverage = answer ?? { positions: [] }; draw(); }
+      });
+    }
   };
 
   const src = el('cwSrc');
@@ -461,12 +540,14 @@ async function load() {
   loading = !flow && !feed;
   draw();
 
-  const [answer, next] = await Promise.all([
+  const [answer, next, held] = await Promise.all([
     fetchFlow({ symbol, window: win, band }),
     fetchTransfers({ symbol, band }),
+    fetchHolders({ symbol, window: win }),
   ]);
   loading = false;
   if (next?.rows?.length || !feed || next?.provider) feed = next;
+  if (held?.error == null || !holders) holders = held;
   /**
    * A refresh that came back empty replaces what was there, and it should: the
    * band or the window may have just changed, and holding the previous answer

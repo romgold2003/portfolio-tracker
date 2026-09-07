@@ -20,6 +20,9 @@ import { topCoins, priceMap, watchContracts } from '../_lib/topcoins.js';
 import { fetchTransfers, feedConfigured } from '../_lib/whalealert.js';
 import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
 import * as store from '../_lib/whalestore.js';
+import * as holders from '../_lib/holders.js';
+import { positionsFor } from '../_lib/leverage.js';
+import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
   PARTICIPANT_FLOOR_USD, ranked, WHALE_FLOOR_USD, linkSwaps,
@@ -132,10 +135,86 @@ async function topUp(now, { force = false } = {}) {
     }
   }
 
+  /**
+   * The holder snapshot, on the same poll.
+   *
+   * One request per token for fifty balances, which is what makes tracking
+   * balances affordable at all — and unlike the transfer sweep it cannot miss
+   * anything by being in the wrong place at the wrong second. A balance is a
+   * balance whenever you ask.
+   */
+  if (prices) {
+    try {
+      written += await snapshotHolders({ prices, now });
+    } catch (err) {
+      failed.push({ chain: 'holders', error: err.message });
+    }
+  }
+
   try { await store.prune({ now }); } catch { /* pruning is housekeeping */ }
+  try { await holders.prune({ now }); } catch { /* pruning is housekeeping */ }
 
   lastPoll = { failed, written, at: now };
   return lastPoll;
+}
+
+/**
+ * Read the top holders of every swept token, on the chains that can answer.
+ *
+ * Only the Blockscout-shaped chains: the holders endpoint is theirs, and Tron,
+ * XRPL and Bitcoin have no equivalent that is free. Settled rather than raced,
+ * so one token that will not answer costs that token.
+ */
+async function snapshotHolders({ prices, now }) {
+  const contracts = await Promise.race([
+    watchContracts().catch(() => ({})),
+    new Promise((resolve) => { setTimeout(() => resolve({}), 2000); }),
+  ]);
+
+  const hosts = { ethereum: 'eth.blockscout.com', polygon: 'polygon.blockscout.com' };
+  const jobs = [];
+
+  for (const chain of CHAINS) {
+    const host = hosts[chain.id];
+    if (!host) continue;
+    for (const token of (contracts[chain.id] ?? []).slice(0, 8)) {
+      jobs.push({ host, chain: chain.id, token });
+    }
+  }
+
+  /**
+   * Twelve seconds, and the arithmetic matters.
+   *
+   * The transfer sweep already spends twenty-two of the sixty a function is
+   * allowed. Measured with the holder snapshot added, one poll took forty-one
+   * seconds — under the limit and with no room left for a slow afternoon.
+   * Whatever this does not finish is asked for again next poll, and a balance
+   * missed by ten minutes is still the same balance.
+   */
+  const clock = AbortSignal.timeout(12_000);
+  const answers = await Promise.allSettled(jobs.map(async ({ host, chain, token }) => {
+    return holders.fetchHolders({ host, chain, token, signal: clock });
+  }));
+
+  const all = [];
+  for (const a of answers) if (a.status === 'fulfilled') all.push(...a.value);
+
+  /**
+   * Priced through the same function the transfers use, wrappers included.
+   *
+   * Reading the map directly left every wrapped asset at zero — CBBTC is not in
+   * CoinGecko's depth under its own ticker, so a Safe holding millions of
+   * dollars of it reported as holding nothing and would never have crossed the
+   * threshold to be reported at all.
+   */
+  const priced = [];
+  for (const r of all) {
+    const price = priceFor(r.symbol, prices);
+    if (!price) continue;
+    r.usd = r.units * price;
+    priced.push(r);
+  }
+  return holders.record(priced, { now });
 }
 
 /** Only for the tests, which drive the poll clock themselves. */
@@ -294,6 +373,43 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       return fail(res, 500, `Could not read the flow (${err.message}).`);
+    }
+  }
+
+  /** Holders whose balance has fallen — the direct answer to "is the team selling". */
+  if (resource === 'holders') {
+    await topUp(Date.now());
+    const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+    if (symbol && !/^[A-Z0-9]{1,12}$/.test(symbol)) return fail(res, 400, 'That is not a symbol.');
+    const win = windowDef(url.searchParams.get('window') || '1m');
+    const days = Number.isFinite(win.hours) ? Math.ceil(win.hours / 24) : holders.RETAIN_DAYS;
+
+    try {
+      const moves = await holders.changes({ days, symbol: symbol || null });
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, { moves, days, at: Date.now() });
+    } catch (err) {
+      return fail(res, 500, `Could not read the holder record (${err.message}).`);
+    }
+  }
+
+  /**
+   * One wallet's leveraged positions, asked for on demand.
+   *
+   * Per address rather than swept: a position matters when you are already
+   * asking about a particular wallet, and fifty lookups a poll to fill a column
+   * that is usually empty would be a poor trade.
+   */
+  if (resource === 'leverage') {
+    const address = (url.searchParams.get('address') || '').trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      return send(res, 200, { supported: false, positions: [], accountValue: null });
+    }
+    try {
+      res.setHeader('Cache-Control', 'private, max-age=60');
+      return send(res, 200, await positionsFor(address));
+    } catch (err) {
+      return fail(res, 502, `Could not reach Hyperliquid (${err.message}).`);
     }
   }
 

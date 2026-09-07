@@ -790,3 +790,26 @@ body.light{--wave-strength:0.34}
    purpose — more participants is a better read. It says so rather than looking
    like a summary of the rows underneath it. */
 .cw-scope{color:var(--text4);font-style:italic}
+
+/* Holder changes: balances rather than transfers. Insiders first, because a
+   treasury shedding tokens and an anonymous whale shedding tokens read the same
+   in a list sorted by size and do not mean remotely the same thing. */
+.cw-hold-grid{display:grid;grid-template-columns:minmax(0,1.3fr) 108px 60px 130px 122px;
+  align-items:center;gap:0 10px;padding:9px 2px}
+.cw-kindtag{font-size:10px;padding:2px 6px;border-radius:4px;background:var(--input);
+  color:var(--text3);white-space:nowrap}
+/* The people who made the thing, getting out. Worth its own colour. */
+.cw-kindtag.is-insider{background:var(--blue-bg);color:var(--blue);
+  border:0.5px solid var(--border-blue)}
+.is-insider-row{background:linear-gradient(90deg,var(--blue-bg),transparent 60%)}
+.cw-hold-now{color:var(--text2);font-weight:400}
+/* A leveraged position moves the market without moving a coin, so it belongs
+   beside the on-chain figures rather than in a panel of its own. */
+.cw-lev{margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.cw-lev-hd{font-size:9px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3)}
+.cw-lev-pos{font-weight:600;font-variant-numeric:tabular-nums}
+.cw-lev-none,.cw-lev-wait{color:var(--text4);font-size:10px}
+@media (max-width:640px){
+  .cw-hold-grid{grid-template-columns:minmax(0,1fr) 0 44px 104px 0}
+  .cw-hold-grid > div:nth-child(2),.cw-hold-now{display:none}
+}
