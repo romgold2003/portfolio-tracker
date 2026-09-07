@@ -953,3 +953,42 @@ body.light{--wave-strength:0.34}
 /* Suspected, not confirmed. A deposit is never a sale. */
 .cw-warn{color:var(--yellow,#d4a017)}
 .cw-ev-note{font-size:10px;color:var(--text4);margin-top:1px}
+
+/* ── Live whale activity ──────────────────────────────────────────────────
+   Five columns, and the fifth is a timestamp. The middle three each answer a
+   different question about the same movement — where it went, what asset
+   changed, and what kind of movement it was — and the third of those is the
+   only one that ever asserts a trade. */
+.cw-act-grid{display:grid;align-items:center;gap:0 12px;padding:9px 2px;grid-template-columns:104px minmax(0,440px) minmax(0,190px) 148px minmax(62px,1fr)}
+/* The slack goes to the last column, which is right-aligned anyway: without
+   that, a wide screen pushes the asset flow and the action away from the two
+   ends they describe. */
+/* Which coin, over what period, at what size — one row, in that order. */
+.cw-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+.cw-select{flex:0 1 250px;min-width:0;background:var(--input);color:var(--text2);
+  border:1px solid var(--border2);border-radius:6px;padding:5px 8px;
+  font-family:inherit;font-size:11px;cursor:pointer}
+.cw-select:hover{color:var(--text);border-color:var(--text4)}
+.cw-select:focus{outline:none;border-color:var(--blue);color:var(--text)}
+.cw-select option:disabled{color:var(--text4)}
+/* The two ends on one line, the chain and the hash quietly under them: the
+   proof stays clickable without spending a whole column on it. */
+.cw-path{display:flex;flex-direction:column;gap:1px;min-width:0}
+.cw-path-line{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw-flow{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+/* Same asset both sides means no conversion was seen — said in grey, because
+   it is the absence of a fact rather than one. */
+.cw-flow-flat{color:var(--text3)}
+.cw-act{min-width:0}
+.cw-act-tag{display:inline-block;max-width:100%;padding:1px 6px;border-radius:4px;
+  background:var(--input);font-size:10px;font-weight:600;color:var(--text2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The sentence that keeps the panel honest, printed rather than hidden in a
+   tooltip: coins arriving at an exchange have not been sold. */
+.cw-act-note{display:block;margin-top:2px;font-size:9px;color:var(--text4)}
+@media (max-width:900px){
+  /* The asset flow goes first: the action already names the movement. */
+  .cw-act-grid{grid-template-columns:92px minmax(0,1.4fr) 0 118px 54px}
+  .cw-flow,.gam-head.cw-act-grid div:nth-child(3){display:none}
+}

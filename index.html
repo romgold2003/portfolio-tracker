@@ -395,23 +395,29 @@
           <div class="card gam-card" id="cryptoWhaleCard">
             <div class="card-lbl">
               <span>Crypto whales — <span id="cwName">all coins</span></span>
+            </div>
+
+            <!-- Two dashboard cards, side by side. Neither is filtered by the
+                 selectors below them: netflow is a question about the whole
+                 market, and the holder card is a snapshot of right now. The
+                 coin selector is the one thing the holder card does follow,
+                 because "who holds the most" needs a coin to mean anything. -->
+            <div class="cw-cards cw-cards-2">
+              <div class="cw-card" id="cwNetflow"></div>
+              <div class="cw-card" id="cwTop"></div>
+            </div>
+
+            <!-- Which coin, over what period, at what size. All three belong
+                 to the table underneath and to nothing above it. -->
+            <div class="cw-section-hd">Live whale activity<span id="cwCount"></span></div>
+            <div class="cw-filters">
+              <select class="cw-select" id="cwCoin" aria-label="Cryptocurrency">
+                <option value="">All coins</option>
+              </select>
               <div class="opt-picker" id="cwWindow"></div>
               <div class="opt-picker" id="cwBand"></div>
             </div>
-            <div class="cw-coins" id="cwCoins"></div>
-            <!-- Three cards across the top: what is happening, the money
-                 moving on and off exchanges, and who is doing it. The tables
-                 underneath are the evidence for all three. -->
-            <!-- Market-wide exchange netflow. Deliberately outside the three
-                 cards and above them: it answers a question about the whole
-                 market and is never filtered by the coin picker. -->
-            <div class="cw-card cw-card-wide" id="cwNetflow"></div>
 
-            <div class="cw-cards">
-              <div class="cw-card" id="cwSummary"></div>
-              <div class="cw-card" id="cwTop"></div>
-              <div class="cw-card" id="cwRank"></div>
-            </div>
             <div id="cwRows"></div>
             <p class="gam-src" id="cwSrc">Reading the chains…</p>
           </div>

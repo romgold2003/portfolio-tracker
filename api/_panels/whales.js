@@ -26,6 +26,7 @@ import { loadExchanges, netflow, exchangeOf, VENUES } from '../_lib/exchanges.js
 import { verdictFor, isStable } from '../_lib/verdict.js';
 import * as netflowCard from '../_lib/netflowcard.js';
 import { rankHolders, exitEvents } from '../_lib/topholders.js';
+import { classifyActivity } from '../_lib/activity.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 import {
   WINDOWS, windowDef, accumulation, performance, consensus, stealth,
@@ -682,6 +683,17 @@ export default async function handler(req, res) {
   const rawMax = Number(url.searchParams.get('max'));
   const maxUsd = Number.isFinite(rawMax) && rawMax > minUsd ? rawMax : Infinity;
 
+  /**
+   * How far back the tape reaches, from the Live Whale Activity timeframe.
+   *
+   * Capped at the retention window rather than trusted: the parameter arrives
+   * from the browser, and a request for ten years would quietly become a
+   * request for everything the store holds anyway.
+   */
+  const rawHours = Number(url.searchParams.get('hours'));
+  const hours = Number.isFinite(rawHours) && rawHours > 0 ? Math.min(rawHours, 24 * 397) : null;
+  const since = hours ? Math.floor(now / 1000) - hours * 3600 : null;
+
   try {
     /**
      * Read the whole recent book, then filter.
@@ -699,16 +711,30 @@ export default async function handler(req, res) {
      * reaches every transfer already in the store rather than only the ones
      * recorded after the label set existed.
      */
+    let byAddress = null;
     try {
-      const byAddress = await loadExchanges();
+      byAddress = await loadExchanges();
       for (const r of all) {
         const to = exchangeOf(r.to?.address, byAddress);
         const from = exchangeOf(r.from?.address, byAddress);
-        if (to) { r.to.owner = to.name; r.to.ownerType = "exchange"; }
-        if (from) { r.from.owner = from.name; r.from.ownerType = "exchange"; }
+        if (to) { r.to.owner = to.name; r.to.ownerType = 'exchange'; }
+        if (from) { r.from.owner = from.name; r.from.ownerType = 'exchange'; }
       }
     } catch { /* unlabelled is the honest fallback */ }
-    const rows = all.filter((r) => r.usd >= minUsd && r.usd < maxUsd).slice(0, 200);
+
+    /**
+     * Size, then time, then the classifier.
+     *
+     * The bands are half-open on purpose — at least the floor, below the
+     * ceiling — so a transfer of exactly a hundred million appears in
+     * $100M–250M and nowhere else. A row landing in two bands would be counted
+     * twice by anybody adding the columns up.
+     */
+    const rows = all
+      .filter((r) => r.usd >= minUsd && r.usd < maxUsd)
+      .filter((r) => since == null || r.at >= since)
+      .slice(0, 200)
+      .map((r) => ({ ...r, activity: classifyActivity(r, { byAddress, subject: symbol || null }) }));
     const counts = await store.countsBySymbol({ minUsd: FLOOR_USD });
 
     /**
@@ -723,6 +749,10 @@ export default async function handler(req, res) {
       counts: Object.fromEntries(counts),
       floor: FLOOR_USD,
       at: now,
+      /** What the tape was asked for, so the panel can label what it shows. */
+      window: { hours, since },
+      /** The oldest transfer held at all — "1 year" is a request, not a promise. */
+      recordSince: all.length ? all[all.length - 1].at : null,
       /**
        * What is wrong, when something is — said plainly rather than as an
        * empty list. "Nothing this big has moved" and "the provider is not

@@ -45,11 +45,17 @@
  * a display setting — a five-million-dollar position built quietly out of
  * quarter-million pieces only exists if the pieces were kept.
  */
+/*
+ * The boundaries are half-open and must stay that way: at least the floor,
+ * below the ceiling. A transfer of exactly a hundred million belongs in
+ * $100M–250M and nowhere else — one landing in two bands would be counted
+ * twice by anybody adding the columns up.
+ */
 export const BANDS = [
-  { id: 'big', label: '$25M–100M', min: 25_000_000, max: 100_000_000 },
-  { id: 'huge', label: '$100M–250M', min: 100_000_000, max: 250_000_000 },
-  { id: 'mega', label: '$250M+', min: 250_000_000, max: Infinity },
   { id: 'all', label: 'All $25M+', min: 25_000_000, max: Infinity },
+  { id: 'big', label: '$25M–$100M', min: 25_000_000, max: 100_000_000 },
+  { id: 'huge', label: '$100M–$250M', min: 100_000_000, max: 250_000_000 },
+  { id: 'mega', label: '$250M+', min: 250_000_000, max: Infinity },
 ];
 
 /**
@@ -62,6 +68,26 @@ export const BANDS = [
  */
 export const bandDef = (id) => BANDS.find((b) => b.id === id)
   ?? BANDS.find((b) => b.id === 'all');
+
+/**
+ * How far back the Live Whale Activity tape reaches.
+ *
+ * Three, not five. The window picker this replaced had five and they blurred
+ * into each other; a day, a week and a quarter are three genuinely different
+ * questions — what is happening now, what happened this week, what has been
+ * building. It applies to the tape and to nothing else on the page: the
+ * netflow card answers about the whole market over its own fixed periods, and
+ * the holder card is a snapshot of right now.
+ */
+export const ACTIVITY_WINDOWS = [
+  { id: '1d', label: 'Last 1D', hours: 24 },
+  { id: '7d', label: 'Last 7D', hours: 24 * 7 },
+  { id: '3m', label: 'Last 3M', hours: 24 * 92 },
+];
+
+/** By name, never by index — a default that moves when a neighbour is inserted. */
+export const activityWindowDef = (id) => ACTIVITY_WINDOWS.find((w) => w.id === id)
+  ?? ACTIVITY_WINDOWS.find((w) => w.id === '7d');
 
 /**
  * Where each chain's transactions can be looked at.
@@ -199,9 +225,17 @@ export function tokens(amount, symbol) {
  * two different chains is one economic event seen twice, and showing it twice
  * would double the only number the panel is read for.
  */
-export function selectTransfers(rows, { band = 'all', limit = 60 } = {}) {
+export function selectTransfers(rows, { band = 'all', window = null, limit = 60 } = {}) {
   if (!Array.isArray(rows)) return [];
   const { min, max } = bandDef(band);
+  /**
+   * The server already cut on time. Cutting again here is not redundancy for
+   * its own sake: the previous timeframe's rows are still in hand while the
+   * new request is in flight, and without this the tape shows a week of
+   * transfers for a moment under a heading that says one day.
+   */
+  const hours = window ? activityWindowDef(window).hours : null;
+  const since = hours ? Math.floor(Date.now() / 1000) - hours * 3600 : null;
 
   const out = [];
   const seen = new Map();
@@ -209,9 +243,17 @@ export function selectTransfers(rows, { band = 'all', limit = 60 } = {}) {
   for (const t of rows) {
     const usd = Number(t?.usd) || 0;
     if (!(usd >= min) || usd >= max) continue;
+    if (since != null && Number(t?.at) < since) continue;
 
     const bucket = `${t.symbol}|${Math.round(usd / 1000)}|${Math.round(t.at / 60)}`;
     const twin = seen.get(bucket);
+    /**
+     * Only across chains. Two transfers of the same size in the same minute on
+     * the same chain are two transfers, and collapsing them lost real rows:
+     * four twenty-six-million WETH moves out of Morpho landed inside one
+     * minute and the tape showed one of them. A bridged asset reported once
+     * per network is the case this exists for, and that one spans two chains.
+     */
     if (twin && twin.blockchain !== t.blockchain) {
       // Keep the first and note the other network on it, rather than dropping
       // the fact that it crossed one.
@@ -219,7 +261,6 @@ export function selectTransfers(rows, { band = 'all', limit = 60 } = {}) {
       if (!twin.alsoOn.includes(t.blockchain)) twin.alsoOn.push(t.blockchain);
       continue;
     }
-    if (twin) continue;
 
     const row = { ...t, direction: directionOf(t) };
     seen.set(bucket, row);
@@ -253,10 +294,11 @@ export async function fetchCoins({ signal } = {}) {
   }
 }
 
-export async function fetchTransfers({ symbol, band = 'all', signal } = {}) {
+export async function fetchTransfers({ symbol, band = 'all', window = null, signal } = {}) {
   const { min, max } = bandDef(band);
   const params = new URLSearchParams({ resource: 'feed', min: String(min) });
   if (Number.isFinite(max)) params.set('max', String(max));
+  if (window) params.set('hours', String(activityWindowDef(window).hours));
   if (symbol) params.set('symbol', symbol);
   try {
     return await get(params.toString(), signal);
@@ -455,4 +497,22 @@ export const STATUS_TONE = {
   'Sent to a contract': '',
   'Wallet transfer — no sale detected': '',
   'Reduction seen, route unknown': '',
+};
+
+/**
+ * How each action reads on screen.
+ *
+ * Only a confirmed swap earns a colour. An exchange deposit gets a warning
+ * tone rather than red, because red would be the app calling it a sale — which
+ * is exactly what the classifier refuses to do.
+ */
+export const ACTION_TONE = {
+  'Buy / Swap': 'cw-in',
+  'Sell / Swap': 'cw-out',
+  'Exchange Deposit': 'cw-warn',
+  'Exchange Withdrawal': '',
+  'Wallet Transfer': '',
+  Bridge: '',
+  'Internal Transfer': '',
+  Unknown: '',
 };

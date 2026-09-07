@@ -28,6 +28,7 @@ import {
 import * as store from '../api/_lib/whalestore.js';
 import {
   BANDS, bandDef, selectTransfers, directionOf, partyName, money, tokens,
+  activityWindowDef, ACTIVITY_WINDOWS,
   explorerTx, explorerAddress, chainLabel,
 } from '../src/services/cryptoWhales.js';
 
@@ -682,5 +683,63 @@ describe('money reads at the scale of the number', () => {
   test('zero is zero, not $0.0M', () => {
     assert.equal(money(0), '$0');
     assert.equal(money(null), '$0');
+  });
+});
+
+describe('two transfers in the same minute are two transfers', () => {
+  const row = (over = {}) => ({
+    at: 1_780_000_000, blockchain: 'ethereum', symbol: 'WETH', usd: 26_200_000,
+    hash: '0x1', kind: 'transfer', from: { address: '0xm' }, to: { address: '0xb' }, ...over,
+  });
+
+  test('same chain, same size, same minute, different transaction — both kept', () => {
+    // Four twenty-six-million WETH moves out of Morpho landed inside one
+    // minute and the tape showed one of them. The dedupe was written for a
+    // bridged asset reported once per network, which always spans two chains.
+    const rows = [row({ hash: '0x1' }), row({ hash: '0x2' }), row({ hash: '0x3' })];
+    assert.equal(selectTransfers(rows, { band: 'all' }).length, 3);
+  });
+
+  test('the cross-chain twin is still collapsed, and still notes the crossing', () => {
+    const out = selectTransfers([
+      row({ blockchain: 'ethereum', hash: '0xa' }),
+      row({ blockchain: 'tron', hash: '0xb', at: 1_780_000_020 }),
+    ], { band: 'all' });
+    assert.equal(out.length, 1);
+    assert.deepEqual(out[0].alsoOn ?? [], ['tron']);
+  });
+});
+
+describe('the timeframe the tape was asked for', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const row = (agoSecs, hash) => ({
+    at: now - agoSecs, blockchain: 'ethereum', symbol: 'ETH', usd: 40_000_000,
+    hash, kind: 'transfer', from: { address: '0xa' }, to: { address: '0xb' },
+  });
+
+  test('each window keeps only what falls inside it', () => {
+    const rows = [row(60, '0x1'), row(3 * 86400, '0x2'), row(40 * 86400, '0x3')];
+    assert.equal(selectTransfers(rows, { band: 'all', window: '1d' }).length, 1);
+    assert.equal(selectTransfers(rows, { band: 'all', window: '7d' }).length, 2);
+    assert.equal(selectTransfers(rows, { band: 'all', window: '3m' }).length, 3);
+  });
+
+  test('no window at all is every row, not none', () => {
+    assert.equal(selectTransfers([row(400 * 86400, '0x1')], { band: 'all' }).length, 1);
+  });
+
+  test('an unknown window falls back by name rather than by index', () => {
+    assert.equal(activityWindowDef('nonsense').id, '7d');
+    assert.equal(activityWindowDef('3m').hours, 24 * 92);
+  });
+
+  test('the bands are half-open, so nothing lands in two of them', () => {
+    const at = [row(60, '0xa'), row(120, '0xb'), row(180, '0xc')];
+    at[0].usd = 25_000_000; at[1].usd = 100_000_000; at[2].usd = 250_000_000;
+    const inBand = (b) => selectTransfers(at, { band: b }).map((r) => r.usd);
+    assert.deepEqual(inBand('big'), [25_000_000]);
+    assert.deepEqual(inBand('huge'), [100_000_000]);
+    assert.deepEqual(inBand('mega'), [250_000_000]);
+    assert.equal(inBand('all').length, 3);
   });
 });

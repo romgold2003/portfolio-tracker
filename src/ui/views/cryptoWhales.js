@@ -1,353 +1,79 @@
 /**
- * Which whales hold the most, and in what.
+ * The crypto whale page.
  *
- * Two sections, stacked, both live and both moving together. On top the tape:
- * the large transfers as they land. Under it the standings: who holds the most
- * and in what, added up over the chosen window.
+ * Rebuilt from the beginning, one piece at a time, because the version before
+ * it had grown into five cards and three tables that all half-answered the same
+ * question. This one asks three things in order and nothing else:
  *
- * They are not alternatives and were briefly built as though they were, behind
- * a toggle, which was wrong — the point is watching a sale hit the tape and
- * seeing the ranking move under it in the same glance. A transfer on its own
- * says little, since an exchange shifting its float between hot and cold
- * storage looks exactly like conviction; the ranking says what it added up to.
- * Each answers what the other cannot.
+ *   1. Is capital moving onto exchanges or off them?   — Exchange Netflow
+ *   2. Who holds the most of this coin?                — Top Holder Whales
+ *   3. What just moved, and what was it?               — Live Whale Activity
  *
- * A whale in three coins appears three times, because those are three positions
- * of different sizes that happen to share an owner and flattening them into one
- * row would hide the sizes. Opening a row shows that whale's whole book, so the
- * repetition explains itself rather than looking like duplication.
+ * The two cards on top are the standing picture and the table underneath is the
+ * tape. The three selectors sit between them, and they belong to the tape: the
+ * netflow card is about the whole market over its own fixed periods and the
+ * holder card is a snapshot of right now, so a timeframe or a size band would
+ * mean nothing to either.
  *
- * The size bands filter the position and the windows decide how far back to
- * add up. Both are honest about what they cannot do: the record only reaches
- * as far as the app has been collecting, so "1Y" is a request, not a promise.
+ * The coin selector is the one exception, and only for the holder card — "who
+ * holds the most" is a question that needs a coin before it means anything.
+ * Netflow is never filtered by it, deliberately.
+ *
+ * Nothing here is called a buy or a sell unless the chain shows both legs of
+ * the trade. See api/_lib/activity.js — that rule is the reason this panel is
+ * worth reading.
  */
 import { escapeHtml } from '../format.js';
 import {
   BANDS, bandDef, fetchCoins, fetchTransfers, selectTransfers,
-  explorerTx, explorerAddress, chainLabel, directionOf, partyName, isVoid,
-  shortAddress, money, tokens, fetchFlow, FLOW_WINDOWS, TREND_TONE,
-  fetchHolders, fetchLeverage, HOLDER_KIND,
-  fetchVerdict, VERDICT_TONE,
+  ACTIVITY_WINDOWS, activityWindowDef, ACTION_TONE,
+  explorerTx, explorerAddress, chainLabel,
+  shortAddress, money, tokens,
   fetchNetflow, SIGNAL_TONE, fetchTopHolders, STATUS_TONE,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
 
-/** Survives a re-render, like the other panels. */
-let band = 'all';
+/* ── what the three selectors are set to, kept across a redraw ──────────── */
+
+/** The coin. Filters the tape, and tells the holder card what to look at. */
 let symbol = '';
+/** How far back the tape reaches. The tape only. */
+let win = '7d';
+/** The transaction size band. The tape only. */
+let band = 'all';
+
 let coins = null;
 let feed = null;
+let netflow = null;
+let topHolders = null;
 let loading = false;
 let lastAt = 0;
-/**
- * 'transfers' is what moved; 'wallets' is who has been moving it.
- *
- * Two views of one store rather than two panels, because they answer the same
- * question at two zoom levels and switching between them is the useful motion:
- * see a wallet accumulating, then look at the transfers that built it.
- */
-let flow = null;
-/** Which rank is open, showing that whale's whole book. */
-let openRank = null;
-/** The opened row's leverage: null while it is being asked for. */
-let openLeverage = null;
-let holders = null;
-let reading = null;
-/** The market-wide netflow card. Never filtered by the coin picker. */
-let netflow = null;
-/** Which period row is expanded into its per-exchange breakdown. */
+/** Which netflow period is expanded into its per-exchange split. */
 let openPeriod = null;
-/** The top-holder card. Unlike netflow, this one follows the coin picker. */
-let topHolders = null;
 /** Rising with each load, so a slow answer cannot overwrite a newer one. */
 let loadToken = 0;
-let win = '1m';
 
-/** "2m", "4h", "3d" — enough to place a transfer without a full timestamp. */
+/** "2m ago", "4h ago", "3d ago" — enough to place a transfer without a stamp. */
 function ago(seconds) {
   const secs = Math.max(0, Math.floor(Date.now() / 1000) - seconds);
   if (secs < 60) return 'now';
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
-/** The full moment, for the title attribute — "when it was made", exactly. */
+/** The exact moment, for the title attribute. */
 const stamp = (seconds) => new Date(seconds * 1000).toLocaleString();
 
-/**
- * One end of a transfer.
- *
- * Linked to the explorer so the address can be opened and its whole history
- * read — which is the on-chain equivalent of the macro panel linking a wallet
- * to its Polymarket profile, and is there for the same reason: the interesting
- * question is never one transfer, it is whether this address has been busy.
- */
-function party(end, chain) {
-  const name = partyName(end);
-  // The burn hole gets no link and no emphasis: there is nothing to look at.
-  if (isVoid(end)) return '<span class="cw-void" title="No counterparty: the tokens were created or destroyed">—</span>';
-  const href = explorerAddress(chain, end?.address);
-  const title = end?.address ? `${end.address}${end.owner ? ` · ${end.owner}` : ''}` : 'not attributed';
-  const known = end?.owner ? ' is-known' : '';
+/* ── the two cards on top ──────────────────────────────────────────────── */
 
-  return href
-    ? `<a class="cw-party${known}" href="${escapeHtml(href)}" target="_blank"
-         rel="noopener noreferrer" title="${escapeHtml(title)}">${escapeHtml(name)}</a>`
-    : `<span class="cw-party${known}" title="${escapeHtml(title)}">${escapeHtml(name)}</span>`;
-}
-
-/**
- * One row.
- *
- * Nothing here is coloured by direction. An exchange inflow is read as bearish
- * and an outflow as bullish by convention, but it is only a convention — a
- * whale moving coins onto an exchange may be posting collateral — and a green
- * or red row would make the app assert something it does not know.
- */
-function row(t) {
-  const href = explorerTx(t.blockchain, t.hash);
-  const chains = [t.blockchain, ...(t.alsoOn ?? [])].map(chainLabel).join(' + ');
-  const kindBadge = t.kind && t.kind !== 'transfer'
-    ? `<span class="cw-kind">${escapeHtml(t.kind)}</span>` : '';
-
-  return `<div class="gam-row gam-grid cw-grid">
-    <div class="gam-size">
-      ${escapeHtml(money(t.usd))}
-      <span class="cw-tokens">${escapeHtml(tokens(t.amount, t.symbol))}</span>
-    </div>
-    <div class="gam-who">
-      <span class="gam-name">${party(t.from, t.blockchain)}</span>
-      <span class="cw-arrow">→ ${party(t.to, t.blockchain)}</span>
-    </div>
-    <div class="gam-bet">
-      <span class="cw-dir">${escapeHtml(t.direction.label)}</span>
-    </div>
-    <div class="gam-market">
-      <span class="gam-title">${t.swap
-    // A trade: what was given up, and what came back for it.
-    ? `<span class="cw-swap-out">${escapeHtml(t.swap.from)}</span><span
-         class="cw-swap-arrow"> → </span><span class="cw-swap-in">${escapeHtml(t.swap.to)}</span>`
-    // Not a trade — one asset moved, so the asset is the whole answer.
-    : escapeHtml(t.symbol)} on ${escapeHtml(chains)}${
-  t.parts > 1 ? ` · ${t.parts} parts` : ''}</span>
-      <span class="gam-topic">${kindBadge}${href
-    ? `<a class="cw-hash" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"
-          title="${escapeHtml(t.hash)}">${escapeHtml(shortAddress(t.hash))}</a>`
-    : escapeHtml(shortAddress(t.hash))}</span>
-    </div>
-    <div class="gam-when" title="${escapeHtml(stamp(t.at))}">${escapeHtml(ago(t.at))}</div>
-  </div>`;
-}
-
-/** One ranked position: a whale, a coin, and what it did over the window. */
-function walletRow(r) {
-  const buying = r.netUsd > 0;
-  const chain = r.chains[0];
-  const href = explorerAddress(chain, r.address);
-  const name = r.owner ? r.owner : shortAddress(r.address);
-  const open = openRank === r.rank;
-  const more = (r.holdings?.length ?? 1) - 1;
-  /**
-   * How far today's value has drifted from what it cost.
-   *
-   * Shown only when it is worth showing: on a stablecoin, or on anything bought
-   * minutes ago, the two numbers are the same and printing both would be noise.
-   */
-  const moved = r.costUsd && Math.abs(r.netUsd - r.costUsd) / Math.abs(r.costUsd);
-
-  /**
-   * What this whale holds in everything else, shown only when the row is open.
-   *
-   * The ranking is per position, so a whale in three coins appears three times
-   * and each of those rows is only a third of the story. Opening one tells the
-   * rest without making the table itself wider or the ranking mean something
-   * other than what it says.
-   */
-  const drawer = open ? `<div class="cw-drawer">
-    <div class="cw-drawer-hd">Everything ${escapeHtml(name)} moved in this window</div>
-    ${(r.holdings ?? []).map((h) => `<div class="cw-hold${h.symbol === r.symbol ? ' is-this' : ''}">
-        <span class="cw-hold-sym">${escapeHtml(h.symbol)}</span>
-        <span class="cw-hold-amt ${h.netUsd > 0 ? 'cw-in' : 'cw-out'}">${
-  escapeHtml((h.netUsd > 0 ? '+' : '') + money(h.netUsd))}</span>
-        <span class="cw-hold-units">${escapeHtml(tokens(Math.abs(h.netUnits), h.symbol))}${
-  h.costUsd && Math.abs(h.netUsd - h.costUsd) / Math.abs(h.costUsd) > 0.01
-    ? ` · cost ${escapeHtml(money(Math.abs(h.costUsd)))}` : ''}</span>
-      </div>`).join('')}
-    ${openLeverage === null
-    ? '<div class="cw-lev cw-lev-wait">Checking Hyperliquid…</div>'
-    : openLeverage?.positions?.length
-      ? `<div class="cw-lev"><span class="cw-lev-hd">Leveraged on Hyperliquid</span>${
-        openLeverage.positions.map((p) => `<span class="cw-lev-pos ${
-          p.side === 'short' ? 'cw-out' : 'cw-in'}">${escapeHtml(p.side)} ${
-          escapeHtml(p.coin)} ${escapeHtml(money(p.notionalUsd))}${
-          p.leverage ? ` · ${p.leverage}x` : ''}</span>`).join('')}</div>`
-      : openLeverage?.supported === false
-        ? ''
-        : '<div class="cw-lev cw-lev-none">No open position on Hyperliquid</div>'}
-    <div class="cw-drawer-ft">${r.transfers} transfer${r.transfers === 1 ? '' : 's'} ·
-      ${escapeHtml(r.chains.map(chainLabel).join(', '))} ·
-      total ${escapeHtml((r.walletNetUsd > 0 ? '+' : '') + money(r.walletNetUsd))}${href
-    ? ` · <a class="cw-hash" href="${escapeHtml(href)}" target="_blank"
-           rel="noopener noreferrer">open on the explorer</a>` : ''}</div>
-  </div>` : '';
-
-  return `<div class="cw-row-wrap${open ? ' is-open' : ''}">
-    <div class="gam-row cw-rank-grid cw-clickable" data-rank="${r.rank}"
-         title="Click to see everything this whale moved">
-      <div class="cw-num">${r.rank}</div>
-      <div class="gam-who">
-        <span class="gam-name">${escapeHtml(name)}</span>
-        <span class="cw-arrow">${escapeHtml(chainLabel(chain))}${
-  more > 0 ? ` · also in ${more} other coin${more === 1 ? '' : 's'}` : ''}</span>
-      </div>
-      <div class="cw-asset">${escapeHtml(r.symbol)}</div>
-      <div class="cw-amount ${buying ? 'cw-in' : 'cw-out'}">
-        ${escapeHtml((buying ? '+' : '') + money(r.netUsd))}
-        <span class="cw-tokens">${escapeHtml(tokens(Math.abs(r.netUnits), r.symbol))}${
-  moved > 0.01 ? ` · ${escapeHtml(moved > 0 ? `cost ${money(Math.abs(r.costUsd))}` : '')}` : ''}</span>
-      </div>
-      <div class="gam-when" title="${escapeHtml(`last seen ${stamp(r.lastAt)}`)}">${
-  escapeHtml(ago(r.lastAt))}<span class="cw-span">${r.transfers} tx</span></div>
-    </div>${drawer}
-  </div>`;
-}
-
-/**
- * The coin picker.
- *
- * Every one of the top fifty is listed, including the ones that cannot be
- * watched — which is the point of showing them. Being told that AVAX is top ten
- * and has no on-chain whale coverage is information; silently omitting it looks
- * like the app forgot about it.
- */
-function drawCoins() {
-  const box = el('cwCoins');
-  if (!box || !coins) return;
-
-  const counts = feed?.counts ?? {};
-  const option = (c) => {
-    const watchable = c.chains.length > 0;
-    const n = counts[c.symbol] ?? 0;
-    const classes = ['cw-coin'];
-    if (c.symbol === symbol) classes.push('active');
-    if (!watchable) classes.push('is-off');
-    const readers = (c.readers ?? []).map((r) => r.label ?? chainLabel(r.chain));
-    const via = (c.viaProvider ?? []).map(chainLabel);
-    const title = watchable
-      ? [`${c.name} · #${c.rank}`,
-        readers.length ? `read directly on ${readers.join(', ')}` : null,
-        via.length ? `via Whale Alert on ${via.join(', ')}` : null,
-        c.support === 'partial' ? 'sampled, not swept' : null].filter(Boolean).join(' · ')
-      : `${c.name} · #${c.rank} · no chain this app can read`;
-
-    return `<button class="${classes.join(' ')}" data-symbol="${escapeHtml(c.symbol)}"
-      ${watchable ? '' : 'disabled'} title="${escapeHtml(title)}">
-      <img class="cw-logo" src="${escapeHtml(c.logo)}" alt="" loading="lazy" width="16" height="16">
-      <span class="cw-sym">${escapeHtml(c.symbol)}</span>
-      <span class="cw-rank">#${c.rank}</span>
-      ${n ? `<span class="gam-count">${n}</span>` : ''}
-      ${c.chains.length > 1 ? '<span class="cw-multi" title="Aggregated across networks">⛓</span>' : ''}
-    </button>`;
-  };
-
-  box.innerHTML = `<button class="cw-coin${symbol ? '' : ' active'}" data-symbol="">
-      <span class="cw-sym">All coins</span>
-    </button>${coins.coins.map(option).join('')}`;
-
-  box.onclick = (e) => {
-    const button = e.target.closest('[data-symbol]');
-    if (!button || button.disabled) return;
-    const next = button.dataset.symbol;
-    if (next === symbol) return;
-    symbol = next;
-    load();
-  };
-}
-
-/**
- * Holders whose balance moved, insiders first.
- *
- * A team multisig shedding tokens and an anonymous whale shedding tokens look
- * identical in a list sorted by size, and they do not mean remotely the same
- * thing — so insiders sort to the top regardless of how much they moved.
- */
-function holderRows() {
-  const moves = holders?.moves ?? [];
-  if (!moves.length) {
-    return `<div class="empty">${loading ? 'Loading…' : `No holder balance has moved
-      enough to report yet. This compares snapshots taken a day apart, so it says
-      nothing until the collector has run across two days.`}</div>`;
-  }
-
-  const sorted = [...moves].sort((a, b) => (b.insider ? 1 : 0) - (a.insider ? 1 : 0)
-    || Math.abs(b.usdDelta) - Math.abs(a.usdDelta));
-
-  return `<div class="gam-head cw-hold-grid">
-      <div>Holder</div><div>Kind</div><div>Coin</div><div>Change</div><div>Holds now</div>
-    </div>${sorted.map((m) => {
-    const selling = m.usdDelta < 0;
-    const kind = HOLDER_KIND[m.kind] ?? HOLDER_KIND.wallet;
-    const href = explorerAddress(m.chain, m.holder);
-    const name = m.name || shortAddress(m.holder);
-    return `<div class="gam-row cw-hold-grid${m.insider ? ' is-insider-row' : ''}">
-      <div class="gam-who">
-        <span class="gam-name">${href
-    ? `<a class="cw-party${m.name ? ' is-known' : ''}" href="${escapeHtml(href)}"
-           target="_blank" rel="noopener noreferrer"
-           title="${escapeHtml(m.holder)}">${escapeHtml(name)}</a>`
-    : escapeHtml(name)}</span>
-        <span class="cw-arrow">${escapeHtml(chainLabel(m.chain))} · ${
-  escapeHtml(m.from)} → ${escapeHtml(m.to)}</span>
-      </div>
-      <div><span class="cw-kindtag ${kind.tone}" title="${escapeHtml(kind.title)}">${
-  escapeHtml(kind.label)}</span></div>
-      <div class="cw-asset">${escapeHtml(m.symbol)}</div>
-      <div class="cw-amount ${selling ? 'cw-out' : 'cw-in'}">
-        ${escapeHtml((selling ? '' : '+') + money(m.usdDelta))}
-        <span class="cw-tokens">${m.pct > 0 ? '+' : ''}${m.pct.toFixed(1)}% of holding</span>
-      </div>
-      <div class="cw-amount cw-hold-now">${escapeHtml(money(m.usdNow))}
-        <span class="cw-tokens">${escapeHtml(tokens(m.unitsAfter, m.symbol))}</span>
-      </div>
-    </div>`;
-  }).join('')}`;
-}
-
-/**
- * The answer, and the working behind it.
- *
- * This replaced a summary line that reported one number — how one-sided the
- * whale flow was — and called it a trend. That was one signal wearing a
- * verdict's clothes. This counts four independent ones and shows each, so a
- * call built on two can never look like a call built on four.
- */
-/**
- * The ranking, as a card.
- *
- * Only the top few, because this is the headline — who is biggest right now —
- * and the full table underneath is where you go to read it properly. Putting
- * fifty rows in a card next to two other cards was how the page got confusing
- * in the first place.
- */
-/**
- * Exchange netflow for the whole market.
- *
- * Independent of everything else on the page — no coin filter, no window
- * picker, five fixed periods. It answers one question and it is the only thing
- * here that answers it: across every asset, is crypto capital moving onto
- * exchanges or off them?
- *
- * Nothing here says bought or sold. Coins arriving on an exchange have not been
- * sold and may never be; they have only been put where selling is possible.
- */
 /**
  * The largest holders of the selected coin, and what happened when one left.
  *
- * Follows the coin picker, unlike the netflow card beside it — "who holds the
+ * Follows the coin selector, unlike the netflow card beside it — "who holds the
  * most ETH" is a question about ETH.
  *
  * The lower table is the one worth reading carefully. A whale can leave the top
@@ -361,11 +87,11 @@ function drawTopHolders() {
   if (!box) return;
 
   const hd = `<div class="cw-card-hd">Top holder whales<span>${
-  symbol ? `${escapeHtml(symbol)} · current snapshot` : 'pick a coin above'}</span></div>`;
+  symbol ? `${escapeHtml(symbol)} · current snapshot` : 'pick a coin below'}</span></div>`;
 
   if (!symbol) {
-    box.innerHTML = `${hd}<div class="cw-card-empty">Select a coin in the picker to see
-      who holds the most of it.</div>`;
+    box.innerHTML = `${hd}<div class="cw-card-empty">Choose a coin in the selector below to
+      see who holds the most of it.</div>`;
     return;
   }
   if (topHolders?.unsupported) {
@@ -418,7 +144,7 @@ function drawTopHolders() {
           ${escapeHtml(money(e.usdMoved))} · ${e.pct.toFixed(1)}% of holding</span>
         <span class="cw-ev-status ${tone}">${escapeHtml(e.status)}</span>
       </div>
-      <div class="cw-ev-note">${escapeHtml(e.note)}${e.at ? ` · ${escapeHtml(ago(e.at))} ago` : ''}${href
+      <div class="cw-ev-note">${escapeHtml(e.note)}${e.at ? ` · ${escapeHtml(ago(e.at))}` : ''}${href
     ? ` · <a class="cw-hash" href="${escapeHtml(href)}" target="_blank"
            rel="noopener noreferrer">${escapeHtml(shortAddress(e.hash))}</a>` : ''}</div>
     </div>`;
@@ -437,6 +163,16 @@ function drawTopHolders() {
     ${eventRows}`;
 }
 
+/**
+ * Exchange netflow for the whole market.
+ *
+ * Independent of all three selectors — no coin, no timeframe, no size band. It
+ * answers one question and it is the only thing here that answers it: across
+ * every asset, is crypto capital moving onto exchanges or off them?
+ *
+ * Nothing here says bought or sold. Coins arriving on an exchange have not been
+ * sold and may never be; they have only been put where selling is possible.
+ */
 function drawNetflow() {
   const box = el('cwNetflow');
   if (!box) return;
@@ -486,10 +222,10 @@ function drawNetflow() {
     </div>`;
   };
 
-  const stamp = netflow?.at ? new Date(netflow.at).toLocaleTimeString() : '—';
+  const at = netflow?.at ? new Date(netflow.at).toLocaleTimeString() : '—';
 
   box.innerHTML = `<div class="cw-card-hd">Exchange netflow<span>whole market · all
-      assets in USD · not filtered by coin</span></div>
+      assets in USD · never filtered by the selectors below</span></div>
     <div class="cw-nf-head">
       <span>Period</span><span>Inflow</span><span>Outflow</span><span>Netflow</span><span>Signal</span>
     </div>
@@ -499,7 +235,7 @@ function drawNetflow() {
       confirmed trade.${recordHours && recordHours < 8784
   ? ` <span class="cw-nf-partial">*</span> record reaches ${recordHours < 48
     ? `${Math.max(1, Math.round(recordHours))}h` : `${Math.round(recordHours / 24)}d`}` : ''}
-      <br>Updated ${escapeHtml(stamp)} · ${netflow?.labels ?? 0} exchange addresses
+      <br>Updated ${escapeHtml(at)} · ${netflow?.labels ?? 0} exchange addresses
       across ${(netflow?.venues ?? []).length} venues
     </div>`;
 
@@ -511,94 +247,46 @@ function drawNetflow() {
   };
 }
 
-function drawRankCard() {
-  const box = el('cwRank');
-  if (!box) return;
-  const list = (reading?.ranked ?? []).slice(0, 5);
-
-  box.innerHTML = `<div class="cw-card-hd">Top whales<span>${
-  escapeHtml(bandDef(band).label)} · ${escapeHtml(windowNote())}</span></div>${
-  list.length
-    ? `<div class="cw-mini">${list.map((r, i) => `<div class="cw-mini-row">
-        <span class="cw-mini-n">${i + 1}</span>
-        <span class="cw-mini-who">${escapeHtml(r.owner || shortAddress(r.address))}</span>
-        <span class="cw-mini-sym">${escapeHtml(r.symbol)}</span>
-        <span class="cw-mini-amt ${r.netUsd > 0 ? 'cw-in' : 'cw-out'}">${
-  escapeHtml((r.netUsd > 0 ? '+' : '') + money(r.netUsd))}</span>
-      </div>`).join('')}</div>`
-    : `<div class="cw-card-empty">${loading ? 'Loading…'
-      : `Nothing in the ${escapeHtml(bandDef(band).label)} range over this window yet.`}</div>`}`;
-}
-
-function drawSummary() {
-  const box = el('cwSummary');
-  if (!box) return;
-
-  const v = reading?.verdict;
-  if (!v) {
-    box.innerHTML = loading ? '<div class="cw-note">Reading the chains…</div>' : '';
-    return;
-  }
-
-  const tone = VERDICT_TONE[v.trend] ?? '';
-  const s = reading?.stealth;
-
-  const rows = v.signals.map((sg) => {
-    const quiet = sg.vote === 0;
-    const amount = Number.isFinite(sg.value) && !quiet
-      ? (sg.value > 0 ? '+' : '') + money(sg.value) : '—';
-    return `<div class="cw-sig${quiet ? ' is-quiet' : ''}">
-      <span class="cw-sig-dot ${quiet ? '' : sg.vote > 0 ? 'cw-in' : 'cw-out'}">${
-  quiet ? '·' : sg.vote > 0 ? '▲' : '▼'}</span>
-      <span class="cw-sig-name">${escapeHtml(sg.label)}</span>
-      <span class="cw-sig-val ${quiet ? '' : sg.vote > 0 ? 'cw-in' : 'cw-out'}">${escapeHtml(amount)}</span>
-      <span class="cw-sig-note">${escapeHtml(quiet ? 'nothing to say yet' : sg.detail ?? sg.reads)}</span>
-    </div>`;
-  }).join('');
-
-  box.innerHTML = `
-    <div class="cw-card-hd">What is happening<span>4 independent signals</span></div>
-    <div class="cw-verdict">
-      <div class="cw-verdict-hd">
-        <span class="cw-verdict-word ${tone}">${escapeHtml(v.trend)}</span>
-        <span class="cw-verdict-count">${v.heard
-    ? `${Math.max(v.bullish, v.bearish)} of ${v.heard} signals agree`
-    : 'no signal has enough data yet'}${v.heard && v.heard < 3 ? ' · thin' : ''}</span>
-        ${v.insiderSelling ? '<span class="cw-flag">insider selling</span>' : ''}
-      </div>
-      <div class="cw-sigs">${rows}</div>
-    </div>
-    ${s ? `<div class="cw-stealth">
-      <div class="cw-stealth-hd">Stealth accumulation</div>
-      <div class="cw-stealth-body"><b>${s.wallets}</b> wallets · <b>${s.transfers}</b> transfers ·
-        net <b class="cw-in">+${escapeHtml(money(s.netUsd))}</b><br>largest single transfer only
-        ${escapeHtml(money(s.largestUsd))}</div>
-    </div>` : ''}`;
-}
+/* ── the three selectors ───────────────────────────────────────────────── */
 
 /**
- * What the chosen window actually reached back over.
+ * The coin selector, from CoinGecko's top fifty by market cap.
  *
- * A window longer than the record returns exactly what the shorter one did, and
- * with nothing said the buttons look broken. Saying how far back the collecting
- * goes turns an apparently dead button into an honest one.
+ * Nothing here is hardcoded: the list, the ranks and the counts all come from
+ * ?resource=coins, so it follows the market as it reorders itself.
+ *
+ * Coins with no chain this app can read are listed and disabled rather than
+ * dropped. Being told that a top-ten coin cannot be watched is information;
+ * silently omitting it looks like the app forgot about it.
  */
-function windowNote() {
-  const label = FLOW_WINDOWS.find((w) => w.id === win)?.label ?? win;
-  const since = reading?.observed?.since ?? flow?.observed?.since;
-  if (!since) return `over ${label}`;
-  const secs = Date.now() / 1000 - since;
-  const days = Math.floor(secs / 86400);
-  const span = days >= 1 ? `${days}d` : `${Math.max(1, Math.round(secs / 3600))}h`;
-  const covered = { '1w': 7, '1m': 31, '3m': 92, '1y': 366, all: Infinity }[win] ?? 31;
-  return days < covered ? `over ${label} — record goes back ${span}` : `over ${label}`;
+function drawCoins() {
+  const box = el('cwCoin');
+  if (!box || !coins) return;
+
+  const counts = feed?.counts ?? {};
+  const option = (c) => {
+    const watchable = c.chains.length > 0;
+    const n = counts[c.symbol] ?? 0;
+    const label = `#${c.rank}  ${c.symbol} — ${c.name}${
+      watchable ? (n ? `  (${n})` : '') : '  · not readable'}`;
+    return `<option value="${escapeHtml(c.symbol)}"${c.symbol === symbol ? ' selected' : ''}${
+      watchable ? '' : ' disabled'}>${escapeHtml(label)}</option>`;
+  };
+
+  box.innerHTML = `<option value=""${symbol ? '' : ' selected'}>All coins</option>${
+    (coins.coins ?? []).map(option).join('')}`;
+
+  box.onchange = () => {
+    if (box.value === symbol) return;
+    symbol = box.value;
+    load();
+  };
 }
 
 function drawWindow() {
   const picker = el('cwWindow');
   if (!picker) return;
-  picker.style.display = '';
-  picker.innerHTML = FLOW_WINDOWS.map((w) =>
+  picker.innerHTML = ACTIVITY_WINDOWS.map((w) =>
     `<button class="opt-tab${w.id === win ? ' active' : ''}"
       data-win="${w.id}">${escapeHtml(w.label)}</button>`).join('');
   picker.onclick = (e) => {
@@ -612,8 +300,6 @@ function drawWindow() {
 function drawBands() {
   const picker = el('cwBand');
   if (!picker) return;
-  // The bands filter a whale's position now, so they always apply.
-  picker.style.display = '';
   picker.innerHTML = BANDS.map((b) =>
     `<button class="opt-tab${b.id === band ? ' active' : ''}"
       data-band="${b.id}">${escapeHtml(b.label)}</button>`).join('');
@@ -621,15 +307,76 @@ function drawBands() {
     const id = e.target?.dataset?.band;
     if (!id || id === band) return;
     band = id;
-    openRank = null;
     load();
   };
 }
 
+/* ── the tape ──────────────────────────────────────────────────────────── */
+
+/** One end of a transfer, linked so the address can be read in full. */
+function end(label, address, chain) {
+  const href = explorerAddress(chain, address);
+  const known = !!label && label !== 'Wallet' && label !== 'Unknown';
+  const title = address ? `${address}${known ? ` · ${label}` : ''}` : 'not attributed';
+  return href
+    ? `<a class="cw-party${known ? ' is-known' : ''}" href="${escapeHtml(href)}"
+         target="_blank" rel="noopener noreferrer"
+         title="${escapeHtml(title)}">${escapeHtml(label)}</a>`
+    : `<span class="cw-party${known ? ' is-known' : ''}"
+         title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
+}
+
 /**
- * What the panel says when it has no rows — which is four different sentences,
- * because there are four different reasons and only some of them are anything
- * the reader can do something about.
+ * One row: how much, from where to where, what asset changed, what kind of
+ * movement it was, and when.
+ *
+ * The classification arrives from the server already made — it needs the
+ * exchange label set, which is three hundred addresses and has no business in
+ * the browser — so this only renders it. What it must not do is add confidence
+ * the classifier withheld: an exchange deposit is amber and says "sale not
+ * confirmed", and only a confirmed swap is ever green or red.
+ */
+function row(t) {
+  const a = t.activity;
+  const href = explorerTx(t.blockchain, t.hash);
+  const chains = [t.blockchain, ...(t.alsoOn ?? [])].map(chainLabel).join(' + ');
+  const tone = ACTION_TONE[a?.action] ?? '';
+
+  const flow = a?.swapped
+    ? `<span class="cw-swap-out">${escapeHtml(a.assetFrom)}</span><span
+         class="cw-swap-arrow"> → </span><span class="cw-swap-in">${escapeHtml(a.assetTo)}</span>`
+    : `<span class="cw-flow-flat">${escapeHtml(a?.assetFrom ?? t.symbol)} → ${
+  escapeHtml(a?.assetTo ?? t.symbol)}</span>`;
+
+  return `<div class="gam-row cw-act-grid">
+    <div class="gam-size">
+      ${escapeHtml(money(t.usd))}
+      <span class="cw-tokens">${escapeHtml(tokens(t.amount, t.symbol))}</span>
+    </div>
+    <div class="cw-path">
+      <span class="cw-path-line">${end(a?.fromLabel ?? 'Wallet', t.from?.address, t.blockchain)}
+        <span class="cw-arrow">→</span>
+        ${end(a?.toLabel ?? 'Wallet', t.to?.address, t.blockchain)}</span>
+      <span class="cw-tokens">${escapeHtml(chains)}${t.parts > 1 ? ` · ${t.parts} parts` : ''}${href
+    ? ` · <a class="cw-hash" href="${escapeHtml(href)}" target="_blank"
+           rel="noopener noreferrer" title="${escapeHtml(t.hash)}">${
+  escapeHtml(shortAddress(t.hash))}</a>` : ''}</span>
+    </div>
+    <div class="cw-flow">${flow}</div>
+    <div class="cw-act">
+      <span class="cw-act-tag ${tone}" title="${escapeHtml(a?.note ?? '')}">${
+  escapeHtml(a?.action ?? 'Unknown')}</span>
+      ${a?.action === 'Exchange Deposit'
+    ? '<span class="cw-act-note">sale not confirmed</span>' : ''}
+    </div>
+    <div class="gam-when" title="${escapeHtml(stamp(t.at))}">${escapeHtml(ago(t.at))}</div>
+  </div>`;
+}
+
+/**
+ * What the tape says when it has no rows — which is several different
+ * sentences, because there are several different reasons and only some of them
+ * are anything the reader can do something about.
  */
 function emptyMessage() {
   const provider = feed?.provider;
@@ -640,81 +387,54 @@ function emptyMessage() {
     return `Some chains are not answering right now (${escapeHtml(provider.error)}).
       Anything already recorded is still shown.`;
   }
-  const where = symbol ? `${escapeHtml(symbol)} ` : '';
-  return `No ${where}transfers in the ${escapeHtml(bandDef(band).label)} range yet.
-    The chains are read once a minute and the record grows from there —
-    transfers this large are rare, which is what makes them worth watching.`;
+
+  /** How far the record actually reaches, so a long timeframe stays honest. */
+  const since = feed?.recordSince;
+  const reach = since
+    ? (() => {
+      const secs = Date.now() / 1000 - since;
+      const days = Math.floor(secs / 86400);
+      return days >= 1 ? `${days}d` : `${Math.max(1, Math.round(secs / 3600))}h`;
+    })()
+    : null;
+
+  return `No ${symbol ? `${escapeHtml(symbol)} ` : ''}transfer in the ${
+    escapeHtml(bandDef(band).label)} range over ${escapeHtml(activityWindowDef(win).label)}.
+    ${reach ? `The record goes back ${escapeHtml(reach)}. ` : ''}Transfers this large are
+    rare, which is what makes them worth watching — try a wider size band or a
+    longer timeframe.`;
 }
 
 function draw() {
   const rows = el('cwRows');
   if (!rows) return;
 
+  drawCoins();
   drawWindow();
   drawBands();
-  drawCoins();
-  drawSummary();
-  drawRankCard();
   drawNetflow();
   drawTopHolders();
 
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
 
-  const transfers = selectTransfers(feed?.rows, { band });
-  const list = flow?.ranked ?? [];
+  const transfers = selectTransfers(feed?.rows, { band, window: win, limit: 80 });
 
-  const tape = transfers.length
-    ? `<div class="gam-head gam-grid cw-grid">
-         <div>Size</div><div>From → To</div><div>Direction</div>
-         <div>Traded · chain</div><div>When</div>
-       </div>${transfers.map(row).join('')}`
-    : `<div class="empty">${loading ? 'Loading…' : `No ${escapeHtml(bandDef(band).label)}
-       transfers recorded yet.`}</div>`;
-
-  const standings = list.length
-    ? `<div class="gam-head cw-rank-grid">
-         <div>#</div><div>Whale</div><div>Coin</div><div>Value now</div><div>Last</div>
-       </div>${list.map(walletRow).join('')}`
-    : `<div class="empty">${loading ? 'Loading…' : `No whale holds a position in the ${escapeHtml(bandDef(band).label)} range over
-       this window yet. Try a wider band or a longer window — the record only goes
-       back as far as the app has been collecting.`}</div>`;
-
-  rows.innerHTML = `
-    <div class="cw-section">
-      <div class="cw-section-hd">Whale transactions<span>as they land</span></div>
-      ${tape}
-    </div>
-    <div class="cw-section">
-      <div class="cw-section-hd">Whale ranking<span>ranked on today's value · ${
-  escapeHtml(windowNote())}</span></div>
-      ${standings}
-    </div>
-    <div class="cw-section">
-      <div class="cw-section-hd">Holder changes<span>balances rather than transfers —
-        this catches a sale however it was made</span></div>
-      ${holderRows()}
+  const head = `<div class="gam-head cw-act-grid">
+      <div>Size</div><div>From → To</div><div>Asset flow</div><div>Action</div><div>When</div>
     </div>`;
 
-  // One handler on the container, so redrawing cannot leave a stale one behind.
-  rows.onclick = (e) => {
-    const row = e.target.closest('[data-rank]');
-    // A link inside a row is a link, not a request to open the row.
-    if (!row || e.target.closest('a')) return;
-    const r = Number(row.dataset.rank);
-    openRank = openRank === r ? null : r;
-    openLeverage = null;
-    draw();
+  rows.innerHTML = transfers.length
+    ? head + transfers.map(row).join('')
+    : `<div class="empty">${loading ? 'Loading…' : emptyMessage()}</div>`;
 
-    // Asked only for the row actually opened, and only once.
-    const opened = (flow?.ranked ?? []).find((x) => x.rank === openRank);
-    if (opened) {
-      fetchLeverage(opened.address).then((answer) => {
-        // The row may have been closed, or another opened, while this was away.
-        if (openRank === r) { openLeverage = answer ?? { positions: [] }; draw(); }
-      });
-    }
-  };
+  const count = el('cwCount');
+  if (count) {
+    count.textContent = transfers.length
+      ? `${transfers.length} transfer${transfers.length === 1 ? '' : 's'} · ${
+        bandDef(band).label} · ${activityWindowDef(win).label}`
+      : `${bandDef(band).label} · ${activityWindowDef(win).label}`;
+  }
 
   const src = el('cwSrc');
   if (src) {
@@ -725,11 +445,13 @@ function draw() {
     src.innerHTML = lastAt
       ? `${escapeHtml(names.join(' · ') || 'on-chain')}${
         feed?.provider?.whaleAlert ? ' · Whale Alert' : ''} — ${watchable} of the top 50
-         watchable · $1M floor · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}
+         watchable · updated ${escapeHtml(new Date(lastAt).toLocaleTimeString())}
          ${names.some((n) => n.endsWith('*')) ? '<br>* sampled each poll rather than swept in full' : ''}`
       : 'Reading the chains…';
   }
 }
+
+/* ── loading ───────────────────────────────────────────────────────────── */
 
 /**
  * Fetch and draw.
@@ -751,50 +473,50 @@ export async function renderCryptoWhales() {
 }
 
 async function load() {
-  loading = !flow && !feed;
+  loading = !feed;
   draw();
 
   /**
    * Each card draws when its own answer lands, not when the slowest does.
    *
-   * These were awaited together, so every card waited on whichever request was
-   * slowest — and one of them triggers the chain poll, which takes the better
-   * part of a minute on a cold start. The holder card had its data in three
-   * seconds and sat blank for forty, which is indistinguishable from broken.
+   * These were awaited together once, so every card waited on whichever request
+   * was slowest — and one of them triggers the chain poll, which takes the
+   * better part of a minute on a cold start. The holder card had its data in
+   * three seconds and sat blank for forty, which is indistinguishable from
+   * broken.
    *
-   * The token guards against a stale answer landing after the coin or window
-   * has already changed: only the newest load is allowed to write.
+   * The token guards against a stale answer landing after a selector has
+   * already changed: only the newest load is allowed to write.
    */
   const mine = ++loadToken;
-  const settle = (fn) => (value) => { if (mine === loadToken) { fn(value); loading = false; draw(); } };
+  const settle = (fn) => (value) => {
+    if (mine !== loadToken) return;
+    fn(value);
+    loading = false;
+    draw();
+  };
 
-  const jobs = [
-    fetchVerdict({ symbol, window: win, band }).then(settle((read) => {
-      if (read?.error == null || !reading) reading = read;
-    })),
-    fetchTransfers({ symbol, band }).then(settle((next) => {
-      if (next?.rows?.length || !feed || next?.provider) feed = next;
+  await Promise.allSettled([
+    // All three selectors: this is the tape they belong to.
+    fetchTransfers({ symbol, band, window: win }).then(settle((next) => {
+      /**
+       * A refresh that came back empty replaces what was there, and it should:
+       * a selector may have just changed, and holding the previous answer would
+       * show one filter's results under another filter's label.
+       */
+      if (next?.rows || !feed) feed = next;
     })),
     // No symbol: this one is about the market, whatever coin is selected.
     fetchNetflow().then(settle((market) => {
       if (market?.error == null || !netflow) netflow = market;
     })),
-    // A symbol: this one is about that coin, and means nothing without it.
+    // A symbol, and only a symbol — a timeframe means nothing to a snapshot.
     fetchTopHolders({ symbol }).then(settle((top) => {
       if (top?.error == null || !topHolders) topHolders = top;
     })),
-  ];
-  await Promise.allSettled(jobs);
+  ]);
+
   if (mine !== loadToken) return;
-  /**
-   * One request now carries what three used to.
-   *
-   * A refresh that came back empty replaces what was there, and it should: the
-   * band or the window may have just changed, and holding the previous answer
-   * would show one filter's results under another filter's label.
-   */
-  flow = reading ? { ranked: reading.ranked, observed: reading.observed } : flow;
-  holders = reading ? { moves: reading.holders } : holders;
   lastAt = Date.now();
   draw();
 }
@@ -830,8 +552,8 @@ export function installGambleTabs({ onMacro } = {}) {
 /**
  * Keep it live while it is on screen.
  *
- * Sixty seconds, matching the rate at which the server actually asks the
- * provider — polling faster would only re-read the same store. An off-screen or
+ * Sixty seconds, matching the rate at which the server actually reads the
+ * chains — polling faster would only re-read the same store. An off-screen or
  * backgrounded page skips the fetch and keeps the timer.
  */
 const EVERY_MS = 60_000;
