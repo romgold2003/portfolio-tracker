@@ -89,7 +89,23 @@ export function movementOf({ transfers = [], unitsNow = 0, address, days, now = 
   }
 
   const netUnits = inUnits - outUnits;
-  const unitsThen = unitsNow - netUnits;
+  const raw = unitsNow - netUnits;
+
+  /**
+   * A wallet that started the window empty lands on zero, give or take.
+   *
+   * A real address came back at −9.3e-10 tokens: it received all 4,369,740
+   * LINK it holds inside the window, so the true answer is exactly zero and
+   * the sign is the last bits of a floating-point subtraction. Anything within
+   * a whisker of the amounts involved is that, and is zero.
+   *
+   * A balance that is negative by more than a whisker is not rounding — it
+   * means the transfer list is missing movements — so the window is reported
+   * as unanswerable rather than as a number that cannot be true.
+   */
+  const noise = Math.max(unitsNow, inUnits, outUnits) * 1e-9;
+  if (raw < -noise) return { days, covered: false, transfers: counted, lastAt };
+  const unitsThen = raw < 0 ? 0 : raw;
 
   return {
     days,
@@ -100,6 +116,14 @@ export function movementOf({ transfers = [], unitsNow = 0, address, days, now = 
     unitsThen,
     transfers: counted,
     lastAt,
+    /**
+     * Held nothing at the start and something now: the position was opened
+     * inside the window. There is no percentage of nothing, so it is flagged
+     * rather than given a number — and it must not fall through to "holding",
+     * which is what a whale that built its entire position this quarter was
+     * being called.
+     */
+    fromNothing: unitsThen === 0 && unitsNow > 0,
     /**
      * As a share of what was held then, which is the number that means
      * something: a whale that shed two million out of three is a different
@@ -122,6 +146,10 @@ export const MATERIAL_PCT = 2;
 export function describeHolding(move) {
   if (!move?.covered) {
     return { status: 'Not enough history', tone: '', note: 'The transfer record does not reach back this far.' };
+  }
+  // Built from nothing inside the window: not a holder, a new arrival.
+  if (move.fromNothing) {
+    return { status: 'New position', tone: 'cw-in', note: 'The whole position was built inside this window.' };
   }
   if (move.pct == null || Math.abs(move.pct) < MATERIAL_PCT) {
     return {

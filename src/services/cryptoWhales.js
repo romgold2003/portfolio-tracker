@@ -346,6 +346,19 @@ export function describeHolding(move) {
       note: 'This wallet moves too often for one page of history to reach back that far.',
     };
   }
+  // Built from nothing inside the window: not a holder, a new arrival. A
+  // whale that opened its entire position this quarter was reading as
+  // 'Holding', which is the opposite of what happened.
+  /**
+   * The flag, or the shape that produced it.
+   *
+   * Answers cached before the flag existed carry a balance of zero (or a
+   * floating-point sliver below it) and no flag, and would otherwise read as
+   * "Holding" until the cache turns over the next day.
+   */
+  if (move.fromNothing || (move.covered && move.unitsThen != null && move.unitsThen <= 0)) {
+    return { status: 'New position', tone: 'cw-in', note: 'The whole position was built inside this window.' };
+  }
   if (move.pct == null || Math.abs(move.pct) < HOLD_MATERIAL_PCT) {
     return move.transfers === 0
       ? { status: 'Untouched', tone: '', note: 'Not one movement in this window.' }

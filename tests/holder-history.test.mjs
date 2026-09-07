@@ -328,3 +328,60 @@ describe('paging back far enough to answer', () => {
     assert.equal(out.pages, 1);
   });
 });
+
+describe('a wallet that started the window with nothing', () => {
+  // A real address came back at −9.3e-10 tokens: it had received all 4,369,740
+  // LINK it holds inside the window, so the true answer is exactly zero and the
+  // sign was the last bits of a floating-point subtraction. It then fell
+  // through to "Holding" — which is the opposite of what a whale that built its
+  // entire position this quarter is doing.
+  const built = (over = {}) => movementOf({
+    address: WHALE,
+    unitsNow: 4_369_740.867303842,
+    days: 90,
+    now: NOW,
+    transfers: [
+      { at: (NOW - 10 * DAY) / 1000, from: '0xa', to: WHALE, units: 4_618_340.867303843 },
+      { at: (NOW - 20 * DAY) / 1000, from: WHALE, to: '0xb', units: 248_600 },
+    ],
+    complete: true,
+    ...over,
+  });
+
+  test('lands on exactly zero rather than a negative sliver', () => {
+    const m = built();
+    assert.equal(m.covered, true);
+    assert.equal(m.unitsThen, 0, `got ${m.unitsThen}`);
+  });
+
+  test('is flagged as a position opened inside the window', () => {
+    assert.equal(built().fromNothing, true);
+  });
+
+  test('reads as a new position, never as holding', () => {
+    const d = describeHolding(built());
+    assert.equal(d.status, 'New position');
+    assert.equal(d.tone, 'cw-in');
+    assert.ok(!/holding/i.test(d.status));
+  });
+
+  test('a wallet that merely held is still holding', () => {
+    const m = movementOf({
+      address: WHALE, unitsNow: 1_000_000, days: 90, now: NOW, complete: true,
+      transfers: [{ at: (NOW - 5 * DAY) / 1000, from: '0xa', to: WHALE, units: 1000 }],
+    });
+    assert.equal(m.fromNothing, false);
+    assert.equal(describeHolding(m).status, 'Holding');
+  });
+
+  test('a balance that is negative by more than rounding is unanswerable', () => {
+    // Not rounding — it means movements are missing from the list, and a
+    // balance that cannot be true must not be presented as one.
+    const m = movementOf({
+      address: WHALE, unitsNow: 100, days: 30, now: NOW, complete: true,
+      transfers: [{ at: (NOW - DAY) / 1000, from: '0xa', to: WHALE, units: 5_000_000 }],
+    });
+    assert.equal(m.covered, false);
+    assert.equal(m.unitsThen, undefined);
+  });
+});
