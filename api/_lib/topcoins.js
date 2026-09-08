@@ -22,6 +22,7 @@
  */
 import { CHAINS, COVERAGE_NOTE } from './chainfeeds.js';
 import { fetchCoverage, feedConfigured } from './whalealert.js';
+import { isDollar } from './stablecoins.js';
 
 const MARKETS_URL = 'https://api.coingecko.com/api/v3/coins/markets';
 const LIST_URL = 'https://api.coingecko.com/api/v3/coins/list?include_platform=true';
@@ -77,6 +78,75 @@ function readersFor({ symbol, platforms }) {
 }
 
 /**
+ * Which coins are dollars rather than bets, from CoinGecko's own category.
+ *
+ * Twelve of the top fifty were stablecoins — USDT, USDC, USDS, DAI, USDE,
+ * USD1, USDG, PYUSD, BUIDL, USYC, RLUSD, USDY — which is a quarter of the
+ * picker spent on things whose price is one dollar by construction. Watching
+ * whales trade them is watching people move cash between accounts.
+ *
+ * The list is fetched rather than hardcoded because new ones keep arriving:
+ * a hardcoded set caught the twelve above and then let USDGO (#61) and BFUSD
+ * (#63) straight back in as their replacements.
+ *
+ * It is the union of two sources, because neither is complete on its own.
+ * CoinGecko's category knows the new arrivals; it does not include the
+ * tokenised treasury funds — BUIDL, USYC, USDY — which are dollar instruments
+ * wearing a fund's name. The local list knows those.
+ *
+ * Gold is deliberately not in either. PAXG and XAUT track an ounce, not a
+ * dollar, and holding them is a position rather than sitting in cash.
+ */
+const STABLE_CATEGORY = `${MARKETS_URL}?vs_currency=usd&category=stablecoins`
+  + '&order=market_cap_desc&per_page=250&page=1&sparkline=false';
+
+/** They change slowly; asking once every six hours is plenty. */
+const STABLE_TTL_MS = 6 * 60 * 60 * 1000;
+let stableCache = { at: 0, ids: null };
+
+export function resetStableCache() { stableCache = { at: 0, ids: null }; }
+
+async function stableIds({ fetcher = fetch, now = Date.now() } = {}) {
+  if (stableCache.ids && now - stableCache.at < STABLE_TTL_MS) return stableCache.ids;
+  try {
+    const res = await fetcher(STABLE_CATEGORY, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(String(res.status));
+    const rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error('not a list');
+    const ids = new Set(rows.map((c) => String(c?.id ?? '')).filter(Boolean));
+    stableCache = { at: now, ids };
+    return ids;
+  } catch {
+    /**
+     * The local list still applies, so a failure here costs the newest
+     * stablecoins their filtering and nothing else. Better a picker with one
+     * unexpected dollar token in it than no picker at all.
+     */
+    return stableCache.ids ?? new Set();
+  }
+}
+
+/**
+ * Tokenised cash funds, which are neither in the category nor dollar-pegged.
+ *
+ * EURSAFO reached the picker at rank sixty-six: "Spiko Amundi Overnight Swap
+ * Fund (EUR)", trading at 1.18 dollars because a euro costs 1.18 dollars.
+ * CoinGecko does not file it under stablecoins — it is a fund share — and it
+ * is not pegged to a dollar, so neither existing test caught it. It is still
+ * somebody parking cash, which is the thing being filtered out.
+ *
+ * Deliberately narrow. It matches how these instruments are named and nothing
+ * else: a fund whose whole purpose is to hold cash overnight says so on the
+ * tin. Bitcoin ETFs and staking derivatives are positions and must not match.
+ */
+const CASH_FUND = /overnight|money market|liquidity fund|treasury fund|yield fund/i;
+
+/** A coin that is cash rather than a position, from any of the three. */
+const isStablecoin = (coin, ids) => ids.has(coin.id)
+  || isDollar(coin.symbol)
+  || CASH_FUND.test(coin.name ?? '');
+
+/**
  * @returns {Promise<{coins: object[], chains: object[], watchable: number}>}
  */
 export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() } = {}) {
@@ -85,7 +155,13 @@ export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() }
   const url = new URL(MARKETS_URL);
   url.searchParams.set('vs_currency', 'usd');
   url.searchParams.set('order', 'market_cap_desc');
-  url.searchParams.set('per_page', String(limit));
+  /**
+   * Twice what is shown, because the stablecoins are dropped afterwards and
+   * their places have to be filled from further down the ranking. Twelve of
+   * the top fifty were dollars, so fifty fetched would have returned
+   * thirty-eight.
+   */
+  url.searchParams.set('per_page', String(Math.min(250, limit * 2)));
   url.searchParams.set('page', '1');
   url.searchParams.set('sparkline', 'false');
 
@@ -109,7 +185,9 @@ export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() }
     try { waCoverage = (await fetchCoverage({ fetcher, now })).bySymbol; } catch { /* optional */ }
   }
 
-  const coins = rows.map((c, i) => {
+  const stables = await stableIds({ fetcher, now });
+
+  const built = rows.map((c, i) => {
     const symbol = String(c?.symbol ?? '').trim().toUpperCase();
     const id = String(c?.id ?? '');
     const readers = readersFor({ symbol, platforms: platforms?.get(id) });
@@ -149,8 +227,27 @@ export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() }
     };
   }).filter((c) => c.symbol);
 
+  /**
+   * Two lists, and the difference matters.
+   *
+   * `coins` is what a person is offered: the largest fifty that are actually
+   * bets on something. `all` is everything fetched, stablecoins included, and
+   * the jobs that need them still get them — the dominance reading is the sum
+   * of their market caps, and the transfer sweep watches USDT and USDC because
+   * they carry more large movements than anything else on the chains.
+   *
+   * Dropping them from the sweep as well as the picker would have quietly
+   * emptied half the whale tape.
+   */
+  const coins = built.filter((c) => !isStablecoin(c, stables)).slice(0, limit);
+
   const value = {
     coins,
+    all: built,
+    /** What was dropped, so the picker can say so rather than just being short. */
+    excludedStables: built.filter((c) => isStablecoin(c, stables))
+      .slice(0, limit)
+      .map((c) => c.symbol),
     chains: CHAINS.map((c) => ({
       id: c.id, label: c.label, tokens: c.tokens, complete: c.complete,
       note: COVERAGE_NOTE[c.id] ?? null,
@@ -225,7 +322,10 @@ export async function priceMap({ fetcher = fetch, now = Date.now() } = {}) {
 const DENSE_IDS = ['wrapped-bitcoin', 'weth', 'wrapped-steth', 'coinbase-wrapped-btc'];
 
 export async function watchContracts(options = {}) {
-  const { coins } = await topCoins(options);
+  // Everything, not the shown fifty: USDT and USDC carry more large transfers
+  // than anything else on these chains, and they are not in the picker.
+  const { all, coins } = await topCoins(options);
+  const sweepable = all ?? coins;
   const byChain = {};
   const add = (chain, contract) => {
     if (!contract) return;
@@ -257,7 +357,7 @@ export async function watchContracts(options = {}) {
     }
   } catch { /* the top fifty on their own are still worth sweeping */ }
 
-  for (const coin of coins) {
+  for (const coin of sweepable) {
     for (const reader of coin.readers) add(reader.chain, reader.contract);
   }
 

@@ -856,3 +856,7 @@ body.light{--wave-strength:0.34}
   font-variant-numeric:tabular-nums}
 /* Not yet worked out, which is different from nothing to report. */
 .cw-th-wait{color:var(--text4);font-weight:400}
+
+/* Why the strip is fifty coins that are not the fifty you might expect. */
+.cw-coin-note{display:flex;align-items:center;flex:0 0 auto;padding:0 4px 0 10px;
+  font-size:9px;color:var(--text4);white-space:nowrap}

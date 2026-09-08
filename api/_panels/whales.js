@@ -453,7 +453,9 @@ const DOMINANCE_BUDGET_MS = 4_000;
 async function liveDominance(now) {
   const [stored, coins] = await Promise.all([
     stablecoins.read({ now }).catch(() => null),
-    topCoins().then((t) => t.coins).catch(() => []),
+    // Every coin, because this is the sum of the stablecoins' market caps and
+    // they are deliberately not in the picker.
+    topCoins().then((t) => t.all ?? t.coins).catch(() => []),
   ]);
 
   const live = await stablecoins.current({ coins, now }).catch(() => null);
@@ -628,10 +630,12 @@ export default async function handler(req, res) {
 
   if (resource === 'coins') {
     try {
-      const { coins, chains, watchable } = await topCoins();
+      const { coins, chains, watchable, excludedStables } = await topCoins();
       // The ranking moves slowly and the coverage list barely at all.
       res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600');
-      return send(res, 200, { coins, chains, watchable, feed: feedConfigured() });
+      // What was left out travels with it, so a short-looking list can explain
+      // itself rather than reading as coins the app forgot about.
+      return send(res, 200, { coins, chains, watchable, excludedStables, feed: feedConfigured() });
     } catch (err) {
       return fail(res, 502, `Could not build the coin list (${err.message}).`);
     }
@@ -746,8 +750,10 @@ export default async function handler(req, res) {
       let byAddress = null;
       try { byAddress = await loadExchanges(); } catch { /* venues go unnamed */ }
 
-      const { coins } = await topCoins();
-      const coin = coins.find((c) => c.symbol === symbol);
+      // The whole list: a symbol asked for directly should still answer even
+      // if it is not one of the fifty offered.
+      const { coins, all } = await topCoins();
+      const coin = (all ?? coins).find((c) => c.symbol === symbol);
       const reader = (coin?.readers ?? []).find((r) => r.contract);
       const hosts = { ethereum: 'eth.blockscout.com', polygon: 'polygon.blockscout.com' };
       const host = reader ? hosts[reader.chain] : null;

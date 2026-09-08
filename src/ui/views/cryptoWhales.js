@@ -402,9 +402,20 @@ function drawCoins() {
     </button>`;
   };
 
+  /**
+   * Said once, quietly, at the end of the strip.
+   *
+   * Twelve of the top fifty were dollars. Dropping them without a word would
+   * leave a list that looks like it is missing the coins everybody knows.
+   */
+  const dropped = (coins.excludedStables ?? []).length
+    ? `<span class="cw-coin-note" title="${escapeHtml((coins.excludedStables ?? []).join(', '))}">${
+      coins.excludedStables.length} stablecoins not shown</span>`
+    : '';
+
   box.innerHTML = `<button class="cw-coin${symbol ? '' : ' active'}" data-symbol="">
       <span class="cw-sym">All coins</span>
-    </button>${coins.coins.map(option).join('')}`;
+    </button>${coins.coins.map(option).join('')}${dropped}`;
 
   box.onclick = (e) => {
     const button = e.target.closest('[data-symbol]');

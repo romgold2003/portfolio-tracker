@@ -20,7 +20,7 @@ import { sqliteDriver } from './support/sqlite.mjs';
 import {
   normaliseTransfer, fetchCoverage, fetchTransfers, resetCoverageCache,
 } from '../api/_lib/whalealert.js';
-import { topCoins, watchContracts, resetTopCoinsCache, resetPriceCache } from '../api/_lib/topcoins.js';
+import { topCoins, watchContracts, resetTopCoinsCache, resetStableCache, resetPriceCache } from '../api/_lib/topcoins.js';
 import {
   priceFor, normalise as normaliseChain,
   FLOOR_USD as CHAIN_FLOOR, DISPLAY_FLOOR_USD as DISPLAY_FLOOR,
@@ -107,13 +107,32 @@ describe('the top fifty, joined to the chains that can be read', () => {
     { id: 'chainlink', platforms: { ethereum: '0x514910771af9ca656af840dff83e8264ecf986ca' } },
   ];
 
-  const feed = (extra = []) => stubFetch([
-    { json: markets }, { json: platforms }, ...extra,
-  ]);
+  /**
+   * Dispatched on the URL rather than on call order.
+   *
+   * A queue that repeats its last body handed the stablecoin-category request
+   * the platform map, every coin in it looked like a dollar, and the picker
+   * came back empty. The real API answers by endpoint, so the stub should.
+   */
+  const feed = () => {
+    const calls = [];
+    const fn = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.includes('category=stablecoins')) return { ok: true, status: 200, json: async () => [{ id: 'tether' }] };
+      if (u.includes('coins/list')) return { ok: true, status: 200, json: async () => platforms };
+      return { ok: true, status: 200, json: async () => markets };
+    };
+    fn.calls = calls;
+    return fn;
+  };
 
   test('a coin is matched to a chain by its contract, not by a typed table', async () => {
-    const { coins } = await topCoins({ fetcher: feed() });
-    const bySymbol = Object.fromEntries(coins.map((c) => [c.symbol, c]));
+    // Read off the whole list rather than the offered one: USDT is a
+    // stablecoin and no longer appears in the picker, but the reader matching
+    // this checks is about every coin the app knows.
+    const { all } = await topCoins({ fetcher: feed() });
+    const bySymbol = Object.fromEntries(all.map((c) => [c.symbol, c]));
 
     // Three of Tether's four networks have a reader here; Solana does not, and
     // is correctly not claimed.
@@ -127,8 +146,8 @@ describe('the top fifty, joined to the chains that can be read', () => {
   });
 
   test('a native coin is matched to its own chain, contract or not', async () => {
-    const { coins } = await topCoins({ fetcher: feed() });
-    const btc = coins.find((c) => c.symbol === 'BTC');
+    const { all } = await topCoins({ fetcher: feed() });
+    const btc = all.find((c) => c.symbol === 'BTC');
     assert.deepEqual(btc.readers.map((r) => r.chain), ['bitcoin']);
     assert.equal(btc.readers[0].contract, null);
     assert.equal(btc.readers[0].native, true);
@@ -139,12 +158,14 @@ describe('the top fifty, joined to the chains that can be read', () => {
   test('a top-fifty coin with no readable chain is kept and marked, not dropped', async () => {
     const { coins, watchable } = await topCoins({ fetcher: feed() });
     const avax = coins.find((c) => c.symbol === 'AVAX');
+    void watchable;
     // Showing it greyed is information. Omitting it looks like a bug.
     assert.ok(avax, 'AVAX was dropped from the list');
     assert.equal(avax.support, 'none');
     assert.deepEqual(avax.chains, []);
     assert.equal(avax.rank, 12);
-    assert.equal(watchable, 3);
+    // BTC and LINK. USDT was the third and is a stablecoin now filtered out.
+    assert.equal((await topCoins({ fetcher: feed() })).watchable, 2);
   });
 
   test('a chain read in full is single, not partial', async () => {
@@ -156,11 +177,13 @@ describe('the top fifty, joined to the chains that can be read', () => {
     // Saying "cannot be watched" because a second request failed is a
     // confident claim built on a missing answer. Native coins still match.
     const fetcher = async (url) => {
-      if (String(url).includes('coins/list')) throw new Error('platform map is down');
+      const u = String(url);
+      if (u.includes('coins/list')) throw new Error('platform map is down');
+      if (u.includes('category=stablecoins')) return { ok: true, status: 200, json: async () => [{ id: 'tether' }] };
       return { ok: true, status: 200, json: async () => markets };
     };
-    const { coins } = await topCoins({ fetcher });
-    assert.equal(coins.find((c) => c.symbol === 'USDT').support, 'unknown');
+    const { coins, all } = await topCoins({ fetcher });
+    assert.equal(all.find((c) => c.symbol === 'USDT').support, 'unknown');
     // BTC needs no contract, so it is still readable and still says so.
     assert.equal(coins.find((c) => c.symbol === 'BTC').support, 'partial');
   });
@@ -705,5 +728,127 @@ describe('the timeframe the tape was asked for', () => {
     assert.deepEqual(inBand('huge'), [100_000_000]);
     assert.deepEqual(inBand('mega'), [250_000_000]);
     assert.equal(inBand('all').length, 3);
+  });
+});
+
+describe('the picker is bets, not dollars', () => {
+  const markets = [
+    { id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', market_cap_rank: 1 },
+    { id: 'tether', symbol: 'usdt', name: 'Tether', market_cap_rank: 3 },
+    { id: 'usd-coin', symbol: 'usdc', name: 'USDC', market_cap_rank: 6 },
+    { id: 'chainlink', symbol: 'link', name: 'Chainlink', market_cap_rank: 15 },
+    { id: 'pax-gold', symbol: 'paxg', name: 'PAX Gold', market_cap_rank: 47 },
+    { id: 'some-new-dollar', symbol: 'newusd', name: 'New Dollar', market_cap_rank: 61 },
+    { id: 'avalanche-2', symbol: 'avax', name: 'Avalanche', market_cap_rank: 62 },
+  ];
+  /** CoinGecko's own stablecoin category — it knows the new arrivals. */
+  const category = [{ id: 'tether' }, { id: 'usd-coin' }, { id: 'some-new-dollar' }];
+
+  const fetcher = async (url) => {
+    const u = String(url);
+    if (u.includes('category=stablecoins')) return { ok: true, status: 200, json: async () => category };
+    if (u.includes('coins/list')) return { ok: true, status: 200, json: async () => [] };
+    return { ok: true, status: 200, json: async () => markets };
+  };
+
+  test('the dollars are dropped and the next coins take their places', async () => {
+    resetTopCoinsCache();
+    resetStableCache();
+    const { coins } = await topCoins({ fetcher, limit: 4 });
+    assert.deepEqual(coins.map((c) => c.symbol), ['BTC', 'LINK', 'PAXG', 'AVAX']);
+  });
+
+  test('a stablecoin CoinGecko added yesterday is caught too', async () => {
+    // A hardcoded list caught the twelve in the top fifty and then let USDGO
+    // and BFUSD straight back in as their replacements.
+    resetTopCoinsCache();
+    resetStableCache();
+    const { coins } = await topCoins({ fetcher, limit: 10 });
+    assert.ok(!coins.some((c) => c.symbol === 'NEWUSD'), 'a new dollar token got through');
+  });
+
+  test('gold is a position, not cash, and stays', async () => {
+    resetTopCoinsCache();
+    resetStableCache();
+    const { coins } = await topCoins({ fetcher, limit: 10 });
+    assert.ok(coins.some((c) => c.symbol === 'PAXG'));
+  });
+
+  test('the whole list still holds them, because other things need them', async () => {
+    // The dominance reading is the sum of their market caps and the transfer
+    // sweep watches USDT and USDC because they carry the most movement.
+    resetTopCoinsCache();
+    resetStableCache();
+    const { all, coins } = await topCoins({ fetcher, limit: 4 });
+    assert.ok(all.some((c) => c.symbol === 'USDT'));
+    assert.ok(!coins.some((c) => c.symbol === 'USDT'));
+  });
+
+  test('what was dropped is named rather than silently missing', async () => {
+    resetTopCoinsCache();
+    resetStableCache();
+    const { excludedStables } = await topCoins({ fetcher, limit: 10 });
+    assert.ok(excludedStables.includes('USDT'));
+    assert.ok(excludedStables.includes('USDC'));
+    assert.ok(!excludedStables.includes('PAXG'));
+  });
+
+  test('a failed category still filters by the list we keep ourselves', async () => {
+    resetTopCoinsCache();
+    resetStableCache();
+    const flaky = async (url) => {
+      const u = String(url);
+      if (u.includes('category=stablecoins')) return { ok: false, status: 429 };
+      if (u.includes('coins/list')) return { ok: true, status: 200, json: async () => [] };
+      return { ok: true, status: 200, json: async () => markets };
+    };
+    const { coins } = await topCoins({ fetcher: flaky, limit: 10 });
+    // USDT and USDC are in the local list, so they still go.
+    assert.ok(!coins.some((c) => c.symbol === 'USDT'));
+    assert.ok(!coins.some((c) => c.symbol === 'USDC'));
+    // The one only CoinGecko knew about gets through, which is the honest cost.
+    assert.ok(coins.some((c) => c.symbol === 'NEWUSD'));
+  });
+});
+
+describe('cash that is not a stablecoin', () => {
+  // EURSAFO reached the picker at rank sixty-six: "Spiko Amundi Overnight Swap
+  // Fund (EUR)", trading at 1.18 dollars because a euro costs 1.18 dollars.
+  // CoinGecko files it as a fund, not a stablecoin, and it is not dollar
+  // pegged — so neither of the other two filters saw it.
+  const markets = [
+    { id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', market_cap_rank: 1 },
+    { id: 'spiko-amundi-overnight-swap-fund-eur', symbol: 'eursafo', name: 'Spiko Amundi Overnight Swap Fund (EUR)', market_cap_rank: 66 },
+    { id: 'blackrock-buidl', symbol: 'buidl', name: 'BlackRock USD Institutional Digital Liquidity Fund', market_cap_rank: 35 },
+    { id: 'ethereum', symbol: 'eth', name: 'Ethereum', market_cap_rank: 2 },
+    { id: 'lido-staked-ether', symbol: 'steth', name: 'Lido Staked Ether', market_cap_rank: 12 },
+  ];
+  const fetcher = async (url) => {
+    const u = String(url);
+    if (u.includes('category=stablecoins')) return { ok: true, status: 200, json: async () => [] };
+    if (u.includes('coins/list')) return { ok: true, status: 200, json: async () => [] };
+    return { ok: true, status: 200, json: async () => markets };
+  };
+
+  test('a euro money-market fund is cash, and goes', async () => {
+    resetTopCoinsCache();
+    resetStableCache();
+    const { coins } = await topCoins({ fetcher, limit: 10 });
+    assert.ok(!coins.some((c) => c.symbol === 'EURSAFO'), 'a cash fund reached the picker');
+  });
+
+  test('so does a dollar liquidity fund CoinGecko does not file as a stablecoin', async () => {
+    resetTopCoinsCache();
+    resetStableCache();
+    const { coins } = await topCoins({ fetcher, limit: 10 });
+    assert.ok(!coins.some((c) => c.symbol === 'BUIDL'));
+  });
+
+  test('a staking derivative is a position and stays', async () => {
+    // The pattern must not reach past cash funds into things that are bets.
+    resetTopCoinsCache();
+    resetStableCache();
+    const { coins } = await topCoins({ fetcher, limit: 10 });
+    assert.deepEqual(coins.map((c) => c.symbol), ['BTC', 'ETH', 'STETH']);
   });
 });
