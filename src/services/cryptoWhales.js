@@ -323,55 +323,76 @@ export const STANCE_TONE = { Bullish: 'cw-in', Bearish: 'cw-out', Neutral: '' };
 /** "11.6%" — two significant places, because the third is noise on a slow signal. */
 export const percent = (n) => (Number.isFinite(n) ? `${n.toFixed(2)}%` : '—');
 
-/** Below this a change is the dust of an active wallet, not a decision. */
-const HOLD_MATERIAL_PCT = 2;
+/**
+ * Below this the position is the size it was.
+ *
+ * Half a percent of a nine-figure position is still a lot of money, but it is
+ * not somebody changing their mind — it is the dust an active wallet throws
+ * off. Above it, the number is shown and the reader decides.
+ */
+const UNCHANGED_PCT = 0.5;
 
 /**
- * Is this whale still holding?
+ * How much this holder grew or shrank its position over the window.
  *
- * Worked out from the balance walked backwards through its own transfers, so
- * it can be answered the first time anybody asks rather than after two days of
- * snapshots. "Holding" is the common answer and is not hedged.
+ * The number is the answer, not a label with the number underneath: up in
+ * green, down in red, and "Unchanged" when the position is the size it was.
  *
- * A smaller position is never called a sale. Tokens leaving a wallet are not a
- * sale — the same rule the rest of this page runs on — so this says the
- * position shrank and stops there.
+ * **It is a share of what they held at the start of the window**, which is the
+ * only denominator that means anything — a whale that added two million to
+ * three million grew by two thirds, and the same two million added to two
+ * hundred million is a rounding error. The tooltip spells out both ends so the
+ * percentage can be checked rather than trusted.
+ *
+ * Nothing here says bought or sold. Tokens arriving in a wallet are not a
+ * purchase and tokens leaving are not a sale — the same rule the rest of this
+ * page runs on — so this reports the size of a position and stops there.
  */
-export function describeHolding(move) {
-  if (!move) return { status: '', tone: '', note: 'Still being worked out.' };
+export function holdingChange(move, { symbol = '' } = {}) {
+  if (!move) {
+    return { text: '…', tone: 'cw-th-wait', note: 'Still being worked out.' };
+  }
   if (!move.covered) {
     return {
-      status: '—',
-      tone: '',
-      note: 'This wallet moves too often for one page of history to reach back that far.',
+      text: '—',
+      tone: 'cw-th-wait',
+      note: 'This wallet moves too often for its transfer history to reach back thirty days.',
     };
   }
-  // Built from nothing inside the window: not a holder, a new arrival. A
-  // whale that opened its entire position this quarter was reading as
-  // 'Holding', which is the opposite of what happened.
-  /**
-   * The flag, or the shape that produced it.
-   *
-   * Answers cached before the flag existed carry a balance of zero (or a
-   * floating-point sliver below it) and no flag, and would otherwise read as
-   * "Holding" until the cache turns over the next day.
-   */
-  if (move.fromNothing || (move.covered && move.unitsThen != null && move.unitsThen <= 0)) {
-    return { status: 'New position', tone: 'cw-in', note: 'The whole position was built inside this window.' };
-  }
-  if (move.pct == null || Math.abs(move.pct) < HOLD_MATERIAL_PCT) {
-    return move.transfers === 0
-      ? { status: 'Untouched', tone: '', note: 'Not one movement in this window.' }
-      : { status: 'Holding', tone: '', note: 'Moved, but the position is the size it was.' };
-  }
-  return move.pct > 0
-    ? { status: 'Adding', tone: 'cw-in', note: 'The position grew over this window.' }
-    : { status: 'Reducing', tone: 'cw-out', note: 'The position shrank. Where it went is a separate question.' };
-}
 
-/** "+12.4%", "−8.1%", or nothing when there is no answer to give. */
-export function movePct(move) {
-  if (!move?.covered || move.pct == null) return '';
-  if (Math.abs(move.pct) < 0.05) return '0%';
-  return `${move.pct > 0 ? '+' : '−'}${Math.abs(move.pct).toFixed(1)}%`;
+  const held = (n) => (Number.isFinite(n)
+    ? `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}${symbol ? ` ${symbol}` : ''}`
+    : '—');
+
+  /**
+   * Opened inside the window, so there is no earlier size to be a share of.
+   * Reported as new rather than as an infinite percentage.
+   */
+  if (move.fromNothing || (move.unitsThen != null && move.unitsThen <= 0)) {
+    return {
+      text: 'New',
+      tone: 'cw-in',
+      note: `The whole position was opened in the last 30 days — 0 → ${
+        held(move.unitsThen + (move.netUnits ?? 0))}. There is no earlier size to measure against.`,
+    };
+  }
+
+  if (move.pct == null || Math.abs(move.pct) < UNCHANGED_PCT) {
+    return {
+      text: 'Unchanged',
+      tone: '',
+      note: move.transfers
+        ? `Tokens moved, but the position is the size it was: ${held(move.unitsThen)} 30 days ago.`
+        : `Not one movement in 30 days. Still ${held(move.unitsThen)}.`,
+    };
+  }
+
+  const up = move.pct > 0;
+  return {
+    text: `${up ? '+' : '−'}${Math.abs(move.pct).toFixed(1)}%`,
+    tone: up ? 'cw-in' : 'cw-out',
+    note: `${up ? 'Grew' : 'Shrank'} ${Math.abs(move.pct).toFixed(1)}% of the position in 30 days: `
+      + `${held(move.unitsThen)} → ${held(move.unitsThen + move.netUnits)}.`
+      + (up ? '' : ' Where it went is a separate question.'),
+  };
 }

@@ -30,7 +30,7 @@ import {
   explorerTx, explorerAddress, chainLabel,
   shortAddress, money, tokens,
   fetchNetflow, SIGNAL_TONE, fetchTopHolders, STATUS_TONE,
-  STANCE_TONE, percent, describeHolding, movePct,
+  STANCE_TONE, percent, holdingChange,
 } from '../../services/cryptoWhales.js';
 
 const el = (id) => document.getElementById(id);
@@ -119,18 +119,15 @@ function drawTopHolders() {
       <span class="cw-th-pct">${h.pctSupply == null ? '—' : `${h.pctSupply}%`}</span>
       ${(() => {
     /**
-     * Still holding, or not. Walked back from today's balance through this
-     * wallet's own transfers, so it is answerable on the first view rather
-     * than after two days of snapshots.
+     * How much bigger or smaller this position got over thirty days.
+     *
+     * Walked back from today's balance through the wallet's own transfers, so
+     * it is answerable on the first view rather than after two days of
+     * snapshots — and it moves as the holder does.
      */
-    const move = h.moves?.['30d'];
-    const d = describeHolding(move);
-    if (!d.status) {
-      return '<span class="cw-th-move cw-th-wait" title="Reading this wallet&#39;s history">…</span>';
-    }
-    const amount = movePct(move);
+    const d = holdingChange(h.moves?.['30d'], { symbol: h.symbol ?? symbol });
     return `<span class="cw-th-move ${d.tone}" title="${escapeHtml(d.note)}">${
-      escapeHtml(d.status)}${amount ? `<span class="cw-th-movepct">${escapeHtml(amount)}</span>` : ''}</span>`;
+      escapeHtml(d.text)}</span>`;
   })()}
     </div>`).join('')
     : `<div class="cw-card-empty">${loading ? 'Reading holders…'
@@ -170,7 +167,7 @@ function drawTopHolders() {
 
   box.innerHTML = `${hd}
     <div class="cw-th-head">
-      <span>#</span><span>Holder</span><span>Amount</span><span>Value</span><span>Supply</span><span>30d</span>
+      <span>#</span><span>Holder</span><span>Amount</span><span>Value</span><span>Supply</span><span>30d change</span>
     </div>
     ${rows}
     ${excluded}
