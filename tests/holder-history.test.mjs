@@ -18,6 +18,7 @@ import { sqliteDriver } from './support/sqlite.mjs';
 import {
   movementOf, describeHolding, MATERIAL_PCT, WINDOWS,
   readCache, writeCache, resetTableCache, prune, fetchTransfers,
+  noteWanted, wanted, resetWantedCache,
 } from '../api/_lib/holderhistory.js';
 
 const DAY = 86_400_000;
@@ -417,5 +418,39 @@ describe('answers cached before the rules were right', () => {
     assert.equal(m.unitsThen, 1000);
     assert.equal(m.pct, -12);
     assert.equal(describeHolding(m).status, 'Reducing');
+  });
+});
+
+describe('remembering which coin somebody is looking at', () => {
+  // The collector fills one coin per poll, and with thirty readable coins on a
+  // ten-minute rotation any given coin comes round about every five hours.
+  // Fine for a coin nobody is watching, useless for the card on screen.
+  beforeEach(() => resetWantedCache());
+
+  test('a note is remembered and comes back', async () => {
+    await noteWanted('LINK', { now: NOW });
+    assert.deepEqual(await wanted({ now: NOW }), ['LINK']);
+  });
+
+  test('the most recently opened comes first', async () => {
+    await noteWanted('UNI', { now: NOW - 3 * 60_000 });
+    await noteWanted('LINK', { now: NOW - 60_000 });
+    assert.deepEqual(await wanted({ now: NOW }), ['LINK', 'UNI']);
+  });
+
+  test('opening the same coin twice leaves one note, not two', async () => {
+    await noteWanted('LINK', { now: NOW - 60_000 });
+    await noteWanted('LINK', { now: NOW });
+    assert.deepEqual(await wanted({ now: NOW }), ['LINK']);
+  });
+
+  test('a coin opened once yesterday is not what the next poll should do', async () => {
+    await noteWanted('OLD', { now: NOW - 12 * 3_600_000 });
+    await noteWanted('NEW', { now: NOW });
+    assert.deepEqual(await wanted({ now: NOW }), ['NEW']);
+  });
+
+  test('no notes at all is an empty list, not a throw', async () => {
+    assert.deepEqual(await wanted({ now: NOW }), []);
   });
 });

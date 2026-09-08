@@ -237,6 +237,55 @@ export async function writeCache({ chain, token, holder, moves, now = Date.now()
   return 1;
 }
 
+/* ── which coin somebody is actually looking at ─────────────────────────── */
+
+let wantedReady = false;
+
+async function ensureWanted() {
+  if (wantedReady || !databaseAvailable()) return;
+  await query(`CREATE TABLE IF NOT EXISTS holder_wanted (
+    symbol TEXT PRIMARY KEY,
+    at INTEGER NOT NULL
+  )`, []);
+  wantedReady = true;
+}
+
+export function resetWantedCache() { wantedReady = false; }
+
+/**
+ * Remember that somebody opened this coin's holder card.
+ *
+ * The collector fills these answers one coin per poll, and with thirty
+ * readable coins on a ten-minute rotation any given coin comes round about
+ * every five hours. That is fine for a coin nobody is looking at and useless
+ * for the one on screen, which sat at "…" until its turn arrived.
+ *
+ * So a request leaves a note, and the collector reads the notes first.
+ */
+export async function noteWanted(symbol, { now = Date.now() } = {}) {
+  if (!databaseAvailable() || !symbol) return;
+  await ensureWanted();
+  const at = Math.floor(now / 1000);
+  await query('DELETE FROM holder_wanted WHERE symbol = $1', [symbol]);
+  await query('INSERT INTO holder_wanted (symbol, at) VALUES ($1, $2)', [symbol, at]);
+}
+
+/**
+ * The coins somebody has looked at lately, most recent first.
+ *
+ * Anything older than the window is forgotten: a coin opened once yesterday is
+ * not what the collector should be spending its next poll on.
+ */
+export async function wanted({ now = Date.now(), withinMs = 6 * 3_600_000 } = {}) {
+  if (!databaseAvailable()) return [];
+  await ensureWanted();
+  const since = Math.floor((now - withinMs) / 1000);
+  const { rows } = await query(
+    'SELECT symbol FROM holder_wanted WHERE at >= $1 ORDER BY at DESC', [since],
+  );
+  return (rows ?? []).map((r) => r.symbol);
+}
+
 /** Yesterday's rows and older are of no use to anybody. */
 export async function prune({ now = Date.now(), keepDays = 3 } = {}) {
   if (!databaseAvailable()) return;

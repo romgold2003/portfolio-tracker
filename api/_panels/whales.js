@@ -311,8 +311,28 @@ async function enrichNextCoin(now) {
     .filter((c) => c.reader && hosts[c.reader.chain]);
   if (!readable.length) return { skipped: 'no readable coins' };
 
-  const turn = Math.floor(now / POLL_MS) % readable.length;
-  const pick = readable[turn];
+  /**
+   * Whatever somebody opened recently and has not been filled today, first.
+   *
+   * The rotation is the fallback rather than the plan: it keeps coins nobody
+   * is watching from going stale, but it must not make somebody wait five
+   * hours for the card in front of them.
+   */
+  const asked = await holderhistory.wanted({ now }).catch(() => []);
+  let pick = null;
+  for (const symbol of asked) {
+    const coin = readable.find((c) => c.symbol === symbol);
+    if (!coin) continue;
+    const done = await holderhistory
+      .readCache({ chain: coin.reader.chain, token: coin.reader.contract, now })
+      .catch(() => new Map());
+    if (done.size < 25) { pick = coin; break; }
+  }
+
+  if (!pick) {
+    const turn = Math.floor(now / POLL_MS) % readable.length;
+    pick = readable[turn];
+  }
   const host = hosts[pick.reader.chain];
 
   const [info, rows, prices] = await Promise.all([
@@ -338,7 +358,7 @@ async function enrichNextCoin(now) {
     host, chain: pick.reader.chain, token: pick.reader.contract, ranked, now,
   });
 
-  return { symbol: pick.symbol, filled: filled.size, of: ranked.length };
+  return { symbol: pick.symbol, filled: filled.size, of: ranked.length, asked: asked.includes(pick.symbol) };
 }
 
 async function enrichHolders({ host, chain, token, ranked, now }) {
@@ -745,6 +765,13 @@ export default async function handler(req, res) {
        * this. The reader gets the balances now either way.
        */
       if (ranked25.some((h) => !moves.has(String(h.address).toLowerCase()))) {
+        /**
+         * A note for the collector, because this function will be frozen long
+         * before twenty-five indexed lookups finish. The rotation alone would
+         * reach this coin in about five hours; the note gets it on the next
+         * poll instead.
+         */
+        holderhistory.noteWanted(symbol, { now }).catch(() => {});
         enrichHolders({
           host, chain: reader.chain, token: reader.contract, ranked: ranked25, now,
         }).catch(() => {});
