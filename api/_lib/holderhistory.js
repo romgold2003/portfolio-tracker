@@ -286,6 +286,60 @@ export async function wanted({ now = Date.now(), withinMs = 6 * 3_600_000 } = {}
   return (rows ?? []).map((r) => r.symbol);
 }
 
+/* ── which coins are finished for the day ───────────────────────────────── */
+
+let doneReady = false;
+
+async function ensureDone() {
+  if (doneReady || !databaseAvailable()) return;
+  await query(`CREATE TABLE IF NOT EXISTS holder_done (
+    token TEXT NOT NULL,
+    day TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (token, day)
+  )`, []);
+  doneReady = true;
+}
+
+export function resetDoneCache() { doneReady = false; }
+
+/**
+ * Say a coin has nothing left to answer today.
+ *
+ * The collector used to decide this by counting cached rows against
+ * twenty-five, which is not the same question. A token accumulates rows all
+ * day for addresses that have since dropped out of the ranking, so AAVE could
+ * hold twenty-five cached answers while several of its *current* top holders
+ * had none — and the count said finished when it was not.
+ *
+ * Whether there is anything left to do is known exactly at the moment the work
+ * runs, so it is recorded then rather than inferred afterwards.
+ */
+export async function markDone(token, { now = Date.now() } = {}) {
+  if (!databaseAvailable() || !token) return;
+  await ensureDone();
+  const key = String(token).toLowerCase();
+  const day = dayOf(now);
+  await query('DELETE FROM holder_done WHERE token = $1 AND day = $2', [key, day]);
+  await query('INSERT INTO holder_done (token, day, at) VALUES ($1, $2, $3)',
+    [key, day, Math.floor(now / 1000)]);
+}
+
+/** The tokens with nothing left to answer today. */
+export async function doneToday({ now = Date.now() } = {}) {
+  if (!databaseAvailable()) return new Set();
+  await ensureDone();
+  const { rows } = await query('SELECT token FROM holder_done WHERE day = $1', [dayOf(now)]);
+  return new Set((rows ?? []).map((r) => String(r.token).toLowerCase()));
+}
+
+/** A coin nobody is looking at any more need not keep its note. */
+export async function forgetWanted(symbol) {
+  if (!databaseAvailable() || !symbol) return;
+  await ensureWanted();
+  await query('DELETE FROM holder_wanted WHERE symbol = $1', [symbol]);
+}
+
 /** Yesterday's rows and older are of no use to anybody. */
 export async function prune({ now = Date.now(), keepDays = 3 } = {}) {
   if (!databaseAvailable()) return;

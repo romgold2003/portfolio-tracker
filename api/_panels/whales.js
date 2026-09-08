@@ -272,17 +272,20 @@ export function resetPollClock() {
 }
 
 /**
- * How long the scheduled collector spends filling in "still holding?".
+ * How many holders the scheduled collector finishes per poll.
  *
- * This used to be the request's budget, and it cost the reader ten seconds on
- * every single load — measured on production across five consecutive calls,
- * none of which was faster than ten seconds, while the count of answered
- * holders crawled from twelve to fifteen. The indexer takes about fifteen
- * seconds per address and there are twenty-five of them, so no request was
- * ever going to finish the job. The collector has the time and nobody is
- * watching it.
+ * Not a time budget. A budget made the poll *return* early while the work it
+ * had started was still in flight, and the function was frozen on the way out
+ * — so nothing was written and production sat on three of twenty-three
+ * through poll after poll.
+ *
+ * One batch, awaited to the end, is the fix: the indexer takes about fifteen
+ * seconds per address and six run at once, so a poll spends around twenty
+ * seconds and every one of those six is written before it returns. Six an
+ * invocation, six invocations an hour, and a coin's twenty-five holders are
+ * done inside an hour — with the card in front of somebody going first.
  */
-const HOLDER_BUDGET_MS = 25_000;
+const HOLDER_PER_POLL = 6;
 
 /** How many holders to ask about at once. Enough to be quick, few enough to be polite. */
 const HOLDER_CONCURRENCY = 6;
@@ -319,19 +322,35 @@ async function enrichNextCoin(now) {
    * hours for the card in front of them.
    */
   const asked = await holderhistory.wanted({ now }).catch(() => []);
+  const finished = await holderhistory.doneToday({ now }).catch(() => new Set());
+
   let pick = null;
   for (const symbol of asked) {
     const coin = readable.find((c) => c.symbol === symbol);
     if (!coin) continue;
-    const done = await holderhistory
-      .readCache({ chain: coin.reader.chain, token: coin.reader.contract, now })
-      .catch(() => new Map());
-    if (done.size < 25) { pick = coin; break; }
+    if (finished.has(String(coin.reader.contract).toLowerCase())) {
+      // Answered in full today; the note has done its job.
+      await holderhistory.forgetWanted(symbol).catch(() => {});
+      continue;
+    }
+    pick = coin;
+    break;
   }
 
+  /**
+   * Otherwise the first coin that is not finished for today.
+   *
+   * No rotation. A clock-driven turn moved between polls, so consecutive
+   * polls landed on consecutive coins and left every one of them half done —
+   * USDT to six of twenty-five, then BNB, then USDC, then USDS, and nothing
+   * ever completed. Scanning from the start and taking the first unfinished
+   * coin advances on its own: a finished coin is skipped forever after, so
+   * the scan walks forward through the list one completed coin at a time.
+   */
   if (!pick) {
-    const turn = Math.floor(now / POLL_MS) % readable.length;
-    pick = readable[turn];
+    pick = readable.find((c) => !finished.has(String(c.reader.contract).toLowerCase())) ?? null;
+    // Everything is answered for today, which is the good case.
+    if (!pick) return { skipped: 'every coin is answered for today' };
   }
   const host = hosts[pick.reader.chain];
 
@@ -356,14 +375,26 @@ async function enrichNextCoin(now) {
 
   const filled = await enrichHolders({
     host, chain: pick.reader.chain, token: pick.reader.contract, ranked, now,
+    limit: HOLDER_PER_POLL,
   });
 
   return { symbol: pick.symbol, filled: filled.size, of: ranked.length, asked: asked.includes(pick.symbol) };
 }
 
-async function enrichHolders({ host, chain, token, ranked, now }) {
+async function enrichHolders({ host, chain, token, ranked, now, limit = Infinity }) {
   const cached = await holderhistory.readCache({ chain, token, now }).catch(() => new Map());
-  const todo = ranked.filter((h) => !cached.has(String(h.address).toLowerCase()));
+  const outstanding = ranked.filter((h) => !cached.has(String(h.address).toLowerCase()));
+  const todo = outstanding.slice(0, limit);
+
+  /**
+   * Nothing outstanding means this coin is finished for today, and that is
+   * recorded now — while it is known exactly — rather than guessed at later
+   * from how many rows the token happens to have accumulated.
+   */
+  if (!outstanding.length) {
+    await holderhistory.markDone(token, { now }).catch(() => {});
+    return cached;
+  }
 
   for (let i = 0; i < todo.length; i += HOLDER_CONCURRENCY) {
     const batch = todo.slice(i, i + HOLDER_CONCURRENCY);
@@ -580,8 +611,11 @@ export default async function handler(req, res) {
      */
     let holderWork = null;
     try {
-      holderWork = await withBudget(enrichNextCoin(now), HOLDER_BUDGET_MS, { skipped: 'budget' });
-    } catch { /* a slow indexer must not fail the whole poll */ }
+      holderWork = await enrichNextCoin(now);
+    } catch (err) {
+      // A slow indexer costs this poll its holder work and nothing else.
+      holderWork = { failed: err.message };
+    }
 
     res.setHeader('Cache-Control', 'no-store');
     return send(res, 200, {

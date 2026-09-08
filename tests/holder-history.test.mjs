@@ -18,7 +18,7 @@ import { sqliteDriver } from './support/sqlite.mjs';
 import {
   movementOf, describeHolding, MATERIAL_PCT, WINDOWS,
   readCache, writeCache, resetTableCache, prune, fetchTransfers,
-  noteWanted, wanted, resetWantedCache,
+  noteWanted, wanted, resetWantedCache, markDone, doneToday, forgetWanted, resetDoneCache,
 } from '../api/_lib/holderhistory.js';
 
 const DAY = 86_400_000;
@@ -451,6 +451,45 @@ describe('remembering which coin somebody is looking at', () => {
   });
 
   test('no notes at all is an empty list, not a throw', async () => {
+    assert.deepEqual(await wanted({ now: NOW }), []);
+  });
+});
+
+describe('knowing when a coin is finished for the day', () => {
+  // The collector used to decide this by counting cached rows against
+  // twenty-five, which is a different question: a token accumulates rows all
+  // day for addresses that have since dropped out of the ranking, so AAVE held
+  // twenty-five cached answers while several of its current top holders had
+  // none — and the count said finished when it was not.
+  beforeEach(() => { resetDoneCache(); resetWantedCache(); });
+
+  test('a coin marked done today is known to be done', async () => {
+    await markDone('0xTOK', { now: NOW });
+    const done = await doneToday({ now: NOW });
+    assert.ok(done.has('0xtok'), 'the token key is lowercased');
+  });
+
+  test('done yesterday is not done today', async () => {
+    await markDone('0xTOK', { now: NOW - DAY });
+    assert.equal((await doneToday({ now: NOW })).size, 0);
+  });
+
+  test('marking twice leaves one row', async () => {
+    await markDone('0xTOK', { now: NOW });
+    await markDone('0xTOK', { now: NOW });
+    assert.equal((await doneToday({ now: NOW })).size, 1);
+  });
+
+  test('one token being done says nothing about another', async () => {
+    await markDone('0xA', { now: NOW });
+    const done = await doneToday({ now: NOW });
+    assert.ok(done.has('0xa'));
+    assert.ok(!done.has('0xb'));
+  });
+
+  test('a note can be forgotten once its coin is answered', async () => {
+    await noteWanted('LINK', { now: NOW });
+    await forgetWanted('LINK');
     assert.deepEqual(await wanted({ now: NOW }), []);
   });
 });
