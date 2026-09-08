@@ -209,6 +209,18 @@ export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() }
       rank: Number(c?.market_cap_rank) || i + 1,
       marketCap: Number(c?.market_cap) || null,
       price: Number(c?.current_price) || null,
+      /**
+       * The supply figures, carried so a holder share can be a share of the
+       * right thing.
+       *
+       * The chain reports a token total that is regularly not the number
+       * anybody means: Blockscout puts SHIB at 999,982,329,055,168 while the
+       * real supply is 589,496,238,721,206, because four hundred trillion of
+       * it was burned. A share measured against the first is understated by
+       * forty per cent.
+       */
+      circulatingSupply: Number(c?.circulating_supply) || null,
+      totalSupply: Number(c?.total_supply) || null,
       readers,
       viaProvider,
       chains: [...readers.map((r) => r.chain), ...viaProvider],

@@ -99,7 +99,7 @@ describe('the top twenty-five', () => {
   });
 
   test('share of supply is a share, or nothing at all', () => {
-    const [top] = rankHolders([holder({ units: 250 })], { price: 2, totalSupply: 1000 });
+    const [top] = rankHolders([holder({ units: 250 })], { price: 2, supply: 1000 });
     assert.equal(top.pctSupply, 25);
     // Unknown supply is absent, not zero — those mean different things.
     const [none] = rankHolders([holder({ units: 250 })], { price: 2 });
@@ -233,5 +233,47 @@ describe('who gets an exit event', () => {
       ],
     });
     assert.deepEqual(out.map((e) => e.holder), ['0xb', '0xa']);
+  });
+});
+
+describe('what a holder is a share of', () => {
+  const holder = (over = {}) => ({
+    holder: '0xwhale', name: null, isContract: false, units: 1000, ...over,
+  });
+
+  test('the denominator is the coins in circulation, not the cap', () => {
+    // Chainlink's largest investor holds 19,213,674 of 748 million
+    // circulating — 2.57%. Measured against the billion-token cap it read
+    // 1.92%, which makes every holder look smaller than they are.
+    const [top] = rankHolders([holder({ units: 19_213_674 })],
+      { price: 13, supply: 748_099_970 });
+    assert.ok(Math.abs(top.pctSupply - 2.57) < 0.01, `got ${top.pctSupply}`);
+
+    const [old] = rankHolders([holder({ units: 19_213_674 })],
+      { price: 13, supply: 1_000_000_000 });
+    assert.ok(Math.abs(old.pctSupply - 1.92) < 0.01, 'the old, larger denominator');
+  });
+
+  test('a burned supply is not counted as if it were still there', () => {
+    // Blockscout reports SHIB at 999,982,329,055,168 against a real supply of
+    // 589,496,238,721,206 — four hundred trillion burned. Every share came out
+    // forty per cent too small.
+    const units = 5_894_962_387_212;
+    const [real] = rankHolders([holder({ units })], { price: 1, supply: 589_496_238_721_206 });
+    const [wrong] = rankHolders([holder({ units })], { price: 1, supply: 999_982_329_055_168 });
+    assert.ok(Math.abs(real.pctSupply - 1) < 0.01, `got ${real.pctSupply}`);
+    assert.ok(wrong.pctSupply < real.pctSupply * 0.65, 'the burned-supply figure understates it');
+  });
+
+  test('an unknown supply is absent, never zero', () => {
+    const [none] = rankHolders([holder({ units: 250 })], { price: 2 });
+    assert.equal(none.pctSupply, null);
+    const [zero] = rankHolders([holder({ units: 250 })], { price: 2, supply: 0 });
+    assert.equal(zero.pctSupply, null);
+  });
+
+  test('no share can exceed the whole', () => {
+    const [all] = rankHolders([holder({ units: 1000 })], { price: 1, supply: 1000 });
+    assert.equal(all.pctSupply, 100);
   });
 });

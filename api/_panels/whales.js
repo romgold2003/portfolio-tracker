@@ -310,7 +310,11 @@ async function enrichNextCoin(now) {
 
   const { coins } = await topCoins();
   const readable = coins
-    .map((c) => ({ symbol: c.symbol, reader: (c.readers ?? []).find((r) => r.contract) }))
+    .map((c) => ({
+      symbol: c.symbol,
+      circulatingSupply: c.circulatingSupply ?? c.totalSupply ?? null,
+      reader: (c.readers ?? []).find((r) => r.contract),
+    }))
     .filter((c) => c.reader && hosts[c.reader.chain]);
   if (!readable.length) return { skipped: 'no readable coins' };
 
@@ -364,9 +368,11 @@ async function enrichNextCoin(now) {
   let byAddress = null;
   try { byAddress = await loadExchanges(); } catch { /* venues go unnamed */ }
 
+  // The collector only needs the ranking, not the shares, but it uses the
+  // same denominator so the two paths cannot disagree.
   const ranked = rankHolders(rows, {
     price: prices ? priceFor(pick.symbol, prices) : null,
-    totalSupply: info?.totalSupply ?? null,
+    supply: pick.circulatingSupply ?? info?.totalSupply ?? null,
     byAddress,
     creator: info?.creator ?? null,
     limit: 25,
@@ -775,9 +781,26 @@ export default async function handler(req, res) {
       ]);
 
       const price = prices ? priceFor(symbol, prices) : null;
+
+      /**
+       * Circulating supply, from CoinGecko, and the chain only as a fallback.
+       *
+       * The chain's own total is regularly not the number anybody means:
+       * Blockscout reports SHIB at 999,982,329,055,168 against a real supply of
+       * 589,496,238,721,206, because four hundred trillion was burned. Every
+       * holder's share came out forty per cent too small.
+       *
+       * And even a correct total is the wrong denominator. A share of the
+       * tokens that exist is what concentration means; a share of the cap
+       * counts coins nobody can hold yet.
+       */
+      const supply = coin?.circulatingSupply ?? coin?.totalSupply ?? info?.totalSupply ?? null;
+      const supplyBasis = coin?.circulatingSupply ? 'circulating'
+        : coin?.totalSupply ? 'total' : info?.totalSupply ? 'on-chain total' : null;
+
       const ranked25 = rankHolders(rows, {
         price,
-        totalSupply: info?.totalSupply ?? null,
+        supply,
         byAddress,
         creator: info?.creator ?? null,
         limit: 25,
@@ -844,11 +867,12 @@ export default async function handler(req, res) {
         chain: reader.chain,
         contract: reader.contract,
         price,
-        totalSupply: info?.totalSupply ?? null,
+        supply,
+        supplyBasis,
         holders: ranked25,
         /** Everything, so the card can say what it filtered out of the ranking. */
         excluded: rankHolders(rows, {
-          price, totalSupply: info?.totalSupply ?? null, byAddress,
+          price, supply, byAddress,
           creator: info?.creator ?? null, limit: 50, investorsOnly: false,
         }).filter((h) => h.kind !== 'whale').slice(0, 8),
         events,

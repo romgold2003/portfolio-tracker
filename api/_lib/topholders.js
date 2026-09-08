@@ -103,7 +103,7 @@ export const HOLDER_LABEL = {
  * whale ranking.
  */
 export function rankHolders(rows, {
-  price = null, totalSupply = null, byAddress = null, creator = null,
+  price = null, supply = null, byAddress = null, creator = null,
   limit = 25, investorsOnly = true,
 } = {}) {
   const out = [];
@@ -129,8 +129,17 @@ export function rankHolders(rows, {
       kindLabel: HOLDER_LABEL[kind] ?? kind,
       units,
       usd: price ? units * price : null,
-      /** Null rather than zero when the supply is unknown: absent, not none. */
-      pctSupply: totalSupply > 0 ? Math.round((units / totalSupply) * 10000) / 100 : null,
+      /**
+       * A share of the coins in circulation.
+       *
+       * Not of the total ever minted, which is a different and larger number
+       * and makes every holder look smaller than they are. Chainlink's largest
+       * investor holds 19,213,674 of 748 million circulating — 2.57% — and was
+       * reported at 1.92% against the billion-token cap.
+       *
+       * Null rather than zero when the supply is unknown: absent, not none.
+       */
+      pctSupply: supply > 0 ? Math.round((units / supply) * 10000) / 100 : null,
     });
   }
 

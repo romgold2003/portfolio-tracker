@@ -88,7 +88,9 @@ function drawTopHolders() {
   if (!box) return;
 
   const hd = `<div class="cw-card-hd">Top holder whales<span>${
-  symbol ? `${escapeHtml(symbol)} · current snapshot` : 'pick a coin below'}</span></div>`;
+  symbol ? `${escapeHtml(symbol)} · current snapshot${
+    topHolders?.supplyBasis ? ` · shares are % of ${escapeHtml(topHolders.supplyBasis)} supply` : ''
+  }` : 'pick a coin below'}</span></div>`;
 
   if (!symbol) {
     box.innerHTML = `${hd}<div class="cw-card-empty">Choose a coin in the selector below to
@@ -167,7 +169,7 @@ function drawTopHolders() {
 
   box.innerHTML = `${hd}
     <div class="cw-th-head">
-      <span>#</span><span>Holder</span><span>Amount</span><span>Value</span><span>Supply</span><span>30d change</span>
+      <span>#</span><span>Holder</span><span>Amount</span><span>Value</span><span title="Share of the coins in circulation">% float</span><span>30d change</span>
     </div>
     ${rows}
     ${excluded}
