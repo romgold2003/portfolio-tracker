@@ -37,6 +37,19 @@ export const state = {
    * gain. A statement simply states it.
    */
   openingNav: null,
+  /**
+   * The broker's transaction ledger, when a statement has supplied one.
+   *
+   * Kept apart from `positions` because it answers a question they cannot: how
+   * many shares were held on a past day. The positions record realised profit in
+   * money, which is what a statement reports and what a journal needs; the
+   * ledger records movements in shares, which is what valuing a past day needs.
+   *
+   * `holdings` is the quantity per ticker as of the statement's close, and
+   * `trades` every movement since the period opened, so any earlier day is the
+   * one with the other undone.
+   */
+  ledger: null,
   /** Finnhub key for stock/ETF quotes. Stays on this device. */
   apiKey: '',
 };
@@ -59,6 +72,44 @@ function sanitizeFlows(list) {
     })
     .filter(Boolean)
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * The ledger, rebuilt field by field so nothing unexamined reaches the rebuild.
+ *
+ * A bad row is dropped rather than the whole ledger: a statement with one
+ * unreadable line is still worth far more than no ledger at all.
+ */
+function sanitizeLedger(value) {
+  if (!value || typeof value !== 'object') return null;
+  const trades = Array.isArray(value.trades) ? value.trades : [];
+  const clean = [];
+  for (const t of trades) {
+    const date = typeof t?.date === 'string' && DATE_ONLY.test(t.date) ? t.date : null;
+    const ticker = typeof t?.ticker === 'string' ? t.ticker.slice(0, 20) : null;
+    const qty = Number(t?.qty);
+    if (!date || !ticker || !Number.isFinite(qty)) continue;
+    clean.push({
+      date,
+      ticker,
+      qty,
+      cash: Number.isFinite(Number(t.cash)) ? Number(t.cash) : 0,
+      price: Number.isFinite(Number(t.price)) ? Number(t.price) : 0,
+    });
+  }
+
+  const holdings = {};
+  for (const [ticker, qty] of Object.entries(value.holdings ?? {})) {
+    if (typeof ticker === 'string' && Number.isFinite(Number(qty))) holdings[ticker] = Number(qty);
+  }
+
+  if (!clean.length && !Object.keys(holdings).length) return null;
+  return {
+    trades: clean,
+    holdings,
+    from: typeof value.from === 'string' && DATE_ONLY.test(value.from) ? value.from : null,
+    to: typeof value.to === 'string' && DATE_ONLY.test(value.to) ? value.to : null,
+  };
 }
 
 /**
@@ -256,6 +307,7 @@ export function loadState(journal) {
   state.cashFlows = sanitizeFlows(source.cashFlows);
   state.income = sanitizeIncome(source.income);
   state.openingNav = sanitizeAnchor(source.openingNav);
+  state.ledger = sanitizeLedger(source.ledger);
   state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
 }
 
@@ -268,6 +320,7 @@ export function journalSnapshot() {
     cashFlows: state.cashFlows,
     income: state.income,
     openingNav: state.openingNav,
+    ledger: state.ledger,
     apiKey: state.apiKey,
   };
 }
@@ -280,6 +333,7 @@ export function clearState() {
   state.cashFlows = [];
   state.income = { dividends: 0, interest: 0, commissions: 0, tax: 0 };
   state.openingNav = null;
+  state.ledger = null;
   state.apiKey = '';
 }
 

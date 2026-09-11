@@ -45,9 +45,19 @@ function writeResolved(map) {
  * coin is dropped from the reconstruction.
  */
 export function historySymbol(ticker, cls) {
-  const symbol = String(ticker || '').toUpperCase();
-  if (cls !== 'Crypto') return symbol;
-  return symbol.endsWith('-USD') ? symbol : `${symbol}-USD`;
+  const symbol = String(ticker || '').toUpperCase().trim();
+  if (cls === 'Crypto') return symbol.endsWith('-USD') ? symbol : `${symbol}-USD`;
+
+  /**
+   * A share class is written three ways and Yahoo accepts one of them.
+   *
+   * IBKR writes Berkshire's B shares as "BRK B" and this app stores it as
+   * "BRK.B"; the history service wants "BRK-B". Left alone the ticker simply
+   * has no price on any past day, and the holding vanishes from the
+   * reconstruction — which on this book was $3,540 of a $45,877 account,
+   * missing from every day of the year with nothing to say it was gone.
+   */
+  return symbol.replace(/[ .]/g, '-');
 }
 
 /** Last close on or before a date. Rows must be ascending. */

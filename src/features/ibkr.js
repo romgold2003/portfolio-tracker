@@ -156,9 +156,30 @@ function readTrades(group) {
   const iBasis = columnIndex(h, 'Basis', 'Base');
   const iPnl = columnIndex(h, 'Realized P/L', 'P/L réalisé');
   const iComm = columnIndex(h, 'Comm/Fee', 'Comm/Tarif');
+  const iPrice = columnIndex(h, 'T. Price', 'Prix trans.');
+  const iProceeds = columnIndex(h, 'Proceeds', 'Produit');
   if (iSymbol < 0 || iDate < 0 || iQty < 0) return { closed: [], commissions: 0 };
 
   const firstBuy = new Map();
+  /**
+   * Net shares traded per ticker over the period.
+   *
+   * Subtracted from the closing quantity it gives the opening one, which is the
+   * only reliable way to tell a holding carried in from last year from one
+   * opened this year. A first purchase inside the period is not that test: a
+   * position held since last year and bought into again in May has one, and
+   * dating the whole holding to May hides it from every day before then.
+   */
+  const netQty = new Map();
+  /**
+   * Every share movement with a date on it.
+   *
+   * The closed rows below record realised profit in money, which is what a
+   * journal needs and what the broker reports. Valuing a past day needs shares,
+   * and no amount of care with the closed rows recovers them — so the raw
+   * movements are kept alongside.
+   */
+  const ledger = [];
   const closed = [];
   let commissions = 0;
 
@@ -169,7 +190,18 @@ function readTrades(group) {
     if (!ticker || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
 
     const qty = num(r[iQty]);
+    netQty.set(ticker, (netQty.get(ticker) ?? 0) + qty);
     if (iComm >= 0) commissions += num(r[iComm]);
+
+    // Proceeds are positive on a sale and negative on a purchase, and the
+    // commission is already signed, so the cash moved by exactly their sum.
+    ledger.push({
+      date,
+      ticker,
+      qty,
+      price: iPrice >= 0 ? num(r[iPrice]) : 0,
+      cash: (iProceeds >= 0 ? num(r[iProceeds]) : 0) + (iComm >= 0 ? num(r[iComm]) : 0),
+    });
 
     if (qty > 0) {
       if (!firstBuy.has(ticker)) firstBuy.set(ticker, date);
@@ -189,10 +221,26 @@ function readTrades(group) {
       pnl,
       pct: (pnl / cost) * 100,
       cost,
+      /**
+       * Held before this statement began, so the purchase is not in it.
+       *
+       * The open date above falls back to the sale date, which keeps the row
+       * readable but is not when the position was taken. Anything reconstructing
+       * a past day has to know the difference: treating that fallback as a real
+       * purchase makes the holding appear on the day it was sold and vanish from
+       * every day before it, which on this book hid ninety per cent of January.
+       *
+       * Per tranche, not per ticker. A holding carried in from last year and
+       * then bought into again in May has a first buy in this period, but the
+       * shares sold in January were not those — dating them to May puts their
+       * cost back into January cash and overstated that day by twenty-two
+       * per cent.
+       */
+      carriedIn: !firstBuy.has(ticker) || date < firstBuy.get(ticker),
     });
   }
 
-  return { closed, commissions, firstBuy };
+  return { closed, commissions, firstBuy, netQty, ledger };
 }
 
 /**
@@ -353,7 +401,7 @@ export function parseIbkrStatement(text) {
   }
 
   const positions = readOpenPositions(groups.get('positions'));
-  const { closed, commissions, firstBuy } = readTrades(groups.get('trades'));
+  const { closed, commissions, firstBuy, netQty, ledger } = readTrades(groups.get('trades'));
   const navChange = readNavChange(groups.get('navChange'));
   const cash = readNavCash(groups.get('nav'));
   const flows = readFlows(groups.get('flows'));
@@ -375,6 +423,8 @@ export function parseIbkrStatement(text) {
     positions,
     closed,
     firstBuy,
+    netQty,
+    ledger,
     periodStart,
     periodEnd: period.to,
     twr,
@@ -422,6 +472,14 @@ export function statementToJournal(parsed, existing = {}) {
     // its opening date is genuinely unknown and stays null. That is what marks
     // it as carried in from an earlier year rather than opened this one.
     open: parsed.firstBuy?.get(p.ticker) ?? null,
+    /**
+     * Held before this statement began.
+     *
+     * Closing quantity less everything traded in the period is the opening
+     * quantity, and anything above zero means the holding predates the
+     * statement however much of it was traded since.
+     */
+    carriedIn: p.qty - (parsed.netQty?.get(p.ticker) ?? 0) > 1e-9,
     close: null,
     entry: p.entry,
     cur: p.cur,
@@ -458,6 +516,21 @@ export function statementToJournal(parsed, existing = {}) {
     // observed on the days it was open, and no statement can restate that.
     snapshots: existing.snapshots ?? [],
     cashFlows: parsed.flows,
+    /**
+     * The share movements, kept so a past day can be valued.
+     *
+     * `holdings` is the quantity per ticker at the statement's close and
+     * `trades` every movement inside the period, so any earlier day is the one
+     * with the other undone. The positions above cannot answer this: they carry
+     * realised profit in money, and a holding carried in from last year and
+     * bought into again during the period leaves no record of that purchase.
+     */
+    ledger: {
+      trades: parsed.ledger ?? [],
+      holdings: Object.fromEntries(parsed.positions.map((p) => [p.ticker, p.qty])),
+      from: parsed.periodStart ?? null,
+      to: parsed.periodEnd ?? null,
+    },
     income: parsed.income,
     /**
      * What the broker says about the window it covered.

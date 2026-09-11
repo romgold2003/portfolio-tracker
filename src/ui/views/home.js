@@ -19,7 +19,7 @@ import {
 import {
   periodStart, cutoffFor, curveSeries, setBackfill,
 } from '../../core/snapshots.js';
-import { rebuildDailyValue } from '../../core/rebuild.js';
+import { rebuildDailyValue, rebuildFromLedger } from '../../core/rebuild.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -288,14 +288,35 @@ async function loadBackfill() {
   const earliest = earliestInterest();
   if (!earliest) return;
 
-  const wanted = [...new Map(state.positions
-    .filter((p) => p.open && (p.status === 'Open' || (p.close && p.close >= earliest)))
-    .map((p) => [historySymbol(p.ticker, p.cls), p])).entries()];
+  /**
+   * Every ticker that needs a price, from the ledger when there is one.
+   *
+   * The ledger names tickers the positions no longer mention — a holding
+   * carried in from last year and sold in January is a closed row in money, but
+   * the ledger still knows it was 250 shares and when they went.
+   */
+  const fromLedger = state.ledger
+    ? [...new Set([
+      ...Object.keys(state.ledger.holdings ?? {}),
+      ...(state.ledger.trades ?? []).map((t) => t.ticker),
+    ])]
+    : [];
+  const tickers = fromLedger.length
+    ? fromLedger
+    : state.positions
+      .filter((p) => p.open && (p.status === 'Open' || (p.close && p.close >= earliest)))
+      .map((p) => p.ticker);
+
+  const wanted = [...new Map(tickers.filter(Boolean).map((ticker) => {
+    const position = state.positions.find((p) => p.ticker === ticker);
+    return [historySymbol(ticker, position?.cls), ticker];
+  })).entries()];
   if (!wanted.length) return;
 
   /** What this run would be built from. Unchanged means nothing to redo. */
   const key = `${earliest}|${state.cash}|${wanted.map(([sym]) => sym).sort().join(',')}|`
-    + `${state.positions.length}|${(state.cashFlows ?? []).length}`;
+    + `${state.positions.length}|${(state.cashFlows ?? []).length}|`
+    + `${(state.ledger?.trades ?? []).length}`;
   if (key === backfillFor) return;
 
   backfillPending = true;
@@ -305,14 +326,21 @@ async function loadBackfill() {
       .catch(() => [symbol, null])));
     for (const [symbol, rows] of loaded) if (rows?.length) priceHistories.set(symbol, rows);
 
-    setBackfill(rebuildDailyValue({
-      positions: state.positions,
-      cash: state.cash,
-      flows: state.cashFlows,
-      priceOn: pastPrice,
-      from: earliest,
-      to: todayStr(),
-    }));
+    /**
+     * The ledger when the broker gave us one, the positions otherwise.
+     *
+     * The positions record realised profit in money, which is what a journal
+     * needs and what a statement reports — but it means a partly sold holding
+     * comes back with no share count, and a holding carried in from last year
+     * and bought into again during the period leaves no record of that
+     * purchase anywhere. Reconstructing a past day from them was out by seven
+     * per cent on average and nineteen on the first of January. From the
+     * ledger it is out by a tenth of one per cent.
+     */
+    const shape = { cash: state.cash, flows: state.cashFlows, priceOn: pastPrice, from: earliest, to: todayStr() };
+    setBackfill(state.ledger?.trades?.length
+      ? rebuildFromLedger({ ledger: state.ledger, ...shape })
+      : rebuildDailyValue({ positions: state.positions, ...shape }));
     backfillFor = key;
     renderHome();
   } finally {
@@ -350,7 +378,11 @@ function earliestInterest() {
    * is. A window the account genuinely predates is a window it cannot answer,
    * and the note under the chart says so rather than the curve inventing it.
    */
-  const earliest = firstTrade < janFirst ? firstTrade : janFirst;
+  // A statement's period start is the earliest day the ledger can answer for,
+  // and it is usually before the first trade inside it.
+  const ledgerFrom = state.ledger?.from;
+  let earliest = firstTrade < janFirst ? firstTrade : janFirst;
+  if (ledgerFrom && ledgerFrom < earliest) earliest = ledgerFrom;
   const floor = back(3 * 366);
   return earliest < floor ? floor : earliest;
 }
@@ -364,7 +396,7 @@ function earliestInterest() {
 function pastPrice(ticker, day) {
   const position = state.positions.find((p) => p.ticker === ticker);
   const rows = priceHistories.get(historySymbol(ticker, position?.cls));
-  if (!rows) return null;
+  if (!rows?.length) return null;
   return closeAtOrBefore(rows, day);
 }
 

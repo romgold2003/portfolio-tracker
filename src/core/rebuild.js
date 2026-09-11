@@ -12,11 +12,24 @@
  * the history service can price any ticker on any past date. So the value of
  * the book on a past day is not a guess:
  *
- *   value(d) = what the open positions were worth at that day's closes
+ *   value(d) = what was held at that day's closes
  *            + the cash that had not yet been spent or had already come back
  *
  * Both halves are walked backwards from today, which is the only day whose
  * figures are known exactly.
+ *
+ * ── The holding that is not in the statement ─────────────────────────────
+ *
+ * The trap here, and it is a big one: a position bought in an earlier year has
+ * no purchase inside the statement that imported it. The importer marks those
+ * by leaving `open` null, deliberately, and an earlier version of this file
+ * read a null open as "never held" and dropped them.
+ *
+ * On the book this was written against that was sixteen holdings worth
+ * $23,687.78 on the first of January — ninety per cent of a $26,365.95 account.
+ * The reconstruction showed January at cash alone, about $2.5K, climbing
+ * through February as this year's positions opened. A crash that never happened
+ * and a recovery that never happened, from the same missing rows.
  */
 
 import { baseQtyOf } from './portfolio.js';
@@ -35,11 +48,21 @@ export function daysBetween(from, to) {
   return out;
 }
 
+/**
+ * True when a position was already held before the window this app knows about.
+ *
+ * Either the importer said so, or there is simply no opening date — which means
+ * the same thing. Such a position has no purchase to undo: the money left the
+ * account before any day being reconstructed, so the cash walk must not add it
+ * back and the holding must not appear from nowhere partway through.
+ */
+export const carriedIn = (position) => position?.carriedIn === true || !position?.open;
+
 /** What one exit paid back: the capital it released plus what it made on it. */
 const proceedsOf = (position, exit) => position.entry * exit.qty + (exit.pnl ?? 0);
 
 /** The exits of a position, or the single implied one for a closed trade. */
-function exitsOf(position) {
+export function exitsOf(position) {
   if (position.exits?.length) return position.exits;
   if (position.status !== 'Closed' || !position.close) return [];
   const qty = baseQtyOf(position);
@@ -49,27 +72,72 @@ function exitsOf(position) {
   return [{ d: position.close, qty, price: position.cur, pnl }];
 }
 
+/** True when the position was on the books at the close of `day`. */
+export function heldOn(position, day) {
+  if (!carriedIn(position) && position.open > day) return false;
+  if (position.status === 'Closed') return !position.close || position.close > day;
+  return true;
+}
+
+/** What a closed tranche was sold for: its capital back plus what it made. */
+export const proceedsTotal = (position) =>
+  exitsOf(position).reduce((sum, e) => sum + proceedsOf(position, e), 0);
+
 /**
- * How much was still held on a given day, after any exits up to and including it.
+ * What one position was worth on a past day.
  *
- * Partial exits are the reason this is not simply "the quantity on the
- * position": a trade half sold in March was still whole in February, and
- * valuing February at the surviving half understates it.
+ * Two shapes, because the book holds two.
+ *
+ * An open position carries real share counts, so it is quantity times that
+ * day's close — plus anything sold out of it since, which was still held then.
+ *
+ * A closed trade out of an IBKR statement does not carry share counts at all.
+ * The importer stores each realised tranche as a single synthetic unit whose
+ * entry is the whole cost basis, because the broker reports realised profit in
+ * money rather than shares and recomputing lots here would only invent a second
+ * opinion. Asking it "how many shares" gives one, for a tranche that was really
+ * eleven shares of AMD.
+ *
+ * What is known exactly is what it sold for and when. So it is valued backwards
+ * along the ticker's own price path: worth its proceeds on the day it was sold,
+ * and on any earlier day that scaled by how the price has moved since. On a
+ * position that does carry real quantities the same formula reduces to quantity
+ * times the close, so one rule covers both.
  */
-export function qtyHeldOn(position, day) {
-  if (!position.open || position.open > day) return 0;
-  const sold = exitsOf(position)
-    .filter((e) => e?.d && e.d <= day)
-    .reduce((sum, e) => sum + (e.qty ?? 0), 0);
-  return Math.max(0, baseQtyOf(position) - sold);
+export function valueOn(position, day, priceOn) {
+  if (!heldOn(position, day)) return null;
+  const price = priceOn(position.ticker, day);
+
+  if (position.status === 'Open') {
+    const sold = exitsOf(position)
+      .filter((e) => e?.d && e.d > day)
+      .reduce((sum, e) => sum + (e.qty ?? 0), 0);
+    const qty = (position.qty ?? 0) + sold;
+    if (!(price > 0)) return { value: position.entry * qty, stale: true };
+    return position.dir === 'Short'
+      ? { value: position.entry * qty + (position.entry - price) * qty, stale: false }
+      : { value: price * qty, stale: false };
+  }
+
+  const proceeds = proceedsTotal(position);
+  const atExit = priceOn(position.ticker, position.close);
+  if (!(price > 0) || !(atExit > 0)) {
+    // No price path to scale along: hold it at cost, which is flat but right in
+    // order of magnitude, and say the value is stale.
+    return { value: position.entry * baseQtyOf(position), stale: true };
+  }
+  const moved = price / atExit;
+  return position.dir === 'Short'
+    ? { value: proceeds * (2 - moved), stale: false }
+    : { value: proceeds * moved, stale: false };
 }
 
 /**
  * The cash balance on a past day, walked back from today's.
  *
- * Three things move it and all three are dated, so each can be undone:
- * money spent opening a position had not been spent yet, money returned by an
- * exit had not come back yet, and a deposit made later had not arrived.
+ * Three things move it and all three are dated, so each can be undone: money
+ * spent opening a position had not been spent yet, money returned by an exit
+ * had not come back yet, and a deposit made later had not arrived.
  *
  * Getting the sign wrong on any of the three is invisible on today's figure and
  * wrong on every other day, which is why each is written out separately.
@@ -78,9 +146,11 @@ export function cashOn(positions, cashToday, flows, day) {
   let cash = cashToday;
 
   for (const position of positions) {
-    // Not yet bought: the money was still in the account.
-    if (position.open && position.open > day) cash += position.entry * baseQtyOf(position);
-    // Not yet sold: the proceeds had not arrived.
+    // Carried in: the money left the account before any day being rebuilt, so
+    // there is nothing to add back.
+    if (!carriedIn(position) && position.open > day) {
+      cash += position.entry * baseQtyOf(position);
+    }
     for (const exit of exitsOf(position)) {
       if (exit?.d && exit.d > day) cash -= proceedsOf(position, exit);
     }
@@ -94,15 +164,22 @@ export function cashOn(positions, cashToday, flows, day) {
 }
 
 /**
+ * How much of the book may be valued at a stale price before a day is unusable.
+ *
+ * A holding the price service has never heard of used to drop the whole day,
+ * and that was the third bug: two hundred and fifty shares of a delisted NASDAQ
+ * shell worth about a hundred dollars deleted January through April from a
+ * twenty-six thousand dollar account. A stub valued at what it last cost moves
+ * the total by nothing; a real holding valued at a stale price would, so past
+ * this share the day is dropped after all.
+ */
+const STALE_LIMIT = 0.03;
+
+/**
  * What the whole book was worth on each day of a range.
  *
  * `priceOn(ticker, day)` returns that ticker's last close on or before the day,
- * or null. A day on which any held position cannot be priced is dropped rather
- * than valued at whatever the rest came to — a book reported without one of its
- * holdings is not a smaller book, it is a wrong number, and a dip to it would
- * read as a loss that never happened.
- *
- * A short is worth its collateral plus what it has made:
+ * or null. A short is worth its collateral plus what it has made:
  *   entry × qty + (entry − price) × qty
  * which is the same shape as a long and the opposite sign on the move.
  */
@@ -110,28 +187,102 @@ export function rebuildDailyValue({
   positions = [], cash = 0, flows = [], priceOn, from, to,
 }) {
   if (typeof priceOn !== 'function' || !from || !to) return [];
-  const out = [];
 
+  const out = [];
   for (const day of daysBetween(from, to)) {
     let held = 0;
-    let priced = true;
+    let stale = 0;
 
     for (const position of positions) {
-      const qty = qtyHeldOn(position, day);
-      if (qty <= 0) continue;
-      const price = priceOn(position.ticker, day);
-      if (!(price > 0)) { priced = false; break; }
-      held += position.dir === 'Short'
-        ? position.entry * qty + (position.entry - price) * qty
-        : price * qty;
+      const priced = valueOn(position, day, priceOn);
+      if (!priced) continue;
+      held += priced.value;
+      if (priced.stale) stale += Math.abs(priced.value);
     }
 
-    if (!priced) continue;
     const value = held + cashOn(positions, cash, flows, day);
     // A reconstructed value at or below zero means the walk-back has lost the
     // thread — a missing trade, a bad date — and drawing it would be worse
     // than leaving the day out.
     if (!(value > 0)) continue;
+    // Too much of the book priced from memory rather than from the market.
+    if (held > 0 && stale / Math.abs(held) > STALE_LIMIT) continue;
+
+    out.push({ date: day, value: +value.toFixed(2) });
+  }
+
+  return out;
+}
+
+/**
+ * The account value each day, from the broker's own transaction ledger.
+ *
+ * Strictly better than reconstructing from the position model, and the reason
+ * is a limit of that model rather than a bug in it. A statement records each
+ * realised tranche as money — cost basis and profit — because that is how a
+ * broker reports realised gains, so a partly sold holding comes back as one
+ * open position and several closed rows with no share counts on them. And a
+ * holding carried in from last year that was bought into again in May has no
+ * record of that purchase anywhere in the positions at all.
+ *
+ * On the book this was written against, BSOL was 93 shares in January and 116
+ * today; nothing in the positions says when the other 23 arrived. Valuing
+ * January at today's quantity overstated it by nineteen per cent.
+ *
+ * The ledger has every one of those movements with a date on it, so any past
+ * day is today's holdings with the year undone:
+ *
+ *   qty(ticker, d)  = qty today  −  every share bought or sold after d
+ *   cash(d)         = cash today −  every cash movement after d
+ *
+ * Checked against the statement it came from, this lands on the closing net
+ * asset value to within the accrued-dividend line and on the opening one to
+ * within a fifth of a per cent.
+ */
+export function rebuildFromLedger({
+  ledger, cash = 0, flows = [], priceOn, from, to,
+}) {
+  const trades = ledger?.trades ?? [];
+  const holdings = ledger?.holdings ?? {};
+  if (typeof priceOn !== 'function' || !from || !to || !trades.length) return [];
+
+  const tickers = [...new Set([...Object.keys(holdings), ...trades.map((t) => t.ticker)])];
+  /** Last resort price per ticker, so a delisted stub cannot delete a month. */
+  const lastKnown = new Map();
+  for (const t of trades) {
+    if (t.price > 0) lastKnown.set(t.ticker, t.price);
+  }
+
+  const out = [];
+  for (const day of daysBetween(from, to)) {
+    let held = 0;
+    let stale = 0;
+
+    for (const ticker of tickers) {
+      let qty = holdings[ticker] ?? 0;
+      for (const t of trades) {
+        if (t.ticker === ticker && t.date > day) qty -= t.qty;
+      }
+      if (Math.abs(qty) < 1e-9) continue;
+
+      let price = priceOn(ticker, day);
+      if (!(price > 0)) {
+        price = lastKnown.get(ticker) ?? 0;
+        stale += Math.abs(price * qty);
+      }
+      if (!(price > 0)) continue;
+      held += price * qty;
+    }
+
+    let money = cash;
+    for (const t of trades) if (t.date > day) money -= t.cash ?? 0;
+    for (const f of flows ?? []) {
+      if (f?.date && f.date > day && Number.isFinite(f.amount)) money -= f.amount;
+    }
+
+    const value = held + money;
+    if (!(value > 0)) continue;
+    if (held > 0 && stale / Math.abs(held) > STALE_LIMIT) continue;
     out.push({ date: day, value: +value.toFixed(2) });
   }
 
