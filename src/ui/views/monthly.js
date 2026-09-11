@@ -8,7 +8,7 @@
  */
 import { state } from '../../core/store.js';
 import {
-  realized, unreal, costOf, pctD, avgTradeReturn, monthPortfolioReturn,
+  realized, unreal, costOf, pctD, avgTradeReturn, monthlyAccountReturns, accountTotals,
 } from '../../core/portfolio.js';
 import { MONTHS_SHORT, MONTHS_LONG, YEAR_PICKER } from '../../config/constants.js';
 import { renderMonthlyChart } from '../charts.js';
@@ -125,22 +125,26 @@ function avgTradeCell(m) {
 /**
  * What the whole account did over the month, deposits taken out.
  *
- * Read off the recorded account values, not off the trades, so it includes the
- * positions carried in from earlier months and everything else that moves a
- * book. That is why it is usually the smaller of the two: a good month on a
- * tenth of the capital is a large trade return and a modest portfolio one.
+ * The percentage is the month's P&L over what the account was worth when the
+ * month opened, which is why it is nearly always the smaller of the two: a
+ * strong month on a tenth of the capital is a large trade return and a modest
+ * portfolio one. That relationship is the reason both columns exist.
  */
-function portfolioCell(key) {
-  const port = monthPortfolioReturn(state.snapshots, state.cashFlows, key);
-  if (!port) {
-    return '<td class="muted" title="The account was not valued around this month, so its move cannot be measured. Daily values are recorded from the day the app is first opened.">—</td>';
+function portfolioCell(key, returns, label) {
+  const month = returns.get(key);
+  if (!month || month.pct == null) {
+    return '<td class="muted" title="There was no capital in the account this month to measure a return against">—</td>';
   }
   const parts = [
-    `Account value ${port.from} → ${port.to}`,
-    port.net ? `${$s(port.net)} paid in over the month, weighted by how long it was present and not counted as profit` : 'no deposits or withdrawals in the month',
-    port.partial ? 'Recorded days do not span the whole month, so this covers the part that was recorded.' : null,
+    `${$u(month.opening)} in the account at the start of ${label}, and the month ${month.pnl < 0 ? 'lost' : 'made'} ${$u(Math.abs(month.pnl))}`,
+    month.net
+      ? `${$s(month.net)} moved in or out during the month — weighted by how long it was actually present, and not counted as profit`
+      : null,
+    month.marked
+      ? `${plural(month.marked, 'position')} opened this month ${month.marked === 1 ? 'is' : 'are'} still open, so ${month.marked === 1 ? 'its' : 'their'} gain is marked at today's price`
+      : null,
   ].filter(Boolean);
-  return `<td style="color:${clr(port.pct)};font-weight:600" title="${parts.join('. ')}">${fp(port.pct)}${port.partial ? '<span style="color:var(--text4);font-weight:400"> *</span>' : ''}</td>`;
+  return `<td style="color:${clr(month.pct)};font-weight:600" title="${parts.join('. ')}">${fp(month.pct)}</td>`;
 }
 
 function renderSummaryTable() {
@@ -154,6 +158,14 @@ function renderSummaryTable() {
     return;
   }
 
+  // One chained walk back through every month, not a lookup per row: each
+  // month's opening value is the one before it closing.
+  const returns = monthlyAccountReturns(
+    state.positions,
+    accountTotals(state.positions, state.cash).account,
+    state.cashFlows,
+  );
+
   body.innerHTML = keys.map((key) => {
     const m = months[key];
     const total = m.real + m.unreal;
@@ -164,7 +176,7 @@ function renderSummaryTable() {
       <td style="color:${clr(m.unreal)}">${m.unreal ? $s(m.unreal) : '—'}</td>
       <td style="color:${clr(total)};font-weight:600">${$s(total)}</td>
       ${avgTradeCell(m)}
-      ${portfolioCell(key)}
+      ${portfolioCell(key, returns, label)}
       <td class="muted">${m.closed}</td>
     </tr>`;
   }).join('');

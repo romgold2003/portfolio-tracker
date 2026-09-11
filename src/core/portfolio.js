@@ -253,74 +253,132 @@ function monthBounds(key) {
 }
 
 /**
- * How far back an opening balance may be dragged forward, in days.
+ * Every month from the first one with anything in it to this one, oldest first.
  *
- * The account is only valued on days the app was opened, so the month's
- * opening figure is usually the last day of the previous month but sometimes a
- * few days before it. A week is close enough to call it the month's starting
- * point; a stale point from six weeks ago would hand this month the gains of
- * the last one.
+ * Months where nothing happened are included on purpose. The account value is
+ * chained backwards month by month, and a quiet month is a link in that chain —
+ * skipping it would hand its deposits to whichever month came next.
  */
-const OPENING_STALE_DAYS = 7;
+export function monthRange(first, last) {
+  const out = [];
+  let year = Number(first.slice(0, 4));
+  let month = Number(first.slice(5, 7));
+  const lastYear = Number(last.slice(0, 4));
+  const lastMonth = Number(last.slice(5, 7));
+  if (!(year > 0) || !(lastYear > 0)) return out;
 
-const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+  while ((year < lastYear || (year === lastYear && month <= lastMonth)) && out.length < 1200) {
+    out.push(`${year}-${String(month).padStart(2, '0')}`);
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  return out;
+}
 
 /**
- * What the whole account did over one calendar month, deposits removed.
+ * What each month earned, attributed to the month that did the work.
  *
- * This is a different question from what the trades did, and the two answers
- * routinely disagree. A month of good trades on a tenth of the book is a large
- * trade return and a small portfolio one; a month of no trades at all still
- * moves the account, because the positions already held moved.
+ *   closed in the month  ->  what it banked
+ *   opened in the month  ->  what it is up or down by, if still open
  *
- * Measured from the recorded account values rather than from the trades, which
- * is what makes it the portfolio's return: it picks up the holdings carried in
- * from earlier months, dividends, fees, and everything else the journal never
- * booked as a trade.
+ * Those two together add up to realised plus unrealised across the whole book,
+ * exactly once each, which is what makes the chain in monthlyAccountReturns
+ * arrive back at the real starting capital instead of drifting.
  *
- * Money paid in is not profit. The deposit is subtracted from the gain and
- * weighted into the base by how much of the month it was actually present —
- * Modified Dietz — because crediting a mid-month deposit with the whole month's
- * return is exactly the error that had this book reporting 24% where its broker
- * said 29%.
- *
- * Null when the account was never valued around this month. An unmeasurable
- * month says so rather than showing a zero that reads as "flat".
+ * The second rule is an approximation with a sharp edge, and it is named rather
+ * than hidden: a position opened in January and still held is marked at today's
+ * price, so all of its gain lands in January even though most of it happened
+ * later. A journal has no month-by-month valuation of a holding, so there is no
+ * honest way to spread it — `marked` counts the positions this applies to, and
+ * the month says so on hover.
  */
-export function monthPortfolioReturn(snapshots, flows = [], key, today = todayStr()) {
-  if (!Array.isArray(snapshots) || snapshots.length < 2) return null;
-  const { first, last, before } = monthBounds(key);
-  const points = [...snapshots]
-    .filter((s) => s && typeof s.date === 'string' && Number.isFinite(s.value))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  // Preferably the closing balance of the previous month; failing that, the
-  // first day inside this one, which measures part of the month and says so.
-  const prior = [...points].reverse().find((s) => s.date <= before);
-  const open = (prior && daysBetween(prior.date, first) <= OPENING_STALE_DAYS)
-    ? prior
-    : points.find((s) => s.date >= first && s.date <= last);
-  if (!open || !(open.value > 0)) return null;
-
-  const close = [...points].reverse().find((s) => s.date <= last && s.date > open.date);
-  if (!close) return null;
-
-  // Flows on the opening day are already inside the opening balance.
-  const inWindow = (flows ?? []).filter((f) => f.date > open.date && f.date <= close.date);
-  const net = inWindow.reduce((sum, f) => sum + f.amount, 0);
-  const pnl = close.value - open.value - net;
-  const pct = modifiedDietzReturn(pnl, open.value, inWindow, open.date, close.date);
-  if (pct == null) return null;
-
-  return {
-    pct,
-    pnl,
-    from: open.date,
-    to: close.date,
-    net,
-    /** True when the recorded days do not span the month, so this is part of it. */
-    partial: open.date >= first || (close.date < last && close.date < today),
+export function monthPnl(positions) {
+  const byMonth = new Map();
+  const bucket = (key) => {
+    if (!byMonth.has(key)) byMonth.set(key, { pnl: 0, marked: 0 });
+    return byMonth.get(key);
   };
+
+  for (const position of positions) {
+    if (position.status === 'Closed') {
+      if (position.close) bucket(position.close.slice(0, 7)).pnl += realized(position);
+      continue;
+    }
+    if (!position.open) continue;
+    const held = bucket(position.open.slice(0, 7));
+    held.pnl += unreal(position);
+    held.marked += 1;
+  }
+  return byMonth;
+}
+
+/**
+ * The percentage the whole account moved in each month of its life.
+ *
+ * Worked backwards from what the account is worth today rather than forwards
+ * from a recording of it, because the recording does not exist. Daily account
+ * values are only written on days the app is open, so they begin the day it was
+ * installed — every month before that had no answer at all, and the first weeks
+ * of the recording are the install settling rather than the market: positions
+ * still being entered and prices still arriving read as a 22% month.
+ *
+ * The trades have no such gap. They know when every position was taken and what
+ * it did, so the account value at the start of any month is simply what it is
+ * worth now, less everything earned since, less everything paid in since:
+ *
+ *   value(start of month) = value(end of month) - P&L(month) - deposits(month)
+ *
+ * Chained month by month back to the beginning. Subtracting the deposits is
+ * what keeps them out of the return in both directions — they neither count as
+ * profit nor quietly enlarge the base of the months before they arrived.
+ *
+ * The return itself is then Modified Dietz, so money that arrived on the 30th
+ * is not treated as having worked all month.
+ *
+ * Returns a Map keyed YYYY-MM. A month whose starting value works out to zero
+ * or less carries a null percentage: there was no capital to measure against,
+ * and a number there would be arithmetic rather than a return.
+ */
+export function monthlyAccountReturns(positions, account, flows = [], today = todayStr()) {
+  const dates = [];
+  for (const position of positions) {
+    if (position.open) dates.push(position.open);
+    if (position.close) dates.push(position.close);
+  }
+  for (const flow of flows) if (flow?.date) dates.push(flow.date);
+  const out = new Map();
+  if (!dates.length) return out;
+
+  const earliest = dates.reduce((a, b) => (a < b ? a : b)).slice(0, 7);
+  const keys = monthRange(earliest, today.slice(0, 7));
+  const pnlByMonth = monthPnl(positions);
+
+  // Newest first, because the only value actually known is today's.
+  let closing = account;
+  for (let i = keys.length - 1; i >= 0; i--) {
+    const key = keys[i];
+    const { pnl, marked } = pnlByMonth.get(key) ?? { pnl: 0, marked: 0 };
+    const inMonth = flows.filter((f) => f?.date?.slice(0, 7) === key);
+    const net = inMonth.reduce((sum, f) => sum + f.amount, 0);
+    const opening = closing - pnl - net;
+    const { first, last } = monthBounds(key);
+    // The month still running is measured to today, not to a date in the future.
+    const to = last > today ? today : last;
+
+    out.set(key, {
+      pct: opening > 0 ? modifiedDietzReturn(pnl, opening, inMonth, first, to) : null,
+      pnl,
+      opening,
+      closing,
+      net,
+      /** Positions opened this month and still held, marked at today's price. */
+      marked,
+      from: first,
+      to,
+    });
+    closing = opening;
+  }
+  return out;
 }
 
 /**
