@@ -554,9 +554,35 @@ function drawOverTime(profile, gex, dex, id) {
 
   const last = rolled[rolled.length - 1];
   const left = remaining(last, id);
+
+  /**
+   * The dates the chosen timeframe actually covers, stated rather than implied.
+   *
+   * "364D" names a window, not a period the record necessarily reaches across,
+   * and those are different whenever the recording is younger than the window —
+   * which, for a panel that can only record forward, is most of the time. The
+   * buttons used to say "364D" over eleven days of data with nothing to
+   * distinguish that from a full year.
+   */
+  const span = (() => {
+    const from = new Date(rolled[0].start);
+    const to = new Date(last.start + frame.ms);
+    const sameYear = from.getFullYear() === to.getFullYear();
+    const show = (d, withYear) => `${d.getDate()} ${MONTHS[d.getMonth()]}${
+      withYear ? ` ${d.getFullYear()}` : ''}`;
+    if (isIntraday(id)) {
+      const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      const sameDay = from.toDateString() === to.toDateString();
+      return sameDay
+        ? `${show(from, false)} ${hhmm(from)} – ${hhmm(to)}`
+        : `${show(from, false)} ${hhmm(from)} – ${show(to, false)} ${hhmm(to)}`;
+    }
+    return `${show(from, !sameYear)} – ${show(to, true)}`;
+  })();
+
   const note = [
+    span,
     `${rolled.length} bars`,
-    frame.days == null ? null : `last ${frame.days} days`,
     left ? `last one closes in ${left}` : null,
   ].filter(Boolean).join(' · ');
   const gexPoints = rolled.map((r) => ({ label: r.label, value: r.gex }));
@@ -602,9 +628,23 @@ export function renderExposure(profile, onPick) {
 
   const picker = el('optPicker');
   if (picker) {
-    picker.innerHTML = (profile.markets ?? []).map((m) =>
+    /**
+     * Grouped by what the underlying is, with the group named beside its
+     * buttons. Four markets do not strictly need grouping; the label is there
+     * because it tells a reader that crypto and an index are not the same kind
+     * of number, which matters more as the list grows.
+     */
+    const groups = [];
+    for (const m of profile.markets ?? []) {
+      const name = m.group ?? '';
+      const last = groups[groups.length - 1];
+      if (last && last.name === name) last.items.push(m);
+      else groups.push({ name, items: [m] });
+    }
+    picker.innerHTML = groups.map((g) => `${g.name
+      ? `<span class="opt-group">${escapeHtml(g.name)}</span>` : ''}${g.items.map((m) =>
       `<button class="opt-tab${m.id === profile.market ? ' active' : ''}"
-        data-market="${escapeHtml(m.id)}">${escapeHtml(m.label)}</button>`).join('');
+        data-market="${escapeHtml(m.id)}">${escapeHtml(m.id)}</button>`).join('')}`).join('');
     picker.onclick = (e) => {
       const id = e.target?.dataset?.market;
       if (id) lastPick?.(id);
@@ -631,6 +671,41 @@ export function renderExposure(profile, onPick) {
     };
   }
 
+  /**
+   * The headline, which is the first thing read and used to be a small cell in
+   * a row of four.
+   *
+   * A GEX figure is only useful with its sign attached to a sentence: positive
+   * means dealers are long gamma and their hedging leans against a move, which
+   * is the difference between a market that grinds and one that runs. The
+   * reference dashboards all print that sentence and they are right to.
+   */
+  const headline = el('optHeadline');
+  if (headline) {
+    const positive = profile.netGex >= 0;
+    const pain = profile.maxPain;
+    const painGap = pain && profile.spot
+      ? ` (${((pain / profile.spot - 1) * 100).toFixed(1)}% from spot)` : '';
+    const band = profile.band
+      ? `Chart shows strikes within ±${profile.band.pct}% of spot · the totals above are the whole chain`
+      : '';
+
+    headline.innerHTML = `
+      <div class="opt-hl-top">
+        <span class="opt-hl-lbl">GEX · Gamma exposure</span>
+        <strong class="opt-hl-val ${positive ? 'is-up' : 'is-down'}">${
+  profile.netGex >= 0 ? '+' : '−'}${short(Math.abs(profile.netGex))}</strong>
+        <span class="opt-hl-badge ${positive ? 'is-up' : 'is-down'}">${
+  positive ? 'Long gamma' : 'Short gamma'}</span>
+      </div>
+      <div class="opt-hl-say">${positive
+    ? 'Dealer hedging leans against moves here — rallies and dips both meet resistance.'
+    : 'Dealer hedging amplifies moves here — a push in either direction tends to extend.'}${
+  pain ? ` Max pain ${strikeLabel(pain)}${painGap}.` : ''}</div>
+      <div class="opt-hl-fine">Max pain is the strike where the options outstanding are worth
+        least at expiry. It is not a target.${band ? ` · ${escapeHtml(band)}` : ''}</div>`;
+  }
+
   const stats = el('optStats');
   if (stats) {
     // The flip is absent when cumulative gamma never crosses zero inside the
@@ -640,7 +715,27 @@ export function renderExposure(profile, onPick) {
       <div class="opt-stat"><span>Net GEX</span><strong class="${profile.netGex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netGex)}</strong></div>
       <div class="opt-stat"><span>Net DEX</span><strong class="${profile.netDex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netDex)}</strong></div>
       <div class="opt-stat"><span>Gamma flip</span><strong>${
-  profile.gammaFlip ? strikeLabel(profile.gammaFlip) : '—'}</strong></div>`;
+  profile.gammaFlip ? strikeLabel(profile.gammaFlip) : '—'}</strong></div>
+      <div class="opt-stat"><span>Max pain</span><strong>${
+  profile.maxPain ? strikeLabel(profile.maxPain) : '—'}</strong></div>`;
+  }
+
+  /**
+   * Where the numbers came from and how old they are.
+   *
+   * The reference dashboard prints a publication time on every screen, and that
+   * is the single most useful piece of furniture on it: an exposure figure with
+   * no stated age invites being read as live when it is not.
+   */
+  const source = el('optSource');
+  if (source) {
+    const struck = profile.struck ? new Date(profile.struck) : null;
+    const modelled = profile.greeks?.modelled
+      ? ` · greeks modelled from implied volatility on ${profile.greeks.modelled.toLocaleString()} contracts`
+      : '';
+    source.innerHTML = `${escapeHtml(profile.source?.name ?? '')} · ${
+  escapeHtml(profile.source?.note ?? '')}${struck
+    ? ` · chain struck ${escapeHtml(struck.toLocaleString())}` : ''}${escapeHtml(modelled)}`;
   }
 
   const gex = el('optGex');

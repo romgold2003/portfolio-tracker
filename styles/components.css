@@ -99,6 +99,23 @@
 .opt-tab:hover{background:var(--hover2);color:var(--text)}
 .opt-tab.active{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
 
+/* The headline: the reference dashboards lead with the number and a sentence,
+   and that is the right order — a signed billion means nothing on its own. */
+.opt-headline{margin:12px 0 10px;padding:12px 14px;border-radius:8px;
+  background:var(--input);border:0.5px solid var(--border2)}
+.opt-hl-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.opt-hl-lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text4)}
+.opt-hl-val{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.opt-hl-badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:99px;
+  background:var(--panel2);border:0.5px solid var(--border2)}
+.opt-hl-say{margin-top:7px;font-size:12px;color:var(--text2);line-height:1.5}
+.opt-hl-fine{margin-top:5px;font-size:10px;color:var(--text4);line-height:1.5}
+/* The group label in the market picker — crypto and an index are not the same
+   kind of number and the picker should not imply they are. */
+.opt-group{font-size:9px;text-transform:uppercase;letter-spacing:0.06em;
+  color:var(--text4);padding:0 6px 0 2px;align-self:center}
+.opt-source{margin:8px 0 2px;font-size:10px;color:var(--text4);line-height:1.5}
+
 .opt-stats{display:flex;gap:26px;flex-wrap:wrap;margin:2px 0 16px}
 .opt-stat{display:flex;flex-direction:column;gap:2px}
 .opt-stat span{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}

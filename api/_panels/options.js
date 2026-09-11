@@ -25,13 +25,14 @@ const SESSION_COOKIE = 'pt_session';
  * would move thirteen megabytes to be told the same thing.
  */
 const MARKETS = {
-  BTC: { label: 'Bitcoin', kind: 'deribit', fresh: 60, url: 'https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option' },
-  SPX: { label: 'S&P 500', kind: 'cboe', fresh: 900, url: 'https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json' },
-  NDX: { label: 'Nasdaq 100', kind: 'cboe', fresh: 900, url: 'https://cdn.cboe.com/api/global/delayed_quotes/options/_NDX.json' },
+  BTC: { label: 'Bitcoin', group: 'Crypto', kind: 'deribit', fresh: 60, url: 'https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option' },
+  ETH: { label: 'Ethereum', group: 'Crypto', kind: 'deribit', fresh: 60, url: 'https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=ETH&kind=option' },
+  SPX: { label: 'S&P 500', group: 'Indices', kind: 'cboe', fresh: 900, url: 'https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json' },
+  NDX: { label: 'Nasdaq 100', group: 'Indices', kind: 'cboe', fresh: 900, url: 'https://cdn.cboe.com/api/global/delayed_quotes/options/_NDX.json' },
 };
 
 export const MARKET_LIST = Object.entries(MARKETS)
-  .map(([id, m]) => ({ id, label: m.label }));
+  .map(([id, m]) => ({ id, label: m.label, group: m.group }));
 
 export default async function handler(req, res) {
   if (!methodIs(req, res, 'GET')) return;
@@ -59,6 +60,16 @@ export default async function handler(req, res) {
     ? fromCboe(payload)
     : fromDeribit(payload?.result);
 
+  /**
+   * When the chain was struck, as the source states it rather than as we
+   * received it. CBOE stamps the file; Deribit's book is live by the time it
+   * answers. The card prints whichever it gets — an exposure figure whose
+   * age is unknown is worth much less than one carrying its own timestamp.
+   */
+  const struck = market.kind === 'cboe'
+    ? (payload?.data?.last_trade_time ?? null)
+    : new Date().toISOString();
+
   // A chain that arrived but priced to nothing usable. Better to say so than to
   // draw an empty axis and let it read as a flat market.
   if (!profile) return fail(res, 503, 'That chain could not be read.');
@@ -85,8 +96,14 @@ export default async function handler(req, res) {
   res.end(JSON.stringify({
     market: id,
     label: market.label,
+    group: market.group,
     markets: MARKET_LIST,
     refreshMs: market.fresh * 1000,
+    /** How the quotes are sourced and how stale they may be, in the card's words. */
+    source: market.kind === 'cboe'
+      ? { name: 'Cboe', note: 'quotes delayed about 15 minutes · open interest struck at the previous clearing' }
+      : { name: 'Deribit', note: 'live order book · open interest updated continuously' },
+    struck,
     ...profile,
     history,
   }));
