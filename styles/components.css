@@ -127,14 +127,22 @@
 /* The curves. preserveAspectRatio is none, so the plot stretches to the card
    while strokes are held at width by vector-effect and text by its own size. */
 .cv{width:100%;height:190px;display:block;overflow:visible}
+/* The history charts scale uniformly instead, so their dots stay round — a
+   stretched viewBox turns every marker into an ellipse. Height follows width. */
+.cv-hist{height:auto;aspect-ratio:900/300}
 .cv-title{font-size:10px;color:var(--text3);text-transform:uppercase;
   letter-spacing:0.05em;margin-bottom:6px}
 .cv-note{color:var(--text4);margin-left:8px;text-transform:none;letter-spacing:0}
 /* Stands in for a curve while the recorded history is too short to draw one. */
 .cv-empty{color:var(--text3);font-size:12px;line-height:1.6;padding:26px 0;text-align:center}
-.cv-grid{stroke:var(--input);stroke-width:1;vector-effect:non-scaling-stroke}
-.cv-grid.is-zero{stroke:var(--border2)}
+/* Dashed, so the grid sits behind the curve instead of competing with it. */
+.cv-grid{stroke:var(--border2);stroke-width:1;stroke-dasharray:4 5;
+  vector-effect:non-scaling-stroke;opacity:0.55}
+.cv-grid.is-zero{stroke:var(--text4);stroke-dasharray:none;opacity:0.7}
 .cv-ytick,.cv-xtick{fill:var(--text4);font-size:9px;font-variant-numeric:tabular-nums}
+/* The history plot is drawn larger, so its labels are too — they were sized for
+   a chart two thirds the height and came out unreadable on a phone. */
+.cv-hist .cv-ytick,.cv-hist .cv-xtick{font-size:11px}
 /* Where price actually is, which is the line the eye needs first. */
 .cv-mark{stroke:var(--text3);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
 .cv-marklbl{fill:var(--text3);font-size:8px;text-transform:uppercase;letter-spacing:0.06em}

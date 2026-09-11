@@ -56,16 +56,22 @@ const DAY = 24 * HOUR;
  * this panel needs — five named views answer the same questions without asking
  * anyone to combine two controls in their head.
  *
- * The first three show everything recorded at that bar size. The last two are
- * fixed windows, which is what makes them worth having beside 1D: the same
- * daily bars, held to a stated number of days.
+ * Every one is a window with a bar size: seven, thirty and ninety days of
+ * daily points, which is the structure the reference dashboards settled on and
+ * the one that answers "has this been building" without asking anyone to
+ * combine two controls in their head. 1H is the intraday view on top of that —
+ * two days of hourly points, which is as far back as an hourly bar is worth
+ * reading.
+ *
+ * Windows rather than "everything recorded" on purpose: this panel can only
+ * record forward, so an open-ended view silently meant "since the database was
+ * attached" and looked identical to a full year.
  */
 const FRAMES = [
-  { id: '1h', label: '1H', ms: HOUR, days: null },
-  { id: '1d', label: '1D', ms: DAY, days: null },
-  { id: '1w', label: '1W', ms: 7 * DAY, days: null },
-  { id: '180d', label: '180D', ms: DAY, days: 180 },
-  { id: '364d', label: '364D', ms: DAY, days: 364 },
+  { id: '1h', label: '1H', ms: HOUR, days: 2 },
+  { id: '7d', label: '7D', ms: DAY, days: 7 },
+  { id: '30d', label: '30D', ms: DAY, days: 30 },
+  { id: '90d', label: '90D', ms: DAY, days: 90 },
 ];
 
 const frameDef = (id) => FRAMES.find((f) => f.id === id) ?? FRAMES[0];
@@ -188,82 +194,132 @@ const PAD = { left: 60, right: 12, top: 14, bottom: 24 };
 const PLOT = { x0: PAD.left, x1: W - PAD.right, y0: PAD.top, y1: H - PAD.bottom };
 
 /**
+ * The history charts get their own, taller box.
+ *
+ * The strike profile is stretched to the card by preserveAspectRatio="none", so
+ * its viewBox height is arbitrary and 190 is as good as any number. The history
+ * scales uniformly — it has to, or its dots become ellipses — which means the
+ * viewBox aspect *is* the shape on screen. At 900×190 a history renders about
+ * 150 pixels tall on a normal card, and a curve that sits near zero and then
+ * jumps is squeezed into a band a few pixels deep. The shape is the entire
+ * reason to draw a history rather than print a number.
+ *
+ * Wider left padding with it, because the labels on this one are bigger.
+ */
+const HIST_H = 300;
+const HIST_PAD = { left: 78, right: 18, top: 20, bottom: 34 };
+const HIST_PLOT = {
+  x0: HIST_PAD.left, x1: W - HIST_PAD.right, y0: HIST_PAD.top, y1: HIST_H - HIST_PAD.bottom,
+};
+
+/**
  * A y scale that always contains zero.
  *
  * Both of these are signed quantities whose sign is the point, so an axis that
  * floated to fit the data and left zero off it would hide the one thing worth
  * seeing.
  */
-function scaleFor(values) {
+function scaleFor(values, plot = PLOT) {
   const max = Math.max(0, ...values);
   const min = Math.min(0, ...values);
   const span = max - min || 1;
-  return { max, min, y: (v) => PLOT.y1 - ((v - min) / span) * (PLOT.y1 - PLOT.y0) };
+  return { max, min, y: (v) => plot.y1 - ((v - min) / span) * (plot.y1 - plot.y0) };
 }
 
-const xAt = (i, n) => (n <= 1
-  ? (PLOT.x0 + PLOT.x1) / 2
-  : PLOT.x0 + (i / (n - 1)) * (PLOT.x1 - PLOT.x0));
+const xAt = (i, n, plot = PLOT) => (n <= 1
+  ? (plot.x0 + plot.x1) / 2
+  : plot.x0 + (i / (n - 1)) * (plot.x1 - plot.x0));
 
-function axisLabels(points, xFor) {
+function axisLabels(points, xFor, bottom = H) {
   const n = points.length;
   const step = Math.max(1, Math.ceil(n / 8));
   return points.map((p, i) =>
     (i % step === 0 || i === n - 1
-      ? `<text x="${xFor(i).toFixed(1)}" y="${H - 6}" class="cv-xtick"
+      ? `<text x="${xFor(i).toFixed(1)}" y="${bottom - 8}" class="cv-xtick"
           text-anchor="middle">${escapeHtml(p.label)}</text>`
       : '')).join('');
 }
 
-function gridFor(s, format) {
-  return [s.max, 0, s.min].filter((v, i, a) => a.indexOf(v) === i).map((v) => {
+/**
+ * Four levels rather than three, evenly spaced across the range.
+ *
+ * Maximum, zero and minimum alone leave the eye nothing to measure the middle
+ * of a curve against, which is where a history spends most of its time. Zero is
+ * always kept and always marked differently, because on a signed quantity it is
+ * not just another gridline.
+ */
+function gridFor(s, format, levels = 1, plot = PLOT) {
+  const values = new Set([s.max, s.min, 0]);
+  for (let i = 1; i < levels; i += 1) values.add(s.min + ((s.max - s.min) * i) / levels);
+
+  return [...values].sort((a, b) => b - a).map((v) => {
     const y = s.y(v).toFixed(1);
-    return `<line x1="${PLOT.x0}" y1="${y}" x2="${PLOT.x1}" y2="${y}"
+    return `<line x1="${plot.x0}" y1="${y}" x2="${plot.x1}" y2="${y}"
         class="cv-grid${v === 0 ? ' is-zero' : ''}" />
-      <text x="${PLOT.x0 - 8}" y="${y}" class="cv-ytick" text-anchor="end"
+      <text x="${plot.x0 - 10}" y="${y}" class="cv-ytick" text-anchor="end"
         dominant-baseline="middle">${format(v)}</text>`;
   }).join('');
 }
 
 /**
- * One line chart with the area under it filled.
+ * One line chart: stroke, dots and a grid, with no fill under the curve.
  *
  * Points are joined straight rather than smoothed: a spline through option
  * strikes invents gamma at prices where no contract trades, and the kinks are
  * real — they are where the open interest sits.
  */
-function lineChart({ points, colour, markIndex, title, note }) {
+function lineChart({ points, colour, markIndex, title, note, history = false }) {
   if (!points.length) return '';
-  const s = scaleFor(points.map((p) => p.value));
+  const plot = history ? HIST_PLOT : PLOT;
+  const box = history ? HIST_H : H;
+  const s = scaleFor(points.map((p) => p.value), plot);
   const n = points.length;
 
-  const coords = points.map((p, i) => ({ x: xAt(i, n), y: s.y(p.value) }));
+  const coords = points.map((p, i) => ({ x: xAt(i, n, plot), y: s.y(p.value) }));
   const line = coords.map((c, i) => `${i ? 'L' : 'M'} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ');
   const zeroY = s.y(0);
   const area = `${line} L ${coords[n - 1].x.toFixed(1)} ${zeroY.toFixed(1)}`
     + ` L ${coords[0].x.toFixed(1)} ${zeroY.toFixed(1)} Z`;
 
   const mark = markIndex >= 0 ? `
-    <line x1="${xAt(markIndex, n).toFixed(1)}" y1="${PLOT.y0}"
-          x2="${xAt(markIndex, n).toFixed(1)}" y2="${PLOT.y1}" class="cv-mark" />
-    <text x="${xAt(markIndex, n).toFixed(1)}" y="${PLOT.y0 - 3}" class="cv-marklbl"
+    <line x1="${xAt(markIndex, n, plot).toFixed(1)}" y1="${plot.y0}"
+          x2="${xAt(markIndex, n, plot).toFixed(1)}" y2="${plot.y1}" class="cv-mark" />
+    <text x="${xAt(markIndex, n, plot).toFixed(1)}" y="${plot.y0 - 3}" class="cv-marklbl"
           text-anchor="middle">spot</text>` : '';
 
+  // Large enough to be a target for the eye on a sparse series, small enough
+  // not to merge into a band on a dense one.
+  const r = n > 120 ? 1.8 : n > 60 ? 2.6 : 3.4;
   const dots = coords.map((c) =>
-    `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.4" fill="${colour}" />`).join('');
+    `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${history ? r : 2.4}"
+      fill="${colour}" />`).join('');
 
+  /**
+   * The history drops the wash under the line; the strike view keeps it.
+   *
+   * A filled area answers "how much", which is exactly the question the strike
+   * profile is asking — the slab under the curve is the wall. A history is
+   * asking about shape instead, and a translucent fill under a line that
+   * crosses zero reads as two disconnected blobs and fights the grid behind it.
+   *
+   * The history also leaves preserveAspectRatio at its default so the plot
+   * scales uniformly: stretching it with "none" turns every dot into an
+   * ellipse, and the markers are what make a sparse series readable.
+   */
   return `<div class="cv-title">${escapeHtml(title)}${
   note ? `<span class="cv-note">${escapeHtml(note)}</span>` : ''}</div>
-    <svg class="cv" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+    <svg class="cv${history ? ' cv-hist' : ''}" viewBox="0 0 ${W} ${box}"
+         ${history ? '' : 'preserveAspectRatio="none"'} role="img"
          aria-label="${escapeHtml(title)}">
-      ${gridFor(s, short)}${mark}
-      <path d="${area}" fill="${colour}" opacity="0.14" />
-      <path d="${line}" fill="none" stroke="${colour}" stroke-width="2"
-            stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+      ${gridFor(s, short, history ? 4 : 1, plot)}${mark}
+      ${history ? '' : `<path d="${area}" fill="${colour}" opacity="0.14" />`}
+      <path d="${line}" fill="none" stroke="${colour}" stroke-width="${history ? 2.2 : 2}"
+            stroke-linejoin="round" stroke-linecap="round"
+            ${history ? '' : 'vector-effect="non-scaling-stroke"'} />
       ${dots}
-      ${axisLabels(points, (i) => xAt(i, n))}
-      <line class="cv-hair" y1="${PLOT.y0}" y2="${PLOT.y1}" x1="0" x2="0" hidden />
-      <circle class="cv-hot" r="4.5" fill="${colour}" hidden />
+      ${axisLabels(points, (i) => xAt(i, n, plot), box)}
+      <line class="cv-hair" y1="${plot.y0}" y2="${plot.y1}" x1="0" x2="0" hidden />
+      <circle class="cv-hot" r="5" fill="${colour}" hidden />
     </svg>`;
 }
 
@@ -466,9 +522,9 @@ export function rollUpExposure(rows, id) {
 /**
  * Read as "Net GEX · daily average", so nobody reads an average as a total.
  *
- * Named for the bar rather than the view. 180D and 364D are drawn in daily
- * bars and only differ in how far back they reach, so calling either a "180D
- * average" would describe a bar half a year wide that does not exist. How far
+ * Named for the bar rather than the view. 7D, 30D and 90D are all drawn in
+ * daily bars and differ only in how far back they reach, so calling one a "90D
+ * average" would describe a bar three months wide that does not exist. How far
  * back it reaches is the note's job.
  */
 function timeTitle(name, id) {
@@ -558,11 +614,11 @@ function drawOverTime(profile, gex, dex, id) {
   /**
    * The dates the chosen timeframe actually covers, stated rather than implied.
    *
-   * "364D" names a window, not a period the record necessarily reaches across,
-   * and those are different whenever the recording is younger than the window —
-   * which, for a panel that can only record forward, is most of the time. The
-   * buttons used to say "364D" over eleven days of data with nothing to
-   * distinguish that from a full year.
+   * "90D" names a window, not a period the record necessarily reaches across,
+   * and those differ whenever the recording is younger than the window — which,
+   * for a panel that can only record forward, is most of the time. The buttons
+   * used to say "364D" over eleven days of data with nothing to distinguish
+   * that from a full year.
    */
   const span = (() => {
     const from = new Date(rolled[0].start);
@@ -589,10 +645,12 @@ function drawOverTime(profile, gex, dex, id) {
   const dexPoints = rolled.map((r) => ({ label: r.label, value: r.dex }));
 
   gex.innerHTML = lineChart({
-    points: gexPoints, colour: GEX_COLOUR, markIndex: -1, title: timeTitle('GEX · Net gamma ($)', id), note,
+    points: gexPoints, colour: GEX_COLOUR, markIndex: -1, history: true,
+    title: timeTitle('GEX · Gamma exposure ($)', id), note,
   });
   dex.innerHTML = lineChart({
-    points: dexPoints, colour: DEX_COLOUR, markIndex: -1, title: timeTitle('DEX · Net delta ($)', id),
+    points: dexPoints, colour: DEX_COLOUR, markIndex: -1, history: true,
+    title: timeTitle('DEX · Delta exposure ($)', id),
   });
   stampYs(gex, gexPoints);
   stampYs(dex, dexPoints);

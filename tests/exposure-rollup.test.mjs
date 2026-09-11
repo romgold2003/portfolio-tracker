@@ -65,25 +65,26 @@ describe('exposure is a level, so it averages', () => {
 
   test('a daily bar gathers the hours inside it', () => {
     const rows = every15('2026-09-03T12:00:00Z', Array.from({ length: 16 }, () => 100));
-    const bars = rollUpExposure(rows, '1d');
+    const bars = rollUpExposure(rows, '7d');
     assert.equal(bars.length, 1, '12:00 to 15:45 is all one day');
     assert.equal(bars[0].label, '3 Sep');
     assert.equal(bars[0].reads, 16);
   });
 
-  test('the windowed views bucket by day like 1D does', () => {
-    // 180D and 364D differ from 1D only in how far back they reach, which is
-    // the caller's business; the bars themselves must be identical.
+  test('every daily window buckets identically', () => {
+    // 7D, 30D and 90D differ only in how far back they reach, which is the
+    // caller's business; the bars themselves must be identical.
     const rows = every15('2026-09-03T12:00:00Z', [1, 2, 3, 4]);
-    for (const id of ['180d', '364d']) {
-      assert.deepEqual(rollUpExposure(rows, id), rollUpExposure(rows, '1d'));
+    for (const id of ['30d', '90d']) {
+      assert.deepEqual(rollUpExposure(rows, id), rollUpExposure(rows, '7d'));
     }
   });
 
-  test('daily and weekly bars are labelled by their day', () => {
+  test('daily bars are labelled by their day', () => {
     const rows = every15('2026-09-03T14:00:00Z', [10, 20]);
-    assert.equal(rollUpExposure(rows, '1d')[0].label, '3 Sep');
-    assert.equal(rollUpExposure(rows, '1w')[0].label, '31 Aug');
+    for (const id of ['7d', '30d', '90d']) {
+      assert.equal(rollUpExposure(rows, id)[0].label, '3 Sep');
+    }
   });
 
   test('a bar carries when it opened and closed', () => {
