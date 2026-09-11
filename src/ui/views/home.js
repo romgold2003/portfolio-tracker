@@ -447,7 +447,9 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
-  renderCurve(ui.timeframe);
+  // Flows go in so the percentage can take them out: a deposit raises the
+  // account without earning anything, and a return that counts it is not one.
+  renderCurve(ui.timeframe, ui.curveMode, state.cashFlows);
 
   const period = accountPerformance({
     positions: state.positions,

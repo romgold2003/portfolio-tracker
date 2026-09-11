@@ -112,6 +112,11 @@
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
               <button class="eye-btn" id="hideAmounts" onclick="toggleAmounts()" title="Hide amounts" aria-label="Hide amounts" aria-pressed="false">👁</button>
               <div class="hero-value" id="acctValue">$0</div>
+              <!-- Dollars or per cent, over whichever timeframe is selected. -->
+              <div class="mode-row" id="curveMode" role="group" aria-label="Show the curve in dollars or as a return">
+                <button type="button" class="mode-btn active" data-mode="value" aria-pressed="true">$</button>
+                <button type="button" class="mode-btn" data-mode="percent" aria-pressed="false">%</button>
+              </div>
               <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Cash</div>
                 <div style="display:flex;align-items:center;gap:8px">

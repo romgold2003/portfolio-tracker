@@ -8,6 +8,14 @@ export const ui = {
   openClosedMonth: null,
   /** Chart timeframe on the home page. */
   timeframe: '3M',
+  /**
+   * Whether the curve is drawn in dollars or as a return.
+   *
+   * 'value' or 'percent'. The timeframe is shared between them, so switching
+   * asks the same question of the same window two ways: what the account is
+   * worth, and what it has made.
+   */
+  curveMode: 'value',
   /** Direction selected in the new-trade form. */
   formDirection: 'Long',
   /** Whether the new-trade form is sized by cash spent or by share count. */

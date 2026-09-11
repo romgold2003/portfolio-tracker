@@ -35,18 +35,31 @@ import { initParticleWave } from './features/particleWave.js';
 import { describeStorageMode } from './ui/views/settings.js';
 import { initVoice } from './features/voice.js';
 import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
-import { installActions, voiceActions, refreshPrices, setTimeframe } from './app/actions.js';
+import {
+  installActions, voiceActions, refreshPrices, setTimeframe, setCurveMode,
+} from './app/actions.js';
 
 /** Background loops, so they can be stopped on sign out. */
 let timers = [];
 
 function wireTimeframeButtons() {
   const row = document.getElementById('tfRow');
-  if (!row) return;
-  row.addEventListener('click', (e) => {
-    const button = e.target.closest('.tf');
-    if (button) setTimeframe(button.dataset.tf);
-  });
+  if (row) {
+    row.addEventListener('click', (e) => {
+      const button = e.target.closest('.tf');
+      if (button) setTimeframe(button.dataset.tf);
+    });
+  }
+
+  // Dollars or per cent. The timeframe is untouched by this — the point of the
+  // toggle is to ask the same window the other question.
+  const modes = document.getElementById('curveMode');
+  if (modes) {
+    modes.addEventListener('click', (e) => {
+      const button = e.target.closest('.mode-btn');
+      if (button) setCurveMode(button.dataset.mode);
+    });
+  }
 }
 
 function showAccount() {

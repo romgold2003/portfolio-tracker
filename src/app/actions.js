@@ -38,7 +38,6 @@ import {
   setSizeMode as applySizeMode, updateSizeHint as refreshSizeHint,
   toggleClosedTrade,
 } from '../ui/views/addTrade.js';
-import { renderCurve } from '../ui/charts.js';
 import { show } from '../ui/router.js';
 import { ui } from '../ui/uiState.js';
 import { toggleTheme } from '../ui/theme.js';
@@ -487,19 +486,35 @@ export function setPosSort(key) {
   renderPositions();
 }
 
+/**
+ * Change the window the curve and the period KPI cover.
+ *
+ * The timeframe is set before the page is drawn, because renderHome reads it —
+ * and renderHome is what draws the curve and fills the return KPI. This used to
+ * draw the curve a second time afterwards and set the KPI from what it returned,
+ * which was wrong twice over: renderCurve returns the whole series rather than a
+ * number, so formatting it as a percentage threw a TypeError on every click, and
+ * the curve is the one thing on this page that must never feed that figure. It
+ * measures the change in what the account holds, which counts money paid in as
+ * though it had been earned.
+ */
 export function setTimeframe(tf) {
   ui.timeframe = tf;
-  show('home');
   document.querySelectorAll('.tf').forEach((x) => x.classList.toggle('active', x.dataset.tf === tf));
   const label = el('kRetLbl');
   if (label) label.textContent = tf;
+  show('home');
+}
 
-  const periodReturn = renderCurve(tf);
-  const value = el('kReturn');
-  if (value) {
-    value.textContent = fp(periodReturn);
-    value.style.color = pnlColor(periodReturn);
-  }
+/** Dollars or per cent, over whatever window is already selected. */
+export function setCurveMode(mode) {
+  ui.curveMode = mode === 'percent' ? 'percent' : 'value';
+  document.querySelectorAll('.mode-btn').forEach((x) => {
+    const on = x.dataset.mode === ui.curveMode;
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-pressed', String(on));
+  });
+  show('home');
 }
 
 export function setDir(direction) { setDirection(direction); }
@@ -561,6 +576,7 @@ function showMonth(key) {
 export const voiceActions = {
   show,
   setTimeframe,
+  setCurveMode,
   editCash,
   refreshPrices,
   focusTicker,

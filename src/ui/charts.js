@@ -6,7 +6,7 @@
  * theme toggle re-renders instead of just swapping a class.
  */
 import { MONTHS_SHORT } from '../config/constants.js';
-import { curveSeries } from '../core/snapshots.js';
+import { curveSeries, returnSeries } from '../core/snapshots.js';
 
 /** Live chart instances, so each redraw can destroy the previous one. */
 const charts = {};
@@ -29,13 +29,24 @@ function chartColors() {
   };
 }
 
-/** Draws the account-value curve and returns the period return it implies. */
-export function renderCurve(timeframe) {
+/**
+ * Draws the account curve and returns the period it implies.
+ *
+ * `mode` is 'value' for dollars or 'percent' for the compounded return over the
+ * same window. The percentage is not the dollar curve rescaled — it is measured
+ * net of deposits, so the two can disagree and the percentage is the one that
+ * is a return. See returnSeries.
+ */
+export function renderCurve(timeframe, mode = 'value', flows = []) {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
-  const series = curveSeries(timeframe);
+  const percent = mode === 'percent';
+  const series = percent ? returnSeries(timeframe, flows) : curveSeries(timeframe);
   const { labels, data } = series;
   const c = chartColors();
+  // Red when the window is down, which on a percentage curve is the first thing
+  // the eye should get. The dollar curve keeps its green for continuity.
+  const line = percent && (data[data.length - 1] ?? 0) < 0 ? c.red : c.green;
 
   charts.curve?.destroy();
   charts.curve = new Chart(canvas, {
@@ -44,11 +55,11 @@ export function renderCurve(timeframe) {
       labels,
       datasets: [{
         data,
-        borderColor: c.green,
+        borderColor: line,
         borderWidth: 2,
         pointRadius: 0,
         fill: true,
-        backgroundColor: c.green + '14',
+        backgroundColor: line + '14',
         tension: 0.4,
       }],
     },
@@ -60,13 +71,23 @@ export function renderCurve(timeframe) {
         tooltip: {
           mode: 'index',
           intersect: false,
-          callbacks: { label: (ctx) => ' $' + Math.round(ctx.raw).toLocaleString() },
+          callbacks: {
+            label: (ctx) => (percent
+              ? ` ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`
+              : ` $${Math.round(ctx.raw).toLocaleString()}`),
+          },
         },
       },
       scales: {
         x: { ticks: { color: c.txt, font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: c.grid } },
         y: {
-          ticks: { color: c.txt, font: { size: 10 }, callback: (v) => '$' + (v / 1000).toFixed(1) + 'k' },
+          ticks: {
+            color: c.txt,
+            font: { size: 10 },
+            callback: (v) => (percent
+              ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
+              : `$${(v / 1000).toFixed(1)}k`),
+          },
           grid: { color: c.grid },
         },
       },

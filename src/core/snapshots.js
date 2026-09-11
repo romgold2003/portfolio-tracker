@@ -77,6 +77,62 @@ export function periodStart(timeframe, firstRecorded, now = new Date()) {
  * a smooth placeholder that ends on the true current value. It is illustrative
  * only, and is replaced by real points as the app is used day to day.
  */
+/**
+ * The same window as a percentage return, compounded, with deposits removed.
+ *
+ * A percentage read straight off the account curve is not a return. Money paid
+ * in raises the account without earning anything, and dividing the new value by
+ * the old one reports the deposit as performance — on this book a transfer of
+ * 2,450 read as profit and put the yearly figure 5 points above what the broker
+ * said.
+ *
+ * So the day's move is measured net of whatever moved in or out that day, taken
+ * against the balance that was actually working the day before, and the daily
+ * returns are chained:
+ *
+ *   r_i   = (v_i − v_i−1 − flow_i) / v_i−1
+ *   index = Π (1 + r_i) − 1
+ *
+ * Chaining rather than dividing the ends is what makes it a *time-weighted*
+ * return: each day is measured on the capital present that day, so the size and
+ * timing of deposits change nothing. It is the same quantity a broker quotes,
+ * and the same one the Monthly page's Portfolio % compounds to.
+ *
+ * The first point is zero by construction — every window starts from where it
+ * starts, and the curve reads as growth from there.
+ */
+export function returnSeries(timeframe, flows = []) {
+  const base = curveSeries(timeframe);
+  const { data, dates } = base;
+
+  /** Net moved in or out on each day, since two can land on one date. */
+  const byDay = new Map();
+  for (const f of flows ?? []) {
+    if (!f?.date || !Number.isFinite(f.amount)) continue;
+    byDay.set(f.date, (byDay.get(f.date) ?? 0) + f.amount);
+  }
+
+  const out = [0];
+  let index = 1;
+  for (let i = 1; i < data.length; i += 1) {
+    const before = data[i - 1];
+    const flow = byDay.get(dates[i]) ?? 0;
+    // A day with no capital behind it has no return to speak of; it contributes
+    // nothing rather than dividing by zero and poisoning the rest of the chain.
+    const r = before > 0 ? (data[i] - before - flow) / before : 0;
+    index *= 1 + r;
+    out.push(+((index - 1) * 100).toFixed(4));
+  }
+
+  return {
+    ...base,
+    data: out,
+    percent: true,
+    /** What the whole window came to, which is the last point by construction. */
+    returnPct: out[out.length - 1] ?? 0,
+  };
+}
+
 export function curveSeries(timeframe) {
   const days = daysForTimeframe(timeframe);
   const cutoff = cutoffFor(timeframe);
@@ -104,6 +160,9 @@ export function curveSeries(timeframe) {
 
   const labels = points.map((s) => s.date.slice(5));
   const data = points.map((s) => +s.value.toFixed(2));
+  // Kept alongside the values so a cash flow can be matched to the day it
+  // landed on — a percentage curve is wrong without that.
+  const dates = points.map((s) => s.date);
   const first = data[0];
   const last = data[data.length - 1];
 
@@ -117,6 +176,7 @@ export function curveSeries(timeframe) {
   return {
     labels,
     data,
+    dates,
     synthetic,
     from,
     to,
