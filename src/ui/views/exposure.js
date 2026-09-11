@@ -213,17 +213,51 @@ const HIST_PLOT = {
 };
 
 /**
- * A y scale that always contains zero.
+ * The y scale.
  *
- * Both of these are signed quantities whose sign is the point, so an axis that
- * floated to fit the data and left zero off it would hide the one thing worth
- * seeing.
+ * Zero belongs on it whenever the series is anywhere near zero: both of these
+ * are signed quantities whose sign is the whole point, and an axis that floated
+ * free would hide a curve crossing into negative gamma — the single most
+ * important thing either chart can show.
+ *
+ * But forcing zero on unconditionally was its own kind of lie. Net delta on an
+ * index book sits in the low trillions and drifts by a few per cent, because it
+ * is dominated by deep in-the-money call open interest that barely moves. An
+ * axis stretched from zero to two trillion renders that drift as **7.7% of the
+ * chart height** — a flat line pinned to the top, which reads as "nothing ever
+ * happens and it is never negative" when in fact it moved by $168B.
+ *
+ * So zero is kept when the data reaches it or comes close, and dropped when the
+ * series lives nowhere near it. Dropping it is never silent: `zeroOffAxis` is
+ * set and the caller prints it on the chart, because an axis that does not
+ * start at zero will be misread about magnitude unless it says so.
  */
-function scaleFor(values, plot = PLOT) {
-  const max = Math.max(0, ...values);
-  const min = Math.min(0, ...values);
+function scaleFor(values, plot = PLOT, { anchorZero = true } = {}) {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+
+  /** How far the series sits from zero, against how much it actually moves. */
+  const spread = hi - lo;
+  const gap = Math.min(Math.abs(lo), Math.abs(hi));
+  const crossesZero = lo <= 0 && hi >= 0;
+  /**
+   * Near enough to zero to keep it: the run to zero is no more than three times
+   * the movement in the series. Past that the movement stops being visible.
+   */
+  const nearZero = crossesZero || spread <= 0 || gap / spread <= 3;
+  const keepZero = anchorZero || nearZero;
+
+  const max = keepZero ? Math.max(0, hi) : hi + spread * 0.12;
+  const min = keepZero ? Math.min(0, lo) : lo - spread * 0.12;
   const span = max - min || 1;
-  return { max, min, y: (v) => plot.y1 - ((v - min) / span) * (plot.y1 - plot.y0) };
+
+  return {
+    max,
+    min,
+    /** True when the reader must be told the axis is not anchored at zero. */
+    zeroOffAxis: !keepZero,
+    y: (v) => plot.y1 - ((v - min) / span) * (plot.y1 - plot.y0),
+  };
 }
 
 const xAt = (i, n, plot = PLOT) => (n <= 1
@@ -249,7 +283,10 @@ function axisLabels(points, xFor, bottom = H) {
  * not just another gridline.
  */
 function gridFor(s, format, levels = 1, plot = PLOT) {
-  const values = new Set([s.max, s.min, 0]);
+  const values = new Set([s.max, s.min]);
+  // Only when it is actually inside the range — a zero line drawn off the plot
+  // lands on the edge and reads as an axis bound.
+  if (s.min <= 0 && s.max >= 0) values.add(0);
   for (let i = 1; i < levels; i += 1) values.add(s.min + ((s.max - s.min) * i) / levels);
 
   return [...values].sort((a, b) => b - a).map((v) => {
@@ -272,7 +309,7 @@ function lineChart({ points, colour, markIndex, title, note, history = false }) 
   if (!points.length) return '';
   const plot = history ? HIST_PLOT : PLOT;
   const box = history ? HIST_H : H;
-  const s = scaleFor(points.map((p) => p.value), plot);
+  const s = scaleFor(points.map((p) => p.value), plot, { anchorZero: !history });
   const n = points.length;
 
   const coords = points.map((p, i) => ({ x: xAt(i, n, plot), y: s.y(p.value) }));
@@ -306,8 +343,12 @@ function lineChart({ points, colour, markIndex, title, note, history = false }) 
    * scales uniformly: stretching it with "none" turns every dot into an
    * ellipse, and the markers are what make a sparse series readable.
    */
+  const axisNote = s.zeroOffAxis
+    ? '<span class="cv-warn" title="This series never comes near zero, so the axis is scaled to the range it actually moves through. Judge the change, not the height.">axis not from zero</span>'
+    : '';
+
   return `<div class="cv-title">${escapeHtml(title)}${
-  note ? `<span class="cv-note">${escapeHtml(note)}</span>` : ''}</div>
+  note ? `<span class="cv-note">${escapeHtml(note)}</span>` : ''}${axisNote}</div>
     <svg class="cv${history ? ' cv-hist' : ''}" viewBox="0 0 ${W} ${box}"
          ${history ? '' : 'preserveAspectRatio="none"'} role="img"
          aria-label="${escapeHtml(title)}">
@@ -454,10 +495,22 @@ function attachHover({ host, charts, count, tip, describe }) {
 }
 
 /** Remember each point's y so the hover dot can sit on the curve. */
-function stampYs(container, points) {
+function stampYs(container, points, history = false) {
   const svg = container?.querySelector('svg');
   if (!svg) return;
-  const s = scaleFor(points.map((p) => p.value));
+  /**
+   * The same box and the same anchoring the chart was drawn with.
+   *
+   * This recomputes the scale rather than being handed it, so any argument
+   * lineChart was given has to be given here too — with the history charts on
+   * their own taller box and their own free axis, defaulting to the strike
+   * geometry put the hover marker tens of units away from its own curve.
+   */
+  const s = scaleFor(
+    points.map((p) => p.value),
+    history ? HIST_PLOT : PLOT,
+    { anchorZero: !history },
+  );
   svg.dataset.values = JSON.stringify(points.map((p) => +s.y(p.value).toFixed(1)));
 }
 
@@ -652,8 +705,8 @@ function drawOverTime(profile, gex, dex, id) {
     points: dexPoints, colour: DEX_COLOUR, markIndex: -1, history: true,
     title: timeTitle('DEX · Delta exposure ($)', id),
   });
-  stampYs(gex, gexPoints);
-  stampYs(dex, dexPoints);
+  stampYs(gex, gexPoints, true);
+  stampYs(dex, dexPoints, true);
 
   attachHover({
     host: el('optCharts'),

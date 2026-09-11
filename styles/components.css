@@ -133,6 +133,10 @@
 .cv-title{font-size:10px;color:var(--text3);text-transform:uppercase;
   letter-spacing:0.05em;margin-bottom:6px}
 .cv-note{color:var(--text4);margin-left:8px;text-transform:none;letter-spacing:0}
+/* Said out loud whenever the axis is scaled to the data instead of to zero,
+   because a baseline that is not zero will otherwise be misread as one. */
+.cv-warn{color:var(--amber);margin-left:8px;text-transform:none;letter-spacing:0;
+  font-size:9px;cursor:help}
 /* Stands in for a curve while the recorded history is too short to draw one. */
 .cv-empty{color:var(--text3);font-size:12px;line-height:1.6;padding:26px 0;text-align:center}
 /* Dashed, so the grid sits behind the curve instead of competing with it. */
