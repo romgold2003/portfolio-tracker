@@ -142,19 +142,7 @@
             <div class="tf" data-tf="All">All</div>
           </div>
         </div>
-        <!-- Dollars, per cent, or against the indices. On its own line above the
-             chart, not inside the row with the account value: that row shares a
-             flex line with the allocation chart and the timeframe buttons, and
-             widening it pushed the timeframe buttons onto a second row. -->
-        <div class="mode-row" id="curveMode" role="group" aria-label="Show the curve in dollars or as a return">
-          <button type="button" class="mode-btn active" data-mode="value" aria-pressed="true">$</button>
-          <button type="button" class="mode-btn" data-mode="percent" aria-pressed="false">%</button>
-          <button type="button" class="mode-btn" data-mode="benchmark" aria-pressed="false">Benchmark</button>
-        </div>
         <div class="curve-wrap"><canvas id="curve" role="img" aria-label="Account value over time">Account value curve.</canvas></div>
-        <!-- What the curve actually covers. Never omitted: the window asked for
-             and the window on file are routinely not the same period. -->
-        <div class="curve-note" id="curveNote"></div>
       </div>
       <div class="kpi-row">
         <div class="kpi"><div class="kpi-lbl">Unrealised P&L</div><div class="kpi-val" id="kUnreal">+$0</div><div class="kpi-chg" id="kUnrealSub">0 open positions</div></div>

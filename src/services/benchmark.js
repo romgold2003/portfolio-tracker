@@ -29,22 +29,6 @@ import { betaFromReturns } from '../core/portfolio.js';
 export const BENCHMARK_SYMBOL = 'VOO';
 export const BENCHMARK_NAME = 'S&P 500';
 
-/**
- * What the comparison curve draws, and in what colour.
- *
- * Tracked through ETFs rather than the indices themselves because the history
- * service quotes tickers: ^GSPC and ^IXIC are not symbols it can ask for, and
- * the funds track their index closely enough that the *shape* — which is the
- * only thing being compared — is the same.
- *
- * The colours are fixed here rather than at the drawing site so that the legend,
- * the line and the tooltip cannot drift apart. Green is kept for the account
- * because it is the account's colour everywhere else on this page.
- */
-export const COMPARISONS = [
-  { id: 'sp500', symbol: 'VOO', label: 'S&P 500', colour: '#4a9ae8' },
-  { id: 'nasdaq', symbol: 'QQQ', label: 'Nasdaq 100', colour: '#c77dff' },
-];
 
 /** A trading day's worth of staleness is fine for a daily close. */
 const CACHE_TTL_MS = 20 * 60 * 60 * 1000;
@@ -318,62 +302,6 @@ export async function benchmarkSeries() {
 }
 
 /** Index level on a date, or the last close before it when markets were shut. */
-/**
- * An index's return across a set of dates, as a percentage from the first one.
- *
- * The two series do not line up by construction and cannot be made to. The
- * account is valued on the days the app was opened — weekends and holidays
- * included, because a Sunday still has an account value — while an index only
- * closes on trading days. Lining them up by position would slide the whole
- * comparison by however many non-trading days fell in the window.
- *
- * So each of the account's dates is answered with the index's last close on or
- * before it. A weekend reads Friday's close, which is what the index was
- * actually worth then, and the two curves stay honestly in step.
- *
- * Everything is rebased to zero at the window's first date, which is the only
- * way three series with wildly different levels can share one axis: the
- * question is not what the Nasdaq costs, it is what it did over the same days.
- *
- * Returns null when the window opens before the history does — a comparison
- * that silently started late would overstate or understate every point in it.
- */
-export function alignedReturns(dates, rows) {
-  if (!Array.isArray(dates) || !dates.length || !Array.isArray(rows) || !rows.length) return null;
-
-  /**
-   * Rebased at the first day the index actually has a close, not at the first
-   * day of the window.
-   *
-   * The two are usually the same and occasionally are not: a year-to-date
-   * window opens on the first of January, which is a market holiday, so there
-   * is no close on or before it and the old rule — refuse the series — dropped
-   * both benchmarks off the YTD chart entirely. A whole line missing because
-   * the year began on a holiday is a far worse answer than a line that starts
-   * on the second.
-   *
-   * Days before that first close stay null. Chart.js spans a null, so the line
-   * simply begins where its data does instead of the window being cut back to
-   * suit it.
-   */
-  let base = 0;
-  let from = null;
-  for (const date of dates) {
-    const close = closeOnOrBefore(rows, date);
-    if (close > 0) { base = close; from = date; break; }
-  }
-  if (!(base > 0)) return null;
-
-  const out = [];
-  for (const date of dates) {
-    const close = date < from ? null : closeOnOrBefore(rows, date);
-    // A gap inside the window is a hole, not a zero: Chart.js skips a null and
-    // joins across it rather than drawing a crash to the axis.
-    out.push(close > 0 ? +(((close / base) - 1) * 100).toFixed(4) : null);
-  }
-  return out;
-}
-
 export function closeOnOrBefore(rows, date) {
   let found = null;
   for (const row of rows) {

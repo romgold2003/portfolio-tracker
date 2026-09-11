@@ -6,21 +6,6 @@
 .hero-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px}
 .hero-value{font-size:42px;font-weight:700;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;line-height:1}
 .hero-pnl{font-size:15px;font-weight:600;margin-top:10px}
-/* Dollars or per cent, beside the account value. Built from the same parts as
-   the timeframe row next to it, because it is the same kind of control. */
-/* The window the curve really covers, under it. Amber when that is not the
-   window the button asked for, because the mismatch is the whole message. */
-.curve-note{margin-top:6px;font-size:10px;color:var(--text4);line-height:1.5}
-.curve-note.is-warn{color:var(--amber)}
-
-.mode-row{display:inline-flex;gap:2px;background:var(--input);
-  border:0.5px solid var(--border2);border-radius:7px;padding:2px}
-.mode-btn{font:inherit;font-size:12px;font-weight:600;line-height:1;
-  padding:6px 11px;border:0;border-radius:5px;cursor:pointer;
-  background:transparent;color:var(--text3)}
-.mode-btn:hover{color:var(--text)}
-.mode-btn.active{background:var(--panel2);color:var(--text)}
-
 .tf-row{display:flex;gap:4px}
 .tf{background:var(--input);border:0.5px solid var(--border2);border-radius:5px;padding:5px 11px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit}
 .tf:hover{background:var(--hover2)}

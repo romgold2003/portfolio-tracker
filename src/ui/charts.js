@@ -6,7 +6,7 @@
  * theme toggle re-renders instead of just swapping a class.
  */
 import { MONTHS_SHORT } from '../config/constants.js';
-import { curveSeries, returnSeries } from '../core/snapshots.js';
+import { curveSeries } from '../core/snapshots.js';
 
 /** Live chart instances, so each redraw can destroy the previous one. */
 const charts = {};
@@ -29,115 +29,44 @@ function chartColors() {
   };
 }
 
-/**
- * Draws the account curve and returns the period it implies.
- *
- * `mode` is 'value' for dollars or 'percent' for the compounded return over the
- * same window. The percentage is not the dollar curve rescaled — it is measured
- * net of deposits, so the two can disagree and the percentage is the one that
- * is a return. See returnSeries.
- */
-export function renderCurve(timeframe, mode = 'value', flows = [], compare = []) {
+/** Draws the account-value curve and returns the period return it implies. */
+export function renderCurve(timeframe) {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
-  /**
-   * Benchmark mode is percentage mode with company.
-   *
-   * Three series can only share one axis if they share one unit, and the unit
-   * has to be "return since the window opened" — the account is in the tens of
-   * thousands, the S&P tracker in the hundreds and the Nasdaq one in the
-   * high hundreds, so a chart of their levels would be three flat lines at
-   * three heights and would compare nothing.
-   */
-  const benchmark = mode === 'benchmark';
-  const percent = benchmark || mode === 'percent';
-  const series = percent ? returnSeries(timeframe, flows) : curveSeries(timeframe);
+  const series = curveSeries(timeframe);
   const { labels, data } = series;
   const c = chartColors();
-  // Red when the window is down, which on a percentage curve is the first thing
-  // the eye should get. The dollar curve keeps its green for continuity.
-  const line = percent && !benchmark && (data[data.length - 1] ?? 0) < 0 ? c.red : c.green;
-
-  /**
-   * The account first, so it draws on top of whatever it is being compared to.
-   *
-   * Only the account is filled. Three translucent slabs over each other is a
-   * mess nobody can read a crossing out of, and a crossing is the entire point
-   * of putting them on one axis.
-   */
-  const datasets = [{
-    label: benchmark ? 'You' : undefined,
-    data,
-    borderColor: line,
-    borderWidth: 2,
-    pointRadius: 0,
-    fill: !benchmark,
-    backgroundColor: line + '14',
-    tension: 0.4,
-  }];
-
-  if (benchmark) {
-    for (const row of compare) {
-      datasets.push({
-        label: row.label,
-        data: row.data,
-        borderColor: row.colour,
-        borderWidth: 1.8,
-        pointRadius: 0,
-        fill: false,
-        tension: 0.4,
-        borderDash: row.dash ?? [],
-        // A day the index has no close for is a hole to be joined across, not a
-        // fall to zero.
-        spanGaps: true,
-      });
-    }
-  }
 
   charts.curve?.destroy();
   charts.curve = new Chart(canvas, {
     type: 'line',
-    data: { labels, datasets },
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor: c.green,
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: c.green + '14',
+        tension: 0.4,
+      }],
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        // Three unlabelled lines is a colour puzzle; one needs no legend at all.
-        legend: benchmark ? {
-          display: true,
-          position: 'bottom',
-          labels: {
-            color: c.txt,
-            boxWidth: 10,
-            boxHeight: 10,
-            usePointStyle: true,
-            pointStyle: 'line',
-            font: { size: 11 },
-          },
-        } : { display: false },
+        legend: { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
-          callbacks: {
-            label: (ctx) => {
-              if (!percent) return ` $${Math.round(ctx.raw).toLocaleString()}`;
-              if (ctx.raw == null) return ` ${ctx.dataset.label}: no close`;
-              const value = `${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`;
-              return benchmark ? ` ${ctx.dataset.label}: ${value}` : ` ${value}`;
-            },
-          },
+          callbacks: { label: (ctx) => ' $' + Math.round(ctx.raw).toLocaleString() },
         },
       },
       scales: {
         x: { ticks: { color: c.txt, font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: c.grid } },
         y: {
-          ticks: {
-            color: c.txt,
-            font: { size: 10 },
-            callback: (v) => (percent
-              ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
-              : `$${(v / 1000).toFixed(1)}k`),
-          },
+          ticks: { color: c.txt, font: { size: 10 }, callback: (v) => '$' + (v / 1000).toFixed(1) + 'k' },
           grid: { color: c.grid },
         },
       },

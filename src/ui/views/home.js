@@ -11,14 +11,11 @@ import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
   benchmarkSpot, benchmarkYearToDate,
-  COMPARISONS, alignedReturns,
 } from '../../services/benchmark.js';
 import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
 } from '../../services/history.js';
-import {
-  periodStart, cutoffFor, curveSeries, setBackfill,
-} from '../../core/snapshots.js';
+import { periodStart, cutoffFor, setBackfill } from '../../core/snapshots.js';
 import { rebuildDailyValue, rebuildFromLedger } from '../../core/rebuild.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
@@ -245,17 +242,6 @@ async function renderBenchmark(totals) {
  */
 let startPrices = new Map();
 
-/**
- * The index histories behind the benchmark curve, once they have arrived.
- *
- * Held here rather than fetched on every draw: a past close never changes, the
- * history service caches the series for the session anyway, and renderHome runs
- * on every price tick. Until they land the curve draws the account alone, which
- * is the same curve the % mode shows and is never wrong — only lonely.
- */
-let comparisons = new Map();
-let comparisonsPending = false;
-
 /** Price history per ticker, for reconstructing the days before the recording. */
 let priceHistories = new Map();
 let backfillPending = false;
@@ -417,31 +403,6 @@ function pastPrice(ticker, day) {
   return closeAtOrBefore(rows, day);
 }
 
-/**
- * Fetch the tracked indices once, then redraw.
- *
- * Only when the benchmark mode is actually selected, so nobody pays two
- * requests for a chart they are not looking at.
- */
-async function loadComparisons() {
-  if (comparisonsPending || comparisons.size === COMPARISONS.length) return;
-  comparisonsPending = true;
-  try {
-    const fetched = await Promise.all(
-      COMPARISONS.map((row) => dailySeries(row.symbol)
-        .then((rows) => [row.id, rows])
-        .catch(() => [row.id, null])),
-    );
-    let gained = false;
-    for (const [id, rows] of fetched) {
-      if (rows?.length && !comparisons.has(id)) { comparisons.set(id, rows); gained = true; }
-    }
-    if (gained) renderHome();
-  } finally {
-    comparisonsPending = false;
-  }
-}
-
 function yearToDateReturn(totals) {
   return accountPerformance({
     positions: state.positions,
@@ -477,74 +438,6 @@ async function loadWindowStartPrices() {
   if (!changed) return;
   startPrices = new Map([...startPrices, ...fetched]);
   renderHome();
-}
-
-/**
- * The indices rebased onto the same days the account curve is drawn over.
- *
- * Each index is answered per date with its last close on or before that day, so
- * a weekend reads Friday and the three curves stay in step. An index whose
- * history does not reach the start of the window is left out entirely rather
- * than drawn from where it happens to begin, which would read as a flat start
- * and understate whatever it did before then.
- */
-function comparisonRows() {
-  const dates = curveSeries(ui.timeframe).dates ?? [];
-  if (!dates.length) return [];
-  const out = [];
-  for (const row of COMPARISONS) {
-    const rows = comparisons.get(row.id);
-    if (!rows) continue;
-    const data = alignedReturns(dates, rows);
-    if (data) out.push({ label: row.label, colour: row.colour, data });
-  }
-  return out;
-}
-
-/**
- * What the curve on screen actually covers, said under it.
- *
- * The figure in the KPI beside it is counted from the trades and reaches back
- * as far as the trades do. The curve can only be drawn from recorded account
- * values, which begin the day the app was installed. When those two periods
- * differ the two numbers differ, and without this line there is nothing on
- * screen to explain why — which is exactly how a correct number gets reported
- * as a bug.
- */
-function drawCurveNote(series) {
-  const host = document.getElementById('curveNote');
-  if (!host) return;
-  if (!series || series.synthetic) {
-    host.textContent = series?.synthetic
-      ? 'Not enough recorded history to draw yet — this is an illustration, not your account.'
-      : '';
-    host.classList.toggle('is-warn', Boolean(series?.synthetic));
-    return;
-  }
-
-  const span = `${longDate(series.from)} – ${longDate(series.to)}`;
-
-  /**
-   * Even over a fully covered window the curve and the KPI beside it can
-   * disagree, because they are two honest methods rather than one figure drawn
-   * twice. The curve is the recorded account value with deposits taken out,
-   * chained daily — a time-weighted return. The KPI counts the trades. Naming
-   * the method is cheaper than fielding the question.
-   */
-  const how = ui.curveMode === 'value'
-    ? 'Recorded account value.'
-    : 'Return on recorded account value, deposits removed and compounded daily.';
-
-  if (!series.short) {
-    host.textContent = `${span} · ${how}`;
-    host.classList.remove('is-warn');
-    return;
-  }
-
-  host.textContent = `${span} — daily account values only start ${longDate(series.from)}, `
-    + `so this is not the full ${ui.timeframe}. The ${ui.timeframe} figure beside it is `
-    + 'counted from your trades and does cover the whole period.';
-  host.classList.add('is-warn');
 }
 
 const longDate = (iso) => new Date(iso).toLocaleDateString('en-GB', {
@@ -718,16 +611,11 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
-  // Flows go in so the percentage can take them out: a deposit raises the
-  // account without earning anything, and a return that counts it is not one.
-  const curve = renderCurve(ui.timeframe, ui.curveMode, state.cashFlows,
-    ui.curveMode === 'benchmark' ? comparisonRows() : []);
+  renderCurve(ui.timeframe);
 
-  // Both kicked off after the draw, so the chart appears immediately and
-  // lengthens when the histories land rather than blocking on the network.
-  if (ui.curveMode === 'benchmark') loadComparisons();
+  // Kicked off after the draw, so the chart appears immediately and lengthens
+  // when the price histories land rather than blocking on the network.
   loadBackfill();
-  drawCurveNote(curve);
 
   const period = accountPerformance({
     positions: state.positions,

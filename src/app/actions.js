@@ -41,7 +41,7 @@ import {
 import { show } from '../ui/router.js';
 import { ui } from '../ui/uiState.js';
 import { toggleTheme } from '../ui/theme.js';
-import { money as $u, signedMoney as $s, pctText as fp, pnlColor, fmtPrice } from '../ui/format.js';
+import { money as $u, signedMoney as $s, pctText as fp, fmtPrice } from '../ui/format.js';
 import { toggleVoice } from '../features/voice.js';
 import { exportBackup, restoreBackup, describeBackup } from '../features/backup.js';
 import {
@@ -506,19 +506,6 @@ export function setTimeframe(tf) {
   show('home');
 }
 
-/** Dollars, per cent, or per cent against the indices. Window unchanged. */
-const CURVE_MODES = new Set(['value', 'percent', 'benchmark']);
-
-export function setCurveMode(mode) {
-  ui.curveMode = CURVE_MODES.has(mode) ? mode : 'value';
-  document.querySelectorAll('.mode-btn').forEach((x) => {
-    const on = x.dataset.mode === ui.curveMode;
-    x.classList.toggle('active', on);
-    x.setAttribute('aria-pressed', String(on));
-  });
-  show('home');
-}
-
 export function setDir(direction) { setDirection(direction); }
 export function clearForm() { clearTradeForm(); }
 export function setSizeMode(mode) { applySizeMode(mode); }
@@ -578,7 +565,6 @@ function showMonth(key) {
 export const voiceActions = {
   show,
   setTimeframe,
-  setCurveMode,
   editCash,
   refreshPrices,
   focusTicker,
