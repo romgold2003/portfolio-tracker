@@ -8,6 +8,11 @@
 .hero-pnl{font-size:15px;font-weight:600;margin-top:10px}
 /* Dollars or per cent, beside the account value. Built from the same parts as
    the timeframe row next to it, because it is the same kind of control. */
+/* The window the curve really covers, under it. Amber when that is not the
+   window the button asked for, because the mismatch is the whole message. */
+.curve-note{margin-top:6px;font-size:10px;color:var(--text4);line-height:1.5}
+.curve-note.is-warn{color:var(--amber)}
+
 .mode-row{display:inline-flex;gap:2px;background:var(--input);
   border:0.5px solid var(--border2);border-radius:7px;padding:2px}
 .mode-btn{font:inherit;font-size:12px;font-weight:600;line-height:1;

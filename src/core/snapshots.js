@@ -173,6 +173,33 @@ export function curveSeries(timeframe) {
   const to = points[points.length - 1].date;
   const coveredDays = Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000));
 
+  /**
+   * Where the window was asked to begin, and whether the record got there.
+   *
+   * Account values are only written on days the app is open, so they begin the
+   * day it was installed. Every window longer than that quietly becomes "since
+   * you started" while still wearing the name of the window — a YTD curve drew
+   * six weeks and reported 6.34% where the figure above it, counted from the
+   * trades, said 25.49% for the actual year to date. Both were right about
+   * different periods and neither said which.
+   */
+  const wanted = timeframe === 'All' ? null : cutoffFor(timeframe).toISOString().slice(0, 10);
+
+  /**
+   * Measured against the whole recording, not against the first point inside
+   * the window.
+   *
+   * The cutoff carries a time of day and a snapshot date does not, so the first
+   * point of any rolling window lands a day after it — which made every single
+   * timeframe, including a fully covered 1W, report itself as truncated. What
+   * actually matters is whether the record reaches back that far at all.
+   */
+  const firstRecorded = state.snapshots.reduce(
+    (earliest, s) => (s?.date && (earliest == null || s.date < earliest) ? s.date : earliest),
+    null,
+  );
+  const short = !synthetic && wanted != null && firstRecorded != null && firstRecorded > wanted;
+
   return {
     labels,
     data,
@@ -181,6 +208,10 @@ export function curveSeries(timeframe) {
     from,
     to,
     coveredDays,
+    /** The date the window was asked to start at, or null for All. */
+    wanted,
+    /** True when the recording begins after that, so this is a shorter window. */
+    short,
     /** What the account gained or lost across the window, in currency. */
     gain: last - first,
     returnPct: first ? ((last - first) / first) * 100 : 0,

@@ -122,3 +122,57 @@ describe('the percentage curve', () => {
     assert.ok(near(last(s), 30), `${last(s)}`);
   });
 });
+
+describe('the window the curve actually covers', () => {
+  /** Recording starts 1 August; the trades go back further, as they always do. */
+  const recordFrom = (month, dayOfMonth) => {
+    const out = [];
+    const end = new Date();
+    for (let d = new Date(Date.UTC(end.getUTCFullYear(), month, dayOfMonth)); d <= end;
+      d.setUTCDate(d.getUTCDate() + 1)) {
+      out.push({ date: d.toISOString().slice(0, 10), value: 30000 });
+    }
+    return out;
+  };
+
+  test('a window the record cannot reach is marked, not quietly shortened', () => {
+    // This is the bug: a YTD curve drew six weeks, reported 6.34%, and the
+    // figure beside it said 25.49% for the actual year. Both were right about
+    // different periods and nothing on screen said which.
+    state.snapshots = recordFrom(new Date().getUTCMonth(), 1);
+    const ytd = curveSeries('YTD');
+    if (ytd.wanted && ytd.from > ytd.wanted) {
+      assert.equal(ytd.short, true, 'a truncated window must say so');
+    }
+  });
+
+  test('a window the record does cover is not marked', () => {
+    state.snapshots = recordFrom(0, 1);
+    assert.equal(curveSeries('1W').short, false);
+    assert.equal(curveSeries('1M').short, false);
+  });
+
+  test('a rolling window is not marked over a one-day boundary', () => {
+    // The cutoff carries a time of day and a snapshot date does not, so the
+    // first point inside any rolling window lands a day after it. Comparing
+    // those flagged every timeframe, including a fully covered week.
+    state.snapshots = recordFrom(0, 1);
+    for (const tf of ['1W', '1M', '3M']) {
+      assert.equal(curveSeries(tf).short, false, `${tf} was wrongly flagged`);
+    }
+  });
+
+  test('All is never marked, because All is whatever there is', () => {
+    state.snapshots = recordFrom(new Date().getUTCMonth(), 1);
+    const all = curveSeries('All');
+    assert.equal(all.wanted, null);
+    assert.equal(all.short, false);
+  });
+
+  test('the percentage series carries the same coverage flags', () => {
+    state.snapshots = recordFrom(new Date().getUTCMonth(), 1);
+    const ytd = returnSeries('YTD', []);
+    assert.equal(ytd.short, curveSeries('YTD').short);
+    assert.equal(ytd.wanted, curveSeries('YTD').wanted);
+  });
+});

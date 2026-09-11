@@ -335,6 +335,52 @@ function comparisonRows() {
   return out;
 }
 
+/**
+ * What the curve on screen actually covers, said under it.
+ *
+ * The figure in the KPI beside it is counted from the trades and reaches back
+ * as far as the trades do. The curve can only be drawn from recorded account
+ * values, which begin the day the app was installed. When those two periods
+ * differ the two numbers differ, and without this line there is nothing on
+ * screen to explain why — which is exactly how a correct number gets reported
+ * as a bug.
+ */
+function drawCurveNote(series) {
+  const host = document.getElementById('curveNote');
+  if (!host) return;
+  if (!series || series.synthetic) {
+    host.textContent = series?.synthetic
+      ? 'Not enough recorded history to draw yet — this is an illustration, not your account.'
+      : '';
+    host.classList.toggle('is-warn', Boolean(series?.synthetic));
+    return;
+  }
+
+  const span = `${longDate(series.from)} – ${longDate(series.to)}`;
+
+  /**
+   * Even over a fully covered window the curve and the KPI beside it can
+   * disagree, because they are two honest methods rather than one figure drawn
+   * twice. The curve is the recorded account value with deposits taken out,
+   * chained daily — a time-weighted return. The KPI counts the trades. Naming
+   * the method is cheaper than fielding the question.
+   */
+  const how = ui.curveMode === 'value'
+    ? 'Recorded account value.'
+    : 'Return on recorded account value, deposits removed and compounded daily.';
+
+  if (!series.short) {
+    host.textContent = `${span} · ${how}`;
+    host.classList.remove('is-warn');
+    return;
+  }
+
+  host.textContent = `${span} — daily account values only start ${longDate(series.from)}, `
+    + `so this is not the full ${ui.timeframe}. The ${ui.timeframe} figure beside it is `
+    + 'counted from your trades and does cover the whole period.';
+  host.classList.add('is-warn');
+}
+
 const longDate = (iso) => new Date(iso).toLocaleDateString('en-GB', {
   day: 'numeric', month: 'long', year: 'numeric',
 });
@@ -514,7 +560,7 @@ export function renderHome() {
   // Kicked off after the draw, so the chart appears immediately and gains its
   // other two lines a moment later rather than waiting on the network.
   if (ui.curveMode === 'benchmark') loadComparisons();
-  void curve;
+  drawCurveNote(curve);
 
   const period = accountPerformance({
     positions: state.positions,
