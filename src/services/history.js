@@ -46,6 +46,16 @@ export function closeOnOrBefore(rows, date) {
   return found ? found.close : null;
 }
 
+/**
+ * A ticker's daily closes, ascending, or null.
+ *
+ * Exported because the comparison curve needs the whole series rather than one
+ * date out of it — and it is the same fetch and the same session cache, so
+ * asking for VOO's year costs nothing extra once a single date has been looked
+ * up for it.
+ */
+export async function dailySeries(ticker) { return seriesFor(ticker); }
+
 async function seriesFor(ticker) {
   if (seriesCache.has(ticker)) return seriesCache.get(ticker);
   try {

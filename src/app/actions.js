@@ -506,9 +506,11 @@ export function setTimeframe(tf) {
   show('home');
 }
 
-/** Dollars or per cent, over whatever window is already selected. */
+/** Dollars, per cent, or per cent against the indices. Window unchanged. */
+const CURVE_MODES = new Set(['value', 'percent', 'benchmark']);
+
 export function setCurveMode(mode) {
-  ui.curveMode = mode === 'percent' ? 'percent' : 'value';
+  ui.curveMode = CURVE_MODES.has(mode) ? mode : 'value';
   document.querySelectorAll('.mode-btn').forEach((x) => {
     const on = x.dataset.mode === ui.curveMode;
     x.classList.toggle('active', on);

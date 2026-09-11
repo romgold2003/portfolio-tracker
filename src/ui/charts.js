@@ -37,44 +37,94 @@ function chartColors() {
  * net of deposits, so the two can disagree and the percentage is the one that
  * is a return. See returnSeries.
  */
-export function renderCurve(timeframe, mode = 'value', flows = []) {
+export function renderCurve(timeframe, mode = 'value', flows = [], compare = []) {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
-  const percent = mode === 'percent';
+  /**
+   * Benchmark mode is percentage mode with company.
+   *
+   * Three series can only share one axis if they share one unit, and the unit
+   * has to be "return since the window opened" — the account is in the tens of
+   * thousands, the S&P tracker in the hundreds and the Nasdaq one in the
+   * high hundreds, so a chart of their levels would be three flat lines at
+   * three heights and would compare nothing.
+   */
+  const benchmark = mode === 'benchmark';
+  const percent = benchmark || mode === 'percent';
   const series = percent ? returnSeries(timeframe, flows) : curveSeries(timeframe);
   const { labels, data } = series;
   const c = chartColors();
   // Red when the window is down, which on a percentage curve is the first thing
   // the eye should get. The dollar curve keeps its green for continuity.
-  const line = percent && (data[data.length - 1] ?? 0) < 0 ? c.red : c.green;
+  const line = percent && !benchmark && (data[data.length - 1] ?? 0) < 0 ? c.red : c.green;
+
+  /**
+   * The account first, so it draws on top of whatever it is being compared to.
+   *
+   * Only the account is filled. Three translucent slabs over each other is a
+   * mess nobody can read a crossing out of, and a crossing is the entire point
+   * of putting them on one axis.
+   */
+  const datasets = [{
+    label: benchmark ? 'You' : undefined,
+    data,
+    borderColor: line,
+    borderWidth: 2,
+    pointRadius: 0,
+    fill: !benchmark,
+    backgroundColor: line + '14',
+    tension: 0.4,
+  }];
+
+  if (benchmark) {
+    for (const row of compare) {
+      datasets.push({
+        label: row.label,
+        data: row.data,
+        borderColor: row.colour,
+        borderWidth: 1.8,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.4,
+        borderDash: row.dash ?? [],
+        // A day the index has no close for is a hole to be joined across, not a
+        // fall to zero.
+        spanGaps: true,
+      });
+    }
+  }
 
   charts.curve?.destroy();
   charts.curve = new Chart(canvas, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data,
-        borderColor: line,
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: true,
-        backgroundColor: line + '14',
-        tension: 0.4,
-      }],
-    },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        // Three unlabelled lines is a colour puzzle; one needs no legend at all.
+        legend: benchmark ? {
+          display: true,
+          position: 'bottom',
+          labels: {
+            color: c.txt,
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+            pointStyle: 'line',
+            font: { size: 11 },
+          },
+        } : { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
           callbacks: {
-            label: (ctx) => (percent
-              ? ` ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`
-              : ` $${Math.round(ctx.raw).toLocaleString()}`),
+            label: (ctx) => {
+              if (!percent) return ` $${Math.round(ctx.raw).toLocaleString()}`;
+              if (ctx.raw == null) return ` ${ctx.dataset.label}: no close`;
+              const value = `${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`;
+              return benchmark ? ` ${ctx.dataset.label}: ${value}` : ` ${value}`;
+            },
           },
         },
       },

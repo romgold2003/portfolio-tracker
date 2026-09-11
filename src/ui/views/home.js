@@ -11,9 +11,10 @@ import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
   benchmarkSpot, benchmarkYearToDate,
+  COMPARISONS, alignedReturns,
 } from '../../services/benchmark.js';
-import { pricesOn } from '../../services/history.js';
-import { periodStart, cutoffFor } from '../../core/snapshots.js';
+import { pricesOn, dailySeries } from '../../services/history.js';
+import { periodStart, cutoffFor, curveSeries } from '../../core/snapshots.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -239,6 +240,42 @@ async function renderBenchmark(totals) {
  */
 let startPrices = new Map();
 
+/**
+ * The index histories behind the benchmark curve, once they have arrived.
+ *
+ * Held here rather than fetched on every draw: a past close never changes, the
+ * history service caches the series for the session anyway, and renderHome runs
+ * on every price tick. Until they land the curve draws the account alone, which
+ * is the same curve the % mode shows and is never wrong — only lonely.
+ */
+let comparisons = new Map();
+let comparisonsPending = false;
+
+/**
+ * Fetch the tracked indices once, then redraw.
+ *
+ * Only when the benchmark mode is actually selected, so nobody pays two
+ * requests for a chart they are not looking at.
+ */
+async function loadComparisons() {
+  if (comparisonsPending || comparisons.size === COMPARISONS.length) return;
+  comparisonsPending = true;
+  try {
+    const fetched = await Promise.all(
+      COMPARISONS.map((row) => dailySeries(row.symbol)
+        .then((rows) => [row.id, rows])
+        .catch(() => [row.id, null])),
+    );
+    let gained = false;
+    for (const [id, rows] of fetched) {
+      if (rows?.length && !comparisons.has(id)) { comparisons.set(id, rows); gained = true; }
+    }
+    if (gained) renderHome();
+  } finally {
+    comparisonsPending = false;
+  }
+}
+
 function yearToDateReturn(totals) {
   return accountPerformance({
     positions: state.positions,
@@ -274,6 +311,28 @@ async function loadWindowStartPrices() {
   if (!changed) return;
   startPrices = new Map([...startPrices, ...fetched]);
   renderHome();
+}
+
+/**
+ * The indices rebased onto the same days the account curve is drawn over.
+ *
+ * Each index is answered per date with its last close on or before that day, so
+ * a weekend reads Friday and the three curves stay in step. An index whose
+ * history does not reach the start of the window is left out entirely rather
+ * than drawn from where it happens to begin, which would read as a flat start
+ * and understate whatever it did before then.
+ */
+function comparisonRows() {
+  const dates = curveSeries(ui.timeframe).dates ?? [];
+  if (!dates.length) return [];
+  const out = [];
+  for (const row of COMPARISONS) {
+    const rows = comparisons.get(row.id);
+    if (!rows) continue;
+    const data = alignedReturns(dates, rows);
+    if (data) out.push({ label: row.label, colour: row.colour, data });
+  }
+  return out;
 }
 
 const longDate = (iso) => new Date(iso).toLocaleDateString('en-GB', {
@@ -449,7 +508,13 @@ export function renderHome() {
   // unrealised by exactly that. Every number here is counted from the trades.
   // Flows go in so the percentage can take them out: a deposit raises the
   // account without earning anything, and a return that counts it is not one.
-  renderCurve(ui.timeframe, ui.curveMode, state.cashFlows);
+  const curve = renderCurve(ui.timeframe, ui.curveMode, state.cashFlows,
+    ui.curveMode === 'benchmark' ? comparisonRows() : []);
+
+  // Kicked off after the draw, so the chart appears immediately and gains its
+  // other two lines a moment later rather than waiting on the network.
+  if (ui.curveMode === 'benchmark') loadComparisons();
+  void curve;
 
   const period = accountPerformance({
     positions: state.positions,
