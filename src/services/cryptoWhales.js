@@ -265,8 +265,186 @@ export async function fetchNetflow({ signal } = {}) {
   }
 }
 
+/**
+ * The series behind the graph, fetched once rather than on every poll.
+ *
+ * Four years of daily rows change once a day. The netflow card next to it is
+ * polled every three minutes for the rolling figure, and carrying this history
+ * along with it would be forty kilobytes of unchanged bytes twenty times an
+ * hour. The frames re-bucket what is already here instead.
+ */
+export async function fetchNetflowSeries({ signal } = {}) {
+  try {
+    return await get('resource=netflowseries', signal);
+  } catch (err) {
+    return { rows: [], live: [], error: err.message };
+  }
+}
+
 /** Green for bullish, red for bearish, nothing for neutral. */
 export const SIGNAL_TONE = { Bullish: 'cw-in', Bearish: 'cw-out', Neutral: '' };
+
+/* ── the exchange netflow graph ────────────────────────────────────────── */
+
+/**
+ * The windows the graph can be read over, and how finely each is drawn.
+ *
+ * `grain` is the point of this table. A year at one bar per day is three
+ * hundred and sixty five slivers a pixel wide, which reads as noise and hides
+ * the thing the graph exists to show — whether the flow has been one way for a
+ * stretch. A year at one bar per week is fifty-two bars and the stretches are
+ * obvious. Four years is monthly for the same reason.
+ *
+ * `1d` is the odd one out and is marked `intraday`. Every other frame comes
+ * from daily balance snapshots, because that is all the exchanges publish — one
+ * figure per day. A single day of that is one point, and a graph of one point
+ * is not a graph, so the day is drawn from readings of the rolling
+ * twenty-four-hour figure taken through the day instead.
+ */
+export const NETFLOW_FRAMES = [
+  { id: '1d', label: '1D', days: 1, grain: 'hour', intraday: true },
+  { id: '7d', label: '7D', days: 7, grain: 'day' },
+  { id: '1m', label: '1M', days: 30, grain: 'day' },
+  { id: '3m', label: '3M', days: 90, grain: 'day' },
+  { id: '1y', label: '1Y', days: 365, grain: 'week' },
+  { id: 'all', label: 'All', days: null, grain: 'month' },
+];
+
+export const netflowFrame = (id) =>
+  NETFLOW_FRAMES.find((f) => f.id === id) ?? NETFLOW_FRAMES[1];
+
+/** Monday of the week a YYYY-MM-DD falls in, so weekly bars start consistently. */
+function weekStartOf(day) {
+  const d = new Date(`${day}T00:00:00Z`);
+  // getUTCDay is 0 for Sunday; shift so Monday opens the week.
+  const back = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - back);
+  return d.toISOString().slice(0, 10);
+}
+
+const bucketKey = (day, grain) => {
+  if (grain === 'month') return `${day.slice(0, 7)}-01`;
+  if (grain === 'week') return weekStartOf(day);
+  return day;
+};
+
+/**
+ * The neutral band, shared with the server so both ends read a number the same.
+ *
+ * A net of nothing against a gross of nothing is neutral; so is a net that is a
+ * rounding error beside how much moved in total. Without the second rule a day
+ * where fifty billion went each way and a hundred million stayed would be
+ * called Bearish, which is a strong claim about a coin flip.
+ */
+const NEUTRAL_BAND = 0.03;
+
+export function netflowSignal(netUsd, grossUsd) {
+  if (!(grossUsd > 0)) return 'Neutral';
+  if (Math.abs(netUsd) / grossUsd < NEUTRAL_BAND) return 'Neutral';
+  // Negative is coins leaving the exchanges, which is the bullish one.
+  return netUsd < 0 ? 'Bullish' : 'Bearish';
+}
+
+/**
+ * Roll the daily rows into the bars one frame draws.
+ *
+ * Inflow and outflow are summed within a bucket and the net is taken from the
+ * sums, never by averaging the daily nets: a week of a billion in and a billion
+ * out every day is a week of enormous churn and no net, and the two sides have
+ * to survive to the tooltip for that to be visible.
+ *
+ * `rows` arrive as [day, inUsd, outUsd] tuples, oldest first.
+ */
+export function netflowBars(rows, frameId, { now = Date.now() } = {}) {
+  const frame = netflowFrame(frameId);
+  if (!Array.isArray(rows) || !rows.length) return [];
+
+  const from = frame.days
+    ? new Date(now - frame.days * 86_400_000).toISOString().slice(0, 10)
+    : null;
+
+  const buckets = new Map();
+  for (const row of rows) {
+    const [day, inUsd, outUsd] = row ?? [];
+    if (typeof day !== 'string') continue;
+    if (from && day <= from) continue;
+    const key = bucketKey(day, frame.grain);
+    const bucket = buckets.get(key) ?? { key, inUsd: 0, outUsd: 0, days: 0, last: day };
+    bucket.inUsd += Number(inUsd) || 0;
+    bucket.outUsd += Number(outUsd) || 0;
+    bucket.days += 1;
+    if (day > bucket.last) bucket.last = day;
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((b) => ({
+      ...b,
+      netUsd: b.inUsd - b.outUsd,
+      signal: netflowSignal(b.inUsd - b.outUsd, b.inUsd + b.outUsd),
+      grain: frame.grain,
+    }));
+}
+
+/**
+ * The intraday frame: readings of the rolling day, thinned to one an hour.
+ *
+ * Each point is the net over the twenty-four hours **ending** at that moment,
+ * so the series is a moving total rather than a bar per hour. Two readings in
+ * the same hour say almost the same thing, so the later one stands for the
+ * hour — which keeps the shape and drops the jitter.
+ *
+ * `rows` arrive as [epochSeconds, inUsd, outUsd], oldest first.
+ */
+export function netflowIntraday(rows, { now = Date.now(), hours = 24 } = {}) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const cutoff = now / 1000 - hours * 3600;
+
+  const byHour = new Map();
+  for (const row of rows) {
+    const [at, inUsd, outUsd] = row ?? [];
+    if (!Number.isFinite(at) || at < cutoff) continue;
+    byHour.set(Math.floor(at / 3600), {
+      at: at * 1000,
+      inUsd: Number(inUsd) || 0,
+      outUsd: Number(outUsd) || 0,
+    });
+  }
+
+  return [...byHour.keys()].sort((a, b) => a - b).map((h) => {
+    const point = byHour.get(h);
+    return {
+      ...point,
+      key: new Date(point.at).toISOString(),
+      netUsd: point.inUsd - point.outUsd,
+      signal: netflowSignal(point.inUsd - point.outUsd, point.inUsd + point.outUsd),
+      grain: 'hour',
+    };
+  });
+}
+
+/** How a bar names the span it covers, in the tooltip. */
+export function barLabel(bar) {
+  if (bar.grain === 'hour') {
+    return new Date(bar.at).toLocaleString(undefined,
+      { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  const start = new Date(`${bar.key}T00:00:00Z`);
+  const opts = { timeZone: 'UTC', month: 'short', day: 'numeric' };
+  if (bar.grain === 'month') {
+    return start.toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' });
+  }
+  if (bar.grain === 'week') {
+    // The year rides on the end of the range rather than being left off. A year
+    // frame runs from last September to this one, and "Sep 8 – Sep 14" was
+    // appearing at both ends of the axis meaning two weeks twelve months apart.
+    const end = new Date(`${bar.last}T00:00:00Z`);
+    return `${start.toLocaleDateString(undefined, opts)} – ${
+      end.toLocaleDateString(undefined, { ...opts, year: 'numeric' })}`;
+  }
+  return start.toLocaleDateString(undefined, { ...opts, year: 'numeric' });
+}
 
 /**
  * The top holders of one coin, and what happened when one left.

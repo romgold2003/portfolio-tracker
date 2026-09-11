@@ -304,6 +304,150 @@ export async function periods({ now = Date.now() } = {}) {
   return { periods: out, venues: [...new Set(parsed.map((r) => r.venue))].sort(), since };
 }
 
+/**
+ * Every stored day, summed across the exchanges, oldest first.
+ *
+ * The card used to ask five separate questions — what did the last week do,
+ * the last month, the last year — and got five numbers that could not be
+ * compared with each other. One of them being negative told you nothing about
+ * whether it had been negative for a fortnight or turned yesterday.
+ *
+ * The series answers the question those five were circling: has this been
+ * sustained. So it is returned whole, at its finest resolution, and the caller
+ * buckets it to whatever window is being looked at.
+ *
+ * Summed across venues rather than returned per venue, because this is the
+ * market-wide indicator; the per-exchange split lives on the 24H row. Transfers
+ * between two wallets of the same exchange never entered the table in the first
+ * place — a venue's own float moving is not a flow, and the published balance
+ * it is derived from does not change when it moves.
+ *
+ * Compact on purpose. Four years of days is fourteen hundred rows, and as
+ * objects with three named keys that is a hundred kilobytes of repeated field
+ * names. As tuples it is forty, which is worth the one line of unpacking at the
+ * other end.
+ */
+export async function series({ now = Date.now(), days = null } = {}) {
+  if (!databaseAvailable()) return { rows: [], since: null, until: null, venues: 0 };
+  await ensureTable();
+
+  /**
+   * Read the rows and add them up here rather than in SQL.
+   *
+   * The amounts are stored as TEXT because the two databases behind this — the
+   * SQLite the tests run on and the Postgres production runs on — agree on
+   * TEXT and INTEGER and on very little else. Summing them needs a CAST, and a
+   * CAST is exactly where the two dialects would quietly disagree and give the
+   * tests a different answer from the site. `periods()` reads the whole table
+   * for the same reason; this is one table scan of the same size.
+   */
+  const params = [];
+  let where = '';
+  if (days > 0) {
+    where = ' WHERE day > $1';
+    params.push(new Date(now - days * 86_400_000).toISOString().slice(0, 10));
+  }
+
+  const { rows } = await query(
+    `SELECT day, venue, in_usd, out_usd FROM cex_flow_daily${where}`, params,
+  );
+
+  const byDay = new Map();
+  for (const r of rows) {
+    const bucket = byDay.get(r.day) ?? { inUsd: 0, outUsd: 0, venues: new Set() };
+    bucket.inUsd += Number(r.in_usd) || 0;
+    bucket.outUsd += Number(r.out_usd) || 0;
+    bucket.venues.add(r.venue);
+    byDay.set(r.day, bucket);
+  }
+
+  const out = [];
+  let venues = 0;
+  for (const day of [...byDay.keys()].sort()) {
+    const bucket = byDay.get(day);
+    venues = Math.max(venues, bucket.venues.size);
+    out.push([day, Math.round(bucket.inUsd), Math.round(bucket.outUsd)]);
+  }
+
+  return {
+    rows: out,
+    since: out[0]?.[0] ?? null,
+    until: out[out.length - 1]?.[0] ?? null,
+    /** The most exchanges any single day was built from. */
+    venues,
+  };
+}
+
+/* ── the intraday record, which the published balances cannot give ──────── */
+
+/**
+ * A table of rolling-day readings, so "1D" can be a line rather than a dot.
+ *
+ * Every other frame is built from daily balance snapshots, which is all the
+ * exchanges publish — one number per day. A day of that is a single point, and
+ * a graph of a single point is not a graph.
+ *
+ * The rolling twenty-four hour figure is recomputed through the day, so reading
+ * it every few minutes and keeping the readings gives an intraday series. Each
+ * point is therefore **the net over the twenty-four hours ending at that
+ * moment**, not the net during that minute — a moving total, which is what
+ * every exchange-flow chart of this kind plots, and what the tooltip says.
+ *
+ * Kept for two days and no longer. It exists to draw one frame.
+ */
+let liveReady = false;
+
+async function ensureLiveTable() {
+  if (liveReady || !databaseAvailable()) return;
+  await query(`CREATE TABLE IF NOT EXISTS cex_flow_live (
+    at INTEGER PRIMARY KEY,
+    in_usd TEXT NOT NULL,
+    out_usd TEXT NOT NULL
+  )`, []);
+  liveReady = true;
+}
+
+export function resetLiveTableCache() { liveReady = false; }
+
+/** How long an intraday reading is worth keeping. */
+const LIVE_KEEP_HOURS = 48;
+
+/**
+ * Record one rolling-day reading.
+ *
+ * Rounded down to the minute so a burst of polls inside one minute overwrites
+ * rather than accumulating: the primary key does the de-duplication, and the
+ * latest reading of a minute is the one worth having.
+ */
+export async function noteLive(reading, { now = Date.now() } = {}) {
+  if (!databaseAvailable() || !reading) return false;
+  const inUsd = Number(reading.inUsd);
+  const outUsd = Number(reading.outUsd);
+  if (!Number.isFinite(inUsd) || !Number.isFinite(outUsd)) return false;
+
+  await ensureLiveTable();
+  const at = Math.floor((reading.at ?? now) / 60_000) * 60;
+
+  await query('DELETE FROM cex_flow_live WHERE at = $1', [at]);
+  await query('INSERT INTO cex_flow_live (at, in_usd, out_usd) VALUES ($1, $2, $3)',
+    [at, String(Math.round(inUsd)), String(Math.round(outUsd))]);
+  await query('DELETE FROM cex_flow_live WHERE at < $1',
+    [Math.floor(now / 1000) - LIVE_KEEP_HOURS * 3600]);
+  return true;
+}
+
+/** The intraday readings, oldest first, as [epochSeconds, inUsd, outUsd]. */
+export async function liveSeries({ now = Date.now(), hours = 24 } = {}) {
+  if (!databaseAvailable()) return [];
+  await ensureLiveTable();
+  const { rows } = await query(
+    'SELECT at, in_usd, out_usd FROM cex_flow_live WHERE at >= $1 ORDER BY at ASC',
+    [Math.floor(now / 1000) - hours * 3600],
+  );
+  return rows.map((r) => [Number(r.at), Math.round(Number(r.in_usd) || 0),
+    Math.round(Number(r.out_usd) || 0)]);
+}
+
 /* ── fetching, which happens in the collector and never in a request ────── */
 
 /**

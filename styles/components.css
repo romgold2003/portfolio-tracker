@@ -743,6 +743,59 @@ body.light{--wave-strength:0.34}
   align-items:baseline;gap:0 12px;padding:3px 0;font-size:11px}
 .cw-nf-venue{color:var(--text2)}
 .cw-nf-foot{margin-top:9px;font-size:10px;color:var(--text4);line-height:1.5}
+
+/* ── the netflow graph ─────────────────────────────────────────────────── */
+.cw-nf-graph{margin-top:12px}
+.cw-nf-frames{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.cw-nf-frame{font:inherit;font-size:11px;font-weight:600;line-height:1;
+  padding:5px 10px;border-radius:5px;cursor:pointer;
+  background:var(--input);border:0.5px solid var(--border2);color:var(--text3)}
+.cw-nf-frame:hover{color:var(--text)}
+.cw-nf-frame.active{background:var(--blue-bg,var(--input));border-color:var(--blue);
+  color:var(--blue)}
+
+/* The plot is a strip: the scale down the left, the bars filling the rest. */
+.cw-nf-plot{display:grid;grid-template-columns:54px minmax(0,1fr);
+  grid-template-areas:'scale svg' '. xaxis';gap:0 8px}
+.cw-nf-scale{grid-area:scale;display:flex;flex-direction:column;
+  justify-content:space-between;align-items:flex-end;text-align:right;
+  font-size:9px;font-variant-numeric:tabular-nums;line-height:1}
+/* Zero is the reading the whole graph is against, so it is labelled, not
+   inferred from the gap between the two extremes. */
+.cw-nf-zero-lbl{color:var(--text4)}
+.cw-nf-svg{grid-area:svg;width:100%;height:118px;display:block;overflow:visible}
+.cw-nf-zero{stroke:var(--text3);stroke-width:0.6;vector-effect:non-scaling-stroke;
+  stroke-dasharray:3 3}
+/* preserveAspectRatio is none, so a bar is stretched horizontally. Its edges
+   would smear with it; this keeps them honest. */
+.cw-nf-bar{shape-rendering:crispEdges}
+.cw-nf-bar.is-out{fill:var(--red)}
+.cw-nf-bar.is-in{fill:var(--green)}
+.cw-nf-bar.is-flat{fill:var(--text4)}
+.cw-nf-bar.is-on{fill:var(--text)}
+.cw-nf-hit{fill:transparent}
+.cw-nf-xaxis{grid-area:xaxis;display:flex;justify-content:space-between;
+  font-size:9px;color:var(--text4);padding-top:4px}
+.cw-nf-plot-empty{font-size:11px;color:var(--text4);line-height:1.5;
+  padding:24px 2px;text-align:center}
+/* Which way is which, spelled out, because up meaning bearish is the one thing
+   on this card a reader will get backwards. */
+.cw-nf-side{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;
+  font-size:9px;padding:6px 0 0 62px}
+
+.cw-nf-tip{margin-top:8px;padding:8px 10px;background:var(--input);border-radius:6px}
+.cw-nf-tip-hd{font-size:11px;font-weight:600;color:var(--text);margin-bottom:6px;
+  display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.cw-nf-tip-sub,.cw-nf-tip-hint{font-size:9px;font-weight:400;color:var(--text4)}
+.cw-nf-tip-rows{display:grid;grid-template-columns:auto auto;gap:3px 14px;
+  font-size:11px;font-variant-numeric:tabular-nums}
+.cw-nf-tip-rows span:nth-child(odd){color:var(--text4)}
+.cw-nf-tip-rows span:nth-child(even){text-align:right;font-weight:600}
+
+@media (max-width:640px){
+  .cw-nf-plot{grid-template-columns:44px minmax(0,1fr)}
+  .cw-nf-side{padding-left:0;font-size:8px}
+}
 @media (max-width:640px){
   .cw-nf-head,.cw-nf-row,.cw-nf-vrow{grid-template-columns:52px minmax(0,1fr) 0 minmax(0,1fr) 62px}
   .cw-nf-out,.cw-nf-head span:nth-child(3){display:none}

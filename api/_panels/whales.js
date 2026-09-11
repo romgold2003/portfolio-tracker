@@ -84,6 +84,8 @@ const REFRESH_BUDGET_MS = 6_000;
 
 /** The rolling day is one small fetch; it should never hold the card up. */
 const LIVE_DAY_BUDGET_MS = 3_000;
+/** Writing down the rolling reading. Nothing waits on it; it is fire and forget. */
+const NOTE_LIVE_BUDGET_MS = 2_000;
 
 /**
  * Start a top-up, but never let the answer wait longer than the budget.
@@ -699,6 +701,22 @@ export default async function handler(req, res) {
       }
 
       /**
+       * Keep the reading, because the intraday frame has no other source.
+       *
+       * The published balances are one figure a day, so a day of them is a
+       * single point. This figure is recomputed through the day, and writing
+       * down each time it is read is what turns it into a line.
+       *
+       * A read must never wait on a write, and it must never fail because of
+       * one: the card is finished either way, and losing a point costs a
+       * pixel on one frame.
+       */
+      if (rolling) {
+        withBudget(cexflow.noteLive(rolling, { now }), NOTE_LIVE_BUDGET_MS, false)
+          .catch(() => false);
+      }
+
+      /**
        * The sample is only computed when the census cannot answer.
        *
        * Building it means reading fifty thousand rows and aggregating them into
@@ -736,6 +754,44 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       return fail(res, 502, `Could not read the exchange flow (${err.message}).`);
+    }
+  }
+
+  /**
+   * The netflow series behind the graph. **Also takes no symbol.**
+   *
+   * Separate from ?resource=netflow on purpose. That one is polled every few
+   * minutes for the rolling day; this is four years of daily rows that change
+   * once a day, and shipping forty kilobytes of unchanged history on every poll
+   * to redraw a number would be a waste of both ends.
+   *
+   * So it is fetched once and kept, at its finest resolution, and the frame
+   * buttons re-bucket what is already in the page rather than asking again.
+   * Switching from 7D to 1Y costs nothing and shows no spinner.
+   */
+  if (resource === 'netflowseries') {
+    try {
+      const now = Date.now();
+      const [daily, intraday] = await Promise.all([
+        cexflow.series({ now }).catch(() => ({ rows: [], since: null, until: null, venues: 0 })),
+        cexflow.liveSeries({ now, hours: 26 }).catch(() => []),
+      ]);
+
+      // It changes once a day, so a few minutes of caching costs nothing and
+      // spares the table a scan per page view.
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return send(res, 200, {
+        /** [day, inUsd, outUsd], oldest first. */
+        rows: daily.rows,
+        /** [epochSeconds, inUsd, outUsd] of the rolling day, oldest first. */
+        live: intraday,
+        since: daily.since,
+        until: daily.until,
+        venues: daily.venues,
+        at: now,
+      });
+    } catch (err) {
+      return fail(res, 502, `Could not read the exchange flow history (${err.message}).`);
     }
   }
 

@@ -18,8 +18,25 @@ import {
 
 const BASE = (process.argv[2] || '').replace(/\/$/, '');
 const KEY = process.argv[3] || process.env.CRON_SECRET || '';
-/** Four hundred days covers a year, the year to date, and a margin. */
-const DAYS = Number(process.env.CEX_DAYS) || 400;
+/**
+ * Everything the source has, which is back to November 2022.
+ *
+ * It was four hundred days, which covered the longest period the card could
+ * then be asked for. The card is a graph now with an "All" frame, and an All
+ * that quietly means "the last thirteen months" would be the sort of lie that
+ * is impossible to spot from the outside. Asking for more days than exist
+ * simply returns what exists.
+ */
+const DAYS = Number(process.env.CEX_DAYS) || 4000;
+
+/**
+ * Days per POST.
+ *
+ * The endpoint refuses more than a thousand rows in one request, and four
+ * years is fourteen hundred. Five hundred keeps each body comfortably inside
+ * both that cap and the body-size limit.
+ */
+const CHUNK = 500;
 
 if (!BASE || !KEY) {
   console.error('usage: node scripts/collect-cex-flow.mjs <base-url> <cron-secret>');
@@ -52,14 +69,25 @@ for (const ex of exchanges) {
       continue;
     }
 
-    const answer = await post(ex.name, days);
-    if (answer.status !== 200) {
-      failed += 1;
-      console.log(`  ${ex.name.padEnd(16)} POST ${answer.status} ${JSON.stringify(answer.body)}`);
-      continue;
+    /**
+     * Oldest chunk first, so a run that dies halfway leaves a prefix of
+     * history rather than a hole in the middle of it.
+     */
+    let written = 0;
+    let broke = false;
+    for (let i = 0; i < days.length; i += CHUNK) {
+      const answer = await post(ex.name, days.slice(i, i + CHUNK));
+      if (answer.status !== 200) {
+        failed += 1;
+        broke = true;
+        console.log(`  ${ex.name.padEnd(16)} POST ${answer.status} ${JSON.stringify(answer.body)}`);
+        break;
+      }
+      written += answer.body?.written ?? 0;
     }
+    if (broke) continue;
 
-    sent += answer.body?.written ?? 0;
+    sent += written;
     const net = days.reduce((n, d) => n + d.netUsd, 0);
     console.log(`  ${ex.name.padEnd(16)} ${String(days.length).padStart(4)} days · `
       + `net ${net < 0 ? '-' : '+'}$${(Math.abs(net) / 1e9).toFixed(2)}B over the window`);
