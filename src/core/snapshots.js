@@ -3,6 +3,7 @@
  * series the chart draws from it.
  */
 import { state, saveSnapshots } from './store.js';
+import { spliceHistory } from './rebuild.js';
 import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
 
@@ -68,6 +69,32 @@ export function periodStart(timeframe, firstRecorded, now = new Date()) {
   if (!firstRecorded) return cutoff;
   const inception = new Date(firstRecorded);
   return inception > cutoff ? inception : cutoff;
+}
+
+/**
+ * The reconstructed days before the recording began.
+ *
+ * Held here rather than recomputed on every draw: it needs a price history per
+ * ticker and renderHome runs on every tick. Set once the histories land, and
+ * empty until then — so the curve starts as the recording alone and lengthens
+ * when the back-cast arrives, rather than blocking on the network.
+ */
+let backfill = [];
+
+export function setBackfill(rows) {
+  backfill = Array.isArray(rows) ? rows : [];
+}
+
+export function backfillRows() { return backfill; }
+
+/**
+ * Every account value known, recorded or reconstructed, oldest first.
+ *
+ * This is what every window is cut from. It is the whole reason "YTD" can mean
+ * the year rather than "since the app was installed".
+ */
+export function accountHistory() {
+  return spliceHistory(state.snapshots, backfill);
 }
 
 /**
@@ -137,7 +164,8 @@ export function curveSeries(timeframe) {
   const days = daysForTimeframe(timeframe);
   const cutoff = cutoffFor(timeframe);
 
-  let points = state.snapshots.filter((s) => new Date(s.date) >= cutoff);
+  const history = accountHistory();
+  let points = history.filter((s) => new Date(s.date) >= cutoff);
   const synthetic = points.length < 2;
 
   if (synthetic) {
@@ -194,7 +222,7 @@ export function curveSeries(timeframe) {
    * timeframe, including a fully covered 1W, report itself as truncated. What
    * actually matters is whether the record reaches back that far at all.
    */
-  const firstRecorded = state.snapshots.reduce(
+  const firstRecorded = history.reduce(
     (earliest, s) => (s?.date && (earliest == null || s.date < earliest) ? s.date : earliest),
     null,
   );

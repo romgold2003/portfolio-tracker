@@ -56,17 +56,22 @@ describe('aligning an index to the account days', () => {
     assert.ok(near(out[1], -20), `${out[1]}`);
   });
 
-  test('a window opening before the history is refused, not started late', () => {
-    // Drawing from where the index happens to begin would read as a flat start
-    // and understate whatever it did before the window opened.
-    assert.equal(alignedReturns(['2026-01-01', '2026-09-08'], rows), null);
+  test('a window opening before the history starts where the data starts', () => {
+    // This used to refuse the whole series, and that was the bug: a year-to-date
+    // window opens on the first of January, which is a market holiday, so both
+    // benchmarks vanished from the YTD chart entirely. A line that begins on the
+    // second is a far better answer than no line.
+    const out = alignedReturns(['2026-01-01', '2026-09-04', '2026-09-08'], rows);
+    assert.equal(out[0], null, 'a day before any close has no value');
+    assert.equal(out[1], 0, 'the first real close is the baseline');
+    assert.ok(out[2] > 0);
   });
 
   test('a day with no close is a hole, not a zero', () => {
     // Chart.js joins across null with spanGaps; a zero would draw a crash.
     const gappy = [{ date: '2026-09-04', close: 100 }, { date: '2026-09-08', close: 110 }];
     const out = alignedReturns(['2026-09-03', '2026-09-04', '2026-09-08'], gappy);
-    assert.equal(out, null, 'the window opens before the first close');
+    assert.deepEqual(out, [null, 0, 10]);
 
     const inside = alignedReturns(['2026-09-04', '2026-09-08'], gappy);
     assert.ok(inside.every((v) => v != null));
@@ -78,9 +83,15 @@ describe('aligning an index to the account days', () => {
     assert.equal(alignedReturns(['2026-09-04'], null), null);
   });
 
-  test('a zero or negative base is refused', () => {
+  test('a close of zero is skipped rather than used as a baseline', () => {
+    // Dividing by it would produce infinities across the whole series.
     const broken = [{ date: '2026-09-04', close: 0 }, { date: '2026-09-08', close: 110 }];
-    assert.equal(alignedReturns(['2026-09-04', '2026-09-08'], broken), null);
+    assert.deepEqual(alignedReturns(['2026-09-04', '2026-09-08'], broken), [null, 0]);
+  });
+
+  test('no usable close anywhere is still null', () => {
+    const dead = [{ date: '2026-09-04', close: 0 }];
+    assert.equal(alignedReturns(['2026-09-04', '2026-09-08'], dead), null);
   });
 });
 

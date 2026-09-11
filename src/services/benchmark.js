@@ -341,12 +341,32 @@ export async function benchmarkSeries() {
 export function alignedReturns(dates, rows) {
   if (!Array.isArray(dates) || !dates.length || !Array.isArray(rows) || !rows.length) return null;
 
-  const base = closeOnOrBefore(rows, dates[0]);
+  /**
+   * Rebased at the first day the index actually has a close, not at the first
+   * day of the window.
+   *
+   * The two are usually the same and occasionally are not: a year-to-date
+   * window opens on the first of January, which is a market holiday, so there
+   * is no close on or before it and the old rule — refuse the series — dropped
+   * both benchmarks off the YTD chart entirely. A whole line missing because
+   * the year began on a holiday is a far worse answer than a line that starts
+   * on the second.
+   *
+   * Days before that first close stay null. Chart.js spans a null, so the line
+   * simply begins where its data does instead of the window being cut back to
+   * suit it.
+   */
+  let base = 0;
+  let from = null;
+  for (const date of dates) {
+    const close = closeOnOrBefore(rows, date);
+    if (close > 0) { base = close; from = date; break; }
+  }
   if (!(base > 0)) return null;
 
   const out = [];
   for (const date of dates) {
-    const close = closeOnOrBefore(rows, date);
+    const close = date < from ? null : closeOnOrBefore(rows, date);
     // A gap inside the window is a hole, not a zero: Chart.js skips a null and
     // joins across it rather than drawing a crash to the axis.
     out.push(close > 0 ? +(((close / base) - 1) * 100).toFixed(4) : null);

@@ -13,8 +13,13 @@ import {
   benchmarkSpot, benchmarkYearToDate,
   COMPARISONS, alignedReturns,
 } from '../../services/benchmark.js';
-import { pricesOn, dailySeries } from '../../services/history.js';
-import { periodStart, cutoffFor, curveSeries } from '../../core/snapshots.js';
+import {
+  pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
+} from '../../services/history.js';
+import {
+  periodStart, cutoffFor, curveSeries, setBackfill,
+} from '../../core/snapshots.js';
+import { rebuildDailyValue } from '../../core/rebuild.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -250,6 +255,118 @@ let startPrices = new Map();
  */
 let comparisons = new Map();
 let comparisonsPending = false;
+
+/** Price history per ticker, for reconstructing the days before the recording. */
+let priceHistories = new Map();
+let backfillPending = false;
+/**
+ * The book the back-cast was last built for.
+ *
+ * Not a plain "done" flag. The page renders once on load with no positions —
+ * signed out, or before the vault is open — and a flag set then latched
+ * permanently, so the rebuild never ran for the real book and the curve stayed
+ * exactly as short as before. Keyed on the book instead, so it runs when there
+ * is something to run for and again if the positions change.
+ */
+let backfillFor = null;
+
+/**
+ * Rebuild the account value for the days the app was not open.
+ *
+ * The recorded curve starts the day this app was first used. The trades, the
+ * cash flows and the broker statement all reach further back, so every figure
+ * beside the chart covered a longer period than the chart did — a YTD curve
+ * drew six weeks while the KPI counted the year.
+ *
+ * One history per ticker held at any point this year, priced through the same
+ * service the rest of the app uses, and a value worked out for every day. It
+ * runs once: a past close never changes.
+ */
+async function loadBackfill() {
+  if (backfillPending) return;
+
+  const earliest = earliestInterest();
+  if (!earliest) return;
+
+  const wanted = [...new Map(state.positions
+    .filter((p) => p.open && (p.status === 'Open' || (p.close && p.close >= earliest)))
+    .map((p) => [historySymbol(p.ticker, p.cls), p])).entries()];
+  if (!wanted.length) return;
+
+  /** What this run would be built from. Unchanged means nothing to redo. */
+  const key = `${earliest}|${state.cash}|${wanted.map(([sym]) => sym).sort().join(',')}|`
+    + `${state.positions.length}|${(state.cashFlows ?? []).length}`;
+  if (key === backfillFor) return;
+
+  backfillPending = true;
+  try {
+    const loaded = await Promise.all(wanted.map(([symbol]) => dailySeries(symbol)
+      .then((rows) => [symbol, rows])
+      .catch(() => [symbol, null])));
+    for (const [symbol, rows] of loaded) if (rows?.length) priceHistories.set(symbol, rows);
+
+    setBackfill(rebuildDailyValue({
+      positions: state.positions,
+      cash: state.cash,
+      flows: state.cashFlows,
+      priceOn: pastPrice,
+      from: earliest,
+      to: todayStr(),
+    }));
+    backfillFor = key;
+    renderHome();
+  } finally {
+    backfillPending = false;
+  }
+}
+
+/** The earliest day worth rebuilding: the start of the longest window offered. */
+function earliestInterest() {
+  const dates = state.positions.flatMap((p) => [p.open, p.close]).filter(Boolean);
+  for (const f of state.cashFlows ?? []) if (f?.date) dates.push(f.date);
+  if (!dates.length) return null;
+  const firstTrade = dates.reduce((a, b) => (a < b ? a : b));
+
+  /**
+   * Far enough back that every button is answered in full.
+   *
+   * The first trade alone is not enough: YTD means the first of January, and an
+   * account whose first trade of the year was on the eighth would report from
+   * the eighth and be flagged as a short window. The days before it are not a
+   * guess — the book was cash, and cashOn() knows exactly how much.
+   *
+   * Floored at three years because that is what the history service fetches;
+   * asking for days it cannot price would only produce days that get dropped.
+   */
+  const back = (days) => new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const janFirst = `${new Date().getUTCFullYear()}-01-01`;
+
+  /**
+   * The first trade or the first of January, whichever came first — and no
+   * earlier.
+   *
+   * Padding back a full year regardless would give "All" months of flat cash
+   * before the account existed, which reads as a longer track record than there
+   * is. A window the account genuinely predates is a window it cannot answer,
+   * and the note under the chart says so rather than the curve inventing it.
+   */
+  const earliest = firstTrade < janFirst ? firstTrade : janFirst;
+  const floor = back(3 * 366);
+  return earliest < floor ? floor : earliest;
+}
+
+/**
+ * A ticker's close on or before a past day.
+ *
+ * On or before, not on: a Saturday has no close and the book still had a value
+ * on it. Friday's close is what the holding was worth over the weekend.
+ */
+function pastPrice(ticker, day) {
+  const position = state.positions.find((p) => p.ticker === ticker);
+  const rows = priceHistories.get(historySymbol(ticker, position?.cls));
+  if (!rows) return null;
+  return closeAtOrBefore(rows, day);
+}
 
 /**
  * Fetch the tracked indices once, then redraw.
@@ -557,9 +674,10 @@ export function renderHome() {
   const curve = renderCurve(ui.timeframe, ui.curveMode, state.cashFlows,
     ui.curveMode === 'benchmark' ? comparisonRows() : []);
 
-  // Kicked off after the draw, so the chart appears immediately and gains its
-  // other two lines a moment later rather than waiting on the network.
+  // Both kicked off after the draw, so the chart appears immediately and
+  // lengthens when the histories land rather than blocking on the network.
   if (ui.curveMode === 'benchmark') loadComparisons();
+  loadBackfill();
   drawCurveNote(curve);
 
   const period = accountPerformance({

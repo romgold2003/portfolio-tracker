@@ -36,6 +36,20 @@ function writeResolved(map) {
   } catch { /* it will simply be fetched again */ }
 }
 
+/**
+ * The symbol the history service knows a holding by.
+ *
+ * The quote feed asks CoinGecko for crypto and the history service asks Yahoo,
+ * and Yahoo does not have a ticker called BTC — it has BTC-USD. Without this a
+ * third of the book cannot be priced on any past day, and every day it holds a
+ * coin is dropped from the reconstruction.
+ */
+export function historySymbol(ticker, cls) {
+  const symbol = String(ticker || '').toUpperCase();
+  if (cls !== 'Crypto') return symbol;
+  return symbol.endsWith('-USD') ? symbol : `${symbol}-USD`;
+}
+
 /** Last close on or before a date. Rows must be ascending. */
 export function closeOnOrBefore(rows, date) {
   let found = null;
