@@ -301,11 +301,23 @@ async function loadBackfill() {
       ...(state.ledger.trades ?? []).map((t) => t.ticker),
     ])]
     : [];
+  /**
+   * Every ticker the book has ever touched, with no date filter on it.
+   *
+   * The filter that used to be here required a non-null `open`, which is
+   * precisely what a holding carried in from an earlier year does not have.
+   * So the sixteen holdings that were ninety per cent of January were the ones
+   * left out of the price fetch; unpriced, they counted as stale, every
+   * reconstructed day was dropped for being mostly guesswork, and the curve
+   * fell back to the recorded snapshots and began in August — the exact
+   * symptom this was all meant to fix.
+   *
+   * Fetching a ticker that turns out not to be needed costs one cached request.
+   * Missing one costs the year.
+   */
   const tickers = fromLedger.length
     ? fromLedger
-    : state.positions
-      .filter((p) => p.open && (p.status === 'Open' || (p.close && p.close >= earliest)))
-      .map((p) => p.ticker);
+    : state.positions.map((p) => p.ticker);
 
   const wanted = [...new Map(tickers.filter(Boolean).map((ticker) => {
     const position = state.positions.find((p) => p.ticker === ticker);
@@ -352,8 +364,13 @@ async function loadBackfill() {
 function earliestInterest() {
   const dates = state.positions.flatMap((p) => [p.open, p.close]).filter(Boolean);
   for (const f of state.cashFlows ?? []) if (f?.date) dates.push(f.date);
-  if (!dates.length) return null;
-  const firstTrade = dates.reduce((a, b) => (a < b ? a : b));
+  /**
+   * A book of nothing but holdings carried in from an earlier year has no dates
+   * on it at all, and returning null there gave up before starting. There is
+   * still a year to draw: those holdings were held through every day of it.
+   */
+  if (!dates.length && !state.positions.length) return null;
+  const firstTrade = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null;
 
   /**
    * Far enough back that every button is answered in full.
@@ -381,7 +398,7 @@ function earliestInterest() {
   // A statement's period start is the earliest day the ledger can answer for,
   // and it is usually before the first trade inside it.
   const ledgerFrom = state.ledger?.from;
-  let earliest = firstTrade < janFirst ? firstTrade : janFirst;
+  let earliest = firstTrade && firstTrade < janFirst ? firstTrade : janFirst;
   if (ledgerFrom && ledgerFrom < earliest) earliest = ledgerFrom;
   const floor = back(3 * 366);
   return earliest < floor ? floor : earliest;
