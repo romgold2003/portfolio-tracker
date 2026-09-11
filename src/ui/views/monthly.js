@@ -7,7 +7,9 @@
  * to money actually taken off the table.
  */
 import { state } from '../../core/store.js';
-import { realized, unreal, costOf, pctD } from '../../core/portfolio.js';
+import {
+  realized, unreal, costOf, pctD, avgTradeReturn, monthPortfolioReturn,
+} from '../../core/portfolio.js';
 import { MONTHS_SHORT, MONTHS_LONG, YEAR_PICKER } from '../../config/constants.js';
 import { renderMonthlyChart } from '../charts.js';
 import { ui } from '../uiState.js';
@@ -42,7 +44,9 @@ function yearTotals(year) {
  */
 function monthsWithActivity() {
   const months = {};
-  const ensure = (key) => (months[key] ??= { real: 0, unreal: 0, cost: 0, closed: 0 });
+  const ensure = (key) => (months[key] ??= {
+    real: 0, unreal: 0, cost: 0, closed: 0, trades: [],
+  });
 
   state.positions.forEach((p) => {
     if (p.status !== 'Closed' || !p.close) return;
@@ -50,6 +54,8 @@ function monthsWithActivity() {
     bucket.real += realized(p);
     bucket.cost += costOf(p);
     bucket.closed++;
+    // Kept individually: the average return is per trade, not per dollar.
+    bucket.trades.push(p);
   });
 
   const open = state.positions.filter((p) => p.status === 'Open');
@@ -92,6 +98,51 @@ export function populateMonthPicker() {
   }).join('');
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * How the typical trade closed in this month did.
+ *
+ * Equal weight, so it answers "how good were the decisions" rather than "how
+ * much money moved" — which is the Total P&L column two to the left, and the
+ * two disagree whenever one position was much larger than the rest.
+ *
+ * Open positions are left out entirely. A trade that has not been closed has no
+ * result yet, and folding its paper move into an average of finished trades
+ * would quietly change what the column means every time a price ticks.
+ */
+function avgTradeCell(m) {
+  const avg = avgTradeReturn(m.trades);
+  if (avg == null) {
+    return '<td class="muted" title="No trade closed in this month, so there is no average to take">—</td>';
+  }
+  const title = `Equal-weight average of ${plural(m.closed, 'closed trade')}. `
+    + 'Each trade counts once whatever it was sized at, so this is how the '
+    + 'typical trade did, not how the money did.';
+  return `<td style="color:${clr(avg)}" title="${title}">${fp(avg)}</td>`;
+}
+
+/**
+ * What the whole account did over the month, deposits taken out.
+ *
+ * Read off the recorded account values, not off the trades, so it includes the
+ * positions carried in from earlier months and everything else that moves a
+ * book. That is why it is usually the smaller of the two: a good month on a
+ * tenth of the capital is a large trade return and a modest portfolio one.
+ */
+function portfolioCell(key) {
+  const port = monthPortfolioReturn(state.snapshots, state.cashFlows, key);
+  if (!port) {
+    return '<td class="muted" title="The account was not valued around this month, so its move cannot be measured. Daily values are recorded from the day the app is first opened.">—</td>';
+  }
+  const parts = [
+    `Account value ${port.from} → ${port.to}`,
+    port.net ? `${$s(port.net)} paid in over the month, weighted by how long it was present and not counted as profit` : 'no deposits or withdrawals in the month',
+    port.partial ? 'Recorded days do not span the whole month, so this covers the part that was recorded.' : null,
+  ].filter(Boolean);
+  return `<td style="color:${clr(port.pct)};font-weight:600" title="${parts.join('. ')}">${fp(port.pct)}${port.partial ? '<span style="color:var(--text4);font-weight:400"> *</span>' : ''}</td>`;
+}
+
 function renderSummaryTable() {
   const body = el('monthTable');
   if (!body) return;
@@ -99,21 +150,21 @@ function renderSummaryTable() {
   const keys = Object.keys(months).sort().reverse();
 
   if (!keys.length) {
-    body.innerHTML = '<tr><td colspan="6"><div class="empty">No closed trades yet</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="7"><div class="empty">No closed trades yet</div></td></tr>';
     return;
   }
 
   body.innerHTML = keys.map((key) => {
     const m = months[key];
     const total = m.real + m.unreal;
-    const ret = m.cost ? (total / m.cost) * 100 : 0;
     const label = new Date(`${key}-02`).toLocaleString('default', { month: 'long', year: 'numeric' });
     return `<tr style="cursor:pointer" onclick="selectMonth('${key}')">
       <td class="mo">${label}</td>
       <td style="color:${clr(m.real)}">${$s(m.real)}</td>
       <td style="color:${clr(m.unreal)}">${m.unreal ? $s(m.unreal) : '—'}</td>
       <td style="color:${clr(total)};font-weight:600">${$s(total)}</td>
-      <td style="color:${clr(ret)}">${fp(ret)}</td>
+      ${avgTradeCell(m)}
+      ${portfolioCell(key)}
       <td class="muted">${m.closed}</td>
     </tr>`;
   }).join('');

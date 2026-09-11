@@ -217,6 +217,113 @@ export function bookedPnl(p) {
 export function pctD(pnl, base) { return base ? (pnl / base) * 100 : 0; }
 
 /**
+ * The equal-weight average return of a set of trades.
+ *
+ * Deliberately not the month's P&L over the month's capital. That figure is
+ * whatever the largest position did — nine careful 5% winners and one oversized
+ * 4% loser can make a month red by dollars and green by average, and both of
+ * those are true things worth seeing side by side.
+ *
+ * Each trade counts once, whatever it was sized at, because the question is how
+ * the typical decision worked out rather than how much money it moved.
+ *
+ * Null when nothing in the set has a cost to measure against, which is absent
+ * rather than flat.
+ */
+export function avgTradeReturn(trades) {
+  const returns = [];
+  for (const t of trades) {
+    const cost = costOf(t);
+    if (cost > 0) returns.push((realized(t) / cost) * 100);
+  }
+  if (!returns.length) return null;
+  return returns.reduce((sum, r) => sum + r, 0) / returns.length;
+}
+
+/** First and last calendar day of a YYYY-MM key. */
+function monthBounds(key) {
+  const year = Number(key.slice(0, 4));
+  const month = Number(key.slice(5, 7));
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return {
+    first: `${key}-01`,
+    last: iso(new Date(Date.UTC(year, month, 0))),
+    before: iso(new Date(Date.UTC(year, month - 1, 0))),
+  };
+}
+
+/**
+ * How far back an opening balance may be dragged forward, in days.
+ *
+ * The account is only valued on days the app was opened, so the month's
+ * opening figure is usually the last day of the previous month but sometimes a
+ * few days before it. A week is close enough to call it the month's starting
+ * point; a stale point from six weeks ago would hand this month the gains of
+ * the last one.
+ */
+const OPENING_STALE_DAYS = 7;
+
+const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+
+/**
+ * What the whole account did over one calendar month, deposits removed.
+ *
+ * This is a different question from what the trades did, and the two answers
+ * routinely disagree. A month of good trades on a tenth of the book is a large
+ * trade return and a small portfolio one; a month of no trades at all still
+ * moves the account, because the positions already held moved.
+ *
+ * Measured from the recorded account values rather than from the trades, which
+ * is what makes it the portfolio's return: it picks up the holdings carried in
+ * from earlier months, dividends, fees, and everything else the journal never
+ * booked as a trade.
+ *
+ * Money paid in is not profit. The deposit is subtracted from the gain and
+ * weighted into the base by how much of the month it was actually present —
+ * Modified Dietz — because crediting a mid-month deposit with the whole month's
+ * return is exactly the error that had this book reporting 24% where its broker
+ * said 29%.
+ *
+ * Null when the account was never valued around this month. An unmeasurable
+ * month says so rather than showing a zero that reads as "flat".
+ */
+export function monthPortfolioReturn(snapshots, flows = [], key, today = todayStr()) {
+  if (!Array.isArray(snapshots) || snapshots.length < 2) return null;
+  const { first, last, before } = monthBounds(key);
+  const points = [...snapshots]
+    .filter((s) => s && typeof s.date === 'string' && Number.isFinite(s.value))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Preferably the closing balance of the previous month; failing that, the
+  // first day inside this one, which measures part of the month and says so.
+  const prior = [...points].reverse().find((s) => s.date <= before);
+  const open = (prior && daysBetween(prior.date, first) <= OPENING_STALE_DAYS)
+    ? prior
+    : points.find((s) => s.date >= first && s.date <= last);
+  if (!open || !(open.value > 0)) return null;
+
+  const close = [...points].reverse().find((s) => s.date <= last && s.date > open.date);
+  if (!close) return null;
+
+  // Flows on the opening day are already inside the opening balance.
+  const inWindow = (flows ?? []).filter((f) => f.date > open.date && f.date <= close.date);
+  const net = inWindow.reduce((sum, f) => sum + f.amount, 0);
+  const pnl = close.value - open.value - net;
+  const pct = modifiedDietzReturn(pnl, open.value, inWindow, open.date, close.date);
+  if (pct == null) return null;
+
+  return {
+    pct,
+    pnl,
+    from: open.date,
+    to: close.date,
+    net,
+    /** True when the recorded days do not span the month, so this is part of it. */
+    partial: open.date >= first || (close.date < last && close.date < today),
+  };
+}
+
+/**
  * Sorting for the open-positions lists. Returns a new array.
  * The daily sorts are direction-aware by construction: dailyDollar() already
  * flips the sign for shorts, so a short whose stock fell ranks as a winner.
