@@ -1026,3 +1026,61 @@ describe('a book with no transfer records at all', () => {
     }
   });
 });
+
+describe('a holding nobody can price', () => {
+  /**
+   * The spike in January, and it was not a market move.
+   *
+   * An option or a delisted stub has no price history, so it is carried at the
+   * marks the statement supplies — and those are trade prices. The mark changes
+   * on the day a trade happened, so differencing it against the day before
+   * turns the gap between two fills into a price move and applies it to the
+   * whole holding. On a real book that drew a thirty-point spike in late
+   * January and took it out again in February, and compounding through it left
+   * the year seventeen points above the truth.
+   */
+  const opening = { date: '2026-01-01', cash: 0, holdings: { OPT: 100 } };
+
+  test('contributes nothing rather than a move invented from its marks', () => {
+    const h = buildPortfolioHistory({
+      opening,
+      events: [],
+      // No price history at all for OPT: every day falls back to the marks.
+      priceOn: () => null,
+      lastKnown: { OPT: [{ date: '2026-01-01', price: 10 }, { date: '2026-01-03', price: 40 }] },
+      to: '2026-01-04',
+    });
+    // The holding is still valued — the balance is real —
+    assert.equal(h[2].positionsValue, 4000);
+    // — but the mark stepping from 10 to 40 is not $3,000 of performance.
+    assert.equal(h[2].marketPnl, 0, 'a trade mark was drawn as a price move');
+    assert.ok(h.every((r) => r.marketPnl === 0));
+  });
+
+  test('while a priced holding beside it is measured as normal', () => {
+    const h = buildPortfolioHistory({
+      opening: { date: '2026-01-01', cash: 0, holdings: { OPT: 100, AAA: 10 } },
+      events: [],
+      priceOn: (ticker, day) => (ticker === 'AAA'
+        ? ({ '2026-01-01': 100, '2026-01-02': 110 }[day] ?? null)
+        : null),
+      lastKnown: { OPT: [{ date: '2026-01-01', price: 10 }, { date: '2026-01-02', price: 40 }] },
+      to: '2026-01-02',
+    });
+    assert.equal(h[1].marketPnl, 100, 'the priced holding should still count');
+  });
+
+  test('and the day it becomes priceable is not a windfall', () => {
+    // The first real close after a stretch of marks must not book the whole
+    // difference between the mark and the market.
+    const h = buildPortfolioHistory({
+      opening,
+      events: [],
+      priceOn: (ticker, day) => (day >= '2026-01-03' ? 40 : null),
+      lastKnown: { OPT: [{ date: '2026-01-01', price: 10 }] },
+      to: '2026-01-04',
+    });
+    assert.equal(h[2].marketPnl, 0, 'the mark-to-market gap was booked as a gain');
+    assert.equal(h[3].marketPnl, 0, 'and the day after is genuinely flat');
+  });
+});

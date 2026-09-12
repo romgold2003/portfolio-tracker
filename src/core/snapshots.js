@@ -294,8 +294,22 @@ function percentCurve(values, dates, synthetic, points = []) {
     let netted = 0;
     const curve = points.map((row, i) => {
       if (i === 0) return 0;
-      const prev = values[i - 1];
-      if (prev > 0) growth *= 1 + (Number(row?.marketPnl) || 0) / prev;
+      /**
+       * The base is the money the figure above it is actually measuring.
+       *
+       * A holding the price service cannot quote contributes nothing to
+       * `marketPnl`, because the only prices available for it are trade marks
+       * and differencing those invents moves. Leaving it in the base anyway
+       * divides a real numerator by a larger denominator and drags the whole
+       * line down — the return on the part of the book that can be measured,
+       * reported as though it were the return on all of it.
+       *
+       * So the unpriceable part comes out of both halves. What is left is a
+       * true statement about the rest.
+       */
+      const previous = points[i - 1];
+      const base = (values[i - 1] || 0) - (Number(previous?.stalePositions) || 0);
+      if (base > 0) growth *= 1 + (Number(row?.marketPnl) || 0) / base;
       netted += Math.abs(Number(row?.externalCashFlow) || 0);
       return +((growth - 1) * 100).toFixed(4);
     });

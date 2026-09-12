@@ -205,7 +205,10 @@ export function rebuildDailyValue({
       if (!priced) continue;
       held += priced.value;
       if (priced.stale) stale += Math.abs(priced.value);
-      if (position.id != null) valued.set(position.id, priced.value);
+      // Only positions carrying a real close are comparable day to day. A
+      // stale one is held at a remembered mark, and the day that mark changes
+      // is a trade date rather than a market move.
+      if (position.id != null && !priced.stale) valued.set(position.id, priced.value);
     }
 
     const value = held + cashOn(positions, cash, flows, day);

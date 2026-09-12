@@ -174,6 +174,25 @@ export function buildPortfolioHistory({
         const now = priceFor(ticker, day);
         const before = priceFor(ticker, prevDay);
         if (!(now.value > 0) || !(before.value > 0)) continue;
+        /**
+         * Only between two real closes.
+         *
+         * A ticker the price service cannot quote — an option, a delisted stub
+         * — falls back to the marks the statement carries, and those are trade
+         * prices. The mark therefore changes on the day a trade happened, and
+         * differencing it against the day before turns the gap between two
+         * fills into a price move, applied to the whole holding. That is what
+         * put a thirty-point spike into January and took it out again in
+         * February: not a market move at all, but the arithmetic of a mark
+         * stepping on a trade date.
+         *
+         * A holding nobody can price contributes nothing to the day's measured
+         * performance. That understates by whatever it really did, which is
+         * honest — an unknown is not a zero, but it is far better than a
+         * fabricated swing, and `stalePositions` already says how much of the
+         * book is in this state.
+         */
+        if (!now.fresh || !before.fresh) continue;
         marketPnl += qty * (now.value - before.value);
       }
     }
