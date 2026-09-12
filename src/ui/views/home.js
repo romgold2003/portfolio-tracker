@@ -294,26 +294,20 @@ function renderCurveNote(series) {
   note.style.display = '';
 
   const removed = series.flowsNetted ?? 0;
-  const knowsOfFlows = (state.cashFlows ?? []).some((f) => Number.isFinite(f?.amount) && f.amount);
   const missing = (series.missing ?? []).length
     ? ` · No data for ${series.missing.join(' or ')}.`
     : '';
 
   /**
-   * The one case worth a warning: the journal has no record of a transfer ever
-   * happening, so there is nothing for the curve to take out. Every dollar paid
-   * in is then sitting inside the return as though it had been earned, and the
-   * figure reads high by roughly the deposits over the opening balance. Nothing
-   * in the arithmetic can detect that — only the absence of the records can.
+   * There is no warning here any more, because there is no longer a case to
+   * warn about.
+   *
+   * This used to caution that the account had no transfer records, since the
+   * return was worked out from the balance and had to subtract them back out —
+   * so without them it read high. The line is now built from what the holdings
+   * earned, which never had the money in it, and needs no record of a transfer
+   * to be right about one.
    */
-  if (!knowsOfFlows && !removed) {
-    note.innerHTML = '<span style="color:var(--amber)">Return since 1 January, compounded daily. '
-      + 'No deposits or withdrawals are recorded on this account — if you have paid money in, '
-      + 'import your broker statement so it can be kept out of this figure.</span>'
-      + escapeHtml(missing);
-    return;
-  }
-
   const excluded = removed > 0
     ? ` ${$u(removed)} of deposits and withdrawals changed your balance and not this line.`
     : '';
@@ -464,11 +458,48 @@ async function loadBackfill() {
         row.totalAccountValue = round2(live);
         row.cashValue = round2(state.cash);
         row.positionsValue = round2(live - state.cash);
-        if (last.date === today) forward[forward.length - 1] = row;
-        else forward.push({ ...row, externalCashFlow: 0, deposit: 0, withdrawal: 0 });
+        if (last.date === today) {
+          /**
+           * Today's performance is restated along with today's balance.
+           *
+           * Spreading the previous row over today carried its `marketPnl` with
+           * it, so the live value was reported alongside a figure describing a
+           * different day — and the last point of the line stepped by whatever
+           * the two days happened to differ by. What today actually earned is
+           * the change in balance since yesterday, less anything paid in.
+           */
+          const previous = forward[forward.length - 2];
+          row.marketPnl = previous
+            ? round2(live - previous.totalAccountValue - (row.externalCashFlow ?? 0))
+            : 0;
+          forward[forward.length - 1] = row;
+        } else {
+          forward.push({
+            ...row,
+            externalCashFlow: 0,
+            deposit: 0,
+            withdrawal: 0,
+            marketPnl: round2(live - last.totalAccountValue),
+          });
+        }
       }
       setBackfill(forward, { authoritative: true });
     } else {
+      /**
+       * The back-cast keeps its flows, which it used to throw away here.
+       *
+       * Reducing each day to a date and a balance meant the percentage curve
+       * had nothing to work with but the balance — and a balance moves when
+       * money is paid in. It then had to find the deposits somewhere else and
+       * line them up by date against days that may not exist, which is where
+       * the unexplained steps came from. The transfer belongs on the day it
+       * happened, beside the balance it changed.
+       */
+      const byDay = new Map();
+      for (const flow of state.cashFlows ?? []) {
+        if (!flow?.date || !Number.isFinite(flow.amount)) continue;
+        byDay.set(flow.date, (byDay.get(flow.date) ?? 0) + flow.amount);
+      }
       setBackfill(rebuildDailyValue({
         positions: state.positions,
         cash: state.cash,
@@ -476,7 +507,14 @@ async function loadBackfill() {
         priceOn: pastPrice,
         from: earliest,
         to: todayStr(),
-      }).map((r) => ({ date: r.date, totalAccountValue: r.value })));
+      }).map((r) => ({
+        date: r.date,
+        totalAccountValue: r.value,
+        externalCashFlow: byDay.get(r.date) ?? 0,
+        // Carried through so the percentage curve has a cash-free figure to
+        // work from even on a book with no statement behind it.
+        marketPnl: r.marketPnl,
+      })));
     }
     backfillFor = key;
     renderHome();

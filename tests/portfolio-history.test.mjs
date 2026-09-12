@@ -880,3 +880,149 @@ describe('the day\'s performance, with no cash in it', () => {
     assert.ok(funded.percent[2] > 0 && bare.percent[2] > 0);
   });
 });
+
+describe('the path a book without a broker ledger actually takes', () => {
+  /**
+   * The full diagnosis, as a test.
+   *
+   * A book with no statement gets a back-cast, which is then spliced under the
+   * recorded snapshots and scaled so the two meet without a step at the join.
+   * Three things went wrong along that path and every one of them put a jump in
+   * the percentage line:
+   *
+   *   - the back-cast was reduced to a date and a balance, so the deposits were
+   *     dropped before the curve ever saw them;
+   *   - the splice scaled the balance and nothing else, so what deposits did
+   *     survive were in different units from the balance they were subtracted
+   *     from;
+   *   - and the percentage was worked out from the balance, which moves when
+   *     money is paid in.
+   */
+  const build = async ({ rebuilt, snapshots, flows }) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.snapshots = snapshots;
+    state.cashFlows = flows;
+    setBackfill(rebuilt);          // NOT authoritative: this is the spliced path
+    return curveSeries('All');
+  };
+
+  test('a deposit in the reconstructed stretch puts no step in the line', async () => {
+    // Flat market throughout, one $10,000 deposit. Every day's return is zero
+    // and the line must be flat, scale factor or no scale factor.
+    const s = await build({
+      rebuilt: [
+        { date: '2026-01-01', totalAccountValue: 10_000, externalCashFlow: 0 },
+        { date: '2026-01-02', totalAccountValue: 20_000, externalCashFlow: 10_000 },
+        { date: '2026-01-03', totalAccountValue: 20_000, externalCashFlow: 0 },
+      ],
+      snapshots: [{ date: '2026-01-04', value: 24_000 }],
+      flows: [{ date: '2026-01-02', amount: 10_000 }],
+    });
+    // The join scales the reconstruction, so check the shape rather than exact
+    // values: the deposit day must not be the biggest move of the window.
+    const step = (i) => Math.abs(s.percent[i] - s.percent[i - 1]);
+    assert.ok(step(1) < 1, `the deposit day stepped ${step(1)} points`);
+  });
+
+  test('the scale factor does not leave flows in the wrong units', async () => {
+    const { spliceHistory } = await import('../src/core/rebuild.js');
+    const spliced = spliceHistory(
+      [{ date: '2026-01-03', value: 24_000 }],
+      [
+        { date: '2026-01-01', value: 10_000, externalCashFlow: 0 },
+        { date: '2026-01-02', value: 20_000, externalCashFlow: 10_000 },
+        { date: '2026-01-03', value: 20_000, externalCashFlow: 0 },
+      ],
+    );
+    // Scale is 24,000 / 20,000 = 1.2, and the deposit must be scaled with it or
+    // subtracting it removes the wrong amount of the step.
+    const day = spliced.find((r) => r.date === '2026-01-02');
+    assert.equal(day.value, 24_000);
+    assert.equal(day.externalCashFlow, 12_000,
+      'the balance was scaled and the deposit beside it was not');
+  });
+
+  test('and the fields survive being handed to setBackfill at all', async () => {
+    const { setBackfill, backfillRows } = await import('../src/core/snapshots.js');
+    setBackfill([
+      { date: '2026-01-02', totalAccountValue: 20_000, externalCashFlow: 10_000, marketPnl: 25 },
+    ]);
+    const row = backfillRows()[0];
+    assert.equal(row.value, 20_000);
+    assert.equal(row.externalCashFlow, 10_000, 'the deposit was stripped on the way in');
+    assert.equal(row.marketPnl, 25);
+  });
+});
+
+describe('a book with no transfer records at all', () => {
+  /**
+   * The case the app could not get right, and the one the complaint came from.
+   *
+   * No broker ledger and no recorded cash flows: the account value moves when
+   * money is paid in and nothing anywhere says that it was. Worked out from the
+   * balance, the deposit is indistinguishable from a day of extraordinary
+   * gains — on a year that truly returned 30% this read 68.8%, with a 7.7-point
+   * step on a deposit day.
+   *
+   * The back-cast now reports what the positions earned, which is prices and
+   * quantities and no cash at all, so the line is right without any record of
+   * the transfer existing.
+   */
+  const rebuilt = async () => {
+    const { rebuildDailyValue } = await import('../src/core/rebuild.js');
+    const days = [];
+    const d0 = Date.UTC(2026, 0, 1);
+    for (let i = 0; i < 251; i++) days.push(new Date(d0 + i * 86_400_000).toISOString().slice(0, 10));
+    const g = 1.3 ** (1 / 250);
+    const prices = {};
+    days.forEach((d, i) => { prices[d] = +(100 * g ** i).toFixed(6); });
+
+    const deposits = [['2026-01-20', 2000], ['2026-03-31', 1000], ['2026-06-05', 2000]];
+    const extra = deposits.reduce((sum, [d, c]) => sum + c / prices[d], 0);
+    const positions = [{
+      id: 1, ticker: 'AAA', status: 'Open', dir: 'Long',
+      qty: 263.6595 + extra, entry: 100, cur: prices['2026-09-08'], open: '2026-01-01',
+    }];
+    return {
+      deposits,
+      rows: rebuildDailyValue({
+        positions, cash: 0, flows: [], priceOn: (t, day) => prices[day] ?? null,
+        from: '2026-01-01', to: '2026-09-08',
+      }),
+    };
+  };
+
+  test('the back-cast reports a cash-free performance figure', async () => {
+    const { rows } = await rebuilt();
+    assert.ok(rows.every((r) => Number.isFinite(r.marketPnl)),
+      'every day needs one, or the curve falls back to the balance');
+    assert.equal(rows[0].marketPnl, 0, 'the first day has no yesterday');
+  });
+
+  test('and the curve is right with nothing recorded about the deposits', async () => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    const { rows, deposits } = await rebuilt();
+
+    state.positions = [];
+    state.snapshots = [];
+    state.cashFlows = [];                       // nothing at all
+    setBackfill(rows.map((r) => ({
+      date: r.date, totalAccountValue: r.value, externalCashFlow: 0, marketPnl: r.marketPnl,
+    })));
+
+    const s = curveSeries('All');
+    assert.ok(Math.abs(s.percent.at(-1) - 30) < 0.01,
+      `the year should be 30%, got ${s.percent.at(-1)}%`);
+
+    // And no day steps like a transfer landed on it.
+    for (const [date] of deposits) {
+      const i = s.dates.indexOf(date);
+      if (i <= 0) continue;
+      assert.ok(Math.abs(s.percent[i] - s.percent[i - 1]) < 1,
+        `${date} stepped ${(s.percent[i] - s.percent[i - 1]).toFixed(2)} points`);
+    }
+  });
+});

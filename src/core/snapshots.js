@@ -102,7 +102,22 @@ let forward = [];
 export function setBackfill(rows, { authoritative = false } = {}) {
   history = Array.isArray(rows) ? rows : [];
   forward = authoritative ? history : [];
-  backfill = history.map((r) => ({ date: r.date, value: r.totalAccountValue ?? r.value }));
+  /**
+   * The per-day money fields travel with the balance into the splice.
+   *
+   * Reducing each row to a date and a value here is what left the splice with
+   * nothing but balances to join, so the percentage curve downstream had to go
+   * looking for the deposits elsewhere and match them by date against days that
+   * might not be there. Carried along, they stay attached to the day they
+   * happened on and get scaled with it.
+   */
+  backfill = history.map((r) => {
+    const row = { date: r.date, value: r.totalAccountValue ?? r.value };
+    for (const field of ['externalCashFlow', 'marketPnl', 'deposit', 'withdrawal']) {
+      if (Number.isFinite(r[field])) row[field] = r[field];
+    }
+    return row;
+  });
 }
 
 export function backfillRows() { return backfill; }

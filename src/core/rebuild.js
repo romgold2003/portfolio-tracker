@@ -189,15 +189,23 @@ export function rebuildDailyValue({
   if (typeof priceOn !== 'function' || !from || !to) return [];
 
   const out = [];
+  /**
+   * What each position was worth on the last day that was actually emitted,
+   * so the next one can be compared against it position by position.
+   */
+  let previous = null;
+
   for (const day of daysBetween(from, to)) {
     let held = 0;
     let stale = 0;
+    const valued = new Map();
 
     for (const position of positions) {
       const priced = valueOn(position, day, priceOn);
       if (!priced) continue;
       held += priced.value;
       if (priced.stale) stale += Math.abs(priced.value);
+      if (position.id != null) valued.set(position.id, priced.value);
     }
 
     const value = held + cashOn(positions, cash, flows, day);
@@ -208,7 +216,31 @@ export function rebuildDailyValue({
     // Too much of the book priced from memory rather than from the market.
     if (held > 0 && stale / Math.abs(held) > STALE_LIMIT) continue;
 
-    out.push({ date: day, value: +value.toFixed(2) });
+    /**
+     * The day's performance, with no cash in it.
+     *
+     * Each position that was held on both days, revalued: what the market did
+     * to money already invested. `valueOn` reads prices and quantities and
+     * never reads cash or flows, so a deposit cannot reach this number — which
+     * is the whole point of computing it, because the balance beside it does
+     * move when money is paid in and every attempt to tell the two apart by
+     * subtracting transfers back out depended on knowing every transfer and its
+     * exact date.
+     *
+     * Positions appearing or disappearing between the two days are left out:
+     * that difference is a trade, not a market move.
+     */
+    let marketPnl = 0;
+    if (previous) {
+      for (const [id, now] of valued) {
+        const before = previous.get(id);
+        if (before == null) continue;
+        marketPnl += now - before;
+      }
+    }
+    previous = valued;
+
+    out.push({ date: day, value: +value.toFixed(2), marketPnl: +marketPnl.toFixed(2) });
   }
 
   return out;
@@ -322,8 +354,24 @@ export function spliceHistory(recorded, rebuilt) {
   const atJoin = back.filter((s) => s.date <= joinDate).pop();
   const scale = atJoin && atJoin.value > 0 ? snaps[0].value / atJoin.value : 1;
 
-  return [
-    ...before.map((s) => ({ date: s.date, value: +(s.value * scale).toFixed(2), rebuilt: true })),
-    ...snaps,
-  ];
+  /**
+   * Every money field is scaled by the same factor, not just the balance.
+   *
+   * The scale exists so the reconstruction meets the recording without a step
+   * at the join. It is a change of units, and applying it to the balance alone
+   * left the other fields in the old ones — so a $2,000 deposit sat beside a
+   * balance that had been multiplied by, say, 1.2, and the percentage curve
+   * subtracting $2,000 from a $2,400 step removed four fifths of it and drew
+   * the rest as a day of extraordinary gains. Scaling all of them together
+   * keeps the day's arithmetic self-consistent whatever the factor is.
+   */
+  const scaled = (row) => {
+    const out = { date: row.date, value: +(row.value * scale).toFixed(2), rebuilt: true };
+    for (const field of ['externalCashFlow', 'marketPnl', 'deposit', 'withdrawal']) {
+      if (Number.isFinite(row[field])) out[field] = +(row[field] * scale).toFixed(2);
+    }
+    return out;
+  };
+
+  return [...before.map(scaled), ...snaps];
 }
