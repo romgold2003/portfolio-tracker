@@ -74,6 +74,7 @@ const SECTIONS = {
   /** Shares moved between two accounts of the same statement. */
   transfers: [/^transfers$/i, /^transferts$/i],
   statement: [/^statement$/i],
+  account: [/^account information$/i, /^informations sur le compte$/i],
 };
 
 function sectionOf(name) {
@@ -383,6 +384,43 @@ function readNavCash(group) {
 }
 
 /**
+ * Dividends declared but not yet paid.
+ *
+ * IBKR carries these as their own line in net asset value, so an account whose
+ * holdings have gone ex-dividend is worth slightly more than its cash and
+ * positions come to. Left out, the app's account value sits a little under the
+ * broker's — eighty-two cents on this book, which is small but is the whole
+ * remaining difference between the two figures, and "small" is not the same as
+ * "explained".
+ *
+ * It is money owed to the account rather than a holding, so it rides with cash,
+ * which is where the broker settles it days later anyway.
+ */
+/**
+ * The accounts a statement covers.
+ *
+ * A consolidated export carries several, and that is worth saying out loud: the
+ * figures here are the sum of them, while the broker's own app usually opens on
+ * one. Two correct numbers that describe different sets of accounts look exactly
+ * like one of them being wrong, and there is nothing inside the arithmetic that
+ * can tell you which you are looking at.
+ */
+function readAccounts(group) {
+  if (!group?.header) return [];
+  const row = group.rows.find((r) => /accounts included|comptes inclus/i.test(clean(r[0])));
+  if (!row) return [];
+  return String(row[1] ?? '').split(/[,;]/).map((x) => clean(x)).filter(Boolean);
+}
+
+function readNavAccruals(group) {
+  if (!group?.header) return null;
+  const iCurrent = columnIndex(group.header, 'Current Total', 'Total actuel');
+  if (iCurrent < 0) return null;
+  const row = group.rows.find((r) => /dividend accrual|cumul.*dividende/i.test(clean(r[0])));
+  return row ? num(row[iCurrent]) : null;
+}
+
+/**
  * The cash balance the period *opened* with.
  *
  * The same row carries both ends, and the forward walk needs the left-hand one:
@@ -522,6 +560,8 @@ export function parseIbkrStatement(text) {
   const { closed, commissions, firstBuy, netQty, ledger } = readTrades(groups.get('trades'));
   const navChange = readNavChange(groups.get('navChange'));
   const cash = readNavCash(groups.get('nav'));
+  const accruals = readNavAccruals(groups.get('nav'));
+  const accounts = readAccounts(groups.get('account'));
   const openingCash = readOpeningCash(groups.get('nav'));
   const { holdings: openingHoldings, marks: openingMarks } = readOpeningHoldings(groups.get('mtm'));
   const transfers = readTransfers(groups.get('transfers'));
@@ -560,6 +600,10 @@ export function parseIbkrStatement(text) {
     periodEnd: period.to,
     twr,
     cash: cash ?? null,
+    /** Dividends declared and not yet paid; part of the broker's NAV. */
+    accruals: accruals ?? 0,
+    /** Every account this export covers; more than one means it is consolidated. */
+    accounts,
     flows,
     income: {
       dividends,
@@ -642,7 +686,8 @@ export function statementToJournal(parsed, existing = {}) {
 
   return {
     positions: [...closed, ...open],
-    cash: parsed.cash ?? 0,
+    // Accruals ride with cash so the account value equals the broker's NAV.
+    cash: (parsed.cash ?? 0) + (parsed.accruals ?? 0),
     // The recorded account curve is left alone: it is a log of what this app
     // observed on the days it was open, and no statement can restate that.
     snapshots: existing.snapshots ?? [],
@@ -731,5 +776,15 @@ export function describeStatement(parsed) {
     parsed.twr != null
       ? `broker's own return ${parsed.twr.toFixed(2)}% through ${parsed.periodEnd ?? 'the period end'}`
       : 'no broker return in this file — the year will be measured here instead',
+    /**
+     * Named because a consolidated export is the one difference that makes two
+     * correct figures disagree. Every number here is the sum of these accounts;
+     * the broker's app usually opens on a single one, and the same day's move
+     * over a different set of holdings is a different percentage.
+     */
+    parsed.accounts?.length > 1
+      ? `covers ${parsed.accounts.length} accounts combined (${parsed.accounts.join(', ')}) — `
+        + "figures here are their total, which will not match a single account in the broker's app"
+      : null,
   ].filter(Boolean).join(' · ');
 }

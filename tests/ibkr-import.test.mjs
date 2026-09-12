@@ -307,3 +307,66 @@ describe('the ledger the daily history is walked from', () => {
     assert.deepEqual(held, l.holdings);
   });
 });
+
+describe('matching the broker to the cent', () => {
+  /**
+   * Two things that made the app disagree with the broker's own app, neither of
+   * them an arithmetic error.
+   *
+   * The account value sat eighty-two cents under IBKR's, every time, because
+   * dividends declared and not yet paid are their own line in net asset value
+   * and were not read. Small, and the whole of the remaining difference — which
+   * is the point: "small" and "explained" are not the same thing.
+   *
+   * And the file is a consolidated export of two accounts. Every figure in it is
+   * their sum, while the broker's app opens on one of them, so the same day's
+   * move over a different set of holdings is a different percentage. Nothing in
+   * the numbers can reveal that; only the header can.
+   */
+  const FILES = [
+    'C:/Users/User/OneDrive - Reichman University/Desktop/MULTI_20260101_20260911.csv',
+    'C:/Users/User/Downloads/MULTI_20260101_20260911.csv',
+  ];
+  let latest = null;
+  before(() => {
+    const found = FILES.find((f) => existsSync(f));
+    if (found) latest = parseIbkrStatement(readFileSync(found, 'utf8'));
+  });
+  const withLatest = (fn) => () => { if (latest) fn(); };
+
+  test('dividend accruals are read', withLatest(() => {
+    assert.ok(near(latest.accruals, 0.82), `accruals ${latest.accruals}`);
+  }));
+
+  test('and the account value then equals the broker\'s NAV exactly', withLatest(() => {
+    loadState(statementToJournal(latest));
+    const t = accountTotals(state.positions, state.cash);
+    // IBKR's own Ending Value for this statement.
+    assert.ok(near(t.account, 45743.381957646, 0.01), `account ${t.account}`);
+  }));
+
+  test('every open position matches the broker position for position', withLatest(() => {
+    loadState(statementToJournal(latest));
+    const open = state.positions.filter((p) => p.status === 'Open');
+    assert.equal(open.length, 14);
+    const value = open.reduce((s, p) => s + p.cur * p.qty, 0);
+    assert.ok(near(value, 36472.61), `positions value ${value}`);
+  }));
+
+  test('the accounts the file covers are read', withLatest(() => {
+    assert.deepEqual(latest.accounts, ['U16279720', 'U25235172']);
+  }));
+
+  test('and a consolidated file says so, because it is why figures differ', withLatest(() => {
+    assert.match(describeStatement(latest), /covers 2 accounts combined/);
+  }));
+
+  test('a single-account file says nothing about it', () => {
+    const one = {
+      positions: [], closed: [], flows: [], cash: 0, accounts: ['U16279720'],
+      income: { dividends: 0, commissions: 0, interest: 0, tax: 0 },
+      twr: null, periodEnd: '2026-09-11',
+    };
+    assert.doesNotMatch(describeStatement(one), /accounts combined/);
+  });
+});
