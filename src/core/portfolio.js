@@ -63,6 +63,26 @@ export function dailyDollar(p, today = todayStr()) {
     return p.dir === 'Long' ? move : -move;
   }
 
+  /**
+   * The price the day started at, taken from the feed rather than rebuilt.
+   *
+   * The quote carries the previous close outright. It used to be thrown away
+   * and reconstructed from the day's percentage instead — `cur / (1 + chg)` —
+   * which is only the same number while those two fields come from the same
+   * moment. They do not have to: the price is updated on the extended-hours
+   * path, on the regular refresh and by an import, and any of those landing
+   * between one another leaves a percentage describing a price that is no
+   * longer there. The reconstruction then quietly moves the whole day's
+   * baseline, and every figure standing on it moves with it.
+   *
+   * The percentage remains the fallback, because a position quoted before this
+   * field existed still has one.
+   */
+  if (Number.isFinite(p.prevClose) && p.prevClose > 0) {
+    const move = (p.cur - p.prevClose) * p.qty;
+    return p.dir === 'Long' ? move : -move;
+  }
+
   if (p.dailyChg == null || !Number.isFinite(p.dailyChg)) return null;
   const factor = 1 + p.dailyChg / 100;
   if (factor <= 0) return null;

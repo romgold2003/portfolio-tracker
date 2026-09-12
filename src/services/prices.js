@@ -75,7 +75,13 @@ async function fetchStockPrice(ticker, position) {
   const price = json.c && json.c > 0 ? json.c : null;
   if (position && price) {
     const prevClose = json.pc && json.pc > 0 ? json.pc : null;
-    if (prevClose) position.dailyChg = ((json.c - prevClose) / prevClose) * 100;
+    if (prevClose) {
+      position.dailyChg = ((json.c - prevClose) / prevClose) * 100;
+      // Kept as a price, not only as the percentage derived from it: the two
+      // are the same answer only while the price beside them is the one they
+      // were computed against.
+      position.prevClose = prevClose;
+    }
     seedPrevClose(ticker, prevClose);
     logPrice(ticker, price);
     position.weeklyChg = getWeekChg(ticker, price);

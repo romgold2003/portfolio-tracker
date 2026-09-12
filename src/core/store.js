@@ -261,6 +261,10 @@ function sanitizePosition(raw) {
   if (origQty != null) clean.origQty = origQty;
   const dailyChg = num(raw.dailyChg);
   if (dailyChg != null) clean.dailyChg = dailyChg;
+  // The close today's move is measured from. Survives a reload alongside the
+  // percentage, or the day's figures rebuild themselves from a stale ratio.
+  const prevClose = num(raw.prevClose);
+  if (prevClose != null && prevClose > 0) clean.prevClose = prevClose;
   const weeklyChg = num(raw.weeklyChg);
   if (weeklyChg != null) clean.weeklyChg = weeklyChg;
   const firstExit = date(raw.firstExit);

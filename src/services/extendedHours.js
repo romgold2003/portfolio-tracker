@@ -253,7 +253,13 @@ export function applyExtendedQuotes(positions, bySymbol, now = new Date()) {
 
     const base = dayBaseline(quote);
     const price = extended ? quote.price : (quote.regularClose > 0 ? quote.regularClose : p.cur);
-    if (base > 0 && price > 0) p.dailyChg = ((price - base) / base) * 100;
+    if (base > 0 && price > 0) {
+      p.dailyChg = ((price - base) / base) * 100;
+      // The baseline itself, so the day's move is measured against the close it
+      // was worked out from rather than one rebuilt from the percentage after
+      // the price has moved on.
+      p.prevClose = base;
+    }
   }
   return changed;
 }
