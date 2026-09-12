@@ -404,3 +404,148 @@ describe('the curve reports a gain, not a balance change', () => {
     assert.ok(s.returnPct > 0, `taking money out read as ${s.returnPct}%`);
   });
 });
+
+describe('the same window drawn as a percentage', () => {
+  /**
+   * The percentage curve is a chained daily return. The property that matters
+   * is that a deposit puts a step in the value line and no step at all in this
+   * one — which is the entire reason the two charts are worth having.
+   */
+  const build = async (rows, flows = []) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = flows;
+    setBackfill(rows.map(([date, totalAccountValue]) => ({ date, totalAccountValue })),
+      { authoritative: true });
+    return curveSeries('All');
+  };
+
+  test('starts at zero, because nothing has happened yet', async () => {
+    const s = await build([['2026-09-01', 10_000], ['2026-09-02', 10_500]]);
+    assert.equal(s.percent[0], 0);
+  });
+
+  test('a day with no flow is just the day', async () => {
+    const s = await build([['2026-09-01', 10_000], ['2026-09-02', 10_500]]);
+    assert.ok(Math.abs(s.percent[1] - 5) < 1e-6, `${s.percent[1]}%`);
+  });
+
+  test('the days compound rather than adding', async () => {
+    // +5% then +5% is 10.25%, not 10%.
+    const s = await build([
+      ['2026-09-01', 10_000], ['2026-09-02', 10_500], ['2026-09-03', 11_025],
+    ]);
+    assert.ok(Math.abs(s.percent[2] - 10.25) < 1e-6, `${s.percent[2]}%`);
+  });
+
+  test('a deposit puts no step in the line', async () => {
+    // Day 2 is a $10,000 deposit and nothing else: the account doubles and the
+    // return for the day is zero.
+    const s = await build(
+      [['2026-09-01', 10_000], ['2026-09-02', 20_000], ['2026-09-03', 21_000]],
+      [{ date: '2026-09-02', amount: 10_000 }],
+    );
+    assert.equal(s.percent[1], 0, 'the deposit was drawn as a gain');
+    assert.ok(Math.abs(s.percent[2] - 5) < 1e-6, `${s.percent[2]}%`);
+  });
+
+  test('and the value line still shows it, which is the difference', async () => {
+    const s = await build(
+      [['2026-09-01', 10_000], ['2026-09-02', 20_000], ['2026-09-03', 21_000]],
+      [{ date: '2026-09-02', amount: 10_000 }],
+    );
+    assert.equal(s.data[1], 20_000);
+  });
+
+  test('a withdrawal is not a loss either', async () => {
+    const s = await build(
+      [['2026-09-01', 10_000], ['2026-09-02', 6000]],
+      [{ date: '2026-09-02', amount: -4000 }],
+    );
+    assert.equal(s.percent[1], 0, 'taking money out was drawn as a fall');
+  });
+
+  test('a deposit on a day that also moved keeps only the move', async () => {
+    // $10,000 in and the market added 2% on top: 10,000 -> 20,200.
+    const s = await build(
+      [['2026-09-01', 10_000], ['2026-09-02', 20_200]],
+      [{ date: '2026-09-02', amount: 10_000 }],
+    );
+    assert.ok(Math.abs(s.percent[1] - 2) < 1e-6, `${s.percent[1]}%`);
+  });
+
+  test('the whole line is unchanged by funding the account further', async () => {
+    const days = [['2026-09-01', 10_000], ['2026-09-02', 10_500], ['2026-09-03', 11_025]];
+    const bare = await build(days);
+    const funded = await build(
+      [['2026-09-01', 10_000], ['2026-09-02', 35_500], ['2026-09-03', 37_275]],
+      [{ date: '2026-09-02', amount: 25_000 }],
+    );
+    assert.deepEqual(funded.percent, bare.percent);
+  });
+
+  test('the day an account is founded earns nothing on the way in', async () => {
+    // Opened from nothing: there is no base for that day and no return.
+    const s = await build(
+      [['2026-09-01', 0], ['2026-09-02', 20_000], ['2026-09-03', 21_000]],
+      [{ date: '2026-09-02', amount: 20_000 }],
+    );
+    assert.equal(s.percent[1], 0);
+    assert.ok(Math.abs(s.percent[2] - 5) < 1e-6, `${s.percent[2]}%`);
+  });
+
+  test('it is the same length and the same days as the value curve', async () => {
+    const s = await build([
+      ['2026-09-01', 10_000], ['2026-09-02', 10_500], ['2026-09-03', 11_025],
+    ]);
+    assert.equal(s.percent.length, s.data.length);
+    assert.equal(s.percent.length, s.labels.length);
+  });
+});
+
+describe('one bad day must not flatten the rest of the line', () => {
+  const build = async (rows, flows = []) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = flows;
+    setBackfill(rows.map(([date, totalAccountValue]) => ({ date, totalAccountValue })),
+      { authoritative: true });
+    return curveSeries('All');
+  };
+
+  test('an account founded onto a residue does not read as −100%', async () => {
+    /**
+     * Exactly what the demo book does: $287 sitting there, then a $42,000
+     * transfer that restates the balance rather than adding to it. The day came
+     * out at −100%, and multiplying the chain by zero flattened every day after
+     * it — the whole year read −100%.
+     */
+    const s = await build(
+      [['2026-01-04', 287.07], ['2026-01-05', 42_000], ['2026-01-06', 44_100]],
+      [{ date: '2026-01-05', amount: 42_000 }],
+    );
+    assert.equal(s.percent[1], 0, 'the founding day earned nothing');
+    assert.ok(Math.abs(s.percent[2] - 5) < 1e-6, `the day after should be +5%, got ${s.percent[2]}%`);
+  });
+
+  test('a real deposit into a real balance is still measured', async () => {
+    // $50,000 into a $5,000 account is a large deposit, not a founding: that
+    // day's return is perfectly well defined and must not be thrown away.
+    const s = await build(
+      [['2026-03-01', 5000], ['2026-03-02', 55_100]],
+      [{ date: '2026-03-02', amount: 50_000 }],
+    );
+    assert.ok(Math.abs(s.percent[1] - 2) < 1e-6, `${s.percent[1]}%`);
+  });
+
+  test('and the whole year survives it', async () => {
+    const s = await build(
+      [['2026-01-04', 287.07], ['2026-01-05', 42_000], ['2026-01-06', 44_100], ['2026-01-07', 46_305]],
+      [{ date: '2026-01-05', amount: 42_000 }],
+    );
+    assert.ok(Math.abs(s.percent[3] - 10.25) < 1e-6, `${s.percent[3]}%`);
+    assert.ok(Math.abs(s.returnPct - 10.25) < 1e-6, 'the reported figure tracks the line');
+  });
+});

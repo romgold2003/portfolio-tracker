@@ -690,7 +690,7 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
-  renderCurve(ui.timeframe);
+  renderCurve(ui.timeframe, ui.curveMode);
 
   // Kicked off after the draw, so the chart appears immediately and lengthens
   // when the price histories land rather than blocking on the network.

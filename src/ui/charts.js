@@ -76,13 +76,25 @@ function cashFlowMarks(marks) {
   };
 }
 
-/** Draws the account-value curve and returns the period return it implies. */
-export function renderCurve(timeframe) {
+/**
+ * Draws the account curve and returns the series behind it.
+ *
+ * `mode` picks which of the two curves the same window is drawn as: 'value' in
+ * currency, 'percent' as the chained daily return. They share the window, the
+ * days and the cash-flow markers — a deposit steps the value line up and leaves
+ * the percentage line flat, and seeing that is the point of having both.
+ */
+export function renderCurve(timeframe, mode = 'value') {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
   const series = curveSeries(timeframe);
-  const { labels, data } = series;
+  const percent = mode === 'percent';
+  const { labels } = series;
+  const data = percent ? series.percent : series.data;
   const c = chartColors();
+  canvas.setAttribute('aria-label', percent
+    ? `Account return over ${timeframe}, as a percentage`
+    : `Account value over ${timeframe}`);
 
   /**
    * The external flows inside this window, matched to the point they sit on.
@@ -111,11 +123,18 @@ export function renderCurve(timeframe) {
       labels,
       datasets: [{
         data,
-        borderColor: c.green,
+        /**
+         * The value curve is always green: it is a balance, and a balance is
+         * not good or bad. A return is, and a red line is how you read a losing
+         * window at a glance — so the percentage curve takes the sign of where
+         * it ends. The fill runs to the zero line either way, which is why that
+         * line is worth having under a percentage.
+         */
+        borderColor: percent && data[data.length - 1] < 0 ? c.red : c.green,
         borderWidth: 2,
         pointRadius: 0,
-        fill: true,
-        backgroundColor: c.green + '14',
+        fill: percent ? 'origin' : true,
+        backgroundColor: (percent && data[data.length - 1] < 0 ? c.red : c.green) + '14',
         tension: 0.4,
       }],
     },
@@ -128,7 +147,9 @@ export function renderCurve(timeframe) {
           mode: 'index',
           intersect: false,
           callbacks: {
-            label: (ctx) => ' $' + Math.round(ctx.raw).toLocaleString(),
+            label: (ctx) => (percent
+              ? ` ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`
+              : ' $' + Math.round(ctx.raw).toLocaleString()),
             /**
              * A deposit is named under the value rather than folded into it.
              * The account really did grow by that much and really did not earn
@@ -145,6 +166,9 @@ export function renderCurve(timeframe) {
                 flow.amount > 0 ? 'Deposit' : 'Withdrawal',
                 'Date: ' + when,
                 'Amount: ' + sign + Math.abs(flow.amount).toLocaleString(),
+                // Said outright on the percentage curve, because the line not
+                // moving here is the one thing a reader might mistake for a bug.
+                ...(percent ? ['Not counted as return'] : []),
               ];
             },
           },
@@ -153,7 +177,13 @@ export function renderCurve(timeframe) {
       scales: {
         x: { ticks: { color: c.txt, font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: c.grid } },
         y: {
-          ticks: { color: c.txt, font: { size: 10 }, callback: (v) => '$' + (v / 1000).toFixed(1) + 'k' },
+          ticks: {
+            color: c.txt,
+            font: { size: 10 },
+            callback: (v) => (percent
+              ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
+              : '$' + (v / 1000).toFixed(1) + 'k'),
+          },
           grid: { color: c.grid },
         },
       },

@@ -112,6 +112,12 @@
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
               <button class="eye-btn" id="hideAmounts" onclick="toggleAmounts()" title="Hide amounts" aria-label="Hide amounts" aria-pressed="false">👁</button>
               <div class="hero-value" id="acctValue">$0</div>
+              <!-- Which curve the chart draws. Sits by the account value because
+                   that is the figure it reads two ways. -->
+              <div class="tf-row" id="curveModeRow" role="group" aria-label="Chart units">
+                <div class="tf active" data-mode="value" role="button" tabindex="0" aria-pressed="true" title="Account value">$</div>
+                <div class="tf" data-mode="percent" role="button" tabindex="0" aria-pressed="false" title="Return over the same window">%</div>
+              </div>
               <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Cash</div>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -135,9 +141,9 @@
           <div class="tf-row" id="tfRow">
             <div class="tf" data-tf="1W">1W</div>
             <div class="tf" data-tf="1M">1M</div>
-            <div class="tf active" data-tf="3M">3M</div>
+            <div class="tf" data-tf="3M">3M</div>
             <div class="tf" data-tf="6M">6M</div>
-            <div class="tf" data-tf="YTD">YTD</div>
+            <div class="tf active" data-tf="YTD">YTD</div>
             <div class="tf" data-tf="1Y">1Y</div>
             <div class="tf" data-tf="All">All</div>
           </div>

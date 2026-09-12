@@ -166,6 +166,62 @@ export function accountHistory() {
 }
 
 /**
+ * The same window as a percentage, day by day, starting at zero.
+ *
+ * This is a time-weighted return, chained daily — the measure a broker reports
+ * and the only one that can be drawn as a line without a deposit putting a step
+ * in it:
+ *
+ *   r(d)     = ( value(d) − flow(d) − value(d−1) ) / value(d−1)
+ *   index(d) = ( PROD( 1 + r ) − 1 ) × 100
+ *
+ * The flow term is the whole point. On the day $10,000 lands the account jumps
+ * $10,000, and subtracting it before dividing leaves only what the market did
+ * that day — so the percentage line stays flat through a deposit while the
+ * value line steps up, which is exactly the difference between the two charts.
+ *
+ * Chaining rather than measuring against the first day also keeps the deposit
+ * out of every later day: once a day's return is a ratio, the size of the
+ * account it was earned on has already divided out.
+ *
+ * A day whose previous value is zero or less has no base to measure against and
+ * contributes no return. That is the day an account is founded: the money that
+ * opens it did not earn anything on the way in.
+ *
+ * Nor does the day it is founded *onto* a balance too small to matter. The demo
+ * book held $287 on 4 January and $42,000 the next day, the transfer having
+ * restated the balance rather than added to it — so the day divided $287 of
+ * arithmetic residue by itself, came out at −100%, and one multiplication by
+ * zero flattened every day of the year that followed. A chained line is only as
+ * robust as its worst day, and a balance this far below the money landing on it
+ * is not a base anyone meant to measure a return against.
+ */
+const FOUNDING_RATIO = 0.01;
+
+function percentCurve(values, dates, synthetic) {
+  const flows = new Map();
+  if (!synthetic) {
+    for (const f of externalFlows()) {
+      flows.set(f.date, (flows.get(f.date) ?? 0) + f.amount);
+    }
+  }
+
+  let growth = 1;
+  return values.map((value, i) => {
+    if (i === 0) return 0;
+    const prev = values[i - 1];
+    const flow = flows.get(dates[i]) ?? 0;
+    // The account existed yesterday, and existed as more than a rounding
+    // remnant of whatever arrived today.
+    const founding = Math.abs(flow) > 0 && prev < Math.abs(flow) * FOUNDING_RATIO;
+    if (prev > 0 && !founding) {
+      growth *= 1 + (value - flow - prev) / prev;
+    }
+    return +((growth - 1) * 100).toFixed(4);
+  });
+}
+
+/**
  * The series for the account curve.
  *
  * A fresh install has no history, so with fewer than two real snapshots we draw
@@ -259,10 +315,12 @@ export function curveSeries(timeframe) {
     null,
   );
   const short = !synthetic && wanted != null && firstRecorded != null && firstRecorded > wanted;
+  const percent = percentCurve(data, dates, synthetic);
 
   return {
     labels,
     data,
+    percent,
     dates,
     synthetic,
     from,
@@ -288,6 +346,15 @@ export function curveSeries(timeframe) {
      */
     gain: last - first - paidIn,
     paidIn,
-    returnPct: first ? ((last - first - paidIn) / first) * 100 : 0,
+    /**
+     * The return the drawn percentage line ends on, so the figure and the chart
+     * can never disagree.
+     *
+     * Chained daily rather than measured end to end. Both are deposit-neutral,
+     * but only the chained one survives a window whose first day is zero — an
+     * account founded inside the window — where dividing by the opening balance
+     * has nothing to divide by.
+     */
+    returnPct: percent[percent.length - 1] ?? 0,
   };
 }
