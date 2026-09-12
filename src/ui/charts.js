@@ -6,7 +6,7 @@
  * theme toggle re-renders instead of just swapping a class.
  */
 import { MONTHS_SHORT } from '../config/constants.js';
-import { curveSeries, portfolioHistory } from '../core/snapshots.js';
+import { curveSeries, externalFlows } from '../core/snapshots.js';
 
 /** Live chart instances, so each redraw can destroy the previous one. */
 const charts = {};
@@ -40,39 +40,41 @@ function chartColors() {
  * Small and white: enough to notice, not enough to compete with the line. A
  * withdrawal is the same triangle the other way up.
  */
-const cashFlowMarks = {
-  id: 'cashFlowMarks',
-  afterDatasetsDraw(chart) {
-    const marks = chart.$cashFlows;
-    if (!marks?.length) return;
-    const { ctx } = chart;
-    const meta = chart.getDatasetMeta(0);
-    ctx.save();
-    ctx.fillStyle = '#ffffff';
-    ctx.globalAlpha = 0.9;
-    for (const mark of marks) {
-      const point = meta.data[mark.index];
-      if (!point) continue;
-      const up = mark.amount > 0;
-      const size = 3.5;
-      // Held clear of the curve so it never sits on the value it belongs to.
-      const y = point.y + (up ? -10 : 10);
-      ctx.beginPath();
-      if (up) {
-        ctx.moveTo(point.x, y - size);
-        ctx.lineTo(point.x + size, y + size);
-        ctx.lineTo(point.x - size, y + size);
-      } else {
-        ctx.moveTo(point.x, y + size);
-        ctx.lineTo(point.x + size, y - size);
-        ctx.lineTo(point.x - size, y - size);
+function cashFlowMarks(marks) {
+  return {
+    id: 'cashFlowMarks',
+    afterDatasetsDraw(chart) {
+      if (!marks.length) return;
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 0.92;
+      for (const mark of marks) {
+        const point = meta.data[mark.index];
+        if (!point) continue;
+        const deposit = mark.amount > 0;
+        const size = 4;
+        // Held clear of the curve so it never sits on the value it belongs to.
+        const y = point.y + (deposit ? -11 : 11);
+        ctx.beginPath();
+        if (deposit) {
+          // Point-down, so the triangle aims at the day it belongs to.
+          ctx.moveTo(point.x, y + size);
+          ctx.lineTo(point.x + size, y - size);
+          ctx.lineTo(point.x - size, y - size);
+        } else {
+          ctx.moveTo(point.x, y - size);
+          ctx.lineTo(point.x + size, y + size);
+          ctx.lineTo(point.x - size, y + size);
+        }
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  },
-};
+      ctx.restore();
+    },
+  };
+}
 
 /** Draws the account-value curve and returns the period return it implies. */
 export function renderCurve(timeframe) {
@@ -92,17 +94,19 @@ export function renderCurve(timeframe) {
    */
   const shown = new Map((series.dates ?? []).map((d, i) => [d, i]));
   const flows = [];
-  for (const row of portfolioHistory()) {
-    if (!row?.externalCashFlow) continue;
-    const index = shown.get(row.date);
+  for (const flow of externalFlows()) {
+    const index = shown.get(flow.date);
     if (index == null) continue;
-    flows.push({ index, date: row.date, amount: row.externalCashFlow });
+    flows.push({ index, date: flow.date, amount: flow.amount });
   }
 
   charts.curve?.destroy();
   charts.curve = new Chart(canvas, {
     type: 'line',
-    plugins: [cashFlowMarks],
+    // Built around this window's flows rather than handed them afterwards: a
+    // plugin assigned after the constructor misses the first paint entirely,
+    // and only reappeared because the animation redrew a frame later.
+    plugins: [cashFlowMarks(flows)],
     data: {
       labels,
       datasets: [{
@@ -155,7 +159,6 @@ export function renderCurve(timeframe) {
       },
     },
   });
-  charts.curve.$cashFlows = flows;
   return series;
 }
 

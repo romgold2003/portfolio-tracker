@@ -285,3 +285,59 @@ describe('the shape of the dataset', () => {
     assert.deepEqual(buildPortfolioHistory({ opening, priceOn: null, to: '2026-01-02' }), []);
   });
 });
+
+describe('the flows the chart marks', () => {
+  test('come from the daily history when it has them', async () => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, externalFlows } = await import('../src/core/snapshots.js');
+    state.cashFlows = [];
+    setBackfill([
+      { date: '2026-01-01', totalAccountValue: 100, externalCashFlow: 0 },
+      { date: '2026-01-20', totalAccountValue: 2100, externalCashFlow: 2000 },
+    ], { authoritative: true });
+    assert.deepEqual(externalFlows(), [{ date: '2026-01-20', amount: 2000 }]);
+  });
+
+  test('fall back to the recorded cash flows when it does not', async () => {
+    // The bug this exists for: a book imported before the ledger existed has no
+    // daily history with flow fields, so a real account with five recorded
+    // transfers showed no markers — which reads as "I never deposited" rather
+    // than "this build cannot see them".
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, externalFlows } = await import('../src/core/snapshots.js');
+    setBackfill([{ date: '2026-01-01', totalAccountValue: 100 }]);
+    state.cashFlows = [
+      { date: '2026-01-20', amount: 2000 },
+      { date: '2026-06-05', amount: 2000 },
+    ];
+    assert.deepEqual(externalFlows(), [
+      { date: '2026-01-20', amount: 2000 },
+      { date: '2026-06-05', amount: 2000 },
+    ]);
+  });
+
+  test('two transfers on one day net into one marker', async () => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, externalFlows } = await import('../src/core/snapshots.js');
+    setBackfill([]);
+    state.cashFlows = [
+      { date: '2026-05-18', amount: 3500 },
+      { date: '2026-05-18', amount: -3500 },
+      { date: '2026-06-05', amount: 2000 },
+    ];
+    // An internal move between two of your own accounts cancels and is not a
+    // deposit; only the real one is marked.
+    assert.deepEqual(externalFlows(), [{ date: '2026-06-05', amount: 2000 }]);
+  });
+
+  test('they come back in date order', async () => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, externalFlows } = await import('../src/core/snapshots.js');
+    setBackfill([]);
+    state.cashFlows = [
+      { date: '2026-06-05', amount: 2000 },
+      { date: '2026-01-20', amount: 2000 },
+    ];
+    assert.deepEqual(externalFlows().map((f) => f.date), ['2026-01-20', '2026-06-05']);
+  });
+});

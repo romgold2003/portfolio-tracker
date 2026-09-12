@@ -111,6 +111,36 @@ export function backfillRows() { return backfill; }
 export function portfolioHistory() { return history; }
 
 /**
+ * Money paid in or taken out, by day, for marking on the chart.
+ *
+ * Two sources, and the second is the one that matters. The daily history knows
+ * its own flows — but only the forward walk produces those fields, and that
+ * needs a statement imported since the ledger existed. A book imported before
+ * then still *has* its deposits, in `cashFlows`, and they are just as real.
+ *
+ * Reading only the history meant a real account with five recorded transfers
+ * showed no markers at all, which reads as "I never deposited" rather than
+ * "this build cannot see them".
+ */
+export function externalFlows() {
+  const fromHistory = history
+    .filter((r) => r?.date && r.externalCashFlow)
+    .map((r) => ({ date: r.date, amount: r.externalCashFlow }));
+  if (fromHistory.length) return fromHistory;
+
+  // Netted per day, so two transfers on one date are one marker.
+  const byDay = new Map();
+  for (const flow of state.cashFlows ?? []) {
+    if (!flow?.date || !Number.isFinite(flow.amount)) continue;
+    byDay.set(flow.date, (byDay.get(flow.date) ?? 0) + flow.amount);
+  }
+  return [...byDay.entries()]
+    .filter(([, amount]) => amount)
+    .map(([date, amount]) => ({ date, amount }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
  * Every account value known, recorded or reconstructed, oldest first.
  *
  * This is what every window is cut from. It is the whole reason "YTD" can mean
