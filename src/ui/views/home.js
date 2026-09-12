@@ -323,6 +323,32 @@ function renderCurveNote(series) {
    * thing to do and the wrong thing to do silently: a figure covering half an
    * account must not be read as covering all of it.
    */
+  /**
+   * A book with no broker ledger cannot draw this line and should say so.
+   *
+   * Without the statement's dated events, past days are reconstructed from
+   * today's positions — and the positions record a realised trade as money
+   * rather than shares, so a partly sold holding has no share count and a
+   * holding bought into twice leaves no trace of the second purchase. The
+   * reconstruction is out by one and a half thousand dollars on the first of
+   * January and swings several per cent a day on noise that never happened.
+   *
+   * Compounding that noise is what makes the line diverge: fake volatility
+   * drags a genuine +30% year to below zero. Measured from the same account
+   * with the ledger present it reads 29.97% against the broker's own 30.83%.
+   *
+   * So the figure is not presented as though it were sound. The fix is one
+   * import away and is worth naming exactly.
+   */
+  if (!state.ledger?.events?.length) {
+    note.innerHTML = '<span style="color:var(--amber)">This line is reconstructed from your '
+      + 'current positions, which cannot show what you held on a past day — so it drifts, '
+      + 'and the further back it goes the less it means. Import your broker statement on the '
+      + 'Settings page to rebuild it from the dated transactions instead.</span>'
+      + escapeHtml(missing);
+    return;
+  }
+
   const share = series.pricedShare ?? 1;
   if (share < 0.95) {
     note.innerHTML = escapeHtml(base)
