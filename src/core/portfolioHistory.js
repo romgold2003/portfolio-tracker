@@ -97,7 +97,7 @@ export function buildPortfolioHistory({
    * carry an adjustment from an earlier year, and applying it here would put
    * last year's tax on this year's first day.
    */
-  /** A price and whether it was a real close, with the dated-mark fallback. */
+  /** A price and whether it came from the market, with the dated-mark fallback. */
   const priceFor = (ticker, day) => {
     const quoted = priceOn(ticker, day);
     if (quoted > 0) return { value: quoted, fresh: true };
@@ -107,6 +107,8 @@ export function buildPortfolioHistory({
   /** Yesterday, for repricing the shares that were held through the night. */
   let prevDay = null;
   let prevHoldings = new Map();
+  /** The prices yesterday actually used, so today can be compared against them. */
+  let prevPrices = new Map();
 
   for (const day of eachDay(opening.date, to)) {
     // Captured before today's trades, so it is genuinely what was held
@@ -143,10 +145,12 @@ export function buildPortfolioHistory({
 
     let positionsValue = 0;
     let stale = 0;
+    const todayPrices = new Map();
     for (const [ticker, qty] of holdings) {
       if (Math.abs(qty) < 1e-9) continue;
       const price = priceFor(ticker, day);
       if (!(price.value > 0)) continue;
+      todayPrices.set(ticker, price);
       const value = qty * price.value;
       positionsValue += value;
       if (!price.fresh) stale += Math.abs(value);
@@ -155,44 +159,27 @@ export function buildPortfolioHistory({
     /**
      * What the market did to money already invested, and nothing else.
      *
-     * Yesterday's shares, repriced. No cash term, no trade term, no flow term —
-     * a deposit cannot appear in it, because a deposit does not change a price
-     * or a quantity held yesterday.
+     * Yesterday's shares at today's prices against yesterday's. No cash term,
+     * no trade term, no flow term — a deposit does not change a price or a
+     * quantity held overnight, so it cannot appear here.
      *
-     * This is what the percentage curve is built from, and it exists because
-     * every attempt to work performance out from the balance instead had to
-     * subtract deposits back out of it. `totalAccountValue` moves for two
-     * different reasons and the subtraction has to be perfect to tell them
-     * apart — one deposit missing its date, or a balance scaled to meet the
-     * recording, and the transfer is drawn as a day of spectacular gains. This
-     * number never had the deposit in it to begin with.
+     * Read from the prices each day already worked out, rather than looking
+     * them up a second time.
+     *
+     * Only pairs of real closes count. A holding the price service cannot quote
+     * is carried at the marks the statement supplies, and those are trade
+     * prices — so the mark changes on the day it was traded, and differencing
+     * it against the day before turns the gap between two fills into a price
+     * move applied to the whole holding. That is not a market move and is not
+     * counted as one.
      */
     let marketPnl = 0;
     if (prevDay) {
       for (const [ticker, qty] of prevHoldings) {
         if (Math.abs(qty) < 1e-9) continue;
-        const now = priceFor(ticker, day);
-        const before = priceFor(ticker, prevDay);
-        if (!(now.value > 0) || !(before.value > 0)) continue;
-        /**
-         * Only between two real closes.
-         *
-         * A ticker the price service cannot quote — an option, a delisted stub
-         * — falls back to the marks the statement carries, and those are trade
-         * prices. The mark therefore changes on the day a trade happened, and
-         * differencing it against the day before turns the gap between two
-         * fills into a price move, applied to the whole holding. That is what
-         * put a thirty-point spike into January and took it out again in
-         * February: not a market move at all, but the arithmetic of a mark
-         * stepping on a trade date.
-         *
-         * A holding nobody can price contributes nothing to the day's measured
-         * performance. That understates by whatever it really did, which is
-         * honest — an unknown is not a zero, but it is far better than a
-         * fabricated swing, and `stalePositions` already says how much of the
-         * book is in this state.
-         */
-        if (!now.fresh || !before.fresh) continue;
+        const now = todayPrices.get(ticker);
+        const before = prevPrices.get(ticker);
+        if (!now?.fresh || !before?.fresh) continue;
         marketPnl += qty * (now.value - before.value);
       }
     }
@@ -214,6 +201,7 @@ export function buildPortfolioHistory({
       stalePositions: round(stale),
     });
     prevDay = day;
+    prevPrices = todayPrices;
   }
 
   return out;

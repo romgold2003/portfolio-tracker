@@ -311,8 +311,27 @@ function renderCurveNote(series) {
   const excluded = removed > 0
     ? ` ${$u(removed)} of deposits and withdrawals changed your balance and not this line.`
     : '';
-  note.textContent = 'Return since 1 January, compounded daily from what your holdings '
-    + `earned — never from your balance, so money paid in cannot appear in it.${excluded}${missing}`;
+  const base = 'Return since 1 January, compounded daily from what your holdings '
+    + `earned — never from your balance, so money paid in cannot appear in it.${excluded}`;
+
+  /**
+   * How much of the account this line actually covers.
+   *
+   * A holding the price service cannot quote is left out of both halves of the
+   * return, because the only prices available for it are trade marks and
+   * differencing those invents moves that never happened. That is the right
+   * thing to do and the wrong thing to do silently: a figure covering half an
+   * account must not be read as covering all of it.
+   */
+  const share = series.pricedShare ?? 1;
+  if (share < 0.95) {
+    note.innerHTML = escapeHtml(base)
+      + ` <span style="color:var(--amber)">Covers ${Math.round(share * 100)}% of your `
+      + 'account — the rest has no daily price to measure.</span>'
+      + escapeHtml(missing);
+    return;
+  }
+  note.textContent = base + missing;
 }
 
 /**

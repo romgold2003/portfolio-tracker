@@ -1084,3 +1084,91 @@ describe('a holding nobody can price', () => {
     assert.equal(h[3].marketPnl, 0, 'and the day after is genuinely flat');
   });
 });
+
+describe('a mark is not a market move, and the line says what it covers', () => {
+  /**
+   * The reported complaint, as a fixture.
+   *
+   * A book whose priced holding returns exactly 30% for the year, five deposits
+   * paid in and invested, and one holding the price service cannot quote whose
+   * marks — trade prices — swing 10, 45, 8, 30. Measured from the balance, the
+   * mark steps moved the account by thousands on days the market had done no
+   * such thing: a 24-point jump in a single day and the year nearly ten points
+   * high. Measured from what the holdings earned, they cannot enter at all.
+   */
+  const fixture = () => {
+    const days = [];
+    const d0 = Date.UTC(2026, 0, 1);
+    for (let i = 0; i < 251; i++) days.push(new Date(d0 + i * 86_400_000).toISOString().slice(0, 10));
+    const g = 1.3 ** (1 / 250);
+    const stock = {};
+    days.forEach((d, i) => { stock[d] = +(100 * g ** i).toFixed(6); });
+
+    const deposits = [['2026-01-20', 2000], ['2026-02-06', 1997], ['2026-03-23', 1500],
+      ['2026-03-31', 1000], ['2026-06-05', 2000]];
+    const events = [];
+    for (const [date, cash] of deposits) {
+      events.push({ date, kind: 'flow', cash });
+      events.push({ date, kind: 'trade', ticker: 'AAA', qty: cash / stock[date], price: stock[date], cash: -cash });
+    }
+    return {
+      deposits,
+      events,
+      priceOn: (ticker, day) => (ticker === 'AAA' ? (stock[day] ?? null) : null),
+      lastKnown: {
+        OPT: [{ date: '2026-01-01', price: 10 }, { date: '2026-01-25', price: 45 },
+          { date: '2026-02-02', price: 8 }, { date: '2026-06-01', price: 30 }],
+      },
+    };
+  };
+
+  const draw = async (holdings) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    const { deposits, events, priceOn, lastKnown } = fixture();
+    const rows = buildPortfolioHistory({
+      opening: { date: '2026-01-01', cash: 0, holdings }, events, priceOn, lastKnown, to: '2026-09-08',
+    });
+    state.positions = [];
+    state.snapshots = [];
+    state.cashFlows = deposits.map(([date, amount]) => ({ date, amount }));
+    setBackfill(rows, { authoritative: true });
+    return { series: curveSeries('All'), deposits };
+  };
+
+  test('the year is right with the unquotable holding in the book', async () => {
+    const { series } = await draw({ AAA: 263.6595, OPT: 200 });
+    assert.ok(Math.abs(series.percent.at(-1) - 30) < 0.01,
+      `should be 30%, got ${series.percent.at(-1)}%`);
+  });
+
+  test('and no day jumps when its mark steps', async () => {
+    const { series } = await draw({ AAA: 263.6595, OPT: 200 });
+    for (const date of ['2026-01-25', '2026-02-02', '2026-06-01']) {
+      const i = series.dates.indexOf(date);
+      const step = Math.abs(series.percent[i] - series.percent[i - 1]);
+      assert.ok(step < 1, `${date} stepped ${step.toFixed(2)} points on a mark change`);
+    }
+  });
+
+  test('nor when a deposit lands', async () => {
+    const { series, deposits } = await draw({ AAA: 263.6595, OPT: 200 });
+    for (const [date] of deposits) {
+      const i = series.dates.indexOf(date);
+      const step = Math.abs(series.percent[i] - series.percent[i - 1]);
+      assert.ok(step < 1, `${date} stepped ${step.toFixed(2)} points on a deposit`);
+    }
+  });
+
+  test('and it says it is not covering the whole account', async () => {
+    const { series } = await draw({ AAA: 263.6595, OPT: 200 });
+    assert.ok(series.pricedShare < 0.95,
+      `should admit to partial cover, reported ${series.pricedShare}`);
+  });
+
+  test('while a fully priced book reports full cover', async () => {
+    const { series } = await draw({ AAA: 263.6595 });
+    assert.ok(Math.abs(series.percent.at(-1) - 30) < 0.01);
+    assert.ok(series.pricedShare > 0.99, `${series.pricedShare}`);
+  });
+});
