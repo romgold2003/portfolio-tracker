@@ -511,20 +511,28 @@ export function setTimeframe(tf) {
 }
 
 /**
- * Switch the home curve between currency and percentage.
+ * Switch the home chart between the account value and the benchmark.
  *
- * Same window, same days, same deposit markers — only the axis changes. The
- * percentage line is a chained daily return, so a deposit that steps the value
- * curve up leaves the percentage curve flat, which is the whole reason for
- * having both.
+ * The benchmark has one window and only one — the year so far — so the
+ * timeframe row is swapped for a single "All" pill rather than left showing
+ * buttons that would do nothing. The selected timeframe is remembered
+ * underneath, so switching back returns to the window that was being looked at.
  */
 export function setCurveMode(mode) {
-  ui.curveMode = mode === 'percent' ? 'percent' : 'value';
+  ui.curveMode = mode === 'benchmark' ? 'benchmark' : 'value';
+  const benchmark = ui.curveMode === 'benchmark';
+
   document.querySelectorAll('#curveModeRow .tf').forEach((x) => {
     const on = x.dataset.mode === ui.curveMode;
     x.classList.toggle('active', on);
     x.setAttribute('aria-pressed', String(on));
   });
+
+  const timeframes = el('tfRow');
+  const single = el('benchTfRow');
+  if (timeframes) timeframes.style.display = benchmark ? 'none' : '';
+  if (single) single.style.display = benchmark ? 'flex' : 'none';
+
   show('home');
 }
 

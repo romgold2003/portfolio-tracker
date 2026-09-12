@@ -7,6 +7,7 @@
  */
 import { MONTHS_SHORT } from '../config/constants.js';
 import { curveSeries, externalFlows } from '../core/snapshots.js';
+import { benchmarkLines, leadOver } from '../core/benchmarkCurve.js';
 
 /** Live chart instances, so each redraw can destroy the previous one. */
 const charts = {};
@@ -79,21 +80,34 @@ function cashFlowMarks(marks) {
 /**
  * Draws the account curve and returns the series behind it.
  *
- * `mode` picks which of the two curves the same window is drawn as: 'value' in
- * currency, 'percent' as the chained daily return. They share the window, the
- * days and the cash-flow markers — a deposit steps the value line up and leaves
- * the percentage line flat, and seeing that is the point of having both.
+ * `mode` picks what the chart is. 'value' is the account in currency over the
+ * selected timeframe. 'benchmark' is the year so far as percentages — the
+ * account against the indexes, every line rebased to zero on 1 January, which
+ * is the only way three series of different sizes can be read side by side.
+ *
+ * `indexes` carries the fetched index histories. They arrive from the network,
+ * so the chart is drawn without them first and redrawn when they land rather
+ * than waiting: the account's own line is the one that matters and it is
+ * already in hand.
  */
-export function renderCurve(timeframe, mode = 'value') {
+export function renderCurve(timeframe, mode = 'value', indexes = []) {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
-  const series = curveSeries(timeframe);
-  const percent = mode === 'percent';
+  const benchmark = mode === 'benchmark';
+  // The benchmark chart has one window: the year so far. It is labelled "All"
+  // because that is all of it — the account's whole life this year.
+  const series = curveSeries(benchmark ? 'YTD' : timeframe);
+  const percent = benchmark;
   const { labels } = series;
   const data = percent ? series.percent : series.data;
   const c = chartColors();
-  canvas.setAttribute('aria-label', percent
-    ? `Account return over ${timeframe}, as a percentage`
+
+  const { lines, missing } = benchmark
+    ? benchmarkLines({ dates: series.dates, percent: series.percent, indexes })
+    : { lines: [], missing: [] };
+
+  canvas.setAttribute('aria-label', benchmark
+    ? `Your return this year against ${lines.slice(1).map((l) => l.name).join(' and ') || 'the market'}`
     : `Account value over ${timeframe}`);
 
   /**
@@ -121,34 +135,63 @@ export function renderCurve(timeframe, mode = 'value') {
     plugins: [cashFlowMarks(flows)],
     data: {
       labels,
-      datasets: [{
-        data,
+      datasets: benchmark
         /**
-         * The value curve is always green: it is a balance, and a balance is
-         * not good or bad. A return is, and a red line is how you read a losing
-         * window at a glance — so the percentage curve takes the sign of where
-         * it ends. The fill runs to the zero line either way, which is why that
-         * line is worth having under a percentage.
+         * Three lines, no fills. A filled area under one line hides the lines
+         * behind it, and on a comparison chart the crossings are the whole
+         * point — the day the account pulled ahead of the index is the thing
+         * being looked for.
+         *
+         * The account is drawn thicker and last so it sits on top: it is the
+         * subject, and the indexes are the backdrop it is read against.
          */
-        borderColor: percent && data[data.length - 1] < 0 ? c.red : c.green,
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: percent ? 'origin' : true,
-        backgroundColor: (percent && data[data.length - 1] < 0 ? c.red : c.green) + '14',
-        tension: 0.4,
-      }],
+        ? lines.map((line, i) => ({
+          label: line.name,
+          data: line.data,
+          borderColor: line.key === 'account' ? c.green : cssVar(line.colour, c.txt),
+          borderWidth: line.key === 'account' ? 2.5 : 1.5,
+          borderDash: line.key === 'account' ? [] : [4, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3,
+          order: lines.length - i,
+        }))
+        : [{
+          data,
+          // A balance is not good or bad, so the value curve is always green.
+          borderColor: c.green,
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          backgroundColor: c.green + '14',
+          tension: 0.4,
+        }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        /**
+         * A legend only where there is more than one line to tell apart. On the
+         * value chart it would be a label for the obvious.
+         */
+        legend: benchmark ? {
+          display: true,
+          position: 'bottom',
+          labels: {
+            color: c.txt,
+            boxWidth: 10,
+            boxHeight: 2,
+            font: { size: 10 },
+            usePointStyle: false,
+          },
+        } : { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
           callbacks: {
             label: (ctx) => (percent
-              ? ` ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`
+              ? ` ${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`
               : ' $' + Math.round(ctx.raw).toLocaleString()),
             /**
              * A deposit is named under the value rather than folded into it.
@@ -166,8 +209,9 @@ export function renderCurve(timeframe, mode = 'value') {
                 flow.amount > 0 ? 'Deposit' : 'Withdrawal',
                 'Date: ' + when,
                 'Amount: ' + sign + Math.abs(flow.amount).toLocaleString(),
-                // Said outright on the percentage curve, because the line not
-                // moving here is the one thing a reader might mistake for a bug.
+                // Said outright on the benchmark chart, because the line not
+                // moving here is the one thing a reader might mistake for a
+                // bug — and it is exactly what makes the comparison fair.
                 ...(percent ? ['Not counted as return'] : []),
               ];
             },
@@ -189,7 +233,9 @@ export function renderCurve(timeframe, mode = 'value') {
       },
     },
   });
-  return series;
+
+  // The comparison the chart just drew, for whoever writes it out in words.
+  return benchmark ? { ...series, lines, missing, lead: leadOver(lines) } : series;
 }
 
 /**

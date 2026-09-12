@@ -114,9 +114,9 @@
               <div class="hero-value" id="acctValue">$0</div>
               <!-- Which curve the chart draws. Sits by the account value because
                    that is the figure it reads two ways. -->
-              <div class="tf-row" id="curveModeRow" role="group" aria-label="Chart units">
+              <div class="tf-row" id="curveModeRow" role="group" aria-label="Chart">
                 <div class="tf active" data-mode="value" role="button" tabindex="0" aria-pressed="true" title="Account value">$</div>
-                <div class="tf" data-mode="percent" role="button" tabindex="0" aria-pressed="false" title="Return over the same window">%</div>
+                <div class="tf" data-mode="benchmark" role="button" tabindex="0" aria-pressed="false" title="Benchmark: your return against the S&amp;P 500 and Nasdaq">&alpha;</div>
               </div>
               <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Cash</div>
@@ -146,6 +146,11 @@
             <div class="tf active" data-tf="YTD">YTD</div>
             <div class="tf" data-tf="1Y">1Y</div>
             <div class="tf" data-tf="All">All</div>
+          </div>
+          <!-- The benchmark chart has one window and only one: the year so far,
+               accumulating. Shown in place of the timeframe row above. -->
+          <div class="tf-row" id="benchTfRow" style="display:none">
+            <div class="tf active">All</div>
           </div>
         </div>
         <div class="curve-wrap"><canvas id="curve" role="img" aria-label="Account value over time">Account value curve.</canvas></div>

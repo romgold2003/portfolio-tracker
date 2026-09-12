@@ -15,8 +15,9 @@ export const ui = {
    */
   timeframe: 'YTD',
   /**
-   * Which curve the home chart draws: 'value' in currency, 'percent' as the
-   * return over the same window.
+   * Which chart the home page draws: 'value' is the account in currency over
+   * the selected timeframe, 'benchmark' is the year so far as percentages with
+   * the indexes beside it.
    */
   curveMode: 'value',
   /** Direction selected in the new-trade form. */

@@ -10,7 +10,7 @@ import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
-  benchmarkSpot, benchmarkYearToDate,
+  benchmarkSpot, benchmarkYearToDate, benchmarkHistories,
 } from '../../services/benchmark.js';
 import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
@@ -272,6 +272,39 @@ let backfillFor = null;
  * service the rest of the app uses, and a value worked out for every day. It
  * runs once: a past close never changes.
  */
+/**
+ * The index histories the benchmark chart draws against.
+ *
+ * Fetched once and held, then the page is redrawn — the same shape as the
+ * price backfill above and for the same reason: the account's own line is
+ * already in hand, so drawing it immediately and adding the indexes a moment
+ * later beats an empty chart waiting on the network.
+ *
+ * Only fetched when the benchmark is actually being looked at. Someone who
+ * never opens it never spends the requests.
+ */
+let indexHistories = [];
+let indexPending = false;
+let indexLoaded = false;
+
+async function loadIndexHistories() {
+  if (indexPending || indexLoaded || ui.curveMode !== 'benchmark') return;
+  indexPending = true;
+  try {
+    const fetched = await benchmarkHistories();
+    // Held even when some came back empty: the chart names what is missing,
+    // and retrying on every render would hammer a source that is simply down.
+    indexHistories = fetched;
+    indexLoaded = true;
+    renderHome();
+  } catch {
+    // Left empty; the chart draws the account alone and says the comparison
+    // is unavailable.
+  } finally {
+    indexPending = false;
+  }
+}
+
 async function loadBackfill() {
   if (backfillPending) return;
 
@@ -690,11 +723,12 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
-  renderCurve(ui.timeframe, ui.curveMode);
+  renderCurve(ui.timeframe, ui.curveMode, indexHistories);
 
   // Kicked off after the draw, so the chart appears immediately and lengthens
   // when the price histories land rather than blocking on the network.
   loadBackfill();
+  loadIndexHistories();
 
   const period = accountPerformance({
     positions: state.positions,
