@@ -63,6 +63,16 @@ const SECTIONS = {
   dividends: [/^dividends$/i, /^dividendes$/i],
   interest: [/^interest$/i, /^intérêt$/i],
   tax: [/^withholding tax$/i, /^retenues d'impôts$/i],
+  /**
+   * The mark-to-market summary, which is the only place the statement states
+   * what was held when the period *opened*. Everything else describes the
+   * close, and a period's opening holdings cannot be inferred from its closing
+   * ones without assuming every movement in between is recorded.
+   */
+  mtm: [/^mark-to-market performance summary$/i,
+    /^synthèse de la performance évaluée au prix du marché$/i],
+  /** Shares moved between two accounts of the same statement. */
+  transfers: [/^transfers$/i, /^transferts$/i],
   statement: [/^statement$/i],
 };
 
@@ -111,6 +121,99 @@ function groupSections(text) {
 /** Rows that are subtotals rather than records. */
 function isTotalRow(fields) {
   return fields.some((f) => /^total/i.test(clean(f)));
+}
+
+/**
+ * What was held when the period opened, and at what price.
+ *
+ * The mark-to-market section carries a prior quantity and a prior price for
+ * every instrument, which is exactly the opening state — stated by the broker
+ * rather than derived by undoing the year. That difference matters: a movement
+ * missing from the file would silently become a holding that was "always
+ * there", and the error would be spread across every earlier day.
+ *
+ * Two kinds of row are skipped. The Forex line is the cash balance wearing a
+ * symbol, and folding it in counts the cash twice — it put the opening balance
+ * out by the whole cash figure. The Total rows carry no quantity but do carry
+ * figures, and summing them would double the book.
+ */
+function readOpeningHoldings(group) {
+  if (!group?.header) return { holdings: {}, marks: {} };
+  const h = group.header;
+  const iClass = columnIndex(h, 'Asset Category', "Catégorie d'actifs");
+  const iSymbol = columnIndex(h, 'Symbol', 'Symbole');
+  const iQty = columnIndex(h, 'Prior Quantity', 'Avant Quantité');
+  const iPrice = columnIndex(h, 'Prior Price', 'Avant Prix');
+  if (iSymbol < 0 || iQty < 0) return { holdings: {}, marks: {} };
+
+  const holdings = {};
+  const marks = {};
+  for (const r of group.rows) {
+    if (isTotalRow(r)) continue;
+    const category = iClass >= 0 ? clean(r[iClass]) : '';
+    if (!/^(stocks?|actions|equity|equities)$/i.test(category)) continue;
+    const ticker = clean(r[iSymbol]).replace(/\s+/g, '.');
+    const qty = num(r[iQty]);
+    if (!ticker || Math.abs(qty) < 1e-9) continue;
+    holdings[ticker] = (holdings[ticker] ?? 0) + qty;
+    const price = iPrice >= 0 ? num(r[iPrice]) : 0;
+    if (price > 0) marks[ticker] = price;
+  }
+  return { holdings, marks };
+}
+
+/**
+ * Shares moved between the accounts a combined statement covers.
+ *
+ * Both legs are present and cancel, which is the point: without them a holding
+ * disappears from one account on the day it moved and only reappears in the
+ * other, so the combined book dips for no reason.
+ */
+function readTransfers(group) {
+  if (!group?.header) return [];
+  const h = group.header;
+  const iSymbol = columnIndex(h, 'Symbol', 'Symbole');
+  const iDate = columnIndex(h, 'Date');
+  const iQty = columnIndex(h, 'Qty', 'Qté', 'Quantity', 'Quantité');
+  const iCash = columnIndex(h, 'Cash Amount', 'Montant trésorerie');
+  if (iSymbol < 0 || iDate < 0 || iQty < 0) return [];
+
+  const out = [];
+  for (const r of group.rows) {
+    if (isTotalRow(r)) continue;
+    const ticker = clean(r[iSymbol]).replace(/\s+/g, '.');
+    const date = clean(r[iDate]).split(',')[0].trim();
+    const qty = num(r[iQty]);
+    if (!ticker || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Math.abs(qty) < 1e-9) continue;
+    out.push({ date, kind: 'transfer', ticker, qty, cash: iCash >= 0 ? num(r[iCash]) : 0 });
+  }
+  return out;
+}
+
+/**
+ * Dated cash events: dividends, interest and withholding tax.
+ *
+ * The totals are already read for the income summary; what the daily history
+ * needs is the dates, so a dividend lands on the day it was paid rather than
+ * being smeared across the year.
+ */
+function readDatedCash(group, kind) {
+  if (!group?.header) return [];
+  const h = group.header;
+  const iDate = columnIndex(h, 'Date');
+  const iAmount = columnIndex(h, 'Amount', 'Montant');
+  if (iDate < 0 || iAmount < 0) return [];
+
+  const out = [];
+  for (const r of group.rows) {
+    if (isTotalRow(r)) continue;
+    const date = clean(r[iDate]).split(',')[0].trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const cash = num(r[iAmount]);
+    if (!Number.isFinite(cash) || cash === 0) continue;
+    out.push({ date, kind, cash });
+  }
+  return out;
 }
 
 function readOpenPositions(group) {
@@ -279,6 +382,21 @@ function readNavCash(group) {
   return row ? num(row[iCurrent]) : null;
 }
 
+/**
+ * The cash balance the period *opened* with.
+ *
+ * The same row carries both ends, and the forward walk needs the left-hand one:
+ * it is the only figure that makes the first day a fact rather than an
+ * inference. Everything after it is arithmetic on dated events.
+ */
+function readOpeningCash(group) {
+  if (!group?.header) return null;
+  const iPrior = columnIndex(group.header, 'Prior Total', 'Total précédent');
+  if (iPrior < 0) return null;
+  const row = group.rows.find((r) => /^(cash|trésorerie)$/i.test(clean(r[0])));
+  return row ? num(row[iPrior]) : null;
+}
+
 /** The "Change in NAV" block is a list of named values rather than a table. */
 function readNavChange(group) {
   const out = {};
@@ -404,6 +522,14 @@ export function parseIbkrStatement(text) {
   const { closed, commissions, firstBuy, netQty, ledger } = readTrades(groups.get('trades'));
   const navChange = readNavChange(groups.get('navChange'));
   const cash = readNavCash(groups.get('nav'));
+  const openingCash = readOpeningCash(groups.get('nav'));
+  const { holdings: openingHoldings, marks: openingMarks } = readOpeningHoldings(groups.get('mtm'));
+  const transfers = readTransfers(groups.get('transfers'));
+  const income = [
+    ...readDatedCash(groups.get('dividends'), 'dividend'),
+    ...readDatedCash(groups.get('interest'), 'interest'),
+    ...readDatedCash(groups.get('tax'), 'tax'),
+  ];
   const flows = readFlows(groups.get('flows'));
   const dividends = readTotal(groups.get('dividends'));
   const interest = readTotal(groups.get('interest'));
@@ -425,6 +551,11 @@ export function parseIbkrStatement(text) {
     firstBuy,
     netQty,
     ledger,
+    openingCash,
+    openingHoldings,
+    openingMarks,
+    transfers,
+    dated: income,
     periodStart,
     periodEnd: period.to,
     twr,
@@ -525,11 +656,34 @@ export function statementToJournal(parsed, existing = {}) {
      * realised profit in money, and a holding carried in from last year and
      * bought into again during the period leaves no record of that purchase.
      */
+    /**
+     * The opening balance and every dated event after it.
+     *
+     * This is what lets the daily history be walked *forward* — the broker's own
+     * arithmetic — rather than inferred by undoing today. A backward walk can
+     * only undo the movements it knows about, so anything missing quietly
+     * becomes a holding that was always there; a forward walk from a stated
+     * opening balance misses loudly at the close instead, where it can be
+     * checked against the statement.
+     *
+     * Everything that moves shares or cash is here with its date: trades,
+     * internal transfers, deposits, dividends, interest and withholding tax.
+     * `openingMarks` prices the holdings the price service cannot answer for.
+     */
     ledger: {
-      trades: parsed.ledger ?? [],
-      holdings: Object.fromEntries(parsed.positions.map((p) => [p.ticker, p.qty])),
       from: parsed.periodStart ?? null,
       to: parsed.periodEnd ?? null,
+      openingCash: parsed.openingCash ?? null,
+      openingHoldings: parsed.openingHoldings ?? {},
+      openingMarks: parsed.openingMarks ?? {},
+      events: [
+        ...(parsed.ledger ?? []).map((t) => ({ ...t, kind: 'trade' })),
+        ...(parsed.transfers ?? []),
+        ...(parsed.flows ?? []).map((f) => ({ date: f.date, kind: 'flow', cash: f.amount })),
+        ...(parsed.dated ?? []),
+      ].sort((a, b) => a.date.localeCompare(b.date)),
+      /** The closing quantities, kept so the walk can be checked against them. */
+      holdings: Object.fromEntries(parsed.positions.map((p) => [p.ticker, p.qty])),
     },
     income: parsed.income,
     /**

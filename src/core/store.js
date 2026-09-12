@@ -82,31 +82,36 @@ function sanitizeFlows(list) {
  */
 function sanitizeLedger(value) {
   if (!value || typeof value !== 'object') return null;
-  const trades = Array.isArray(value.trades) ? value.trades : [];
+
   const clean = [];
-  for (const t of trades) {
-    const date = typeof t?.date === 'string' && DATE_ONLY.test(t.date) ? t.date : null;
-    const ticker = typeof t?.ticker === 'string' ? t.ticker.slice(0, 20) : null;
-    const qty = Number(t?.qty);
-    if (!date || !ticker || !Number.isFinite(qty)) continue;
-    clean.push({
-      date,
-      ticker,
-      qty,
-      cash: Number.isFinite(Number(t.cash)) ? Number(t.cash) : 0,
-      price: Number.isFinite(Number(t.price)) ? Number(t.price) : 0,
-    });
+  for (const e of Array.isArray(value.events) ? value.events : []) {
+    const date = typeof e?.date === 'string' && DATE_ONLY.test(e.date) ? e.date : null;
+    const kind = typeof e?.kind === 'string' ? e.kind.slice(0, 16) : null;
+    if (!date || !kind) continue;
+    const row = { date, kind, cash: Number.isFinite(Number(e.cash)) ? Number(e.cash) : 0 };
+    if (typeof e.ticker === 'string' && e.ticker) row.ticker = e.ticker.slice(0, 20);
+    if (Number.isFinite(Number(e.qty))) row.qty = Number(e.qty);
+    if (Number.isFinite(Number(e.price))) row.price = Number(e.price);
+    clean.push(row);
   }
 
-  const holdings = {};
-  for (const [ticker, qty] of Object.entries(value.holdings ?? {})) {
-    if (typeof ticker === 'string' && Number.isFinite(Number(qty))) holdings[ticker] = Number(qty);
-  }
+  const numbersOf = (source) => {
+    const out = {};
+    for (const [k, v] of Object.entries(source ?? {})) {
+      if (typeof k === 'string' && Number.isFinite(Number(v))) out[k] = Number(v);
+    }
+    return out;
+  };
 
-  if (!clean.length && !Object.keys(holdings).length) return null;
+  const openingHoldings = numbersOf(value.openingHoldings);
+  if (!clean.length && !Object.keys(openingHoldings).length) return null;
+
   return {
-    trades: clean,
-    holdings,
+    events: clean,
+    openingHoldings,
+    openingMarks: numbersOf(value.openingMarks),
+    openingCash: Number.isFinite(Number(value.openingCash)) ? Number(value.openingCash) : null,
+    holdings: numbersOf(value.holdings),
     from: typeof value.from === 'string' && DATE_ONLY.test(value.from) ? value.from : null,
     to: typeof value.to === 'string' && DATE_ONLY.test(value.to) ? value.to : null,
   };

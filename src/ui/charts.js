@@ -6,7 +6,7 @@
  * theme toggle re-renders instead of just swapping a class.
  */
 import { MONTHS_SHORT } from '../config/constants.js';
-import { curveSeries } from '../core/snapshots.js';
+import { curveSeries, portfolioHistory } from '../core/snapshots.js';
 
 /** Live chart instances, so each redraw can destroy the previous one. */
 const charts = {};
@@ -29,6 +29,51 @@ function chartColors() {
   };
 }
 
+/**
+ * Money paid in or taken out, marked on the day it happened.
+ *
+ * A deposit genuinely makes the account bigger, so the curve steps up and
+ * should. But a step that looks like a good week and was a bank transfer is the
+ * most misleading thing this chart can draw, and the marker is the difference
+ * between reading that jump as performance and knowing it was funding.
+ *
+ * Small and white: enough to notice, not enough to compete with the line. A
+ * withdrawal is the same triangle the other way up.
+ */
+const cashFlowMarks = {
+  id: 'cashFlowMarks',
+  afterDatasetsDraw(chart) {
+    const marks = chart.$cashFlows;
+    if (!marks?.length) return;
+    const { ctx } = chart;
+    const meta = chart.getDatasetMeta(0);
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 0.9;
+    for (const mark of marks) {
+      const point = meta.data[mark.index];
+      if (!point) continue;
+      const up = mark.amount > 0;
+      const size = 3.5;
+      // Held clear of the curve so it never sits on the value it belongs to.
+      const y = point.y + (up ? -10 : 10);
+      ctx.beginPath();
+      if (up) {
+        ctx.moveTo(point.x, y - size);
+        ctx.lineTo(point.x + size, y + size);
+        ctx.lineTo(point.x - size, y + size);
+      } else {
+        ctx.moveTo(point.x, y + size);
+        ctx.lineTo(point.x + size, y - size);
+        ctx.lineTo(point.x - size, y - size);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  },
+};
+
 /** Draws the account-value curve and returns the period return it implies. */
 export function renderCurve(timeframe) {
   const canvas = document.getElementById('curve');
@@ -37,9 +82,27 @@ export function renderCurve(timeframe) {
   const { labels, data } = series;
   const c = chartColors();
 
+  /**
+   * The external flows inside this window, matched to the point they sit on.
+   *
+   * Indexed by position in the drawn series rather than by date, because that
+   * is what the canvas needs — and read from the same daily dataset the curve
+   * itself is drawn from, so a marker can never land on a day the line has not
+   * got.
+   */
+  const shown = new Map((series.dates ?? []).map((d, i) => [d, i]));
+  const flows = [];
+  for (const row of portfolioHistory()) {
+    if (!row?.externalCashFlow) continue;
+    const index = shown.get(row.date);
+    if (index == null) continue;
+    flows.push({ index, date: row.date, amount: row.externalCashFlow });
+  }
+
   charts.curve?.destroy();
   charts.curve = new Chart(canvas, {
     type: 'line',
+    plugins: [cashFlowMarks],
     data: {
       labels,
       datasets: [{
@@ -60,7 +123,27 @@ export function renderCurve(timeframe) {
         tooltip: {
           mode: 'index',
           intersect: false,
-          callbacks: { label: (ctx) => ' $' + Math.round(ctx.raw).toLocaleString() },
+          callbacks: {
+            label: (ctx) => ' $' + Math.round(ctx.raw).toLocaleString(),
+            /**
+             * A deposit is named under the value rather than folded into it.
+             * The account really did grow by that much and really did not earn
+             * it, and both facts have to reach whoever is reading the day.
+             */
+            afterBody: (items) => {
+              const flow = flows.find((f) => f.index === items[0]?.dataIndex);
+              if (!flow) return '';
+              const when = new Date(flow.date + 'T00:00:00Z').toLocaleDateString(undefined, {
+                timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric',
+              });
+              const sign = flow.amount > 0 ? '+$' : '−$';
+              return [
+                flow.amount > 0 ? 'Deposit' : 'Withdrawal',
+                'Date: ' + when,
+                'Amount: ' + sign + Math.abs(flow.amount).toLocaleString(),
+              ];
+            },
+          },
         },
       },
       scales: {
@@ -72,6 +155,7 @@ export function renderCurve(timeframe) {
       },
     },
   });
+  charts.curve.$cashFlows = flows;
   return series;
 }
 

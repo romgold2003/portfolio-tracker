@@ -213,3 +213,81 @@ describe('bad input', () => {
     assert.match(text, /closed trades/);
   }));
 });
+
+describe('the ledger the daily history is walked from', () => {
+  /** A statement in miniature, with the rows that used to break the opening. */
+  const csv = [
+    'Statement,Header,Field Name,Field Value',
+    'Statement,Data,Period,"January 1, 2026 - September 8, 2026"',
+    'Net asset value,Header,Asset Class,Prior Total,Current Long,Current Short,Current Total,Change',
+    'Net asset value,Data,Cash,2000,5000,0,5000,3000',
+    'Net asset value,Data,Total,12000,25000,0,25000,13000',
+    'Mark-to-market performance summary,Header,Asset Category,Symbol,Prior Quantity,Current Quantity,'
+      + 'Prior Price,Current Price,Mark-to-Market P/L Position,Mark-to-Market P/L Transaction,'
+      + 'Mark-to-Market P/L Commissions,Mark-to-Market P/L Other,Mark-to-Market P/L Total,Code',
+    'Mark-to-market performance summary,Data,Stocks,AAA,100,120,100,150,5000,0,0,0,5000,',
+    // The cash line wearing a symbol. Counting it as a holding doubled the cash.
+    'Mark-to-market performance summary,Data,Forex,USD,2000,5000,1.0000,1.0000,0,0,0,0,0,',
+    // A subtotal with figures but no quantity.
+    'Mark-to-market performance summary,Data,Total,,,,,,5000,0,0,0,5000,',
+    'Open positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult,Cost Price,'
+      + 'Cost Basis,Close Price,Value,Unrealized P/L,Code',
+    'Open positions,Data,Summary,Stocks,USD,AAA,120,1,105,12600,150,18000,5400,',
+    'Trades,Header,DataDiscriminator,Asset Category,Currency,Account,Symbol,Date/Time,Quantity,'
+      + 'T. Price,Close Price,Proceeds,Comm/Fee,Basis,Realized P/L,MTM P/L,Code',
+    'Trades,Data,Order,Stocks,USD,U1,AAA,"2026-03-02, 10:00:00",20,120,120,-2400,-1,2401,0,0,O',
+    'Deposits & withdrawals,Header,Currency,Account,Settle Date,Description,Amount',
+    'Deposits & withdrawals,Data,USD,U1,2026-02-10,Electronic fund transfer,1500',
+    'Dividends,Header,Currency,Account,Date,Description,Amount',
+    'Dividends,Data,USD,U1,2026-04-01,AAA cash dividend,40',
+  ].join('\n');
+
+  const ledger = () => statementToJournal(parseIbkrStatement(csv)).ledger;
+
+  test('states the opening cash rather than inferring it', () => {
+    assert.equal(ledger().openingCash, 2000);
+  });
+
+  test('takes the opening holdings from the prior quantities', () => {
+    assert.deepEqual(ledger().openingHoldings, { AAA: 100 });
+  });
+
+  test('does not count the cash line as a holding', () => {
+    // The Forex row is the cash balance with a symbol on it; folding it in
+    // counted the cash twice and put the opening balance out by the whole of it.
+    assert.ok(!('USD' in ledger().openingHoldings));
+  });
+
+  test('keeps the prior price, so an unpriceable holding still has a mark', () => {
+    assert.equal(ledger().openingMarks.AAA, 100);
+  });
+
+  test('carries every dated event that moves shares or cash', () => {
+    const kinds = ledger().events.map((e) => e.kind);
+    assert.ok(kinds.includes('trade'));
+    assert.ok(kinds.includes('flow'));
+    assert.ok(kinds.includes('dividend'));
+  });
+
+  test('the events are in date order, which the forward walk relies on', () => {
+    const dates = ledger().events.map((e) => e.date);
+    assert.deepEqual(dates, [...dates].sort());
+  });
+
+  test('a deposit is a flow, and a dividend is not', () => {
+    const events = ledger().events;
+    assert.equal(events.find((e) => e.kind === 'flow').cash, 1500);
+    assert.equal(events.find((e) => e.kind === 'dividend').cash, 40);
+  });
+
+  test('walking the events forward lands on the stated closing quantity', () => {
+    const l = ledger();
+    const held = { ...l.openingHoldings };
+    for (const e of l.events) {
+      if (e.ticker && (e.kind === 'trade' || e.kind === 'transfer')) {
+        held[e.ticker] = (held[e.ticker] ?? 0) + e.qty;
+      }
+    }
+    assert.deepEqual(held, l.holdings);
+  });
+});

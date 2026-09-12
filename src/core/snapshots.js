@@ -81,11 +81,34 @@ export function periodStart(timeframe, firstRecorded, now = new Date()) {
  */
 let backfill = [];
 
-export function setBackfill(rows) {
-  backfill = Array.isArray(rows) ? rows : [];
+/**
+ * The full daily dataset behind the curve, when one has been built.
+ *
+ * Kept whole rather than reduced to date-and-value because the chart needs the
+ * cash-flow fields to mark deposits, and the percentage and index curves will
+ * need the same rows rather than a second reconstruction of their own.
+ */
+let history = [];
+
+/**
+ * The forward-walked history, when the book has a statement behind it.
+ *
+ * Separate from `backfill` because the two earn different treatment: a forward
+ * walk is authoritative and used as it stands, a back-cast is an estimate that
+ * gets spliced under the recording.
+ */
+let forward = [];
+
+export function setBackfill(rows, { authoritative = false } = {}) {
+  history = Array.isArray(rows) ? rows : [];
+  forward = authoritative ? history : [];
+  backfill = history.map((r) => ({ date: r.date, value: r.totalAccountValue ?? r.value }));
 }
 
 export function backfillRows() { return backfill; }
+
+/** The daily portfolio history: value, cash, positions and external flows. */
+export function portfolioHistory() { return history; }
 
 /**
  * Every account value known, recorded or reconstructed, oldest first.
@@ -94,6 +117,21 @@ export function backfillRows() { return backfill; }
  * the year rather than "since the app was installed".
  */
 export function accountHistory() {
+  /**
+   * A forward-walked history wins outright, and is not spliced under the
+   * recording.
+   *
+   * The splice exists to join a *back-cast* onto the recorded days, scaling it
+   * so the two meet without a step. That is the right treatment for an
+   * estimate. It is the wrong treatment for this one: the forward walk is
+   * checked against the statement it came from — exact on the opening balance,
+   * exact on every closing quantity — and scaling it to land on the app's own
+   * observations would bend the better number onto the worse one.
+   *
+   * It also already covers every day to today, so there is nothing left for the
+   * recording to add.
+   */
+  if (forward.length) return forward;
   return spliceHistory(state.snapshots, backfill);
 }
 
@@ -131,7 +169,15 @@ export function curveSeries(timeframe) {
   }
 
   const labels = points.map((s) => s.date.slice(5));
-  const data = points.map((s) => +s.value.toFixed(2));
+  /**
+   * Two row shapes reach here and both are legitimate.
+   *
+   * A recorded snapshot is `{date, value}` — it only ever knew the one number.
+   * A row from the daily portfolio history is `{date, totalAccountValue, ...}`,
+   * because the percentage and index curves will need its cash and flow fields
+   * too. Reading only `value` turned every day of the richer one into undefined.
+   */
+  const data = points.map((s) => +Number(s.totalAccountValue ?? s.value ?? 0).toFixed(2));
   // Kept alongside the values so a cash flow can be matched to the day it
   // landed on — a percentage curve is wrong without that.
   const dates = points.map((s) => s.date);

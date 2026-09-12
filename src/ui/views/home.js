@@ -16,7 +16,8 @@ import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
 } from '../../services/history.js';
 import { periodStart, cutoffFor, setBackfill } from '../../core/snapshots.js';
-import { rebuildDailyValue, rebuildFromLedger } from '../../core/rebuild.js';
+import { rebuildDailyValue } from '../../core/rebuild.js';
+import { buildPortfolioHistory } from '../../core/portfolioHistory.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -24,6 +25,9 @@ import {
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 const setColor = (id, color) => { const el = document.getElementById(id); if (el) el.style.color = color; };
+
+/** Currency rounding, matching what the history dataset stores. */
+const round2 = (n) => Math.round(n * 100) / 100;
 
 /**
  * Hiding the figures, for when someone can see the screen.
@@ -283,9 +287,10 @@ async function loadBackfill() {
    */
   const fromLedger = state.ledger
     ? [...new Set([
+      ...Object.keys(state.ledger.openingHoldings ?? {}),
       ...Object.keys(state.ledger.holdings ?? {}),
-      ...(state.ledger.trades ?? []).map((t) => t.ticker),
-    ])]
+      ...(state.ledger.events ?? []).map((e) => e.ticker),
+    ].filter(Boolean))]
     : [];
   /**
    * Every ticker the book has ever touched, with no date filter on it.
@@ -314,7 +319,7 @@ async function loadBackfill() {
   /** What this run would be built from. Unchanged means nothing to redo. */
   const key = `${earliest}|${state.cash}|${wanted.map(([sym]) => sym).sort().join(',')}|`
     + `${state.positions.length}|${(state.cashFlows ?? []).length}|`
-    + `${(state.ledger?.trades ?? []).length}`;
+    + `${(state.ledger?.events ?? []).length}`;
   if (key === backfillFor) return;
 
   backfillPending = true;
@@ -335,10 +340,62 @@ async function loadBackfill() {
      * per cent on average and nineteen on the first of January. From the
      * ledger it is out by a tenth of one per cent.
      */
-    const shape = { cash: state.cash, flows: state.cashFlows, priceOn: pastPrice, from: earliest, to: todayStr() };
-    setBackfill(state.ledger?.trades?.length
-      ? rebuildFromLedger({ ledger: state.ledger, ...shape })
-      : rebuildDailyValue({ positions: state.positions, ...shape }));
+/**
+     * Forward from the statement's opening balance when there is one.
+     *
+     * That is the broker's own arithmetic — holdings at the day's marks plus
+     * cash, rolled forward through every dated event — and it reproduces the
+     * statement it came from exactly at the open and to within a fifth of a
+     * per cent at the close.
+     *
+     * The older path infers a past day by undoing today, which is all that can
+     * be done without a statement, and is kept for books that have none.
+     */
+    const ledger = state.ledger;
+    const forward = ledger?.openingCash != null && ledger.from
+      ? buildPortfolioHistory({
+        opening: {
+          date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings,
+        },
+        events: ledger.events ?? [],
+        priceOn: pastPrice,
+        lastKnown: datedMarks(ledger),
+        from: earliest,
+        to: todayStr(),
+      })
+      : null;
+
+    if (forward?.length) {
+      /**
+       * Today is known exactly, so it is not left at yesterday's close.
+       *
+       * Every other day in the walk is marked at the last close the price
+       * service has, which for today is usually the previous session. The
+       * account value beside the chart is the live one, and a curve ending four
+       * hundred dollars below the number printed above it reads as a bug.
+       */
+      const live = accountTotals(state.positions, state.cash).account;
+      const today = todayStr();
+      const last = forward[forward.length - 1];
+      if (live > 0 && last) {
+        const row = { ...last, date: today };
+        row.totalAccountValue = round2(live);
+        row.cashValue = round2(state.cash);
+        row.positionsValue = round2(live - state.cash);
+        if (last.date === today) forward[forward.length - 1] = row;
+        else forward.push({ ...row, externalCashFlow: 0, deposit: 0, withdrawal: 0 });
+      }
+      setBackfill(forward, { authoritative: true });
+    } else {
+      setBackfill(rebuildDailyValue({
+        positions: state.positions,
+        cash: state.cash,
+        flows: state.cashFlows,
+        priceOn: pastPrice,
+        from: earliest,
+        to: todayStr(),
+      }).map((r) => ({ date: r.date, totalAccountValue: r.value })));
+    }
     backfillFor = key;
     renderHome();
   } finally {
@@ -388,6 +445,27 @@ function earliestInterest() {
   if (ledgerFrom && ledgerFrom < earliest) earliest = ledgerFrom;
   const floor = back(3 * 366);
   return earliest < floor ? floor : earliest;
+}
+
+/**
+ * The prices we know for a ticker without asking anyone, with their dates.
+ *
+ * The statement's opening mark, then the price of every trade in it. Dated,
+ * because "the last price we ever saw" values a holding on every past day at a
+ * price from its future — a delisted stub marked at 0.40 on the thirty-first of
+ * December and sold at 0.70 in April was carried at 0.70 all year.
+ */
+function datedMarks(ledger) {
+  const out = {};
+  for (const [ticker, price] of Object.entries(ledger.openingMarks ?? {})) {
+    if (price > 0) out[ticker] = [{ date: ledger.from, price }];
+  }
+  for (const event of ledger.events ?? []) {
+    if (event.kind !== 'trade' || !(event.price > 0) || !event.ticker) continue;
+    (out[event.ticker] ??= []).push({ date: event.date, price: event.price });
+  }
+  for (const list of Object.values(out)) list.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
 }
 
 /**
