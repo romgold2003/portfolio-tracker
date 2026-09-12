@@ -214,6 +214,18 @@ export function curveSeries(timeframe) {
   const first = data[0];
   const last = data[data.length - 1];
 
+  /**
+   * Money paid in or taken out between the two endpoints.
+   *
+   * Strictly after the opening day: a deposit on the first day is already
+   * inside `first`, so subtracting it too would count it twice.
+   */
+  const paidIn = synthetic ? 0 : externalFlows().reduce((sum, f) => (
+    f.date > points[0].date && f.date <= points[points.length - 1].date
+      ? sum + f.amount
+      : sum
+  ), 0);
+
   // The requested window is often longer than the history on file. Reporting
   // the span actually covered stops "1Y" from claiming a year of data that was
   // never recorded.
@@ -260,8 +272,22 @@ export function curveSeries(timeframe) {
     wanted,
     /** True when the recording begins after that, so this is a shorter window. */
     short,
-    /** What the account gained or lost across the window, in currency. */
-    gain: last - first,
-    returnPct: first ? ((last - first) / first) * 100 : 0,
+    /**
+     * What the window earned, and what that was as a percentage.
+     *
+     * Both are net of money paid in or taken out inside the window. The raw
+     * difference between the two endpoints is not a gain: a $10,000 deposit
+     * makes the curve step up $10,000, and reading that as profit is the exact
+     * error every return in this app is built to avoid. So the flows that
+     * landed inside the window come off the top, and the base is the balance
+     * the window opened with — a deposit is then out of both halves and cannot
+     * move the percentage.
+     *
+     * `paidIn` is reported alongside so a caller can say why the curve rose
+     * further than the return did.
+     */
+    gain: last - first - paidIn,
+    paidIn,
+    returnPct: first ? ((last - first - paidIn) / first) * 100 : 0,
   };
 }

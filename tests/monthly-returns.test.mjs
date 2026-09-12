@@ -139,13 +139,24 @@ describe('the portfolio return, month by month', () => {
     assert.equal(round(withFlow.get('2026-01').opening), round(without.get('2026-01').opening));
   });
 
-  test('a deposit is weighted by how much of the month it was present', () => {
+  test('when the deposit landed changes nothing', () => {
+    // This used to be weighted by how much of the month the money was present —
+    // Modified Dietz — which is the right answer to "what did my money make"
+    // and the wrong one here: it let paying money in move the percentage
+    // without a single trade changing. A deposit is capital to work with, not
+    // a result, so it is out of the base entirely and its date cannot matter.
     const early = monthlyAccountReturns(book, 31700, [{ date: '2026-02-01', amount: 10000 }], '2026-03-31');
     const late = monthlyAccountReturns(book, 31700, [{ date: '2026-02-27', amount: 10000 }], '2026-03-31');
     assert.equal(early.get('2026-02').pnl, late.get('2026-02').pnl);
-    // The same loss over a larger working base is a smaller percentage loss.
-    assert.ok(early.get('2026-02').pct > late.get('2026-02').pct,
-      `${early.get('2026-02').pct} should be the milder of the two`);
+    assert.equal(early.get('2026-02').pct, late.get('2026-02').pct);
+  });
+
+  test('and depositing at all changes nothing', () => {
+    const without = monthlyAccountReturns(book, account, [], '2026-03-31');
+    const withFlow = monthlyAccountReturns(book, account + 10000,
+      [{ date: '2026-02-10', amount: 10000 }], '2026-03-31');
+    assert.ok(Math.abs(without.get('2026-02').pct - withFlow.get('2026-02').pct) < 1e-9,
+      `${without.get('2026-02').pct} vs ${withFlow.get('2026-02').pct}`);
   });
 
   test('a withdrawal does not read as a losing month', () => {
@@ -195,5 +206,63 @@ describe('the portfolio return, month by month', () => {
     const { account: nlv } = accountTotals(positions, cash);
     const r = monthlyAccountReturns(positions, nlv, [], '2026-03-31');
     assert.equal(round(r.get('2026-03').closing), round(nlv));
+  });
+});
+
+describe('the month an account is opened', () => {
+  /**
+   * An account founded inside the range has nothing before its first transfer,
+   * so chaining that transfer out of the base leaves whatever rounding residue
+   * is lying around and the month divides by it. The demo book opens with
+   * $42,000 on 5 January against a first trade on the 6th, and January reported
+   * 2,548%.
+   */
+  const book = [
+    closed(100, 120, 50, '2026-01-06', '2026-01-20'),   // +1,000 in January
+    closed(100, 110, 50, '2026-02-02', '2026-02-25'),   //   +500 in February
+  ];
+  const founding = [{ date: '2026-01-05', amount: 20_000 }];
+  const account = 21_500;
+
+  test('is measured against the capital it was opened with', () => {
+    const r = monthlyAccountReturns(book, account, founding, '2026-02-28');
+    assert.equal(round(r.get('2026-01').base), 20_000);
+    assert.equal(round(r.get('2026-01').pct), 5);       // 1,000 on 20,000
+  });
+
+  test('and the card still says what the account really held that morning', () => {
+    // The base is not the opening balance and must not be reported as one: on
+    // 1 January this account held nothing.
+    const r = monthlyAccountReturns(book, account, founding, '2026-02-28');
+    assert.equal(round(r.get('2026-01').opening), 0);
+    assert.equal(round(r.get('2026-01').founding), 20_000);
+  });
+
+  test('every later month is unaffected by any of it', () => {
+    const r = monthlyAccountReturns(book, account, founding, '2026-02-28');
+    assert.equal(round(r.get('2026-02').founding), 0);
+    assert.equal(round(r.get('2026-02').base), round(r.get('2026-02').opening));
+    assert.equal(round(r.get('2026-02').pct), round(500 / 21_000 * 100));
+  });
+
+  test('and a deposit into the running account still moves nothing', () => {
+    const later = [...founding, { date: '2026-02-10', amount: 9000 }];
+    const a = monthlyAccountReturns(book, account, founding, '2026-02-28');
+    const b = monthlyAccountReturns(book, account + 9000, later, '2026-02-28');
+    for (const key of ['2026-01', '2026-02']) {
+      assert.ok(Math.abs(a.get(key).pct - b.get(key).pct) < 1e-9,
+        `${key}: ${a.get(key).pct} vs ${b.get(key).pct}`);
+    }
+  });
+
+  test('with no trades there is no founding date and nothing is special-cased', () => {
+    // Flow dates alone still define the range, so the months exist. What must
+    // not happen is money being called founding capital on a book that never
+    // placed a trade for it to have founded.
+    const r = monthlyAccountReturns([], 20_000, founding, '2026-02-28');
+    assert.deepEqual([...r.keys()].sort(), ['2026-01', '2026-02']);
+    assert.equal(r.get('2026-01').founding, 0);
+    assert.equal(round(r.get('2026-01').opening), 0);
+    assert.equal(r.get('2026-01').pct, null, 'no capital and no trades is not a return');
   });
 });

@@ -14,11 +14,17 @@
  * printed the answer on the statement, and a time-weighted return is chainable.
  * So their figure is used for the stretch it covers and only the days since are
  * measured here.
+ *
+ * Modified Dietz has since been dropped from the fallback too. It answers a
+ * question nobody asked it — "what did my money earn" — by weighting deposits
+ * into the base, so paying money in moved the percentage on a day with no trades
+ * at all. The fallback is now profit over the opening balance, which cannot see
+ * a deposit.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { accountPerformance, modifiedDietzReturn } from '../src/core/portfolio.js';
+import { accountPerformance } from '../src/core/portfolio.js';
 import { state, loadState } from '../src/core/store.js';
 
 /**
@@ -63,28 +69,87 @@ describe('the broker had already done the hard part', () => {
       `reported ${r.returnPct}, statement says ${STATEMENT.twr}`);
   });
 
-  test('the reported complaint: 31 where the old method said 34', () => {
-    // The account a few days on, unchanged deposits.
+  test('the broker figure is used whenever they gave us one', () => {
     const account = 46000;
     const now = run({ account, to: '2026-09-03' });
-    const dietz = run({ account, to: '2026-09-03', nav: openingNav({ twr: null }) });
+    const fallback = run({ account, to: '2026-09-03', nav: openingNav({ twr: null }) });
 
     assert.equal(now.method, 'broker');
-    assert.equal(dietz.method, 'statement');
+    assert.equal(fallback.method, 'statement');
     assert.equal(now.returnPct.toFixed(1), '31.2');
-    assert.equal(dietz.returnPct.toFixed(1), '34.5');
+
+    /**
+     * The fallback reads higher, and it is worth being clear about why rather
+     * than tuning it to look closer.
+     *
+     * It is the period's profit over the balance the period opened with, which
+     * is deposit-neutral: paying money in cannot move it, because the deposit
+     * is out of both halves. The cost of that is it credits the whole profit to
+     * the opening capital, when some of it was earned by money that arrived
+     * later — so on a book that doubled its size mid-year it overstates.
+     *
+     * Modified Dietz used to sit here and read 34.5%, closer to the broker's
+     * 31.2% — but it moved whenever money was paid in, which is the one thing
+     * this app's returns must never do. The broker's own chained figure is both
+     * neutral and exact, which is why it is preferred whenever it exists; this
+     * is only what happens when a statement arrives without one.
+     */
+    assert.equal(fallback.returnPct.toFixed(1), '42.2');
+    assert.ok(fallback.returnPct > now.returnPct);
+  });
+
+  test('and the fallback does not move when money is paid in', () => {
+    const nav = openingNav({ twr: null });
+    const bare = run({ account: 46000, to: '2026-09-03', nav, flows: [] });
+    const funded = run({
+      account: 56000, to: '2026-09-03', nav,
+      flows: [{ date: '2026-05-01', amount: 10000 }],
+    });
+    assert.ok(Math.abs(bare.returnPct - funded.returnPct) < 1e-9,
+      `${bare.returnPct} vs ${funded.returnPct}`);
   });
 
   test('the sub-periods compound rather than adding', () => {
     const account = 47000;
     const r = run({ account, to: '2026-09-03' });
-    const stub = modifiedDietzReturn(
-      account - STATEMENT.endNav, STATEMENT.endNav, [], STATEMENT.to, '2026-09-03',
-    );
+    // The days since the statement closed, on the balance it closed with.
+    const stub = ((account - STATEMENT.endNav) / STATEMENT.endNav) * 100;
     const expected = ((1 + STATEMENT.twr / 100) * (1 + stub / 100) - 1) * 100;
     assert.ok(Math.abs(r.returnPct - expected) < 1e-9);
     // Compounding is not addition, and on figures this size the gap is visible.
     assert.notEqual(r.returnPct.toFixed(2), (STATEMENT.twr + stub).toFixed(2));
+  });
+
+  test('a deposit in the stub does not move the year either', () => {
+    // The narrower case below only proves a deposit is not itself counted as
+    // profit. This is the one that was actually wrong: with real profit in the
+    // stub, Modified Dietz weighted the deposit into the base, and $10,000 paid
+    // in on 2 September moved the reported year by nearly a point — 34.60% to
+    // 33.70% — with not a single trade between the two.
+    const base = { to: '2026-09-30' };
+    const flat = run({ ...base, account: STATEMENT.endNav + 2000, flows: [] });
+    const paid = run({
+      ...base,
+      account: STATEMENT.endNav + 2000 + 10_000,
+      flows: [{ date: '2026-09-02', amount: 10_000 }],
+    });
+    assert.equal(flat.method, 'broker');
+    assert.equal(paid.method, 'broker');
+    assert.ok(Math.abs(flat.returnPct - paid.returnPct) < 1e-9,
+      `${flat.returnPct}% vs ${paid.returnPct}%`);
+  });
+
+  test('and when it landed in the stub is equally irrelevant', () => {
+    const early = run({
+      to: '2026-09-30', account: STATEMENT.endNav + 12_000,
+      flows: [{ date: '2026-08-29', amount: 10_000 }],
+    });
+    const late = run({
+      to: '2026-09-30', account: STATEMENT.endNav + 12_000,
+      flows: [{ date: '2026-09-29', amount: 10_000 }],
+    });
+    assert.ok(Math.abs(early.returnPct - late.returnPct) < 1e-9,
+      `${early.returnPct}% vs ${late.returnPct}%`);
   });
 
   test('a deposit after the statement does not read as profit', () => {
@@ -106,7 +171,7 @@ describe('the broker had already done the hard part', () => {
 });
 
 describe('falling back rather than guessing', () => {
-  test('a statement with no time-weighted return uses Modified Dietz', () => {
+  test('a statement with no time-weighted return is measured from its opening balance', () => {
     const r = run({ account: 46000, to: '2026-09-03', nav: openingNav({ twr: null }) });
     assert.equal(r.method, 'statement');
     assert.equal(r.brokerTwr, null, 'nothing to attribute to the broker');

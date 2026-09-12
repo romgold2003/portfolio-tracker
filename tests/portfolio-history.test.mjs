@@ -341,3 +341,66 @@ describe('the flows the chart marks', () => {
     assert.deepEqual(externalFlows().map((f) => f.date), ['2026-01-20', '2026-06-05']);
   });
 });
+
+describe('the curve reports a gain, not a balance change', () => {
+  /**
+   * The curve steps up on the day money is paid in, and it should — that is
+   * what the account was worth. What must not happen is the step being read
+   * back out as profit.
+   */
+  const setup = async (flows) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = flows;
+    setBackfill([
+      { date: '2026-09-01', totalAccountValue: 10_000 },
+      { date: '2026-09-02', totalAccountValue: 10_500 },
+      { date: '2026-09-03', totalAccountValue: 21_000 },
+    ], { authoritative: true });
+    return curveSeries('All');
+  };
+
+  test('a deposit inside the window is not a gain', async () => {
+    // 10,000 to 21,000, of which 10,000 was paid in on the last day. The
+    // account really did earn 1,000, which is 10% of what it opened with.
+    const s = await setup([{ date: '2026-09-03', amount: 10_000 }]);
+    assert.equal(s.paidIn, 10_000);
+    assert.equal(Math.round(s.gain), 1000);
+    assert.ok(Math.abs(s.returnPct - 10) < 1e-9, `${s.returnPct}%`);
+  });
+
+  test('and the curve itself still shows the whole balance', async () => {
+    const s = await setup([{ date: '2026-09-03', amount: 10_000 }]);
+    assert.equal(s.data[s.data.length - 1], 21_000,
+      'the account value must not be netted down to hide the deposit');
+  });
+
+  test('with no flows it is the plain difference', async () => {
+    const s = await setup([]);
+    assert.equal(s.paidIn, 0);
+    assert.equal(Math.round(s.gain), 11_000);
+  });
+
+  test('money already there on the opening day is not subtracted twice', async () => {
+    // It is inside the opening balance already; counting it again would report
+    // a loss on a window that made money.
+    const s = await setup([{ date: '2026-09-01', amount: 5000 }]);
+    assert.equal(s.paidIn, 0);
+    assert.equal(Math.round(s.gain), 11_000);
+  });
+
+  test('a withdrawal does not read as a loss', async () => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = [{ date: '2026-09-03', amount: -4000 }];
+    setBackfill([
+      { date: '2026-09-01', totalAccountValue: 10_000 },
+      { date: '2026-09-02', totalAccountValue: 10_500 },
+      { date: '2026-09-03', totalAccountValue: 7000 },
+    ], { authoritative: true });
+    const s = curveSeries('All');
+    assert.ok(s.returnPct > 0, `taking money out read as ${s.returnPct}%`);
+  });
+});

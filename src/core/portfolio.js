@@ -332,8 +332,10 @@ export function monthPnl(positions) {
  * what keeps them out of the return in both directions — they neither count as
  * profit nor quietly enlarge the base of the months before they arrived.
  *
- * The return itself is then Modified Dietz, so money that arrived on the 30th
- * is not treated as having worked all month.
+ * The return is then the month's profit over what it opened with. Not Modified
+ * Dietz, which weights a deposit by how much of the month it was present: that
+ * lets paying money in move a percentage with no trade behind it, and a deposit
+ * is capital to work with rather than a result.
  *
  * Returns a Map keyed YYYY-MM. A month whose starting value works out to zero
  * or less carries a null percentage: there was no capital to measure against,
@@ -353,6 +355,28 @@ export function monthlyAccountReturns(positions, account, flows = [], today = to
   const keys = monthRange(earliest, today.slice(0, 7));
   const pnlByMonth = monthPnl(positions);
 
+  /**
+   * The money the account was built from, which is not a deposit into it.
+   *
+   * The chain subtracts each month's flows to find what the account opened
+   * with, and for every month of a running account that is exactly right. It
+   * breaks on the month the account was founded: there was nothing before the
+   * founding transfer, so taking it out leaves whatever rounding residue
+   * happens to be there and the month divides by it. On the demo book, opened
+   * with $42,000 on 5 January against a first trade on the 6th, January opened
+   * at $289 and reported 2,548%.
+   *
+   * Money paid in before the first trade is starting capital and stays in the
+   * base. Everything after it is a contribution and comes out, which is the
+   * neutrality that matters — it is the only kind of deposit an account that is
+   * already running can receive. See periodPnl, which draws the same line.
+   */
+  const firstTrade = positions.reduce(
+    (soonest, p) => (p.open && (soonest == null || p.open < soonest) ? p.open : soonest),
+    null,
+  );
+  const isFounding = (f) => firstTrade != null && f.date <= firstTrade;
+
   // Newest first, because the only value actually known is today's.
   let closing = account;
   for (let i = keys.length - 1; i >= 0; i--) {
@@ -360,15 +384,49 @@ export function monthlyAccountReturns(positions, account, flows = [], today = to
     const { pnl, marked } = pnlByMonth.get(key) ?? { pnl: 0, marked: 0 };
     const inMonth = flows.filter((f) => f?.date?.slice(0, 7) === key);
     const net = inMonth.reduce((sum, f) => sum + f.amount, 0);
+    const founding = inMonth.reduce((sum, f) => (isFounding(f) ? sum + f.amount : sum), 0);
+    /**
+     * Two numbers, because they answer two questions.
+     *
+     * `opening` is what the account was actually worth on the first of the
+     * month, and it is what the card says out loud — so it has every flow taken
+     * out of it, founding capital included. On the month an account is opened
+     * that is a near-nothing, and truthfully so.
+     *
+     * `base` is the capital the month's trading ran on, which is what a return
+     * is measured against. They are the same number for every month of a
+     * running account and differ only where the account was founded.
+     */
     const opening = closing - pnl - net;
+    const base = opening + founding;
     const { first, last } = monthBounds(key);
     // The month still running is measured to today, not to a date in the future.
     const to = last > today ? today : last;
 
     out.set(key, {
-      pct: opening > 0 ? modifiedDietzReturn(pnl, opening, inMonth, first, to) : null,
+      /**
+       * The month's profit over what the account was worth when it opened.
+       *
+       * This was Modified Dietz, which weights each deposit by how much of the
+       * month it was present and so divides by the average capital at work.
+       * That is the right answer to "what did my money make" — and the wrong
+       * one here, because it means paying money in changes the percentage
+       * without a single trade changing. A $25,000 transfer moved a month from
+       * 1.79% to 1.47% on the demo book.
+       *
+       * A deposit is capital to work with, not a result, so it is kept out of
+       * the base entirely: the same trades report the same percentage whether
+       * money arrived that month or not. `net` is still returned, and the card
+       * still says what moved, so nothing is hidden — only kept out of the
+       * number it would otherwise distort.
+       */
+      pct: base > 0 ? (pnl / base) * 100 : null,
       pnl,
       opening,
+      /** What the percentage was measured against; differs from `opening` only where the account was founded. */
+      base,
+      /** Capital the account was opened with, rather than paid into a running one. */
+      founding,
       closing,
       net,
       /** Positions opened this month and still held, marked at today's price. */
@@ -471,7 +529,7 @@ export function accountTotals(positions, cash) {
  * return is measured against that. It is money-weighted: it answers "what did
  * this account make", not "how well timed were the deposits".
  */
-export function periodPnl(positions, account, from = null, startPrices = new Map()) {
+export function periodPnl(positions, account, from = null, startPrices = new Map(), flows = []) {
   let pnl = 0;
   let carried = 0;
 
@@ -497,10 +555,57 @@ export function periodPnl(positions, account, from = null, startPrices = new Map
     }
   }
 
-  const startEquity = account - pnl;
+  /**
+   * What the account was worth when the window opened.
+   *
+   *   opening = today  −  what was earned since  −  what was paid in since
+   *
+   * That last term is the one that was missing, and leaving it out is what let
+   * a deposit change a return. Money paid in during the window is inside
+   * `account` and is not inside `pnl`, so without subtracting it the opening
+   * balance is overstated by the whole deposit and the return is divided by a
+   * base that did not exist. On the demo book a $25,000 transfer took the
+   * year-to-date figure from 20.35% to 13.85% without a single trade changing.
+   *
+   * With it out, the same trades produce the same percentage whether money was
+   * paid in or not — which is the point. A deposit is capital to work with, not
+   * a result.
+   */
+  /**
+   * The one deposit that is not a deposit: the money the account opened with.
+   *
+   * Taking every flow out of the base assumes there was a base to begin with.
+   * An account funded inside the window did not have one — it started at
+   * nothing — so subtracting its founding transfer leaves whatever rounding
+   * residue happens to be lying around, and the year is divided by that. On the
+   * demo book, which opens with a $42,000 transfer on 5 January, the base came
+   * out at $289 and the year read 3,752%.
+   *
+   * Money paid in before the first trade is what the account was built from,
+   * not a contribution to a running account, so it stays in the base. Every
+   * flow after trading has begun is a contribution and comes out — which is the
+   * neutrality that matters, because that is the only kind of deposit an
+   * account that is already running can receive.
+   */
+  const firstTrade = positions.reduce(
+    (earliest, p) => (p.open && (earliest == null || p.open < earliest) ? p.open : earliest),
+    null,
+  );
+
+  const paidIn = (flows ?? []).reduce((sum, f) => {
+    if (!f?.date || !Number.isFinite(f.amount)) return sum;
+    if (from && f.date < from) return sum;
+    // Founding capital: paid in before there was anything to add to.
+    if (firstTrade && f.date <= firstTrade) return sum;
+    return sum + f.amount;
+  }, 0);
+
+  const startEquity = account - pnl - paidIn;
   return {
     pnl,
     startEquity,
+    /** Net paid in or taken out inside the window, for whoever needs to say so. */
+    externalFlow: paidIn,
     /** Null when the starting equity is not a sensible base to divide by. */
     returnPct: startEquity > 0 ? (pnl / startEquity) * 100 : null,
     /** Holdings predating the window, left out for want of a price at its start. */
@@ -509,63 +614,17 @@ export function periodPnl(positions, account, from = null, startPrices = new Map
 }
 
 /**
- * Return over a window when money went in and out during it — Modified Dietz.
+ * Modified Dietz used to live here, alongside a helper that worked an opening
+ * balance backwards for it. Both are gone.
  *
- *   R = P&L / ( BMV + SUM( w_i * CF_i ) ),   w_i = (T - t_i) / T
+ * Dietz weights each deposit by the fraction of the window it was present, which
+ * answers "what did my money earn" — a fair question, and not the one this app
+ * asks. Its consequence was that paying money in moved every percentage on the
+ * page on a day nothing was traded. Returns here are profit over the balance the
+ * window opened with, so a deposit is out of both halves and cannot be seen.
  *
- * The denominator is the point. Dividing by the opening balance alone credits
- * the whole year's profit to money that only arrived in June; dividing by the
- * closing balance does the opposite. Weighting each deposit by the fraction of
- * the period it was actually present gives the average capital at work, which
- * is what a return is a return *on*.
- *
- * This is the standard approximation to a true time-weighted return for anyone
- * without a valuation on every flow date. It differs from one only to the
- * extent the account moved sharply between flows — a broker computing daily
- * TWR will report something close but not identical, and neither is wrong.
- *
- * Returns null when the weighted base is not positive, which means the window
- * has no capital to measure a return against.
+ * See tests/deposit-neutrality.test.mjs, which asserts that across every figure.
  */
-export function modifiedDietzReturn(pnl, openingValue, flows = [], from, to) {
-  const start = new Date(from).getTime();
-  const end = new Date(to).getTime();
-  const days = (end - start) / 86_400_000;
-  if (!Number.isFinite(days) || days <= 0) return null;
-
-  let weighted = 0;
-  for (const f of flows) {
-    const at = new Date(f.date).getTime();
-    if (!Number.isFinite(at) || at < start || at > end) continue;
-    // Money present for the whole period counts fully; money that arrived
-    // yesterday counts for almost nothing.
-    const weight = (end - at) / (end - start);
-    weighted += f.amount * weight;
-  }
-
-  const base = openingValue + weighted;
-  if (!(base > 0)) return null;
-  return (pnl / base) * 100;
-}
-
-/**
- * What the account was worth when the window opened, worked out backwards.
- *
- *   opening = closing - profit - money paid in
- *
- * Without the flows term this silently assumes every deposit was present from
- * the start, which inflates the base by the whole amount paid in and crushes
- * the reported return.
- */
-export function openingValue(closingValue, pnl, flows = [], from, to) {
-  const start = new Date(from).getTime();
-  const end = new Date(to).getTime();
-  const net = flows.reduce((sum, f) => {
-    const at = new Date(f.date).getTime();
-    return (at >= start && at <= end) ? sum + f.amount : sum;
-  }, 0);
-  return closingValue - pnl - net;
-}
 
 /**
  * Chain the broker's own return with the days since they wrote it.
@@ -582,8 +641,14 @@ export function openingValue(closingValue, pnl, flows = [], from, to) {
  * this app only knows what it was worth on the days it happened to be open.
  * The broker did value it daily — and printed the answer on the statement. So
  * the long stretch is taken from them, and only the stub since their closing
- * date is measured here, where Modified Dietz over a short window with few
- * flows is a close approximation rather than a different answer.
+ * date is measured here.
+ *
+ * The stub is profit over the balance the statement closed on, and deliberately
+ * not Modified Dietz. Dietz would weight a deposit into that base, so money paid
+ * in last week would move the reported year on a day nothing was traded — and it
+ * did, by nearly a point on a $10,000 deposit. A deposit is capital, not a
+ * result; it is out of the base entirely, which also makes the stub's date
+ * irrelevant and the whole figure stable between statements.
  *
  * Null when the stub cannot be measured, so the caller falls back rather than
  * reporting a figure resting on a base it does not have.
@@ -597,10 +662,8 @@ function chainedFromBroker({ account, openingNav, flows, to }) {
   const stubPnl = account - throughValue - net;
   // A statement that closes today has no stub, and the broker's figure stands
   // on its own.
-  const stub = through === to
-    ? 0
-    : modifiedDietzReturn(stubPnl, throughValue, since, through, to);
-  if (stub == null) return null;
+  const stub = through === to ? 0 : (stubPnl / throughValue) * 100;
+  if (stub == null || !Number.isFinite(stub)) return null;
 
   return ((1 + twr / 100) * (1 + stub / 100) - 1) * 100;
 }
@@ -620,10 +683,10 @@ function chainedFromBroker({ account, openingNav, flows, to }) {
  * what the account is worth now, less what it was worth then, less the money
  * paid in between — which captures dividends, fees and holdings carried in from
  * earlier years without needing to know anything about them individually. The
- * return is then Modified Dietz, weighting each deposit by how long it was
- * actually present. That answers a slightly different question — it is the
- * return on the money you had at work, so it credits you for adding before a
- * good run — and will read a little above or below the broker accordingly.
+ * return is then that profit over the stated opening balance. It reads above
+ * the broker on an account whose capital grew during the year, because it
+ * credits the whole year's profit to the money that started it — the price of
+ * being a figure a deposit cannot move.
  *
  * Failing even that, it adds up the trades and assumes no money moved. That is
  * the honest best guess from a journal alone, and it understates whenever money
@@ -647,7 +710,18 @@ export function accountPerformance({
     return {
       pnl,
       startEquity: openingNav.value,
-      returnPct: chained ?? modifiedDietzReturn(pnl, openingNav.value, flows, from, to),
+      /**
+       * The broker's own chained figure when they gave us one; otherwise the
+       * period's profit over the balance it opened with.
+       *
+       * That fallback was Modified Dietz, which adds each deposit to the base
+       * in proportion to how long it was present. Correct as a money-weighted
+       * return, and wrong for this app's rule: it let paying money in change
+       * the percentage on its own. The opening balance already excludes every
+       * later deposit, and `pnl` already excludes them too, so dividing one by
+       * the other is deposit-neutral by construction.
+       */
+      returnPct: chained ?? (openingNav.value > 0 ? (pnl / openingNav.value) * 100 : null),
       carried: 0,
       method: chained == null ? 'statement' : 'broker',
       /** The broker's own figure and the day it runs to, for the tooltip. */
@@ -656,12 +730,14 @@ export function accountPerformance({
     };
   }
 
-  return { ...periodPnl(positions, account, from, startPrices), method: 'trades' };
+  // Flows go through so the deposit can be taken back out of the opening
+  // balance; without them the return is divided by a base that never existed.
+  return { ...periodPnl(positions, account, from, startPrices, flows), method: 'trades' };
 }
 
 /** The calendar year, which is the window the overview reports against. */
-export function yearToDatePnl(positions, account, startPrices = new Map(), now = new Date()) {
-  return periodPnl(positions, account, `${now.getFullYear()}-01-01`, startPrices);
+export function yearToDatePnl(positions, account, startPrices = new Map(), now = new Date(), flows = []) {
+  return periodPnl(positions, account, `${now.getFullYear()}-01-01`, startPrices, flows);
 }
 
 export function sectorBreakdown(positions, cash = 0) {

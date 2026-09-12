@@ -11,7 +11,7 @@ import { readFileSync, existsSync } from 'node:fs';
 
 import { parseIbkrStatement, statementToJournal, describeStatement } from '../src/features/ibkr.js';
 import { state, loadState } from '../src/core/store.js';
-import { accountTotals, accountPerformance, modifiedDietzReturn } from '../src/core/portfolio.js';
+import { accountTotals, accountPerformance } from '../src/core/portfolio.js';
 
 /**
  * The statement is personal, so it is not in the repository and these tests
@@ -89,8 +89,10 @@ describe('the parsed statement matches what IBKR states', () => {
 
   test("the broker's own time-weighted return is picked up", withFile(() => {
     // It sits in the Net Asset Value block under a header of its own, as a lone
-    // percentage with no column to look it up by. Without it this app can only
-    // report Modified Dietz, which on this account reads three points high.
+    // percentage with no column to look it up by. It is the only true
+    // time-weighted return available — without it the app falls back to profit
+    // over the opening balance, which is deposit-neutral but reads high on an
+    // account whose capital grew a third during the year.
     assert.ok(near(parsed.twr, 28.900517844, 1e-9), `read ${parsed.twr}`);
   }));
 
@@ -165,33 +167,47 @@ describe('the journal it builds', () => {
   }));
 });
 
-describe('deposits change the answer', () => {
-  test('ignoring them understates the return badly', () => {
-    const flows = [
-      { date: '2026-01-20', amount: 2000 }, { date: '2026-02-06', amount: 1997 },
-      { date: '2026-03-23', amount: 1500 }, { date: '2026-03-31', amount: 1000 },
-      { date: '2026-06-05', amount: 2000 },
-    ];
-    const pnl = 10334.02;
-    const opening = 26365.95;
+describe('deposits are capital, not performance', () => {
+  // The real statement's five deposits, $8,497 between them.
+  const FLOWS = [
+    { date: '2026-01-20', amount: 2000 }, { date: '2026-02-06', amount: 1997 },
+    { date: '2026-03-23', amount: 1500 }, { date: '2026-03-31', amount: 1000 },
+    { date: '2026-06-05', amount: 2000 },
+  ];
+  const PNL = 10334.02;
+  const OPENING = 26365.95;
+  const ACCOUNT = OPENING + PNL + 8497;
 
-    const withFlows = modifiedDietzReturn(pnl, opening, flows, '2026-01-01', '2026-08-28');
+  const measure = (account, flows) => accountPerformance({
+    positions: [], account, from: '2026-01-01', to: '2026-08-28', flows,
+    openingNav: { date: '2026-01-01', value: OPENING },
+  });
 
-    // Counting every deposit as though it had been present since January: the
-    // base swells by the full 8,497 and the return is diluted by money that was
-    // only there for part of the year.
-    const unweighted = (pnl / (opening + 8497)) * 100;
+  test('the deposits are not mistaken for profit', () => {
+    const r = measure(ACCOUNT, FLOWS);
+    assert.equal(r.method, 'statement');
+    // Profit is what the account gained beyond what was paid into it. Without
+    // the flows term the $8,497 reads as a gain and the year reads near 72%.
+    assert.ok(Math.abs(r.pnl - PNL) < 0.01, `${r.pnl} should be ${PNL}`);
+  });
 
-    assert.ok(
-      withFlows > unweighted + 2,
-      `weighting should add at least two points: ${withFlows.toFixed(2)}% vs ${unweighted.toFixed(2)}%`,
-    );
-    assert.ok(withFlows > 30 && withFlows < 34, `expected low thirties, got ${withFlows}`);
+  test('and they are not mistaken for capital that was there in January', () => {
+    // This was the original bug: the base swelled by the full $8,497, so money
+    // that arrived in June diluted a return it had not been present to earn.
+    const r = measure(ACCOUNT, FLOWS);
+    const swollen = (PNL / (OPENING + 8497)) * 100;
+    assert.ok(Math.abs(r.returnPct - (PNL / OPENING) * 100) < 1e-9);
+    assert.ok(r.returnPct > swollen + 9,
+      `${r.returnPct.toFixed(2)}% vs the old ${swollen.toFixed(2)}%`);
+  });
 
-    // And against what the app actually reported before any of this existed,
-    // which was worse again: it derived the opening balance from today's value
-    // and left out the holdings carried in from last year.
-    assert.ok(withFlows > 24.01 + 6, 'the whole fix should be worth several points');
+  test('so paying money in leaves the year exactly where it was', () => {
+    // The property that matters more than either number above: the account is
+    // $8,497 bigger and the percentage is untouched.
+    const none = measure(OPENING + PNL, []);
+    const paid = measure(ACCOUNT, FLOWS);
+    assert.ok(Math.abs(none.returnPct - paid.returnPct) < 1e-9,
+      `${none.returnPct}% vs ${paid.returnPct}%`);
   });
 });
 

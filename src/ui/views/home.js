@@ -540,9 +540,10 @@ function describeOwnYear(performance) {
       longDate(performance.brokerThrough)}, compounded with this account's move since.`;
   }
   if (performance?.method === 'statement') {
-    return `Your return since 1 January ${year}, measured on the money you had at work `
-      + '(Modified Dietz). Import a statement carrying your broker\'s own time-weighted '
-      + 'return to match their figure exactly.';
+    return `Your return since 1 January ${year}: the year's profit over what the account `
+      + 'was worth on 1 January, so money you paid in since does not change it. Import a '
+      + 'statement carrying your broker\'s own time-weighted return to match their figure '
+      + 'exactly.';
   }
 
   const span = trackedSpan();
