@@ -97,10 +97,32 @@ export function buildPortfolioHistory({
    * carry an adjustment from an earlier year, and applying it here would put
    * last year's tax on this year's first day.
    */
+  /** A price and whether it was a real close, with the dated-mark fallback. */
+  const priceFor = (ticker, day) => {
+    const quoted = priceOn(ticker, day);
+    if (quoted > 0) return { value: quoted, fresh: true };
+    return { value: lastKnownOn(lastKnown[ticker], day), fresh: false };
+  };
+
+  /** Yesterday, for repricing the shares that were held through the night. */
+  let prevDay = null;
+  let prevHoldings = new Map();
+
   for (const day of eachDay(opening.date, to)) {
+    // Captured before today's trades, so it is genuinely what was held
+    // overnight rather than what the day ended up holding.
+    prevHoldings = new Map(holdings);
+
     const todays = byDay.get(day);
     let deposit = 0;
     let withdrawal = 0;
+    /**
+     * Cash that is neither a transfer nor the other half of a trade: dividends,
+     * interest, commissions, withholding tax. It is performance — money the
+     * holdings earned or cost — so it belongs in the day's return, and unlike a
+     * deposit it is not money you put in.
+     */
+    let income = 0;
 
     for (const event of todays ?? []) {
       if (MOVES_SHARES.has(event.kind) && event.ticker) {
@@ -109,6 +131,10 @@ export function buildPortfolioHistory({
       if (event.kind === 'flow') {
         const amount = Number(event.cash) || 0;
         if (amount >= 0) deposit += amount; else withdrawal += amount;
+      } else if (!MOVES_SHARES.has(event.kind)) {
+        // Not a transfer and not the cash leg of a trade, so it is income or a
+        // cost: the account earned or paid it.
+        income += Number(event.cash) || 0;
       }
       cash += Number(event.cash) || 0;
     }
@@ -119,13 +145,37 @@ export function buildPortfolioHistory({
     let stale = 0;
     for (const [ticker, qty] of holdings) {
       if (Math.abs(qty) < 1e-9) continue;
-      let price = priceOn(ticker, day);
-      const fresh = price > 0;
-      if (!fresh) price = lastKnownOn(lastKnown[ticker], day);
-      if (!(price > 0)) continue;
-      const value = qty * price;
+      const price = priceFor(ticker, day);
+      if (!(price.value > 0)) continue;
+      const value = qty * price.value;
       positionsValue += value;
-      if (!fresh) stale += Math.abs(value);
+      if (!price.fresh) stale += Math.abs(value);
+    }
+
+    /**
+     * What the market did to money already invested, and nothing else.
+     *
+     * Yesterday's shares, repriced. No cash term, no trade term, no flow term —
+     * a deposit cannot appear in it, because a deposit does not change a price
+     * or a quantity held yesterday.
+     *
+     * This is what the percentage curve is built from, and it exists because
+     * every attempt to work performance out from the balance instead had to
+     * subtract deposits back out of it. `totalAccountValue` moves for two
+     * different reasons and the subtraction has to be perfect to tell them
+     * apart — one deposit missing its date, or a balance scaled to meet the
+     * recording, and the transfer is drawn as a day of spectacular gains. This
+     * number never had the deposit in it to begin with.
+     */
+    let marketPnl = 0;
+    if (prevDay) {
+      for (const [ticker, qty] of prevHoldings) {
+        if (Math.abs(qty) < 1e-9) continue;
+        const now = priceFor(ticker, day);
+        const before = priceFor(ticker, prevDay);
+        if (!(now.value > 0) || !(before.value > 0)) continue;
+        marketPnl += qty * (now.value - before.value);
+      }
     }
 
     out.push({
@@ -136,9 +186,15 @@ export function buildPortfolioHistory({
       externalCashFlow: round(deposit + withdrawal),
       deposit: round(deposit),
       withdrawal: round(withdrawal),
+      /**
+       * The day's performance: price moves on shares already held, plus what
+       * the holdings earned or cost in cash. No deposit can reach it.
+       */
+      marketPnl: round(marketPnl + income),
       /** Value carried at a last-known mark rather than a real close. */
       stalePositions: round(stale),
     });
+    prevDay = day;
   }
 
   return out;

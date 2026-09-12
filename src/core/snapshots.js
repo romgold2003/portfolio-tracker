@@ -258,6 +258,35 @@ function flowsByStep(points, dates, synthetic) {
 }
 
 function percentCurve(values, dates, synthetic, points = []) {
+  /**
+   * When the days know what they earned, use that and nothing else.
+   *
+   * `marketPnl` is price moves on shares already held plus dividends and fees —
+   * performance with no cash movement in it at all. Dividing it by yesterday's
+   * balance gives the day's return directly:
+   *
+   *   r(d) = marketPnl(d) / value(d−1)
+   *
+   * and there is no deposit to subtract, because there was never one in the
+   * numerator. That is the difference from every earlier attempt here, all of
+   * which worked the day's profit out from the change in balance and then had
+   * to remove the transfers again — which only works if every transfer is known
+   * and perfectly dated, and is drawn as a day of spectacular gains when one
+   * is not.
+   */
+  if (!synthetic && points.some((p) => Number.isFinite(p?.marketPnl))) {
+    let growth = 1;
+    let netted = 0;
+    const curve = points.map((row, i) => {
+      if (i === 0) return 0;
+      const prev = values[i - 1];
+      if (prev > 0) growth *= 1 + (Number(row?.marketPnl) || 0) / prev;
+      netted += Math.abs(Number(row?.externalCashFlow) || 0);
+      return +((growth - 1) * 100).toFixed(4);
+    });
+    return { curve, netted };
+  }
+
   const flows = flowsByStep(points, dates, synthetic);
   // Gross rather than net, because it is reported as "how much money moved and
   // was kept out of the return". A deposit and a withdrawal of the same size

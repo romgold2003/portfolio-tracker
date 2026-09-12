@@ -248,7 +248,7 @@ describe('the shape of the dataset', () => {
       opening, events: [], priceOn: book({ AAA: { '2026-01-01': 50 } }), to: '2026-01-01',
     });
     assert.deepEqual(Object.keys(h[0]).sort(), [
-      'cashValue', 'date', 'deposit', 'externalCashFlow',
+      'cashValue', 'date', 'deposit', 'externalCashFlow', 'marketPnl',
       'positionsValue', 'stalePositions', 'totalAccountValue', 'withdrawal',
     ]);
   });
@@ -784,5 +784,99 @@ describe('the rows carry their own flows', () => {
     ], []);
     assert.equal(s.flowsNetted, 0);
     assert.ok(Math.abs(s.percent[1] - 100) < 1e-6, 'with nothing recorded it can only be a gain');
+  });
+});
+
+describe('the day\'s performance, with no cash in it', () => {
+  /**
+   * The measure the percentage curve is built from, and the reason it exists.
+   *
+   * Every earlier attempt worked the day's profit out from the change in
+   * balance and then subtracted the transfers back out. That only works if
+   * every transfer is known and perfectly dated — and when one is not, the
+   * whole transfer is drawn as a day of spectacular gains. This number never
+   * had a deposit in it: yesterday's shares, repriced, plus what the holdings
+   * earned or cost.
+   */
+  const opening = { date: '2026-01-01', cash: 1000, holdings: { AAA: 10 } };
+  const book = (prices) => (ticker, day) => prices[ticker]?.[day] ?? null;
+  const flat = { AAA: { '2026-01-01': 100, '2026-01-02': 100, '2026-01-03': 100 } };
+
+  test('a deposit earns nothing on the day it lands', () => {
+    const h = buildPortfolioHistory({
+      opening,
+      events: [{ date: '2026-01-02', kind: 'flow', cash: 50_000 }],
+      priceOn: book(flat), to: '2026-01-03',
+    });
+    assert.equal(h[1].marketPnl, 0, 'the deposit was counted as a gain');
+    assert.equal(h[1].externalCashFlow, 50_000, 'but the balance still records it');
+    assert.equal(h[1].totalAccountValue, 52_000);
+  });
+
+  test('a price move is the whole of it', () => {
+    const h = buildPortfolioHistory({
+      opening,
+      events: [],
+      priceOn: book({ AAA: { '2026-01-01': 100, '2026-01-02': 110 } }), to: '2026-01-02',
+    });
+    assert.equal(h[1].marketPnl, 100);   // 10 shares up 10
+  });
+
+  test('buying today does not book today\'s earlier move', () => {
+    // Shares bought this morning were not held through the night, so the day's
+    // move does not belong to them.
+    const h = buildPortfolioHistory({
+      opening: { date: '2026-01-01', cash: 10_000, holdings: {} },
+      events: [{ date: '2026-01-02', kind: 'trade', ticker: 'AAA', qty: 10, price: 100, cash: -1000 }],
+      priceOn: book({ AAA: { '2026-01-01': 90, '2026-01-02': 100 } }), to: '2026-01-02',
+    });
+    assert.equal(h[1].marketPnl, 0);
+  });
+
+  test('dividends and fees are performance and are counted', () => {
+    const h = buildPortfolioHistory({
+      opening,
+      events: [
+        { date: '2026-01-02', kind: 'dividend', cash: 25 },
+        { date: '2026-01-02', kind: 'commission', cash: -4 },
+      ],
+      priceOn: book(flat), to: '2026-01-02',
+    });
+    assert.equal(h[1].marketPnl, 21);
+  });
+
+  test('the first day has no yesterday, so it earns nothing', () => {
+    const h = buildPortfolioHistory({ opening, events: [], priceOn: book(flat), to: '2026-01-02' });
+    assert.equal(h[0].marketPnl, 0);
+  });
+
+  test('and the curve built from it ignores a deposit entirely', async () => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = [];
+
+    const rising = { AAA: { '2026-01-01': 100, '2026-01-02': 110, '2026-01-03': 121 } };
+    const withDeposit = buildPortfolioHistory({
+      opening: { date: '2026-01-01', cash: 0, holdings: { AAA: 10 } },
+      events: [{ date: '2026-01-02', kind: 'flow', cash: 100_000 }],
+      priceOn: book(rising), to: '2026-01-03',
+    });
+    setBackfill(withDeposit, { authoritative: true });
+    const funded = curveSeries('All');
+
+    const without = buildPortfolioHistory({
+      opening: { date: '2026-01-01', cash: 0, holdings: { AAA: 10 } },
+      events: [], priceOn: book(rising), to: '2026-01-03',
+    });
+    setBackfill(without, { authoritative: true });
+    const bare = curveSeries('All');
+
+    // Day two is +10%, and the $100,000 must not show anywhere in the line.
+    assert.ok(Math.abs(bare.percent[1] - 10) < 1e-6, `${bare.percent[1]}%`);
+    assert.ok(Math.abs(funded.percent[1] - 10) < 1e-6,
+      `a deposit moved the line: ${funded.percent[1]}%`);
+    // Later days differ only because the money really is working by then.
+    assert.ok(funded.percent[2] > 0 && bare.percent[2] > 0);
   });
 });

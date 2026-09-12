@@ -315,9 +315,10 @@ function renderCurveNote(series) {
   }
 
   const excluded = removed > 0
-    ? `${$u(removed)} of deposits and withdrawals excluded — they change your balance, not your return.`
-    : 'No deposits or withdrawals fell inside this window.';
-  note.textContent = `Return since 1 January, compounded daily. ${excluded}${missing}`;
+    ? ` ${$u(removed)} of deposits and withdrawals changed your balance and not this line.`
+    : '';
+  note.textContent = 'Return since 1 January, compounded daily from what your holdings '
+    + `earned — never from your balance, so money paid in cannot appear in it.${excluded}${missing}`;
 }
 
 /**
