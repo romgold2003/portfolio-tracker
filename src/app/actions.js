@@ -500,39 +500,9 @@ export function setPosSort(key) {
  */
 export function setTimeframe(tf) {
   ui.timeframe = tf;
-  // Scoped to the timeframe row. Unscoped, this cleared the active state off
-  // every other control sharing the `.tf` pill style — the $ / % switch lost
-  // its highlight on each timeframe click, because neither of its buttons
-  // carries a `data-tf` to match.
-  document.querySelectorAll('#tfRow .tf').forEach((x) => x.classList.toggle('active', x.dataset.tf === tf));
+  document.querySelectorAll('.tf').forEach((x) => x.classList.toggle('active', x.dataset.tf === tf));
   const label = el('kRetLbl');
   if (label) label.textContent = tf;
-  show('home');
-}
-
-/**
- * Switch the home chart between the account value and the benchmark.
- *
- * The benchmark has one window and only one — the year so far — so the
- * timeframe row is swapped for a single "All" pill rather than left showing
- * buttons that would do nothing. The selected timeframe is remembered
- * underneath, so switching back returns to the window that was being looked at.
- */
-export function setCurveMode(mode) {
-  ui.curveMode = mode === 'benchmark' ? 'benchmark' : 'value';
-  const benchmark = ui.curveMode === 'benchmark';
-
-  document.querySelectorAll('#curveModeRow .tf').forEach((x) => {
-    const on = x.dataset.mode === ui.curveMode;
-    x.classList.toggle('active', on);
-    x.setAttribute('aria-pressed', String(on));
-  });
-
-  const timeframes = el('tfRow');
-  const single = el('benchTfRow');
-  if (timeframes) timeframes.style.display = benchmark ? 'none' : '';
-  if (single) single.style.display = benchmark ? 'flex' : 'none';
-
   show('home');
 }
 
@@ -595,7 +565,6 @@ function showMonth(key) {
 export const voiceActions = {
   show,
   setTimeframe,
-  setCurveMode,
   editCash,
   refreshPrices,
   focusTicker,

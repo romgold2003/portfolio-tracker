@@ -10,7 +10,7 @@ import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
-  benchmarkSpot, benchmarkYearToDate, benchmarkHistories,
+  benchmarkSpot, benchmarkYearToDate,
 } from '../../services/benchmark.js';
 import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
@@ -272,127 +272,6 @@ let backfillFor = null;
  * service the rest of the app uses, and a value worked out for every day. It
  * runs once: a past close never changes.
  */
-/**
- * What the benchmark chart took out of the return, said out loud.
- *
- * "Deposits do not affect the percentage" is a claim, and a claim about money
- * deserves to be checkable rather than trusted. This states the amount actually
- * removed from the chained return — and, when the journal records transfers the
- * chart did not remove, says that instead, because that is the failure worth
- * catching: an account whose deposits are invisible to the curve reports them
- * as performance and reads high by roughly the deposits over the opening
- * balance.
- */
-function renderCurveNote(series) {
-  const note = document.getElementById('curveNote');
-  if (!note) return;
-
-  if (!series || ui.curveMode !== 'benchmark') {
-    note.style.display = 'none';
-    return;
-  }
-  note.style.display = '';
-
-  const removed = series.flowsNetted ?? 0;
-  const missing = (series.missing ?? []).length
-    ? ` · No data for ${series.missing.join(' or ')}.`
-    : '';
-
-  /**
-   * There is no warning here any more, because there is no longer a case to
-   * warn about.
-   *
-   * This used to caution that the account had no transfer records, since the
-   * return was worked out from the balance and had to subtract them back out —
-   * so without them it read high. The line is now built from what the holdings
-   * earned, which never had the money in it, and needs no record of a transfer
-   * to be right about one.
-   */
-  const excluded = removed > 0
-    ? ` ${$u(removed)} of deposits and withdrawals changed your balance and not this line.`
-    : '';
-  const base = 'Return since 1 January, compounded daily from what your holdings '
-    + `earned — never from your balance, so money paid in cannot appear in it.${excluded}`;
-
-  /**
-   * How much of the account this line actually covers.
-   *
-   * A holding the price service cannot quote is left out of both halves of the
-   * return, because the only prices available for it are trade marks and
-   * differencing those invents moves that never happened. That is the right
-   * thing to do and the wrong thing to do silently: a figure covering half an
-   * account must not be read as covering all of it.
-   */
-  /**
-   * A book with no broker ledger cannot draw this line and should say so.
-   *
-   * Without the statement's dated events, past days are reconstructed from
-   * today's positions — and the positions record a realised trade as money
-   * rather than shares, so a partly sold holding has no share count and a
-   * holding bought into twice leaves no trace of the second purchase. The
-   * reconstruction is out by one and a half thousand dollars on the first of
-   * January and swings several per cent a day on noise that never happened.
-   *
-   * Compounding that noise is what makes the line diverge: fake volatility
-   * drags a genuine +30% year to below zero. Measured from the same account
-   * with the ledger present it reads 29.97% against the broker's own 30.83%.
-   *
-   * So the figure is not presented as though it were sound. The fix is one
-   * import away and is worth naming exactly.
-   */
-  if (!state.ledger?.events?.length) {
-    note.innerHTML = '<span style="color:var(--amber)">This line is reconstructed from your '
-      + 'current positions, which cannot show what you held on a past day — so it drifts, '
-      + 'and the further back it goes the less it means. Import your broker statement on the '
-      + 'Settings page to rebuild it from the dated transactions instead.</span>'
-      + escapeHtml(missing);
-    return;
-  }
-
-  const share = series.pricedShare ?? 1;
-  if (share < 0.95) {
-    note.innerHTML = escapeHtml(base)
-      + ` <span style="color:var(--amber)">Covers ${Math.round(share * 100)}% of your `
-      + 'account — the rest has no daily price to measure.</span>'
-      + escapeHtml(missing);
-    return;
-  }
-  note.textContent = base + missing;
-}
-
-/**
- * The index histories the benchmark chart draws against.
- *
- * Fetched once and held, then the page is redrawn — the same shape as the
- * price backfill above and for the same reason: the account's own line is
- * already in hand, so drawing it immediately and adding the indexes a moment
- * later beats an empty chart waiting on the network.
- *
- * Only fetched when the benchmark is actually being looked at. Someone who
- * never opens it never spends the requests.
- */
-let indexHistories = [];
-let indexPending = false;
-let indexLoaded = false;
-
-async function loadIndexHistories() {
-  if (indexPending || indexLoaded || ui.curveMode !== 'benchmark') return;
-  indexPending = true;
-  try {
-    const fetched = await benchmarkHistories();
-    // Held even when some came back empty: the chart names what is missing,
-    // and retrying on every render would hammer a source that is simply down.
-    indexHistories = fetched;
-    indexLoaded = true;
-    renderHome();
-  } catch {
-    // Left empty; the chart draws the account alone and says the comparison
-    // is unavailable.
-  } finally {
-    indexPending = false;
-  }
-}
-
 async function loadBackfill() {
   if (backfillPending) return;
 
@@ -503,48 +382,11 @@ async function loadBackfill() {
         row.totalAccountValue = round2(live);
         row.cashValue = round2(state.cash);
         row.positionsValue = round2(live - state.cash);
-        if (last.date === today) {
-          /**
-           * Today's performance is restated along with today's balance.
-           *
-           * Spreading the previous row over today carried its `marketPnl` with
-           * it, so the live value was reported alongside a figure describing a
-           * different day — and the last point of the line stepped by whatever
-           * the two days happened to differ by. What today actually earned is
-           * the change in balance since yesterday, less anything paid in.
-           */
-          const previous = forward[forward.length - 2];
-          row.marketPnl = previous
-            ? round2(live - previous.totalAccountValue - (row.externalCashFlow ?? 0))
-            : 0;
-          forward[forward.length - 1] = row;
-        } else {
-          forward.push({
-            ...row,
-            externalCashFlow: 0,
-            deposit: 0,
-            withdrawal: 0,
-            marketPnl: round2(live - last.totalAccountValue),
-          });
-        }
+        if (last.date === today) forward[forward.length - 1] = row;
+        else forward.push({ ...row, externalCashFlow: 0, deposit: 0, withdrawal: 0 });
       }
       setBackfill(forward, { authoritative: true });
     } else {
-      /**
-       * The back-cast keeps its flows, which it used to throw away here.
-       *
-       * Reducing each day to a date and a balance meant the percentage curve
-       * had nothing to work with but the balance — and a balance moves when
-       * money is paid in. It then had to find the deposits somewhere else and
-       * line them up by date against days that may not exist, which is where
-       * the unexplained steps came from. The transfer belongs on the day it
-       * happened, beside the balance it changed.
-       */
-      const byDay = new Map();
-      for (const flow of state.cashFlows ?? []) {
-        if (!flow?.date || !Number.isFinite(flow.amount)) continue;
-        byDay.set(flow.date, (byDay.get(flow.date) ?? 0) + flow.amount);
-      }
       setBackfill(rebuildDailyValue({
         positions: state.positions,
         cash: state.cash,
@@ -552,14 +394,7 @@ async function loadBackfill() {
         priceOn: pastPrice,
         from: earliest,
         to: todayStr(),
-      }).map((r) => ({
-        date: r.date,
-        totalAccountValue: r.value,
-        externalCashFlow: byDay.get(r.date) ?? 0,
-        // Carried through so the percentage curve has a cash-free figure to
-        // work from even on a book with no statement behind it.
-        marketPnl: r.marketPnl,
-      })));
+      }).map((r) => ({ date: r.date, totalAccountValue: r.value })));
     }
     backfillFor = key;
     renderHome();
@@ -855,12 +690,11 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
-  renderCurveNote(renderCurve(ui.timeframe, ui.curveMode, indexHistories));
+  renderCurve(ui.timeframe);
 
   // Kicked off after the draw, so the chart appears immediately and lengthens
   // when the price histories land rather than blocking on the network.
   loadBackfill();
-  loadIndexHistories();
 
   const period = accountPerformance({
     positions: state.positions,

@@ -7,7 +7,6 @@
  */
 import { MONTHS_SHORT } from '../config/constants.js';
 import { curveSeries, externalFlows } from '../core/snapshots.js';
-import { benchmarkLines, leadOver } from '../core/benchmarkCurve.js';
 
 /** Live chart instances, so each redraw can destroy the previous one. */
 const charts = {};
@@ -19,21 +18,6 @@ function cssVar(name, fallback) {
   } catch {
     return fallback;
   }
-}
-
-/**
- * A colour at partial opacity.
- *
- * Chart.js takes any CSS colour string, and the palette arrives as `#rrggbb`
- * from the computed style, so an alpha pair appended to the hex is the whole
- * job. Anything that is not a six-digit hex — a named colour, an rgb() — is
- * handed back untouched rather than corrupted by appending to it.
- */
-function translucent(colour, alpha) {
-  if (!/^#[0-9a-f]{6}$/i.test(colour)) return colour;
-  const pair = Math.round(Math.min(Math.max(alpha, 0), 1) * 255)
-    .toString(16).padStart(2, '0');
-  return colour + pair;
 }
 
 function chartColors() {
@@ -92,45 +76,13 @@ function cashFlowMarks(marks) {
   };
 }
 
-/**
- * Draws the account curve and returns the series behind it.
- *
- * `mode` picks what the chart is. 'value' is the account in currency over the
- * selected timeframe. 'benchmark' is the year so far as percentages — the
- * account against the indexes, every line rebased to zero on 1 January, which
- * is the only way three series of different sizes can be read side by side.
- *
- * `indexes` carries the fetched index histories. They arrive from the network,
- * so the chart is drawn without them first and redrawn when they land rather
- * than waiting: the account's own line is the one that matters and it is
- * already in hand.
- */
-export function renderCurve(timeframe, mode = 'value', indexes = []) {
+/** Draws the account-value curve and returns the period return it implies. */
+export function renderCurve(timeframe) {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
-  const benchmark = mode === 'benchmark';
-  // The benchmark chart has one window: the year so far. It is labelled "All"
-  // because that is all of it — the account's whole life this year.
-  const series = curveSeries(benchmark ? 'YTD' : timeframe);
-  const percent = benchmark;
-  const { labels } = series;
-  const data = percent ? series.percent : series.data;
+  const series = curveSeries(timeframe);
+  const { labels, data } = series;
   const c = chartColors();
-
-  const { lines, missing } = benchmark
-    ? benchmarkLines({
-      dates: series.dates,
-      percent: series.percent,
-      indexes,
-      // The placeholder curve is a drawing, not a record, and must never be
-      // raced against real index data.
-      accountReady: !series.synthetic,
-    })
-    : { lines: [], missing: [] };
-
-  canvas.setAttribute('aria-label', benchmark
-    ? `Your return this year against ${lines.slice(1).map((l) => l.name).join(' and ') || 'the market'}`
-    : `Account value over ${timeframe}`);
 
   /**
    * The external flows inside this window, matched to the point they sit on.
@@ -142,15 +94,10 @@ export function renderCurve(timeframe, mode = 'value', indexes = []) {
    */
   const shown = new Map((series.dates ?? []).map((d, i) => [d, i]));
   const flows = [];
-  // Not on the benchmark chart. There the line deliberately does not move when
-  // money lands, so a marker would be pointing at nothing — and three lines
-  // already carry enough for the eye without triangles between them.
-  if (!benchmark) {
-    for (const flow of externalFlows()) {
-      const index = shown.get(flow.date);
-      if (index == null) continue;
-      flows.push({ index, date: flow.date, amount: flow.amount });
-    }
+  for (const flow of externalFlows()) {
+    const index = shown.get(flow.date);
+    if (index == null) continue;
+    flows.push({ index, date: flow.date, amount: flow.amount });
   }
 
   charts.curve?.destroy();
@@ -162,74 +109,26 @@ export function renderCurve(timeframe, mode = 'value', indexes = []) {
     plugins: [cashFlowMarks(flows)],
     data: {
       labels,
-      datasets: benchmark
-        /**
-         * Three lines, no fills. A filled area under one line hides the lines
-         * behind it, and on a comparison chart the crossings are the whole
-         * point — the day the account pulled ahead of the index is the thing
-         * being looked for.
-         *
-         * The account is drawn thicker and last so it sits on top: it is the
-         * subject, and the indexes are the backdrop it is read against.
-         */
-        ? lines.map((line, i) => ({
-          label: line.name,
-          data: line.data,
-          /**
-           * All three solid, thin, and slightly translucent.
-           *
-           * Solid because a dashed line reads as an estimate, and all three of
-           * these are measured. Thin because three lines at chart weight fill
-           * the plot and the crossings get lost in the ink. Translucent because
-           * where they overlap — which on a good year is most of the way across
-           * — you need to see that two lines are there rather than one.
-           */
-          borderColor: translucent(
-            line.key === 'account' ? c.green : cssVar(line.colour, c.txt), 0.85,
-          ),
-          borderWidth: line.key === 'account' ? 1.6 : 1.2,
-          pointRadius: 0,
-          fill: false,
-          tension: 0.3,
-          order: lines.length - i,
-        }))
-        : [{
-          data,
-          // A balance is not good or bad, so the value curve is always green.
-          borderColor: c.green,
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: true,
-          backgroundColor: c.green + '14',
-          tension: 0.4,
-        }],
+      datasets: [{
+        data,
+        borderColor: c.green,
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: c.green + '14',
+        tension: 0.4,
+      }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        /**
-         * A legend only where there is more than one line to tell apart. On the
-         * value chart it would be a label for the obvious.
-         */
-        legend: benchmark ? {
-          display: true,
-          position: 'bottom',
-          labels: {
-            color: c.txt,
-            boxWidth: 10,
-            boxHeight: 2,
-            font: { size: 10 },
-            usePointStyle: false,
-          },
-        } : { display: false },
+        legend: { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
           callbacks: {
-            label: (ctx) => (percent
-              ? ` ${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`
-              : ' $' + Math.round(ctx.raw).toLocaleString()),
+            label: (ctx) => ' $' + Math.round(ctx.raw).toLocaleString(),
             /**
              * A deposit is named under the value rather than folded into it.
              * The account really did grow by that much and really did not earn
@@ -246,10 +145,6 @@ export function renderCurve(timeframe, mode = 'value', indexes = []) {
                 flow.amount > 0 ? 'Deposit' : 'Withdrawal',
                 'Date: ' + when,
                 'Amount: ' + sign + Math.abs(flow.amount).toLocaleString(),
-                // Said outright on the benchmark chart, because the line not
-                // moving here is the one thing a reader might mistake for a
-                // bug — and it is exactly what makes the comparison fair.
-                ...(percent ? ['Not counted as return'] : []),
               ];
             },
           },
@@ -258,21 +153,13 @@ export function renderCurve(timeframe, mode = 'value', indexes = []) {
       scales: {
         x: { ticks: { color: c.txt, font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: c.grid } },
         y: {
-          ticks: {
-            color: c.txt,
-            font: { size: 10 },
-            callback: (v) => (percent
-              ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
-              : '$' + (v / 1000).toFixed(1) + 'k'),
-          },
+          ticks: { color: c.txt, font: { size: 10 }, callback: (v) => '$' + (v / 1000).toFixed(1) + 'k' },
           grid: { color: c.grid },
         },
       },
     },
   });
-
-  // The comparison the chart just drew, for whoever writes it out in words.
-  return benchmark ? { ...series, lines, missing, lead: leadOver(lines) } : series;
+  return series;
 }
 
 /**

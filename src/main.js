@@ -35,37 +35,17 @@ import { initParticleWave } from './features/particleWave.js';
 import { describeStorageMode } from './ui/views/settings.js';
 import { initVoice } from './features/voice.js';
 import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
-import {
-  installActions, voiceActions, refreshPrices, setTimeframe, setCurveMode,
-} from './app/actions.js';
+import { installActions, voiceActions, refreshPrices, setTimeframe } from './app/actions.js';
 
 /** Background loops, so they can be stopped on sign out. */
 let timers = [];
 
 function wireTimeframeButtons() {
   const row = document.getElementById('tfRow');
-  if (row) {
-    row.addEventListener('click', (e) => {
-      const button = e.target.closest('.tf');
-      if (button) setTimeframe(button.dataset.tf);
-    });
-  }
-
-  const modes = document.getElementById('curveModeRow');
-  if (!modes) return;
-  modes.addEventListener('click', (e) => {
+  if (!row) return;
+  row.addEventListener('click', (e) => {
     const button = e.target.closest('.tf');
-    if (button) setCurveMode(button.dataset.mode);
-  });
-  // Reachable by keyboard: these are buttons in everything but tag name, and
-  // the timeframe row above them is driven by click alone only because it has
-  // never been focusable either.
-  modes.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const button = e.target.closest('.tf');
-    if (!button) return;
-    e.preventDefault();
-    setCurveMode(button.dataset.mode);
+    if (button) setTimeframe(button.dataset.tf);
   });
 }
 

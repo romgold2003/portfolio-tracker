@@ -102,22 +102,7 @@ let forward = [];
 export function setBackfill(rows, { authoritative = false } = {}) {
   history = Array.isArray(rows) ? rows : [];
   forward = authoritative ? history : [];
-  /**
-   * The per-day money fields travel with the balance into the splice.
-   *
-   * Reducing each row to a date and a value here is what left the splice with
-   * nothing but balances to join, so the percentage curve downstream had to go
-   * looking for the deposits elsewhere and match them by date against days that
-   * might not be there. Carried along, they stay attached to the day they
-   * happened on and get scaled with it.
-   */
-  backfill = history.map((r) => {
-    const row = { date: r.date, value: r.totalAccountValue ?? r.value };
-    for (const field of ['externalCashFlow', 'marketPnl', 'deposit', 'withdrawal']) {
-      if (Number.isFinite(r[field])) row[field] = r[field];
-    }
-    return row;
-  });
+  backfill = history.map((r) => ({ date: r.date, value: r.totalAccountValue ?? r.value }));
 }
 
 export function backfillRows() { return backfill; }
@@ -178,137 +163,6 @@ export function accountHistory() {
    */
   if (forward.length) return forward;
   return spliceHistory(state.snapshots, backfill);
-}
-
-/**
- * The same window as a percentage, day by day, starting at zero.
- *
- *   r(d)     = ( value(d) − flow(d) − value(d−1) ) / value(d−1)
- *   index(d) = ( PROD( 1 + r ) − 1 ) × 100
- *
- * The day's gain over the balance that earned it, compounded. Subtracting the
- * flow is what keeps a deposit out: the money lands in value(d) and is taken
- * straight back out, so the balance steps up and the line does not.
- *
- * Chained rather than measured against the first day, because those are not the
- * same question. Measuring dollars gained against the starting balance credits
- * the whole year's profit to the money that began it — so paying more money in
- * earns more dollars, divided by the same base, and the percentage rises
- * without a single trade going better. Chaining divides each day's gain by the
- * balance that actually earned it, which is why it is the measure a broker
- * reports and why it is the one that a deposit genuinely cannot move.
- */
-/**
- * How small a balance has to be, next to the money landing on it, before the
- * day is treated as the account being opened rather than added to.
- */
-const FOUNDING_RATIO = 0.01;
-
-/**
- * Money moved, attributed to the step of the curve it happened in.
- *
- * Where the rows carry their own flows, those are used and nothing is matched:
- * a row from the daily walk knows what moved that day because the walk applied
- * it, so the number cannot be mis-dated or missed.
- *
- * Otherwise the recorded list is placed by window. Each flow lands on the first
- * drawn day at or after it — not by exact date, because a recorded curve only
- * holds the days the app was open, and a deposit on any other day would match
- * nothing, never be subtracted, and be drawn as a gain. A flow at or before the
- * first day is already inside the opening balance and is not counted again.
- */
-function flowsByStep(points, dates, synthetic) {
-  const byStep = new Map();
-  if (synthetic) return byStep;
-
-  let carried = 0;
-  for (let i = 0; i < points.length; i++) {
-    const amount = Number(points[i]?.externalCashFlow) || 0;
-    if (!amount) continue;
-    if (i > 0) byStep.set(i, (byStep.get(i) ?? 0) + amount);
-    carried += 1;
-  }
-  if (carried) return byStep;
-
-  for (const flow of externalFlows()) {
-    if (!flow?.date || !Number.isFinite(flow.amount)) continue;
-    let step = -1;
-    for (let i = 0; i < dates.length; i++) {
-      if (dates[i] >= flow.date) { step = i; break; }
-    }
-    if (step <= 0) continue;
-    byStep.set(step, (byStep.get(step) ?? 0) + flow.amount);
-  }
-  return byStep;
-}
-
-function percentCurve(values, dates, synthetic, points = []) {
-  /**
-   * Where the days know what they earned, that is the measure.
-   *
-   *   r(d) = marketPnl(d) / ( value(d−1) − unpriceable(d−1) )
-   *
-   * The numerator is price moves on shares held overnight plus dividends and
-   * fees. No cash term, so a deposit cannot enter it — and no mark term, so a
-   * holding the price service cannot quote cannot enter it either. That second
-   * one is what the balance-based measure could never survive: the marks are
-   * trade prices, so an unquotable holding's mark steps on the day it was
-   * traded, and the balance steps with it. On a book carrying one such holding
-   * that drew a twenty-four point jump in a single day and left the year nearly
-   * ten points high.
-   *
-   * The base drops the unpriceable part too, so a real numerator is not divided
-   * by a larger denominator. What is left is a true statement about the part of
-   * the book that can be measured, and `pricedShare` says how much of it that
-   * is — because a figure covering half an account should not be read as
-   * covering all of it.
-   */
-  const measured = !synthetic && points.some((p) => Number.isFinite(p?.marketPnl));
-  if (measured) {
-    let growth = 1;
-    let netted = 0;
-    let priced = 0;
-    let counted = 0;
-
-    const curve = points.map((row, i) => {
-      if (i === 0) return 0;
-      const prev = points[i - 1];
-      const total = values[i - 1] || 0;
-      const base = total - (Number(prev?.stalePositions) || 0);
-      if (total > 0) { priced += base / total; counted += 1; }
-      if (base > 0) growth *= 1 + (Number(row?.marketPnl) || 0) / base;
-      netted += Math.abs(Number(row?.externalCashFlow) || 0);
-      return +((growth - 1) * 100).toFixed(4);
-    });
-
-    return { curve, netted, pricedShare: counted ? priced / counted : 1 };
-  }
-
-  const flows = flowsByStep(points, dates, synthetic);
-  // Gross rather than net: a deposit and a withdrawal of the same size are two
-  // movements kept out of the return, not zero.
-  let netted = 0;
-  let growth = 1;
-
-  const curve = values.map((value, i) => {
-    if (i === 0) return 0;
-    const prev = values[i - 1];
-    const flow = flows.get(i) ?? 0;
-    /**
-     * The day an account is founded has no balance behind it to measure
-     * against. A book opened with $42,000 against $287 of residue divided that
-     * residue by itself, came out at −100%, and one multiplication by zero
-     * flattened every day of the year that followed.
-     */
-    const founding = Math.abs(flow) > 0 && prev < Math.abs(flow) * FOUNDING_RATIO;
-    if (prev > 0 && !founding) {
-      growth *= 1 + (value - flow - prev) / prev;
-      netted += Math.abs(flow);
-    }
-    return +((growth - 1) * 100).toFixed(4);
-  });
-
-  return { curve, netted, pricedShare: 1 };
 }
 
 /**
@@ -405,12 +259,10 @@ export function curveSeries(timeframe) {
     null,
   );
   const short = !synthetic && wanted != null && firstRecorded != null && firstRecorded > wanted;
-  const { curve: percent, netted: flowsNetted, pricedShare } = percentCurve(data, dates, synthetic, points);
 
   return {
     labels,
     data,
-    percent,
     dates,
     synthetic,
     from,
@@ -436,27 +288,6 @@ export function curveSeries(timeframe) {
      */
     gain: last - first - paidIn,
     paidIn,
-    /**
-     * External cash the percentage chain actually took out.
-     *
-     * Reported so the chart can state it rather than leave it to be trusted.
-     * When this reads zero on a book that has had deposits, the return is
-     * counting them as performance and the figure is wrong by roughly the
-     * deposits over the opening balance — which is a thing worth seeing on the
-     * screen rather than discovering by arithmetic.
-     */
-    flowsNetted,
-    /** How much of the account the percentage line actually measures, 0 to 1. */
-    pricedShare,
-    /**
-     * The return the drawn percentage line ends on, so the figure and the chart
-     * can never disagree.
-     *
-     * Chained daily rather than measured end to end. Both are deposit-neutral,
-     * but only the chained one survives a window whose first day is zero — an
-     * account founded inside the window — where dividing by the opening balance
-     * has nothing to divide by.
-     */
-    returnPct: percent[percent.length - 1] ?? 0,
+    returnPct: first ? ((last - first - paidIn) / first) * 100 : 0,
   };
 }

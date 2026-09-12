@@ -97,34 +97,10 @@ export function buildPortfolioHistory({
    * carry an adjustment from an earlier year, and applying it here would put
    * last year's tax on this year's first day.
    */
-  /** A price and whether it came from the market, with the dated-mark fallback. */
-  const priceFor = (ticker, day) => {
-    const quoted = priceOn(ticker, day);
-    if (quoted > 0) return { value: quoted, fresh: true };
-    return { value: lastKnownOn(lastKnown[ticker], day), fresh: false };
-  };
-
-  /** Yesterday, for repricing the shares that were held through the night. */
-  let prevDay = null;
-  let prevHoldings = new Map();
-  /** The prices yesterday actually used, so today can be compared against them. */
-  let prevPrices = new Map();
-
   for (const day of eachDay(opening.date, to)) {
-    // Captured before today's trades, so it is genuinely what was held
-    // overnight rather than what the day ended up holding.
-    prevHoldings = new Map(holdings);
-
     const todays = byDay.get(day);
     let deposit = 0;
     let withdrawal = 0;
-    /**
-     * Cash that is neither a transfer nor the other half of a trade: dividends,
-     * interest, commissions, withholding tax. It is performance — money the
-     * holdings earned or cost — so it belongs in the day's return, and unlike a
-     * deposit it is not money you put in.
-     */
-    let income = 0;
 
     for (const event of todays ?? []) {
       if (MOVES_SHARES.has(event.kind) && event.ticker) {
@@ -133,10 +109,6 @@ export function buildPortfolioHistory({
       if (event.kind === 'flow') {
         const amount = Number(event.cash) || 0;
         if (amount >= 0) deposit += amount; else withdrawal += amount;
-      } else if (!MOVES_SHARES.has(event.kind)) {
-        // Not a transfer and not the cash leg of a trade, so it is income or a
-        // cost: the account earned or paid it.
-        income += Number(event.cash) || 0;
       }
       cash += Number(event.cash) || 0;
     }
@@ -145,43 +117,15 @@ export function buildPortfolioHistory({
 
     let positionsValue = 0;
     let stale = 0;
-    const todayPrices = new Map();
     for (const [ticker, qty] of holdings) {
       if (Math.abs(qty) < 1e-9) continue;
-      const price = priceFor(ticker, day);
-      if (!(price.value > 0)) continue;
-      todayPrices.set(ticker, price);
-      const value = qty * price.value;
+      let price = priceOn(ticker, day);
+      const fresh = price > 0;
+      if (!fresh) price = lastKnownOn(lastKnown[ticker], day);
+      if (!(price > 0)) continue;
+      const value = qty * price;
       positionsValue += value;
-      if (!price.fresh) stale += Math.abs(value);
-    }
-
-    /**
-     * What the market did to money already invested, and nothing else.
-     *
-     * Yesterday's shares at today's prices against yesterday's. No cash term,
-     * no trade term, no flow term — a deposit does not change a price or a
-     * quantity held overnight, so it cannot appear here.
-     *
-     * Read from the prices each day already worked out, rather than looking
-     * them up a second time.
-     *
-     * Only pairs of real closes count. A holding the price service cannot quote
-     * is carried at the marks the statement supplies, and those are trade
-     * prices — so the mark changes on the day it was traded, and differencing
-     * it against the day before turns the gap between two fills into a price
-     * move applied to the whole holding. That is not a market move and is not
-     * counted as one.
-     */
-    let marketPnl = 0;
-    if (prevDay) {
-      for (const [ticker, qty] of prevHoldings) {
-        if (Math.abs(qty) < 1e-9) continue;
-        const now = todayPrices.get(ticker);
-        const before = prevPrices.get(ticker);
-        if (!now?.fresh || !before?.fresh) continue;
-        marketPnl += qty * (now.value - before.value);
-      }
+      if (!fresh) stale += Math.abs(value);
     }
 
     out.push({
@@ -192,16 +136,9 @@ export function buildPortfolioHistory({
       externalCashFlow: round(deposit + withdrawal),
       deposit: round(deposit),
       withdrawal: round(withdrawal),
-      /**
-       * The day's performance: price moves on shares already held, plus what
-       * the holdings earned or cost in cash. No deposit can reach it.
-       */
-      marketPnl: round(marketPnl + income),
       /** Value carried at a last-known mark rather than a real close. */
       stalePositions: round(stale),
     });
-    prevDay = day;
-    prevPrices = todayPrices;
   }
 
   return out;
