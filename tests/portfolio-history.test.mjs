@@ -719,3 +719,70 @@ describe("the chart's own figure against the broker's", () => {
     assert.ok(s.percent.at(-1) < IBKR_TWR + 0.01);
   });
 });
+
+describe('the rows carry their own flows', () => {
+  /**
+   * The strongest form of the deposit rule: a row from the daily walk knows
+   * what moved that day, because the walk is what applied it. Read there, a
+   * deposit cannot be mis-dated, cannot be missed, and cannot disagree with the
+   * balance it is being subtracted from — no matching of any kind.
+   */
+  const build = async (rows, cashFlows = []) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = cashFlows;
+    setBackfill(rows, { authoritative: true });
+    return curveSeries('All');
+  };
+
+  test('a flow on the row is taken off that day', async () => {
+    const s = await build([
+      { date: '2026-01-02', totalAccountValue: 10_000, externalCashFlow: 0 },
+      { date: '2026-01-03', totalAccountValue: 20_000, externalCashFlow: 10_000 },
+      { date: '2026-01-04', totalAccountValue: 21_000, externalCashFlow: 0 },
+    ]);
+    assert.equal(s.percent[1], 0);
+    assert.ok(Math.abs(s.percent[2] - 5) < 1e-6, `${s.percent[2]}%`);
+    assert.equal(s.flowsNetted, 10_000);
+  });
+
+  test('the rows win over a stale recorded list', async () => {
+    // A cashFlows list left over from an earlier import, with the wrong date on
+    // it, must not be able to double-subtract or mis-place anything.
+    const s = await build([
+      { date: '2026-01-02', totalAccountValue: 10_000, externalCashFlow: 0 },
+      { date: '2026-01-03', totalAccountValue: 20_000, externalCashFlow: 10_000 },
+    ], [{ date: '2026-01-02', amount: 10_000 }]);
+    assert.equal(s.percent[1], 0);
+    assert.equal(s.flowsNetted, 10_000);
+  });
+
+  test('a flow on the opening row is already in the opening balance', async () => {
+    const s = await build([
+      { date: '2026-01-02', totalAccountValue: 10_000, externalCashFlow: 10_000 },
+      { date: '2026-01-03', totalAccountValue: 10_500, externalCashFlow: 0 },
+    ]);
+    assert.ok(Math.abs(s.percent[1] - 5) < 1e-6, `${s.percent[1]}%`);
+  });
+
+  test('a book whose rows carry no flows still nets the recorded ones', async () => {
+    const s = await build([
+      { date: '2026-01-02', totalAccountValue: 10_000 },
+      { date: '2026-01-05', totalAccountValue: 20_000 },
+    ], [{ date: '2026-01-03', amount: 10_000 }]);
+    assert.equal(s.percent[1], 0, 'the fallback path stopped working');
+    assert.equal(s.flowsNetted, 10_000);
+  });
+
+  test('and a book with no flow information anywhere says it netted nothing', async () => {
+    // This is what the on-screen warning keys off: deposits the journal knows
+    // about that the curve did not remove mean the return is reading high.
+    const s = await build([
+      { date: '2026-01-02', totalAccountValue: 10_000 },
+      { date: '2026-01-05', totalAccountValue: 20_000 },
+    ], []);
+    assert.equal(s.flowsNetted, 0);
+    assert.ok(Math.abs(s.percent[1] - 100) < 1e-6, 'with nothing recorded it can only be a gain');
+  });
+});

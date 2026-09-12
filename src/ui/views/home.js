@@ -273,6 +273,54 @@ let backfillFor = null;
  * runs once: a past close never changes.
  */
 /**
+ * What the benchmark chart took out of the return, said out loud.
+ *
+ * "Deposits do not affect the percentage" is a claim, and a claim about money
+ * deserves to be checkable rather than trusted. This states the amount actually
+ * removed from the chained return — and, when the journal records transfers the
+ * chart did not remove, says that instead, because that is the failure worth
+ * catching: an account whose deposits are invisible to the curve reports them
+ * as performance and reads high by roughly the deposits over the opening
+ * balance.
+ */
+function renderCurveNote(series) {
+  const note = document.getElementById('curveNote');
+  if (!note) return;
+
+  if (!series || ui.curveMode !== 'benchmark') {
+    note.style.display = 'none';
+    return;
+  }
+  note.style.display = '';
+
+  const removed = series.flowsNetted ?? 0;
+  const knowsOfFlows = (state.cashFlows ?? []).some((f) => Number.isFinite(f?.amount) && f.amount);
+  const missing = (series.missing ?? []).length
+    ? ` · No data for ${series.missing.join(' or ')}.`
+    : '';
+
+  /**
+   * The one case worth a warning: the journal has no record of a transfer ever
+   * happening, so there is nothing for the curve to take out. Every dollar paid
+   * in is then sitting inside the return as though it had been earned, and the
+   * figure reads high by roughly the deposits over the opening balance. Nothing
+   * in the arithmetic can detect that — only the absence of the records can.
+   */
+  if (!knowsOfFlows && !removed) {
+    note.innerHTML = '<span style="color:var(--amber)">Return since 1 January, compounded daily. '
+      + 'No deposits or withdrawals are recorded on this account — if you have paid money in, '
+      + 'import your broker statement so it can be kept out of this figure.</span>'
+      + escapeHtml(missing);
+    return;
+  }
+
+  const excluded = removed > 0
+    ? `${$u(removed)} of deposits and withdrawals excluded — they change your balance, not your return.`
+    : 'No deposits or withdrawals fell inside this window.';
+  note.textContent = `Return since 1 January, compounded daily. ${excluded}${missing}`;
+}
+
+/**
  * The index histories the benchmark chart draws against.
  *
  * Fetched once and held, then the page is redrawn — the same shape as the
@@ -723,7 +771,7 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
-  renderCurve(ui.timeframe, ui.curveMode, indexHistories);
+  renderCurveNote(renderCurve(ui.timeframe, ui.curveMode, indexHistories));
 
   // Kicked off after the draw, so the chart appears immediately and lengthens
   // when the price histories land rather than blocking on the network.

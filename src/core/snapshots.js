@@ -213,10 +213,38 @@ const FOUNDING_RATIO = 0.01;
  * day is already part of the opening balance and is not counted again; one
  * after the last day is not inside any step drawn here.
  */
-function flowsByStep(dates, synthetic) {
+function flowsByStep(points, dates, synthetic) {
   const byStep = new Map();
   if (synthetic) return byStep;
 
+  /**
+   * Where the rows carry their own flows, believe them and match nothing.
+   *
+   * A row from the daily portfolio walk knows what moved that day, because the
+   * walk is what applied it — the number is on the row beside the balance it
+   * changed. Reading it there cannot mis-date a deposit, cannot miss one, and
+   * cannot disagree with the balance it is being subtracted from.
+   */
+  let carried = 0;
+  for (let i = 0; i < points.length; i++) {
+    const amount = Number(points[i]?.externalCashFlow) || 0;
+    if (!amount) continue;
+    // A flow on the opening day is already inside the opening balance.
+    if (i > 0) byStep.set(i, (byStep.get(i) ?? 0) + amount);
+    carried += 1;
+  }
+  if (carried) return byStep;
+
+  /**
+   * Otherwise fall back to the recorded flow list, matched by window.
+   *
+   * A book whose curve comes from recorded snapshots or a back-cast has no
+   * per-day flow field, so the flows have to be placed. Each lands on the first
+   * drawn day at or after it, which is the step of the line the money is inside
+   * — not by exact date, because a recorded curve only holds the days the app
+   * was open and a deposit on any other day would match nothing at all, never
+   * be subtracted, and be drawn as a day of extraordinary performance.
+   */
   for (const flow of externalFlows()) {
     if (!flow?.date || !Number.isFinite(flow.amount)) continue;
     let step = -1;
@@ -229,11 +257,15 @@ function flowsByStep(dates, synthetic) {
   return byStep;
 }
 
-function percentCurve(values, dates, synthetic) {
-  const flows = flowsByStep(dates, synthetic);
+function percentCurve(values, dates, synthetic, points = []) {
+  const flows = flowsByStep(points, dates, synthetic);
+  // Gross rather than net, because it is reported as "how much money moved and
+  // was kept out of the return". A deposit and a withdrawal of the same size
+  // are two movements excluded, not zero.
+  let netted = 0;
 
   let growth = 1;
-  return values.map((value, i) => {
+  const curve = values.map((value, i) => {
     if (i === 0) return 0;
     const prev = values[i - 1];
     const flow = flows.get(i) ?? 0;
@@ -242,9 +274,12 @@ function percentCurve(values, dates, synthetic) {
     const founding = Math.abs(flow) > 0 && prev < Math.abs(flow) * FOUNDING_RATIO;
     if (prev > 0 && !founding) {
       growth *= 1 + (value - flow - prev) / prev;
+      netted += Math.abs(flow);
     }
     return +((growth - 1) * 100).toFixed(4);
   });
+
+  return { curve, netted };
 }
 
 /**
@@ -341,7 +376,7 @@ export function curveSeries(timeframe) {
     null,
   );
   const short = !synthetic && wanted != null && firstRecorded != null && firstRecorded > wanted;
-  const percent = percentCurve(data, dates, synthetic);
+  const { curve: percent, netted: flowsNetted } = percentCurve(data, dates, synthetic, points);
 
   return {
     labels,
@@ -372,6 +407,16 @@ export function curveSeries(timeframe) {
      */
     gain: last - first - paidIn,
     paidIn,
+    /**
+     * External cash the percentage chain actually took out.
+     *
+     * Reported so the chart can state it rather than leave it to be trusted.
+     * When this reads zero on a book that has had deposits, the return is
+     * counting them as performance and the figure is wrong by roughly the
+     * deposits over the opening balance — which is a thing worth seeing on the
+     * screen rather than discovering by arithmetic.
+     */
+    flowsNetted,
     /**
      * The return the drawn percentage line ends on, so the figure and the chart
      * can never disagree.
