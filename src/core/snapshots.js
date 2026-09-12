@@ -198,19 +198,45 @@ export function accountHistory() {
  */
 const FOUNDING_RATIO = 0.01;
 
-function percentCurve(values, dates, synthetic) {
-  const flows = new Map();
-  if (!synthetic) {
-    for (const f of externalFlows()) {
-      flows.set(f.date, (flows.get(f.date) ?? 0) + f.amount);
+/**
+ * Money moved, attributed to the step of the curve it happened in.
+ *
+ * Not looked up by exact date, which is the bug this replaced. A deposit on a
+ * Saturday — or on any day the drawn series happens not to carry, which is
+ * every day the market was shut when the curve comes from recorded snapshots —
+ * matched nothing, so it was never subtracted and the whole transfer read as a
+ * day of spectacular performance. On a book with $8,497 paid into $26,366 that
+ * is worth up to thirty points of invented return.
+ *
+ * Each flow lands on the first drawn day at or after it, because that is the
+ * step of the line the money is actually inside. A flow at or before the first
+ * day is already part of the opening balance and is not counted again; one
+ * after the last day is not inside any step drawn here.
+ */
+function flowsByStep(dates, synthetic) {
+  const byStep = new Map();
+  if (synthetic) return byStep;
+
+  for (const flow of externalFlows()) {
+    if (!flow?.date || !Number.isFinite(flow.amount)) continue;
+    let step = -1;
+    for (let i = 0; i < dates.length; i++) {
+      if (dates[i] >= flow.date) { step = i; break; }
     }
+    if (step <= 0) continue;
+    byStep.set(step, (byStep.get(step) ?? 0) + flow.amount);
   }
+  return byStep;
+}
+
+function percentCurve(values, dates, synthetic) {
+  const flows = flowsByStep(dates, synthetic);
 
   let growth = 1;
   return values.map((value, i) => {
     if (i === 0) return 0;
     const prev = values[i - 1];
-    const flow = flows.get(dates[i]) ?? 0;
+    const flow = flows.get(i) ?? 0;
     // The account existed yesterday, and existed as more than a rounding
     // remnant of whatever arrived today.
     const founding = Math.abs(flow) > 0 && prev < Math.abs(flow) * FOUNDING_RATIO;

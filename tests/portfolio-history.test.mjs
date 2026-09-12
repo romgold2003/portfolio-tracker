@@ -549,3 +549,173 @@ describe('one bad day must not flatten the rest of the line', () => {
     assert.ok(Math.abs(s.returnPct - 10.25) < 1e-6, 'the reported figure tracks the line');
   });
 });
+
+describe('money that moved on a day the curve does not carry', () => {
+  /**
+   * The bug this exists for, and it was worth up to thirty points.
+   *
+   * Flows were matched to the curve by exact date. A recorded curve only has
+   * the days the app was open and a reconstructed one only trading days, so a
+   * deposit on a Saturday matched nothing at all — it was never subtracted, and
+   * the whole transfer was drawn as a day of extraordinary performance. On a
+   * book with $8,497 paid into $26,366 the year read far above the broker's
+   * own figure.
+   */
+  const build = async (rows, flows) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = flows;
+    setBackfill(rows.map(([date, totalAccountValue]) => ({ date, totalAccountValue })),
+      { authoritative: true });
+    return curveSeries('All');
+  };
+
+  test('a weekend deposit is still not a gain', async () => {
+    // Friday 10,000; Monday 20,000, of which 10,000 arrived on the Saturday.
+    const s = await build(
+      [['2026-01-02', 10_000], ['2026-01-05', 20_000]],
+      [{ date: '2026-01-03', amount: 10_000 }],
+    );
+    assert.equal(s.percent[1], 0, 'the weekend deposit was drawn as a gain');
+  });
+
+  test('it lands in the step it actually happened in', async () => {
+    // Saturday deposit plus a real 2% on the Monday.
+    const s = await build(
+      [['2026-01-02', 10_000], ['2026-01-05', 20_200]],
+      [{ date: '2026-01-03', amount: 10_000 }],
+    );
+    assert.ok(Math.abs(s.percent[1] - 2) < 1e-6, `${s.percent[1]}%`);
+  });
+
+  test('several flows inside one step are all removed', async () => {
+    const s = await build(
+      [['2026-01-02', 10_000], ['2026-01-09', 15_000]],
+      [{ date: '2026-01-05', amount: 3000 }, { date: '2026-01-07', amount: 2000 }],
+    );
+    assert.equal(s.percent[1], 0);
+  });
+
+  test('a flow before the window is left alone', async () => {
+    // It is already inside the opening balance; subtracting it again would
+    // invent a loss.
+    const s = await build(
+      [['2026-02-02', 10_000], ['2026-02-03', 10_500]],
+      [{ date: '2026-01-10', amount: 5000 }],
+    );
+    assert.ok(Math.abs(s.percent[1] - 5) < 1e-6, `${s.percent[1]}%`);
+  });
+
+  test('a flow on the very first day is already in the opening balance', async () => {
+    const s = await build(
+      [['2026-02-02', 10_000], ['2026-02-03', 10_500]],
+      [{ date: '2026-02-02', amount: 5000 }],
+    );
+    assert.ok(Math.abs(s.percent[1] - 5) < 1e-6, `${s.percent[1]}%`);
+  });
+
+  test('a long gap between drawn days still nets its deposits out', async () => {
+    // Monthly snapshots with a deposit in between: the gain is the market's,
+    // not the transfer's.
+    const s = await build(
+      [['2026-01-31', 20_000], ['2026-02-28', 32_000]],
+      [{ date: '2026-02-14', amount: 10_000 }],
+    );
+    assert.ok(Math.abs(s.percent[1] - 10) < 1e-6, `${s.percent[1]}%`);
+  });
+});
+
+describe("the chart's own figure against the broker's", () => {
+  /**
+   * The complaint this exists for: the benchmark chart read 47% for a year the
+   * broker reports as 30.83%.
+   *
+   * The real statement, to the cent. Interactive Brokers, 1 January to 8
+   * September 2026: opening NAV $26,365.95, five deposits totalling $8,497, and
+   * their own time-weighted return of 30.825899%.
+   *
+   * Fed a true daily series carrying those deposits, the chained curve must
+   * come back with the broker's number and not a point more. The deposits are
+   * a third of the opening capital, so any that fail to be netted out show up
+   * immediately and enormously — which is exactly how the 47% happened.
+   */
+  const OPENING = 26_365.94901;
+  const IBKR_TWR = 30.825899;
+  const FLOWS = [
+    { date: '2026-01-20', amount: 2000 },
+    { date: '2026-02-06', amount: 1997 },
+    { date: '2026-03-23', amount: 1500 },
+    { date: '2026-03-31', amount: 1000 },
+    { date: '2026-06-05', amount: 2000 },
+  ];
+
+  /** Every date from 1 January to 8 September, or only the weekdays. */
+  const days = (weekdaysOnly) => {
+    const out = [];
+    for (let t = Date.UTC(2026, 0, 1); t <= Date.UTC(2026, 8, 8); t += 86_400_000) {
+      const d = new Date(t);
+      if (weekdaysOnly && (d.getUTCDay() === 0 || d.getUTCDay() === 6)) continue;
+      out.push(d.toISOString().slice(0, 10));
+    }
+    return out;
+  };
+
+  /**
+   * A daily account value that genuinely compounds to the broker's return, with
+   * the deposits landing on their real dates on top of it.
+   */
+  const navs = (dates) => {
+    const growth = (1 + IBKR_TWR / 100) ** (1 / (dates.length - 1));
+    let nav = OPENING;
+    return dates.map((date, i) => {
+      if (i > 0) {
+        nav *= growth;
+        // Anything that moved since the previous drawn day.
+        for (const f of FLOWS) {
+          if (f.date > dates[i - 1] && f.date <= date) nav += f.amount;
+        }
+      }
+      return +nav.toFixed(2);
+    });
+  };
+
+  const run = async (weekdaysOnly) => {
+    const { state } = await import('../src/core/store.js');
+    const { setBackfill, curveSeries } = await import('../src/core/snapshots.js');
+    state.positions = [];
+    state.cashFlows = FLOWS;
+    const dates = days(weekdaysOnly);
+    const values = navs(dates);
+    setBackfill(dates.map((date, i) => ({ date, totalAccountValue: values[i] })),
+      { authoritative: true });
+    return curveSeries('All');
+  };
+
+  test('every calendar day: the broker\'s figure, to two decimals', async () => {
+    const s = await run(false);
+    assert.ok(Math.abs(s.percent.at(-1) - IBKR_TWR) < 0.01,
+      `chart says ${s.percent.at(-1)}%, broker says ${IBKR_TWR}%`);
+  });
+
+  test('trading days only, deposits falling on weekends: the same figure', async () => {
+    /**
+     * The case that was wrong. Two of these five deposits land on days a
+     * weekday-only series does not carry, so matching flows by exact date
+     * dropped them — and a dropped deposit is drawn as pure profit.
+     */
+    const s = await run(true);
+    assert.ok(Math.abs(s.percent.at(-1) - IBKR_TWR) < 0.01,
+      `chart says ${s.percent.at(-1)}%, broker says ${IBKR_TWR}%`);
+  });
+
+  test('and it is nowhere near the figure that ignores the deposits', async () => {
+    // Counting the $8,497 as performance is worth roughly sixteen points, which
+    // is the gap that was reported.
+    const s = await run(true);
+    const ignoringFlows = ((s.data.at(-1) - s.data[0]) / s.data[0]) * 100;
+    assert.ok(ignoringFlows > IBKR_TWR + 15,
+      `the naive figure should be far higher: ${ignoringFlows}%`);
+    assert.ok(s.percent.at(-1) < IBKR_TWR + 0.01);
+  });
+});

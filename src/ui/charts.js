@@ -21,6 +21,21 @@ function cssVar(name, fallback) {
   }
 }
 
+/**
+ * A colour at partial opacity.
+ *
+ * Chart.js takes any CSS colour string, and the palette arrives as `#rrggbb`
+ * from the computed style, so an alpha pair appended to the hex is the whole
+ * job. Anything that is not a six-digit hex — a named colour, an rgb() — is
+ * handed back untouched rather than corrupted by appending to it.
+ */
+function translucent(colour, alpha) {
+  if (!/^#[0-9a-f]{6}$/i.test(colour)) return colour;
+  const pair = Math.round(Math.min(Math.max(alpha, 0), 1) * 255)
+    .toString(16).padStart(2, '0');
+  return colour + pair;
+}
+
 function chartColors() {
   return {
     grid: cssVar('--grid', '#1a1a1a'),
@@ -103,7 +118,14 @@ export function renderCurve(timeframe, mode = 'value', indexes = []) {
   const c = chartColors();
 
   const { lines, missing } = benchmark
-    ? benchmarkLines({ dates: series.dates, percent: series.percent, indexes })
+    ? benchmarkLines({
+      dates: series.dates,
+      percent: series.percent,
+      indexes,
+      // The placeholder curve is a drawing, not a record, and must never be
+      // raced against real index data.
+      accountReady: !series.synthetic,
+    })
     : { lines: [], missing: [] };
 
   canvas.setAttribute('aria-label', benchmark
@@ -120,10 +142,15 @@ export function renderCurve(timeframe, mode = 'value', indexes = []) {
    */
   const shown = new Map((series.dates ?? []).map((d, i) => [d, i]));
   const flows = [];
-  for (const flow of externalFlows()) {
-    const index = shown.get(flow.date);
-    if (index == null) continue;
-    flows.push({ index, date: flow.date, amount: flow.amount });
+  // Not on the benchmark chart. There the line deliberately does not move when
+  // money lands, so a marker would be pointing at nothing — and three lines
+  // already carry enough for the eye without triangles between them.
+  if (!benchmark) {
+    for (const flow of externalFlows()) {
+      const index = shown.get(flow.date);
+      if (index == null) continue;
+      flows.push({ index, date: flow.date, amount: flow.amount });
+    }
   }
 
   charts.curve?.destroy();
@@ -148,9 +175,19 @@ export function renderCurve(timeframe, mode = 'value', indexes = []) {
         ? lines.map((line, i) => ({
           label: line.name,
           data: line.data,
-          borderColor: line.key === 'account' ? c.green : cssVar(line.colour, c.txt),
-          borderWidth: line.key === 'account' ? 2.5 : 1.5,
-          borderDash: line.key === 'account' ? [] : [4, 3],
+          /**
+           * All three solid, thin, and slightly translucent.
+           *
+           * Solid because a dashed line reads as an estimate, and all three of
+           * these are measured. Thin because three lines at chart weight fill
+           * the plot and the crossings get lost in the ink. Translucent because
+           * where they overlap — which on a good year is most of the way across
+           * — you need to see that two lines are there rather than one.
+           */
+          borderColor: translucent(
+            line.key === 'account' ? c.green : cssVar(line.colour, c.txt), 0.85,
+          ),
+          borderWidth: line.key === 'account' ? 1.6 : 1.2,
           pointRadius: 0,
           fill: false,
           tension: 0.3,

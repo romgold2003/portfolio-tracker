@@ -65,9 +65,24 @@ export function rebase(rows, dates) {
  * not be rebased is dropped from `lines` and named in `missing`, so the chart
  * can say which comparison is absent instead of quietly showing fewer lines.
  */
-export function benchmarkLines({ dates, percent, indexes = [] }) {
-  const lines = [{ key: 'account', name: 'Your portfolio', data: percent ?? [] }];
+export function benchmarkLines({ dates, percent, indexes = [], accountReady = true }) {
+  const lines = [];
   const missing = [];
+
+  /**
+   * A placeholder account line is not drawn at all.
+   *
+   * With too little history to plot, the curve falls back to an illustrative
+   * shape that ends on the true account value — fine as a picture of a balance
+   * while the real days accumulate, and indefensible here. It rises by a fixed
+   * amount by construction, so putting it against real index data would show a
+   * fabricated performance winning or losing a race it never ran.
+   */
+  if (accountReady) {
+    lines.push({ key: 'account', name: 'Your portfolio', data: percent ?? [] });
+  } else {
+    missing.push('your own history (not enough recorded days yet)');
+  }
 
   for (const index of indexes) {
     const data = rebase(index?.rows, dates ?? []);

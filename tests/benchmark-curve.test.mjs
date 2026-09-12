@@ -140,3 +140,38 @@ describe('how far ahead the account finished', () => {
     assert.deepEqual(leadOver(lines), []);
   });
 });
+
+describe('a placeholder account line is not raced against the market', () => {
+  const dates = ['2026-01-02', '2026-01-06'];
+  const indexes = [
+    { symbol: 'VOO', name: 'S&P 500', rows: rows(['2026-01-02', 100], ['2026-01-06', 104]) },
+  ];
+
+  /**
+   * With too little history the curve falls back to an illustrative shape that
+   * ends on the true account value. It is fine as a picture of a balance while
+   * the real days accumulate. It is not a performance record, and it rises by
+   * a fixed amount by construction — so drawing it against real index data
+   * would show a fabricated line winning or losing a race it never ran.
+   */
+  test('it is left out and said to be missing', () => {
+    const { lines, missing } = benchmarkLines({
+      dates, percent: [0, 16], indexes, accountReady: false,
+    });
+    assert.deepEqual(lines.map((l) => l.key), ['VOO']);
+    assert.match(missing.join(' '), /your own history/i);
+  });
+
+  test('so there is no lead to report either', () => {
+    const { lines } = benchmarkLines({ dates, percent: [0, 16], indexes, accountReady: false });
+    assert.deepEqual(leadOver(lines), []);
+  });
+
+  test('and with real history it is drawn as normal', () => {
+    const { lines, missing } = benchmarkLines({
+      dates, percent: [0, 16], indexes, accountReady: true,
+    });
+    assert.equal(lines[0].key, 'account');
+    assert.deepEqual(missing, []);
+  });
+});
