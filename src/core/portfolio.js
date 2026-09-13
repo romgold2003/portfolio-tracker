@@ -315,13 +315,19 @@ export function monthRange(first, last) {
 export function monthPnl(positions) {
   const byMonth = new Map();
   const bucket = (key) => {
-    if (!byMonth.has(key)) byMonth.set(key, { pnl: 0, marked: 0 });
+    if (!byMonth.has(key)) byMonth.set(key, { pnl: 0, realised: 0, marked: 0 });
     return byMonth.get(key);
   };
 
   for (const position of positions) {
     if (position.status === 'Closed') {
-      if (position.close) bucket(position.close.slice(0, 7)).pnl += realized(position);
+      if (position.close) {
+        const month = bucket(position.close.slice(0, 7));
+        const banked = realized(position);
+        month.pnl += banked;
+        // Kept apart as well: it is what the month's percentage is made of.
+        month.realised += banked;
+      }
       continue;
     }
     if (!position.open) continue;
@@ -401,7 +407,7 @@ export function monthlyAccountReturns(positions, account, flows = [], today = to
   let closing = account;
   for (let i = keys.length - 1; i >= 0; i--) {
     const key = keys[i];
-    const { pnl, marked } = pnlByMonth.get(key) ?? { pnl: 0, marked: 0 };
+    const { pnl, realised, marked } = pnlByMonth.get(key) ?? { pnl: 0, realised: 0, marked: 0 };
     const inMonth = flows.filter((f) => f?.date?.slice(0, 7) === key);
     const net = inMonth.reduce((sum, f) => sum + f.amount, 0);
     const founding = inMonth.reduce((sum, f) => (isFounding(f) ? sum + f.amount : sum), 0);
@@ -425,7 +431,15 @@ export function monthlyAccountReturns(positions, account, flows = [], today = to
 
     out.set(key, {
       /**
-       * The month's profit over what the account was worth when it opened.
+       * What the month's closed trades banked, over what the account was worth
+       * when the month opened.
+       *
+       * Realised profit only. An open position's paper move is not a gain the
+       * month has made, and marking it at today's price would keep rewriting a
+       * month that is already over — a January holding still open in September
+       * would go on changing January's figure every day. The total P&L, open
+       * positions included, is still used below to work out what the account
+       * was worth at each month's start; it just is not what is divided.
        *
        * This was Modified Dietz, which weights each deposit by how much of the
        * month it was present and so divides by the average capital at work.
@@ -440,8 +454,10 @@ export function monthlyAccountReturns(positions, account, flows = [], today = to
        * still says what moved, so nothing is hidden — only kept out of the
        * number it would otherwise distort.
        */
-      pct: base > 0 ? (pnl / base) * 100 : null,
+      pct: base > 0 ? (realised / base) * 100 : null,
       pnl,
+      /** Profit booked by trades closed in the month. */
+      realised,
       opening,
       /** What the percentage was measured against; differs from `opening` only where the account was founded. */
       base,

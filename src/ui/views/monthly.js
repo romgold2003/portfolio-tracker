@@ -123,12 +123,17 @@ function avgTradeCell(m) {
 }
 
 /**
- * What the whole account did over the month, deposits taken out.
+ * What the month's closed trades added to the account, as a share of it.
  *
- * The percentage is the month's P&L over what the account was worth when the
- * month opened, which is why it is nearly always the smaller of the two: a
- * strong month on a tenth of the capital is a large trade return and a modest
- * portfolio one. That relationship is the reason both columns exist.
+ * Realised profit from positions closed in the month, over what the account was
+ * worth when the month opened. Open positions are left out on purpose: a paper
+ * gain has not been made yet, and counting it at today's price would keep
+ * rewriting months that are already over. Deposits stay out of the base, so
+ * paying money in does not shrink the figure.
+ *
+ * It is nearly always the smaller of the two percentages: a strong month on a
+ * tenth of the capital is a large trade return and a modest portfolio one,
+ * which is the reason both columns exist.
  */
 function portfolioCell(key, returns, label) {
   const month = returns.get(key);
@@ -136,14 +141,17 @@ function portfolioCell(key, returns, label) {
     return '<td class="muted" title="There was no capital in the account this month to measure a return against">—</td>';
   }
   const parts = [
-    `${$u(month.opening)} in the account at the start of ${label}, and the month ${month.pnl < 0 ? 'lost' : 'made'} ${$u(Math.abs(month.pnl))}`,
+    `${$u(month.opening)} in the account at the start of ${label}`,
+    month.realised
+      ? `trades closed this month ${month.realised < 0 ? 'lost' : 'banked'} ${$u(Math.abs(month.realised))}`
+      : 'no trade was closed this month',
     month.net
-      ? `${$s(month.net)} moved in or out during the month — weighted by how long it was actually present, and not counted as profit`
+      ? `${$u(Math.abs(month.net))} ${month.net > 0 ? 'deposited' : 'withdrawn'} during the month, not counted as profit or loss`
       : null,
     month.marked
-      ? `${plural(month.marked, 'position')} opened this month ${month.marked === 1 ? 'is' : 'are'} still open, so ${month.marked === 1 ? 'its' : 'their'} gain is marked at today's price`
+      ? `${plural(month.marked, 'position')} opened this month ${month.marked === 1 ? 'is' : 'are'} still open and not counted until closed`
       : null,
-  ].filter(Boolean);
+  ].filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1));
   return `<td style="color:${clr(month.pct)};font-weight:600" title="${parts.join('. ')}">${fp(month.pct)}</td>`;
 }
 

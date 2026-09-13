@@ -116,11 +116,24 @@ describe('the portfolio return, month by month', () => {
     assert.equal(round(r.get('2026-03').closing), account);
   });
 
-  test('each month is its P&L over what the account was worth then', () => {
+  test('each month is what its closed trades banked, over what the account was worth then', () => {
     const r = monthlyAccountReturns(book, account, [], '2026-03-31');
-    assert.equal(round(r.get('2026-01').pct), 5);          // 1,000 on 20,000
+    assert.equal(round(r.get('2026-01').pct), 5);          // 1,000 banked on 20,000
     assert.equal(round(r.get('2026-02').pct), round(-500 / 21000 * 100));
-    assert.equal(round(r.get('2026-03').pct), round(1200 / 20500 * 100));
+  });
+
+  test("an open position's paper gain is not the month's return", () => {
+    /**
+     * March's only activity is a position opened and still held, up 1,200 at
+     * today's price. Nothing was closed, so nothing was made: counting that
+     * move would keep rewriting March every day the price changes, long after
+     * March is over. It still counts towards what the account was worth, which
+     * is why April's base would include it.
+     */
+    const r = monthlyAccountReturns(book, account, [], '2026-03-31');
+    assert.equal(r.get('2026-03').pct, 0);
+    assert.equal(r.get('2026-03').realised, 0);
+    assert.equal(r.get('2026-03').pnl, 1200, 'the move is still known, just not divided');
   });
 
   test('a quiet month is flat, not missing', () => {
@@ -160,8 +173,12 @@ describe('the portfolio return, month by month', () => {
   });
 
   test('a withdrawal does not read as a losing month', () => {
-    const r = monthlyAccountReturns(book, account - 5000, [{ date: '2026-03-10', amount: -5000 }], '2026-03-31');
-    assert.ok(r.get('2026-03').pct > 0, 'taking money out was booked as a loss');
+    // January banked 1,000; taking 5,000 out the same month changes nothing
+    // about what its trades made.
+    const without = monthlyAccountReturns(book, account, [], '2026-03-31');
+    const r = monthlyAccountReturns(book, account - 5000, [{ date: '2026-01-10', amount: -5000 }], '2026-03-31');
+    assert.ok(r.get('2026-01').pct > 0, 'taking money out was booked as a loss');
+    assert.equal(round(r.get('2026-01').pct), round(without.get('2026-01').pct));
   });
 
   test('the month still running is measured to today, not to a future date', () => {
