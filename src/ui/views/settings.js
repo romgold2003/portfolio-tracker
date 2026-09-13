@@ -2,6 +2,7 @@
 import { state } from '../../core/store.js';
 import { benchmarkKey } from '../../services/benchmark.js';
 import { cloudMode } from '../../core/profiles.js';
+import { chainReport } from '../../features/statementLibrary.js';
 
 const modal = () => document.getElementById('settingsModal');
 
@@ -11,7 +12,81 @@ export function openSettings() {
   const bench = document.getElementById('benchKeyInput');
   if (bench) bench.value = benchmarkKey();
   describeStorage();
+  renderStatementYears();
   modal()?.classList.add('show');
+}
+
+/** The earliest year the statement picker offers. */
+const FIRST_STATEMENT_YEAR = 1980;
+
+/**
+ * The year picker: read the year from the file, or name one from 1980 to now.
+ *
+ * Rebuilt every time settings open, so it reaches the new year on its own when
+ * the calendar turns, and so it can mark which years are already imported.
+ */
+function renderYearPicker() {
+  const select = document.getElementById('ibkrYear');
+  if (!select) return;
+  const imported = new Set((state.statements ?? []).map((r) => r.year));
+  const chosen = select.value;
+  select.replaceChildren(new Option('Detect year from file', ''));
+  for (let year = new Date().getFullYear(); year >= FIRST_STATEMENT_YEAR; year--) {
+    select.add(new Option(imported.has(year) ? `${year} · imported` : String(year), String(year)));
+  }
+  select.value = [...select.options].some((o) => o.value === chosen) ? chosen : '';
+}
+
+const shortDay = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
+  timeZone: 'UTC', month: 'short', day: 'numeric',
+});
+
+/**
+ * Every imported year, newest first, and whether each joins the next.
+ *
+ * The broker's own return sits beside each year: it is the one figure per year
+ * this app cannot recompute, and the quickest way to see a year is the right
+ * file.
+ */
+export function renderStatementYears() {
+  renderYearPicker();
+  const box = document.getElementById('ibkrYears');
+  if (!box) return;
+  box.replaceChildren();
+  const records = state.statements ?? [];
+  if (!records.length) return;
+
+  const heading = document.createElement('div');
+  heading.style.cssText = 'font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px';
+  heading.textContent = 'Imported years';
+  box.append(heading);
+
+  for (const record of [...records].reverse()) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:0.5px solid var(--border2);font-size:12px';
+
+    const parts = [String(record.year), `${shortDay(record.from)} – ${shortDay(record.to)}`];
+    if (Number.isFinite(record.twr)) parts.push(`IBKR return ${record.twr >= 0 ? '+' : ''}${record.twr.toFixed(2)}%`);
+    if ((record.accounts ?? []).length > 1) parts.push(`${record.accounts.length} accounts combined`);
+    const label = document.createElement('span');
+    label.textContent = parts.join(' · ');
+
+    const remove = document.createElement('button');
+    remove.className = 'btn';
+    remove.style.cssText = 'font-size:11px;padding:3px 9px';
+    remove.textContent = 'Remove';
+    remove.setAttribute('onclick', `removeStatementYear(${record.year})`);
+
+    row.append(label, remove);
+    box.append(row);
+  }
+
+  for (const link of chainReport(records).filter((l) => !l.ok)) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:11px;color:var(--amber);margin-top:6px';
+    note.textContent = `${link.from} → ${link.to}: ${link.reason}`;
+    box.append(note);
+  }
 }
 
 /**

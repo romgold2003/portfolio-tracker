@@ -471,18 +471,22 @@
 
     <div class="modal-field">
       <label>Import from Interactive Brokers</label>
-      <p style="margin-bottom:10px">Rebuilds the whole book from an Activity Statement — every position, every closed trade with the profit IBKR calculated, your cash balance, and the deposits and withdrawals that make a real return possible.</p>
-      <p style="margin-bottom:10px;color:var(--text3);font-size:11px">In IBKR: <strong>Performance &amp; Reports → Statements → Activity Statement</strong>, period <strong>Year to Date</strong>, format <strong>CSV</strong>.</p>
-      <input type="file" id="ibkrFile" accept=".csv,text/csv" onchange="readIbkrFile()" style="font-size:12px">
+      <p style="margin-bottom:10px">Rebuilds your book from Activity Statements — every position, every closed trade with the profit IBKR calculated, your cash, and the deposits that make a real return possible. Add one statement per calendar year, for as many years as you have, and they are joined into a single history.</p>
+      <p style="margin-bottom:10px;color:var(--text3);font-size:11px">In IBKR: <strong>Performance &amp; Reports → Statements → Activity Statement</strong>, one calendar year per file (this year: <strong>Year to Date</strong>), format <strong>CSV</strong>. The annual statements IBKR saves as <strong>HTML</strong> work too. Pick several files at once to add several years.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="ibkrYear" onchange="readIbkrFile()" aria-label="Which year the statement covers" style="font-size:12px"></select>
+        <input type="file" id="ibkrFile" multiple accept=".csv,.htm,.html,text/csv,text/html" onchange="readIbkrFile()" style="font-size:12px">
+      </div>
       <div id="ibkrPreview" style="display:none;margin-top:12px">
         <div class="hint" id="ibkrSummary" style="margin:0 0 10px"></div>
-        <div class="hint" style="margin:0 0 10px;color:var(--red)">This replaces everything currently in your journal. Export a backup first if you want to keep it.</div>
+        <div class="hint" id="ibkrWarning" style="margin:0 0 10px;color:var(--red)"></div>
         <div style="display:flex;gap:8px">
           <button class="btn" onclick="cancelIbkrImport()">Cancel</button>
-          <button class="btn btn-blue" onclick="confirmIbkrImport()">Replace my journal</button>
+          <button class="btn btn-blue" id="ibkrConfirm" onclick="confirmIbkrImport()">Add to journal</button>
         </div>
       </div>
       <div id="ibkrError" class="lock-error" style="margin-top:10px"></div>
+      <div id="ibkrYears" style="margin-top:14px"></div>
     </div>
 
     <div class="modal-field danger-zone">

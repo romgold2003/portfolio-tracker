@@ -50,6 +50,14 @@ export const state = {
    * one with the other undone.
    */
   ledger: null,
+  /**
+   * Every broker statement imported, one per calendar year, oldest first.
+   *
+   * Kept whole so the next import can be merged in: the book is rebuilt from
+   * all of them together, which is how several years become one history
+   * instead of each import replacing the last.
+   */
+  statements: [],
   /** Finnhub key for stock/ETF quotes. Stays on this device. */
   apiKey: '',
 };
@@ -149,6 +157,31 @@ function sanitizeAnchor(value) {
   if (value.twr != null && Number.isFinite(twr)) anchor.twr = twr;
 
   return anchor;
+}
+
+/**
+ * The imported statements, one per year.
+ *
+ * Checked for the shape the merge relies on — a year, dates inside that year,
+ * lists where lists belong — and dropped whole when it is wrong. The rows inside
+ * are not re-examined here: the journal built from them passes through every
+ * sanitiser above on its way in, which is where a bad row would do harm.
+ */
+function sanitizeStatements(list) {
+  if (!Array.isArray(list)) return [];
+  const lists = ['positions', 'closed', 'ledger', 'transfers', 'dated', 'flows', 'splits'];
+  const records = ['firstBuy', 'netQty', 'openingHoldings', 'openingMarks', 'income', 'navChange'];
+  const byYear = new Map();
+  for (const r of list) {
+    const year = Number(r?.year);
+    if (!Number.isInteger(year) || year < 1900 || year > 3000) continue;
+    if (!DATE_ONLY.test(r.from ?? '') || !DATE_ONLY.test(r.to ?? '')) continue;
+    if (r.from.slice(0, 4) !== String(year) || r.to.slice(0, 4) !== String(year)) continue;
+    if (lists.some((k) => r[k] != null && !Array.isArray(r[k]))) continue;
+    if (records.some((k) => r[k] != null && (typeof r[k] !== 'object' || Array.isArray(r[k])))) continue;
+    byYear.set(year, r);
+  }
+  return [...byYear.values()].sort((a, b) => a.year - b.year);
 }
 
 function sanitizeIncome(value) {
@@ -254,6 +287,10 @@ function sanitizePosition(raw) {
   // amount staked as though it were an entry price.
   if (raw.summary === true) clean.summary = true;
 
+  // Held before the first statement on record. The reconstruction of a past
+  // day decides by it whether a purchase still has to be undone.
+  if (raw.carriedIn === true) clean.carriedIn = true;
+
   // Optional fields are only carried over when they hold a usable value, so a
   // missing one stays absent rather than becoming a misleading zero.
   if (exits && exits.length) clean.exits = exits;
@@ -317,6 +354,7 @@ export function loadState(journal) {
   state.income = sanitizeIncome(source.income);
   state.openingNav = sanitizeAnchor(source.openingNav);
   state.ledger = sanitizeLedger(source.ledger);
+  state.statements = sanitizeStatements(source.statements);
   state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
 }
 
@@ -330,6 +368,7 @@ export function journalSnapshot() {
     income: state.income,
     openingNav: state.openingNav,
     ledger: state.ledger,
+    statements: state.statements,
     apiKey: state.apiKey,
   };
 }
@@ -343,6 +382,7 @@ export function clearState() {
   state.income = { dividends: 0, interest: 0, commissions: 0, tax: 0 };
   state.openingNav = null;
   state.ledger = null;
+  state.statements = [];
   state.apiKey = '';
 }
 

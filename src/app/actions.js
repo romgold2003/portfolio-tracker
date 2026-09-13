@@ -16,7 +16,7 @@ import {
   loadState, flushNow,
 } from '../core/store.js';
 import {
-  parseIbkrStatement, statementToJournal, describeStatement,
+  parseIbkrStatement, describeStatement,
 } from '../features/ibkr.js';
 import {
   addPosition, addClosedPosition, updatePosition, applyDca as applyDcaToPosition, previewDca,
@@ -30,7 +30,12 @@ import { renderHome, toggleAmounts } from '../ui/views/home.js';
 import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
-import { openSettings, closeSettings, readApiKeyInput, readBenchKeyInput } from '../ui/views/settings.js';
+import {
+  openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears,
+} from '../ui/views/settings.js';
+import {
+  statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn,
+} from '../features/statementLibrary.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
@@ -609,7 +614,7 @@ export function installActions(extra = {}) {
     exportBackup, openImport, closeImport, previewImport, readImportFile, confirmImport,
     copyLegacySnippet,
     // Interactive Brokers import
-    readIbkrFile, cancelIbkrImport, confirmIbkrImport,
+    readIbkrFile, cancelIbkrImport, confirmIbkrImport, removeStatementYear,
     // account deletion
     beginDeleteAccount, cancelDeleteAccount, confirmDeleteAccount,
     ...extra,
@@ -678,13 +683,70 @@ export async function confirmDeleteAccount() {
 let signOutAfterDelete = async () => window.location.reload();
 
 /**
- * Importing an Interactive Brokers Activity Statement.
+ * Importing Interactive Brokers statements, one calendar year per file.
  *
- * Read, summarised, and only then applied — the file replaces the entire
- * journal, so what is about to happen is put on screen and confirmed before
+ * Read, checked against the years already imported, put on screen, and only
+ * then applied. The book is rebuilt from every year together, so the result —
+ * which years it will cover, and whether they join up — is shown before
  * anything is touched.
  */
-let stagedStatement = null;
+let stagedStatements = [];
+
+const moneyText = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/**
+ * Why an import must not go ahead, or '' when it can.
+ *
+ * The newest statement decides today's positions and cash, so importing only
+ * older years into a journal that already holds a newer one would put the
+ * account back to the end of the older year.
+ */
+function importBlockedBy(records) {
+  const newest = records[records.length - 1]?.year;
+  const known = newestYearIn(state);
+  if (!newest || !known || newest >= known || !state.positions.length) return '';
+  return `Your journal already holds ${known}. The newest statement decides today's positions and cash, `
+    + `so add your ${known} statement in the same import — otherwise the book would go back to the end of ${newest}.`;
+}
+
+function renderIbkrPreview() {
+  const records = withStatements(state.statements, stagedStatements.map((s) => s.record));
+  const imported = new Set((state.statements ?? []).map((r) => r.year));
+  const summary = el('ibkrSummary');
+  const warning = el('ibkrWarning');
+  if (!summary || !warning) return;
+
+  summary.replaceChildren();
+  const line = (text, colour) => {
+    const div = document.createElement('div');
+    div.style.marginBottom = '6px';
+    if (colour) div.style.color = colour;
+    div.textContent = text;
+    summary.append(div);
+  };
+
+  for (const { record, parsed } of [...stagedStatements].sort((a, b) => a.record.year - b.record.year)) {
+    const replaces = imported.has(record.year) ? ' (replaces the one imported before)' : '';
+    line(`${record.year}${replaces} — ${describeStatement(parsed)}`);
+  }
+
+  const years = records.map((r) => r.year);
+  line(`After this your journal covers ${years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : years[0]}.`);
+  for (const link of chainReport(records)) {
+    if (link.ok) {
+      line(`${link.from} → ${link.to}: joins up exactly${Number.isFinite(link.value) ? ` at ${moneyText(link.value)}` : ''}.`, 'var(--green)');
+    } else {
+      line(`${link.from} → ${link.to}: ${link.reason}`, 'var(--amber)');
+    }
+  }
+
+  const blocked = importBlockedBy(records);
+  warning.textContent = blocked
+    || 'Positions and closed trades are rebuilt from these statements, so anything entered by hand is replaced. Export a backup first if you want to keep it.';
+  const confirmButton = el('ibkrConfirm');
+  if (confirmButton) confirmButton.disabled = Boolean(blocked);
+  el('ibkrPreview').style.display = 'block';
+}
 
 function ibkrError(message) {
   const box = el('ibkrError');
@@ -695,34 +757,81 @@ function ibkrError(message) {
 
 export async function readIbkrFile() {
   const input = el('ibkrFile');
-  const file = input?.files?.[0];
+  const files = [...(input?.files ?? [])];
   ibkrError('');
-  if (!file) return;
+  stagedStatements = [];
+  el('ibkrPreview').style.display = 'none';
+  if (!files.length) return;
 
-  try {
-    stagedStatement = parseIbkrStatement(await file.text());
-  } catch (err) {
-    stagedStatement = null;
-    el('ibkrPreview').style.display = 'none';
-    ibkrError(err.message);
-    return;
+  /**
+   * The year picked, checked against the year the file says it covers.
+   *
+   * The file is the authority — a statement's period is printed in it — so the
+   * picker cannot relabel one. What it catches is the wrong file chosen for the
+   * slot, which is exactly the mistake worth stopping before it is merged.
+   * With several files at once each goes to its own year.
+   */
+  const chosen = Number(el('ibkrYear')?.value) || null;
+  const problems = [];
+  for (const file of files) {
+    try {
+      const parsed = parseIbkrStatement(await file.text());
+      const record = statementRecord(parsed);
+      if (chosen && files.length === 1 && record.year !== chosen) {
+        problems.push(`${file.name} covers ${record.year}, not ${chosen}. Pick ${record.year}, or "Detect year from file".`);
+        continue;
+      }
+      stagedStatements.push({ name: file.name, parsed, record });
+    } catch (err) {
+      problems.push(`${file.name}: ${err.message}`);
+    }
   }
 
-  el('ibkrSummary').textContent = describeStatement(stagedStatement);
-  el('ibkrPreview').style.display = 'block';
+  if (problems.length) ibkrError(problems.join(' '));
+  if (stagedStatements.length) renderIbkrPreview();
 }
 
 export function cancelIbkrImport() {
-  stagedStatement = null;
+  stagedStatements = [];
   const input = el('ibkrFile');
   if (input) input.value = '';
   el('ibkrPreview').style.display = 'none';
   ibkrError('');
 }
 
+/**
+ * Take one year back out of the history.
+ *
+ * What that does depends on which year, so the confirmation says which of the
+ * three it is: the only saved statement leaves the book as it is, the newest
+ * one hands today's positions to the year before it, and any other takes its
+ * trades and deposits with it.
+ */
+export async function removeStatementYear(year) {
+  const records = withoutStatement(state.statements, year);
+  const newest = state.statements[state.statements.length - 1]?.year;
+  const message = !records.length
+    ? `Remove ${year}? Your positions stay exactly as they are — only the saved statement goes, so later imports will not include it.`
+    : year === newest
+      ? `Remove ${year}? Your book is rebuilt from ${records[records.length - 1].year}, the newest year left: its closing positions and cash, not today's.`
+      : `Remove ${year}? Its closed trades and deposits leave your journal.`;
+  if (!confirm(message)) return;
+
+  if (records.length) {
+    loadState(journalFromStatements(records, { snapshots: state.snapshots, apiKey: state.apiKey }));
+  } else {
+    loadState({ ...state, statements: [] });
+  }
+  await flushNow();
+  renderAll();
+  renderStatementYears();
+}
+
 export async function confirmIbkrImport() {
-  if (!stagedStatement) return;
-  const journal = statementToJournal(stagedStatement, {
+  if (!stagedStatements.length) return;
+  const records = withStatements(state.statements, stagedStatements.map((s) => s.record));
+  if (importBlockedBy(records)) return;
+  const journal = journalFromStatements(records, {
     snapshots: state.snapshots,
     apiKey: state.apiKey,
   });
@@ -730,7 +839,10 @@ export async function confirmIbkrImport() {
   loadState(journal);
   await flushNow();
 
-  const count = journal.positions.length;
+  const count = journal.positions.filter((p) => p.status === 'Open').length;
+  const closedCount = journal.positions.length - count;
+  const years = records.map((r) => r.year);
+  const broken = chainReport(records).filter((link) => !link.ok);
   const nav = journal.openingNav;
   cancelIbkrImport();
   closeSettings();
@@ -751,7 +863,10 @@ export async function confirmIbkrImport() {
     : 'This statement carried no time-weighted return, so the year is measured '
       + 'here instead and may read a little above or below your broker.';
 
-  alert(`Imported ${count} positions from your statement.\n\n`
-    + 'Prices are refreshing now. Your open positions, closed trades, cash and '
-    + `deposits all came from the statement.\n\n${measure}`);
+  const span = years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : `${years[0]}`;
+  const gaps = broken.length ? `\n\nNot joined up: ${broken.map((link) => link.reason).join(' ')}` : '';
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  alert(`Your journal now covers ${span}: ${plural(count, 'open position')} and ${plural(closedCount, 'closed trade')} `
+    + `from ${plural(years.length, 'statement')}.${gaps}\n\n`
+    + `Prices are refreshing now.\n\n${measure}`);
 }

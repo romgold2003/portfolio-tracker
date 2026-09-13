@@ -24,6 +24,8 @@
  * decide, so a bad file cannot half-replace a journal.
  */
 
+import { looksLikeHtmlStatement, htmlStatementToCsv } from './ibkrHtml.js';
+
 /** One line of CSV, respecting quoted fields — IBKR puts commas inside dates. */
 function parseLine(line) {
   const out = [];
@@ -73,6 +75,8 @@ const SECTIONS = {
     /^synthèse de la performance évaluée au prix du marché$/i],
   /** Shares moved between two accounts of the same statement. */
   transfers: [/^transfers$/i, /^transferts$/i],
+  /** Splits, which change a share count without a trade. */
+  corporateActions: [/^corporate actions$/i, /^opérations sur titres$/i],
   statement: [/^statement$/i],
   account: [/^account information$/i, /^informations sur le compte$/i],
 };
@@ -301,6 +305,9 @@ function readTrades(group) {
     // commission is already signed, so the cash moved by exactly their sum.
     ledger.push({
       date,
+      // To the second, because a split lands at a time of day and a trade on
+      // the same date can fall either side of it.
+      at: `${date} ${clean(r[iDate]).split(',')[1]?.trim() || '00:00:00'}`,
       ticker,
       qty,
       price: iPrice >= 0 ? num(r[iPrice]) : 0,
@@ -548,10 +555,43 @@ function readTotal(group) {
 }
 
 /**
+ * Share splits, from the corporate actions.
+ *
+ * Only the ratio and the moment are kept. Every movement of that ticker dated
+ * before the split is later expressed in the shares that exist after it,
+ * because that is the unit the price history uses. IBKR books a split as two
+ * rows — the old line leaving, the new one arriving — carrying the same
+ * description, so the pair collapses to one entry.
+ */
+function readSplits(group) {
+  if (!group?.header) return [];
+  const iDate = columnIndex(group.header, 'Date/Time', 'Date/Heure');
+  const iDesc = columnIndex(group.header, 'Description');
+  if (iDate < 0 || iDesc < 0) return [];
+
+  const seen = new Map();
+  for (const r of group.rows) {
+    if (isTotalRow(r)) continue;
+    const match = /^\s*([A-Z0-9 .-]+?)\s*\([A-Z0-9]+\)\s+split\s+([\d.]+)\s+for\s+([\d.]+)/i.exec(clean(r[iDesc] ?? ''));
+    const [day, time] = clean(r[iDate] ?? '').split(',').map((s) => s.trim());
+    if (!match || !/^\d{4}-\d{2}-\d{2}$/.test(day ?? '')) continue;
+    const ratio = num(match[2]) / num(match[3]);
+    if (!Number.isFinite(ratio) || !(ratio > 0)) continue;
+    const ticker = match[1].trim().replace(/\s+/g, '.');
+    const at = `${day} ${time || '00:00:00'}`;
+    seen.set(`${ticker}|${at}`, { ticker, date: day, at, ratio });
+  }
+  return [...seen.values()];
+}
+
+/**
  * Read a statement. Throws only when the file is not one.
+ *
+ * Takes IBKR's CSV export or its HTML statement page; the page is turned into
+ * the same rows first, so everything below reads both.
  */
 export function parseIbkrStatement(text) {
-  const groups = groupSections(text);
+  const groups = groupSections(looksLikeHtmlStatement(text) ? htmlStatementToCsv(text) : text);
   if (!groups.size) {
     throw new Error('That does not look like an Interactive Brokers activity statement.');
   }
@@ -565,6 +605,7 @@ export function parseIbkrStatement(text) {
   const openingCash = readOpeningCash(groups.get('nav'));
   const { holdings: openingHoldings, marks: openingMarks } = readOpeningHoldings(groups.get('mtm'));
   const transfers = readTransfers(groups.get('transfers'));
+  const splits = readSplits(groups.get('corporateActions'));
   const income = [
     ...readDatedCash(groups.get('dividends'), 'dividend'),
     ...readDatedCash(groups.get('interest'), 'interest'),
@@ -595,6 +636,7 @@ export function parseIbkrStatement(text) {
     openingHoldings,
     openingMarks,
     transfers,
+    splits,
     dated: income,
     periodStart,
     periodEnd: period.to,
@@ -633,6 +675,9 @@ export function parseIbkrStatement(text) {
  * and the cost basis, and recomputing them here would only invent a second
  * opinion.
  */
+/** A value from a Map, or from the plain object a stored statement keeps instead. */
+const lookup = (source, key) => (source instanceof Map ? source.get(key) : source?.[key]);
+
 export function statementToJournal(parsed, existing = {}) {
   let id = Date.now() * 1000;
   const nextId = () => { id += 1; return id; };
@@ -646,7 +691,7 @@ export function statementToJournal(parsed, existing = {}) {
     // A holding bought before the statement period has no purchase in it, so
     // its opening date is genuinely unknown and stays null. That is what marks
     // it as carried in from an earlier year rather than opened this one.
-    open: parsed.firstBuy?.get(p.ticker) ?? null,
+    open: lookup(parsed.firstBuy, p.ticker) ?? null,
     /**
      * Held before this statement began.
      *
@@ -654,7 +699,7 @@ export function statementToJournal(parsed, existing = {}) {
      * quantity, and anything above zero means the holding predates the
      * statement however much of it was traded since.
      */
-    carriedIn: p.qty - (parsed.netQty?.get(p.ticker) ?? 0) > 1e-9,
+    carriedIn: p.qty - (lookup(parsed.netQty, p.ticker) ?? 0) > 1e-9,
     close: null,
     entry: p.entry,
     cur: p.cur,
