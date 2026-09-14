@@ -15,9 +15,10 @@ import {
 import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
 } from '../../services/history.js';
-import { periodStart, cutoffFor, setBackfill } from '../../core/snapshots.js';
+import { periodStart, cutoffFor, setBackfill, authoritativeHistory } from '../../core/snapshots.js';
+import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
-import { buildPortfolioHistory } from '../../core/portfolioHistory.js';
+import { buildPortfolioHistory, periodReturnFromHistory } from '../../core/portfolioHistory.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -583,7 +584,7 @@ function renderPeriodGain(period) {
   const pnlEl = document.getElementById('acctPnl');
   if (!pnlEl) return;
 
-  if (!period) {
+  if (!period || period.returnPct == null) {
     pnlEl.textContent = '—';
     return;
   }
@@ -696,17 +697,9 @@ export function renderHome() {
   // when the price histories land rather than blocking on the network.
   loadBackfill();
 
-  const period = accountPerformance({
-    positions: state.positions,
-    account: totals.account,
-    from: windowStart(),
-    to: todayStr(),
-    flows: state.cashFlows,
-    openingNav: state.openingNav,
-    startPrices,
-  });
-  setText('kReturn', fp(period.returnPct ?? 0));
-  setColor('kReturn', clr(period.returnPct ?? 0));
+  const period = timeframePerformance(totals);
+  setText('kReturn', period?.returnPct == null ? '—' : fp(period.returnPct));
+  setColor('kReturn', period?.returnPct == null ? 'var(--text3)' : clr(period.returnPct));
   renderPeriodGain(period);
 
   // Needs the network, so it settles in after the rest of the page is drawn.
@@ -726,4 +719,75 @@ export function renderHome() {
 function windowStart() {
   if (ui.timeframe === 'All') return null;
   return cutoffFor(ui.timeframe).toISOString().slice(0, 10);
+}
+
+/**
+ * The selected timeframe's return, by the most reliable measure the data allows.
+ *
+ * Measured against this account's own three years of IBKR statements, the
+ * figures outside year to date were far out: a week read −7.90% where it was
+ * −0.90%, the year +47.54% where it was +25.45%, and all time +97.44% where
+ * IBKR itself says +53.19%. Two faults. Every window was costed from the prices
+ * on 1 January, so a week's return carried nine months of price moves. And all
+ * time divided the whole history's profit by the first deposit alone, as though
+ * the fifteen thousand paid in afterwards had earned nothing.
+ *
+ * So, in order of how much is actually known:
+ *
+ *   year to date   the broker's own figure, chained to today, as before
+ *   all time       the broker's yearly figures compounded, when every year is
+ *                  an IBKR statement and the years join up
+ *   any window     the account valued every day from the statements, deposits
+ *                  taken out and the days compounded — within about half a
+ *                  point of the broker on every year it could be checked on
+ *   no statements  the estimate from trades, but no longer handed 1 January's
+ *                  prices for a window that does not start then
+ *
+ * While the daily values are still loading a figure is not guessed: the
+ * statements mean a reliable one is seconds away, and a wrong one on screen in
+ * the meantime is exactly the complaint.
+ */
+function timeframePerformance(totals) {
+  const from = windowStart();
+  const to = todayStr();
+  const ytd = ui.timeframe === 'YTD';
+  const fromTrades = () => accountPerformance({
+    positions: state.positions,
+    account: totals.account,
+    from,
+    to,
+    flows: state.cashFlows,
+    openingNav: state.openingNav,
+    // The closes on 1 January are the starting prices of a window that starts
+    // on 1 January, and of no other.
+    startPrices: ytd ? startPrices : new Map(),
+  });
+
+  if (ytd || !state.ledger?.events?.length) return fromTrades();
+
+  const history = authoritativeHistory();
+  if (!history.length) return null;
+  const measured = periodReturnFromHistory(history, from, to);
+  if (!measured) return fromTrades();
+
+  if (ui.timeframe === 'All') {
+    const year = new Date().getFullYear();
+    const thisYear = accountPerformance({
+      positions: state.positions,
+      account: totals.account,
+      from: `${year}-01-01`,
+      to,
+      flows: state.cashFlows,
+      openingNav: state.openingNav,
+      startPrices,
+    });
+    const chained = chainedBrokerReturn(
+      state.statements,
+      thisYear.method === 'broker' ? thisYear.returnPct : null,
+      year,
+    );
+    if (chained != null) return { ...measured, returnPct: chained, method: 'broker' };
+  }
+
+  return { ...measured, method: 'history' };
 }

@@ -107,6 +107,15 @@ export function setBackfill(rows, { authoritative = false } = {}) {
 
 export function backfillRows() { return backfill; }
 
+/**
+ * The daily history walked forward from a broker's statements, or empty.
+ *
+ * Only this one is trusted for measuring returns. It is checked against the
+ * statements it came from; a back-cast from today's positions drifts by several
+ * per cent a day, and compounding that drift turns a real year upside down.
+ */
+export function authoritativeHistory() { return forward; }
+
 /** The daily portfolio history: value, cash, positions and external flows. */
 export function portfolioHistory() { return history; }
 

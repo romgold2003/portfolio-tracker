@@ -391,3 +391,33 @@ export function newestYearIn(journal) {
   for (const r of journal?.statements ?? []) note(r.to);
   return newest || null;
 }
+
+/**
+ * The return since the first statement, from the broker's own yearly figures.
+ *
+ * A time-weighted return compounds, so the whole history is each year's return
+ * multiplied through: on this account −2.43%, +20.36% and +30.44% make +53.19%.
+ * That is exactly what IBKR itself reports for the period, which no estimate
+ * worked out here can match to the cent.
+ *
+ * `currentYearPct` is this year's return chained to today — the broker's
+ * year-to-date plus the days since the statement closed — and replaces the
+ * newest statement's own figure, which stops on the day it was exported.
+ *
+ * Null unless every year is an IBKR statement with a return in it, the years
+ * join up with none missing, and the newest is this year: anything less leaves
+ * a stretch of the history the broker did not measure.
+ */
+export function chainedBrokerReturn(records, currentYearPct, currentYear) {
+  const sorted = [...(records ?? [])].sort((a, b) => a.year - b.year);
+  if (!sorted.length || sorted.some((r) => sourceOf(r) !== 'ibkr' || !Number.isFinite(r.twr))) return null;
+  if (sorted[sorted.length - 1].year !== currentYear || !Number.isFinite(currentYearPct)) return null;
+  if (chainReport(sorted).some((link) => !link.ok)) return null;
+
+  let growth = 1;
+  sorted.forEach((record, i) => {
+    const pct = i === sorted.length - 1 ? currentYearPct : record.twr;
+    growth *= 1 + pct / 100;
+  });
+  return (growth - 1) * 100;
+}
