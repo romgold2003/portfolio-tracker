@@ -517,7 +517,14 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
       skipped.push({ line, reason: `a ${kind} with no amount` });
       return;
     }
-    const cash = kind === 'fee' || kind === 'withdrawal' ? -Math.abs(value)
+    /**
+     * A refund of tax or fees is money back, not another charge. Israeli
+     * brokers settle capital-gains tax monthly and credit it back after a
+     * losing month; forcing every "tax" row negative charged those twice.
+     */
+    const refund = kind === 'fee' && /refund|rebate|reversal|credit|reclaim/i.test(words);
+    const cash = refund ? Math.abs(value)
+      : kind === 'fee' || kind === 'withdrawal' ? -Math.abs(value)
       : kind === 'deposit' ? Math.abs(value)
         : value;
     transactions.push({ ...base, ticker: ticker || null, cash });

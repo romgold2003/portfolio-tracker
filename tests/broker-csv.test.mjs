@@ -183,6 +183,17 @@ describe('what kind of transaction a row is', () => {
     assert.equal(classifyAction('Stock split'), 'split');
     assert.equal(classifyAction('Something else'), null);
   });
+
+  test('a tax refund is money back, not another charge', () => {
+    // Israeli brokers charge capital-gains tax monthly and credit it back after
+    // a losing month. Both rows read as tax; only the charge takes money out.
+    const { transactions } = read([
+      'Date,Action,Symbol,Quantity,Price,Amount,Fees',
+      '2026-04-05,Tax,,,,-6.61,0',
+      '2026-05-03,Tax refund,,,,17.80,0',
+    ].join('\n'));
+    assert.deepEqual(transactions.map((t) => [t.kind, t.cash]), [['fee', -6.61], ['fee', 17.8]]);
+  });
 });
 
 describe('rows into transactions', () => {
