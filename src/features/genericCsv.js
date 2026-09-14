@@ -146,6 +146,15 @@ export const FIELDS = [
     key: 'currency', label: 'Currency',
     hints: ['currency', 'ccy', 'devise', 'währung', 'waehrung', 'moneda'],
   },
+  {
+    /**
+     * Free text about the row. Read to tell what a row is when there is no type
+     * column, and which way money went: many exports write every amount as
+     * positive and say "Transfer to bank" or "Incoming wire" in words.
+     */
+    key: 'description', label: 'Description',
+    hints: ['description', 'details', 'narrative', 'memo', 'comment', 'libellé', 'libelle', 'omschrijving', 'beschreibung', 'descripción'],
+  },
 ];
 
 const normalise = (h) => String(h ?? '').toLowerCase().replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -173,7 +182,7 @@ function scoreHeader(header, hints) {
 export function guessMapping(headers) {
   const mapping = {};
   const used = new Set();
-  const order = ['date', 'ticker', 'quantity', 'price', 'fees', 'amount', 'action', 'currency'];
+  const order = ['date', 'ticker', 'quantity', 'price', 'fees', 'amount', 'action', 'currency', 'description'];
   for (const key of order) {
     const field = FIELDS.find((f) => f.key === key);
     let bestIndex = -1;
@@ -341,6 +350,9 @@ export function classifyAction(text) {
   const t = ` ${String(text ?? '').toLowerCase()} `;
   if (!t.trim()) return null;
   if (/split/.test(t)) return 'split';
+  // A dividend spent on shares: a purchase when it carries a quantity, which is
+  // decided where the quantity is known.
+  if (/reinvest|\bdrip\b/.test(t)) return 'reinvest';
   if (/dividend|dividende|\bcdiv\b|\bdiv\b|distribution|ausschüttung/.test(t)) return 'dividend';
   if (/interest|intérêt|interet|\bzins|\bint\b/.test(t)) return 'interest';
   if (/withdraw|retrait|auszahlung|\bwdl\b|retiro/.test(t)) return 'withdrawal';
@@ -349,6 +361,19 @@ export function classifyAction(text) {
   if (/\bsell|\bsold\b|\bsld\b|verkauf|vente|venta|\bstc\b|^\s*s\s*$/.test(t)) return 'sell';
   if (/\bbuy|\bbought\b|\bbot\b|kauf|achat|compra|purchase|\bbto\b|^\s*b\s*$/.test(t)) return 'buy';
   if (/transfer|journal|\bach\b|wire|virement|überweisung/.test(t)) return 'transfer';
+  return null;
+}
+
+/**
+ * Which way a transfer of money went, when the words say so.
+ *
+ * Returns 'in', 'out', or null when the text is silent and the sign of the
+ * amount has to decide.
+ */
+export function transferDirection(text) {
+  const t = ` ${String(text ?? '').toLowerCase()} `;
+  if (/withdraw|retrait|auszahlung|outgoing|payout|\bsent\b|(transfer|wire|ach|payment)\s+(out\b|to\b)|\bto (bank|checking|savings|current account|account ending)/.test(t)) return 'out';
+  if (/deposit|dépôt|depot|einzahlung|incoming|received|(transfer|wire|ach)\s+(in\b|from\b)|\bfrom (bank|checking|savings|current account)/.test(t)) return 'in';
   return null;
 }
 
@@ -383,6 +408,7 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
   const transactions = [];
   const skipped = [];
   const currencies = new Set();
+  let repriced = 0;
 
   table.rows.forEach((row, index) => {
     const line = index + 1;
@@ -400,13 +426,25 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
     const currency = String(cell(row, 'currency') ?? '').trim().toUpperCase();
     if (currency) currencies.add(currency);
 
-    let kind = at.action >= 0 ? classifyAction(cell(row, 'action')) : null;
+    const words = `${cell(row, 'action') ?? ''} ${cell(row, 'description') ?? ''}`;
+    let kind = classifyAction(cell(row, 'action')) ?? classifyAction(cell(row, 'description'));
+    if (kind === 'reinvest') kind = ticker && rawQty ? 'buy' : 'dividend';
     if (!kind && ticker && rawQty) kind = rawQty < 0 ? 'sell' : 'buy';
-    if (!kind && !ticker && amount) kind = amount > 0 ? 'deposit' : 'withdrawal';
+    if (!kind && !ticker && amount) kind = 'transfer';
     if (kind === 'transfer') {
       if (ticker && rawQty) { skipped.push({ line, reason: 'shares moved in or out without a price' }); return; }
       if (!amount) { skipped.push({ line, reason: 'a transfer with no amount' }); return; }
-      kind = amount > 0 ? 'deposit' : 'withdrawal';
+      /**
+       * Which way the money went: in words when the file says it, and only
+       * failing that off the sign. Plenty of exports write every amount as
+       * positive and put the direction in the description, and reading the
+       * sign alone counted "Transfer to bank" as money coming in — twice the
+       * transfer added to an account that had just lost it.
+       */
+      const direction = transferDirection(words);
+      kind = direction === 'out' ? 'withdrawal'
+        : direction === 'in' ? 'deposit'
+          : (amount > 0 ? 'deposit' : 'withdrawal');
     }
     if (!kind) {
       skipped.push({ line, reason: `not a kind of transaction this can read ("${cell(row, 'action')}")` });
@@ -429,8 +467,26 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
       const qty = Math.abs(rawQty ?? 0);
       if (!ticker) { skipped.push({ line, reason: 'a trade with no ticker' }); return; }
       if (!qty) { skipped.push({ line, reason: `a ${kind} of ${ticker} with no quantity` }); return; }
-      const unit = price != null && price !== 0 ? Math.abs(price) : (amount ? Math.abs(amount) / qty : null);
+      let unit = price != null && price !== 0 ? Math.abs(price) : (amount ? Math.abs(amount) / qty : null);
       if (!unit) { skipped.push({ line, reason: `a ${kind} of ${ticker} with no price or amount` }); return; }
+      /**
+       * A price that does not match its own total is in a different unit.
+       *
+       * UK exports quote in pence while the total is in pounds, and a share
+       * bought abroad is quoted in its listing's currency while the total is
+       * in the account's. Taken at face value a 100p share read as £100 and
+       * the position came out a hundred times its size. When quantity times
+       * price is further from the total than the fee and a margin explain, the
+       * total is the account's own money, and the price is taken from it.
+       */
+      if (price && amount) {
+        const stated = qty * Math.abs(price);
+        const total = Math.abs(amount);
+        if (Math.abs(stated - total) > fees + 0.03 * Math.max(stated, total)) {
+          unit = total / qty;
+          repriced += 1;
+        }
+      }
       /**
        * The cash that moved.
        *
@@ -467,7 +523,7 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
     transactions.push({ ...base, ticker: ticker || null, cash });
   });
 
-  return { transactions, skipped, currencies: [...currencies] };
+  return { transactions, skipped, currencies: [...currencies], repriced };
 }
 
 /** A key for remembering how a broker's files are laid out. */

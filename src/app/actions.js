@@ -39,7 +39,7 @@ import {
 import {
   parseCsvTable, guessMapping, detectFormats, missingFields, readTransactions, layoutKey,
 } from '../features/genericCsv.js';
-import { transactionRecords, transactionWarnings } from '../features/transactionBook.js';
+import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
 import { renderCsvMapping } from '../ui/views/csvMapping.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
@@ -697,7 +697,7 @@ let signOutAfterDelete = async () => window.location.reload();
  */
 let stagedStatements = [];
 
-const moneyText = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const moneyText = (n) => `${n < 0 ? '-' : ''}$${Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**
  * Why an import must not go ahead, or '' when it can.
@@ -754,6 +754,12 @@ function renderIbkrPreview() {
     ? 'Interactive Brokers statements and histories from other brokers cannot be combined in one journal. Import files from one source, or remove the other years first.'
     : '';
   if (!mixed && sources.has('transactions')) {
+    const s = transactionSummary(records);
+    line(`How the account adds up: deposits ${moneyText(s.deposits)}, withdrawals ${moneyText(s.withdrawals)}, `
+      + `bought ${moneyText(s.bought)}, sold ${moneyText(s.sold)}, dividends and interest ${moneyText(s.income)}, `
+      + `fees ${moneyText(s.fees)} — leaving cash of ${moneyText(s.cash)} and holdings worth ${moneyText(s.holdings)} `
+      + `at their last traded price, about ${moneyText(s.account)} in all. If a line is not what your broker shows, `
+      + 'the column it comes from is matched wrongly.', 'var(--text2)');
     for (const note of transactionWarnings(records)) line(note, 'var(--amber)');
   }
   const chosen = Number(el('ibkrYear')?.value) || null;
@@ -762,6 +768,10 @@ function renderIbkrPreview() {
       const first = group.skipped[0];
       line(`${group.skipped.length} row${group.skipped.length === 1 ? '' : 's'} left out as not a transaction `
         + `(e.g. ${first.name} line ${first.line}: ${first.reason}).`, 'var(--text3)');
+    }
+    if (group.repriced) {
+      line(`${group.repriced} trade${group.repriced === 1 ? '' : 's'} had a price that did not match the total — `
+        + 'a different currency, or pence — so the price was taken from the total.', 'var(--text3)');
     }
     if (group.outside) line(`${group.outside} transaction${group.outside === 1 ? '' : 's'} outside ${chosen} left out.`, 'var(--text3)');
     for (const name of group.empty ?? []) line(`${name}: no transactions${chosen ? ` in ${chosen}` : ''} could be read.`, 'var(--amber)');
@@ -903,12 +913,14 @@ function refreshCsvImport() {
     group.sample = [];
     group.skipped = [];
     group.outside = 0;
+    group.repriced = 0;
     group.empty = [];
     if (group.missing.length) continue;
     rememberLayout(group.key, { mapping: group.mapping, formats: group.formats });
 
     for (const { name, table } of group.tables) {
-      const { transactions, skipped } = readTransactions(table, group.mapping, group.formats);
+      const { transactions, skipped, repriced } = readTransactions(table, group.mapping, group.formats);
+      group.repriced += repriced;
       group.skipped.push(...skipped.map((s) => ({ ...s, name })));
       if (group.sample.length < 3) group.sample.push(...transactions.slice(0, 3 - group.sample.length));
       const kept = chosen ? transactions.filter((t) => t.date.startsWith(`${chosen}-`)) : transactions;

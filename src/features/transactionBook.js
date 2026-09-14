@@ -154,7 +154,88 @@ export function transactionWarnings(records) {
     out.push(`Cash goes negative (${money(book.lowest.value)} on ${book.lowest.date}): the files probably leave out `
       + 'deposits, or the account held cash before the earliest file. Correct it with Edit cash after importing.');
   }
+
+  const all = records.flatMap((r) => r.transactions ?? []);
+
+  /**
+   * The same transfer listed twice.
+   *
+   * Some exports carry money both as the transfer and again as a movement in a
+   * cash ledger, and reading both deposits the money twice — the account comes
+   * out richer by exactly that amount. Two genuine deposits of the same sum on
+   * the same day are possible, so this is said rather than acted on.
+   */
+  const transfers = new Map();
+  for (const t of all) {
+    if (t.kind !== 'deposit' && t.kind !== 'withdrawal') continue;
+    const key = `${t.kind}|${t.date}|${t.cash}`;
+    transfers.set(key, (transfers.get(key) ?? 0) + 1);
+  }
+  const doubled = [...transfers].filter(([, n]) => n > 1);
+  if (doubled.length) {
+    const examples = doubled.slice(0, 3).map(([key, n]) => {
+      const [kind, date, cash] = key.split('|');
+      return `${n} ${kind}s of ${money(Math.abs(Number(cash)))} on ${date}`;
+    });
+    out.push(`${examples.join(', ')}${doubled.length > 3 ? ' and more' : ''}: if that is one transfer listed twice — `
+      + 'once as a transfer and again as a cash movement — the account comes out that much too high. '
+      + 'Delete the repeated rows from the file before importing.');
+  }
+
+  const trades = new Map();
+  for (const t of all) {
+    if (t.kind !== 'buy' && t.kind !== 'sell') continue;
+    const key = `${t.at}|${t.kind}|${t.ticker}|${t.qty}|${t.price}`;
+    trades.set(key, (trades.get(key) ?? 0) + 1);
+  }
+  const repeated = [...trades].filter(([, n]) => n > 1);
+  if (repeated.length) {
+    const [at, kind, ticker, qty] = repeated[0][0].split('|');
+    out.push(`${repeated.length} trade${repeated.length === 1 ? ' appears' : 's appear'} more than once with the same time, `
+      + `size and price (e.g. ${kind} ${qty} ${ticker} at ${at}). Partial fills can look like that; a trade listed twice `
+      + 'would overstate the holding and the cash spent.');
+  }
+
+  const foreign = [...new Set(all.map((t) => t.currency).filter((c) => c && c !== 'USD'))];
+  if (foreign.length) {
+    out.push(`Amounts in ${foreign.join(', ')}: the app shows every amount as dollars and fetches live prices in US dollars, `
+      + "so values can differ from your broker's.");
+  }
+
   return out;
+}
+
+/**
+ * How the account value is built from the files, line by line.
+ *
+ * Put in front of the person importing so that a wrong column shows up as a
+ * wrong line — deposits of twice what they paid in, holdings a hundred times
+ * too large — before it becomes a wrong account.
+ */
+export function transactionSummary(records) {
+  const all = records.flatMap((r) => r.transactions ?? []);
+  const book = replayTransactions(all);
+  const total = (kinds, sign = 1) => all
+    .filter((t) => kinds.includes(t.kind))
+    .reduce((s, t) => s + sign * t.cash, 0);
+
+  let holdings = 0;
+  for (const [ticker, lots] of book.lots) {
+    const qty = lots.reduce((s, l) => s + l.qty, 0);
+    if (qty > EMPTY) holdings += qty * (book.lastPrice.get(ticker) ?? 0);
+  }
+
+  return {
+    deposits: total(['deposit']),
+    withdrawals: total(['withdrawal'], -1),
+    bought: total(['buy'], -1),
+    sold: total(['sell']),
+    income: total(['dividend', 'interest']),
+    fees: total(['fee'], -1),
+    cash: book.cash,
+    holdings,
+    account: book.cash + holdings,
+  };
 }
 
 /** A journal rebuilt from every year of transactions. */

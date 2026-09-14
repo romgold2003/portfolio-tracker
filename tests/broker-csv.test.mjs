@@ -16,8 +16,9 @@ import {
   detectDateOrder, parseDate, classifyAction, readTransactions, detectFormats, layoutKey,
 } from '../src/features/genericCsv.js';
 import {
-  transactionRecords, journalFromTransactions, transactionWarnings, replayTransactions,
+  transactionRecords, journalFromTransactions, transactionWarnings, replayTransactions, transactionSummary,
 } from '../src/features/transactionBook.js';
+import { accountTotals } from '../src/core/portfolio.js';
 import {
   chainReport, journalFromStatements, statementRecord, withStatements,
 } from '../src/features/statementLibrary.js';
@@ -171,7 +172,9 @@ describe('what kind of transaction a row is', () => {
     assert.equal(classifyAction('SLD'), 'sell');
     assert.equal(classifyAction('Achat'), 'buy');
     assert.equal(classifyAction('CDIV'), 'dividend');
-    assert.equal(classifyAction('Dividend reinvestment buy'), 'dividend');
+    // A reinvested dividend is a purchase when it has a quantity; that is
+    // decided where the quantity is read.
+    assert.equal(classifyAction('Dividend reinvestment buy'), 'reinvest');
     assert.equal(classifyAction('ACH Deposit'), 'deposit');
     assert.equal(classifyAction('Withdrawal'), 'withdrawal');
     assert.equal(classifyAction('Commission'), 'fee');
@@ -398,5 +401,114 @@ describe('years from other brokers alongside the rest', () => {
     assert.equal(state.statements.length, 1);
     assert.equal(state.statements[0].transactions.length, 1);
     assert.equal(state.statements[0].kind, 'transactions');
+  });
+});
+
+/* ───────────────────────── the phantom money people reported ───────────────────────── */
+
+describe('money that was never in the account', () => {
+  /**
+   * Reported after release: an import showing thousands the person never had.
+   * Each case below is a layout that produced exactly that, run straight
+   * through as someone accepting every guess would. The truth in each is a
+   * 10,000 deposit and 20 AAPL bought at 200 — an account of 10,000 — with
+   * whatever the case adds on top.
+   */
+  const account = (text) => {
+    const { transactions, repriced } = read(text);
+    const records = transactionRecords(transactions);
+    const j = journalFromTransactions(records, {});
+    return { records, transactions, repriced, value: accountTotals(j.positions, j.cash).account };
+  };
+
+  test('a transfer to the bank written as a positive amount is money out, not in', () => {
+    // Read by the sign alone this was a second deposit: 12,000 where 8,000 is true.
+    const { value, transactions } = account([
+      'Date,Description,Symbol,Quantity,Price,Amount',
+      '2025-01-02,ACH Deposit,,,,10000',
+      '2025-01-03,Buy,AAPL,20,200,-4000',
+      '2025-03-01,Transfer to bank,,,,2000',
+    ].join('\n'));
+    assert.deepEqual(transactions.map((t) => t.kind), ['deposit', 'buy', 'withdrawal']);
+    assert.ok(near(value, 8000), `account ${value}`);
+  });
+
+  test('the direction is found in the description even when a type column exists', () => {
+    const { value } = account([
+      'Date,Type,Description,Symbol,Quantity,Price,Amount',
+      '2025-01-02,Transfer,Incoming wire,,,,10000',
+      '2025-01-03,Buy,Apple,AAPL,20,200,-4000',
+      '2025-03-01,Transfer,Wire out to checking,,,,2000',
+    ].join('\n'));
+    assert.ok(near(value, 8000), `account ${value}`);
+  });
+
+  test('a price in pence against a total in pounds is not a hundred times the holding', () => {
+    // 4,000 shares at 100p is £4,000. Read as £100 a share it was £400,000.
+    const { value, repriced } = account([
+      'Time,Action,Ticker,No. of shares,Price / share,Currency (Price / share),Total',
+      '2025-01-02,Deposit,,,,,10000',
+      '2025-01-03,Market buy,VOD,4000,100,GBX,4000',
+    ].join('\n'));
+    assert.equal(repriced, 1);
+    assert.ok(near(value, 10000), `account ${value}`);
+  });
+
+  test('and the foreign currency is said, since prices are fetched in dollars', () => {
+    const { records } = account([
+      'Time,Action,Ticker,No. of shares,Price / share,Currency (Price / share),Total',
+      '2025-01-02,Deposit,,,,,10000',
+      '2025-01-03,Market buy,VOD,4000,100,GBX,4000',
+    ].join('\n'));
+    assert.match(transactionWarnings(records).join(' '), /Amounts in GBX/);
+  });
+
+  test('a deposit listed twice is pointed out, with the amount and the day', () => {
+    const { records, value } = account([
+      'Date,Type,Symbol,Quantity,Price,Amount',
+      '2025-01-02,Deposit,,,,10000',
+      '2025-01-02,Cash In,,,,10000',
+      '2025-01-03,Buy,AAPL,20,200,-4000',
+    ].join('\n'));
+    assert.ok(near(value, 20000), 'both rows are real rows in the file, so both are read');
+    assert.match(transactionWarnings(records).join(' '), /2 deposits of \$10,000\.00 on 2025-01-02/);
+  });
+
+  test('a dividend reinvested in shares adds the shares', () => {
+    const { value, transactions } = account([
+      'Date,Action,Symbol,Quantity,Price,Amount',
+      '2025-01-02,Deposit,,,,10000',
+      '2025-01-03,Buy,AAPL,20,200,-4000',
+      '2025-02-01,Dividend,AAPL,,,50',
+      '2025-02-01,Dividend Reinvestment,AAPL,0.25,200,-50',
+    ].join('\n'));
+    assert.deepEqual(transactions.map((t) => t.kind), ['deposit', 'buy', 'dividend', 'buy']);
+    assert.ok(near(value, 10050), `account ${value}`);
+  });
+
+  test('a price that matches its total is left alone, fee or no fee', () => {
+    const { repriced } = account('Date,Symbol,Action,Quantity,Price,Amount,Fees\n2025-01-02,AAPL,Buy,10,100,-1001,1\n2025-01-03,AAPL,Buy,3,20,-61,1\n');
+    assert.equal(repriced, 0);
+  });
+
+  test('the preview can show how the account adds up, line by line', () => {
+    const { records } = account([
+      'Date,Description,Symbol,Quantity,Price,Amount',
+      '2025-01-02,ACH Deposit,,,,10000',
+      '2025-01-03,Buy,AAPL,20,200,-4000',
+      '2025-02-01,Dividend,AAPL,,,50',
+      '2025-03-01,Transfer to bank,,,,2000',
+    ].join('\n'));
+    const s = transactionSummary(records);
+    assert.deepEqual(
+      [s.deposits, s.withdrawals, s.bought, s.sold, s.income, s.fees, s.cash, s.holdings, s.account],
+      [10000, 2000, 4000, 0, 50, 0, 4050, 4000, 8050],
+    );
+  });
+
+  test('a description column is matched on its own and does not take the place of a type column', () => {
+    const mapping = guessMapping(['Date', 'Trans Code', 'Description', 'Symbol', 'Quantity', 'Price', 'Amount']);
+    assert.equal(mapping.action, 'Trans Code');
+    assert.equal(mapping.description, 'Description');
   });
 });
