@@ -148,7 +148,8 @@ export function transactionWarnings(records) {
     const names = [...book.uncovered.keys()];
     out.push(`${names.slice(0, 5).join(', ')}${names.length > 5 ? ` and ${names.length - 5} more` : ''}: `
       + 'more shares were sold than these files show being bought, so those sales count as no profit. '
-      + 'Add the earlier years — back to when the shares were bought — to cost them properly.');
+      + 'The oldest file is taken as the year the account opened, so the shares must have been bought '
+      + 'before it — add the earlier years, back to when the account opened, to cost them properly.');
   }
   if (book.lowest.value < -0.01) {
     out.push(`Cash goes negative (${money(book.lowest.value)} on ${book.lowest.date}): the files probably leave out `

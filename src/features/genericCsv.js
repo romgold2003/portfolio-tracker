@@ -76,10 +76,32 @@ const looksNumeric = (s) => /^[\s(+-]*[$€£¥]?\s*[\d.,\s']+\)?\s*%?$/.test(s)
 export function parseCsvTable(text) {
   const clean = String(text ?? '').replace(/^﻿/, '');
   const delimiter = detectDelimiter(clean);
-  const rows = splitRows(clean, delimiter)
-    .map((r) => r.map((c) => c.trim()))
+  return { delimiter, ...tableFromRows(splitRows(clean, delimiter)) };
+}
+
+/**
+ * The sheet of a workbook that reads as transactions: the one where every
+ * field is found, and of those the longest. Banks put a summary of balances
+ * beside the movements, and that sheet is not the history.
+ */
+export function tableFromSheets(sheets) {
+  let best = null;
+  for (const sheet of sheets ?? []) {
+    const table = tableFromRows(sheet.rows);
+    if (table.headers.length < 2 || !table.rows.length) continue;
+    const readable = !missingFields(readableMapping(table)).length;
+    const score = (readable ? 1e9 : 0) + table.rows.length;
+    if (!best || score > best.score) best = { table, score };
+  }
+  return best?.table ?? null;
+}
+
+/** Rows of cells, from a CSV or a spreadsheet, as a header and the rows under it. */
+export function tableFromRows(input) {
+  const rows = (input ?? [])
+    .map((r) => (r ?? []).map((c) => String(c ?? '').trim()))
     .filter((r) => r.some(Boolean));
-  if (!rows.length) return { delimiter, headers: [], rows: [] };
+  if (!rows.length) return { headers: [], rows: [] };
 
   let headerAt = 0;
   for (let i = 0; i < Math.min(rows.length, 25); i++) {
@@ -101,7 +123,7 @@ export function parseCsvTable(text) {
     return n > 1 ? `${name} ${n}` : name;
   });
   const body = rows.slice(headerAt + 1).map((r) => headers.map((_, i) => r[i] ?? ''));
-  return { delimiter, headers, rows: body };
+  return { headers, rows: body };
 }
 
 /* ───────────────────────── what each column is ───────────────────────── */
