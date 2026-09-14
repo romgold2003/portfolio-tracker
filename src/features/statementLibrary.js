@@ -452,3 +452,33 @@ export function importPlan(existing = [], incoming = []) {
   }
   return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: false };
 }
+
+/**
+ * The journal left after taking one imported year out.
+ *
+ * With years still imported, the book is rebuilt from them alone, exactly as an
+ * import would build it. With none left, nothing is: every position, closed
+ * trade, cash balance, deposit and daily value came from those files, and they
+ * go with the last of them. Keeping the book as it stood — which this used to
+ * do — left positions on screen after every file had been removed, belonging to
+ * an account that was no longer in the app at all.
+ *
+ * The API key is the only thing kept: it is a setting, not part of any account.
+ */
+export function journalWithoutYear(current, year) {
+  const records = withoutStatement(current?.statements ?? [], year);
+  if (records.length) {
+    return journalFromStatements(records, { snapshots: current.snapshots, apiKey: current.apiKey });
+  }
+  return {
+    positions: [],
+    cash: 0,
+    snapshots: [],
+    cashFlows: [],
+    income: null,
+    openingNav: null,
+    ledger: null,
+    statements: [],
+    apiKey: current?.apiKey ?? '',
+  };
+}

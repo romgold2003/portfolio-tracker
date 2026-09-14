@@ -40,7 +40,7 @@ import {
   parseCsvTable, readableMapping, detectFormats, missingFields, readTransactions, layoutKey, tableFromSheets,
 } from '../features/genericCsv.js';
 import { readWorkbook, isZip, isOldExcel } from '../features/xlsx.js';
-import { importPlan } from '../features/statementLibrary.js';
+import { importPlan, journalWithoutYear } from '../features/statementLibrary.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
@@ -1012,25 +1012,22 @@ export function cancelIbkrImport() {
  * Take one year back out of the history.
  *
  * What that does depends on which year, so the confirmation says which of the
- * three it is: the only saved statement leaves the book as it is, the newest
- * one hands today's positions to the year before it, and any other takes its
- * trades and deposits with it.
+ * three it is: the last file left takes the whole book with it, the newest one
+ * hands today's positions to the year before it, and any other takes its trades
+ * and deposits with it.
  */
 export async function removeStatementYear(year) {
   const records = withoutStatement(state.statements, year);
   const newest = state.statements[state.statements.length - 1]?.year;
   const message = !records.length
-    ? `Remove ${year}? Your positions stay exactly as they are — only the saved statement goes, so later imports will not include it.`
+    ? `Remove ${year}? It is the last imported file, so everything built from it is removed too: every position, `
+      + 'closed trade, cash balance and deposit. Export a backup first if you want to keep them.'
     : year === newest
       ? `Remove ${year}? Your book is rebuilt from ${records[records.length - 1].year}, the newest year left: its closing positions and cash, not today's.`
       : `Remove ${year}? Its closed trades and deposits leave your journal.`;
   if (!confirm(message)) return;
 
-  if (records.length) {
-    loadState(journalFromStatements(records, { snapshots: state.snapshots, apiKey: state.apiKey }));
-  } else {
-    loadState({ ...state, statements: [] });
-  }
+  loadState(journalWithoutYear(state, year));
   await flushNow();
   renderAll();
   renderStatementYears();
