@@ -37,10 +37,9 @@ import {
   statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn, sourceOf,
 } from '../features/statementLibrary.js';
 import {
-  parseCsvTable, guessMapping, detectFormats, missingFields, readTransactions, layoutKey,
+  parseCsvTable, readableMapping, detectFormats, missingFields, readTransactions, layoutKey,
 } from '../features/genericCsv.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
-import { renderCsvMapping } from '../ui/views/csvMapping.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
@@ -759,7 +758,7 @@ function renderIbkrPreview() {
       + `bought ${moneyText(s.bought)}, sold ${moneyText(s.sold)}, dividends and interest ${moneyText(s.income)}, `
       + `fees ${moneyText(s.fees)} — leaving cash of ${moneyText(s.cash)} and holdings worth ${moneyText(s.holdings)} `
       + `at their last traded price, about ${moneyText(s.account)} in all. If a line is not what your broker shows, `
-      + 'the column it comes from is matched wrongly.', 'var(--text2)');
+      + 'check the file holds every transaction of the year.', 'var(--text2)');
     for (const note of transactionWarnings(records)) line(note, 'var(--amber)');
   }
   const chosen = Number(el('ibkrYear')?.value) || null;
@@ -772,6 +771,10 @@ function renderIbkrPreview() {
     if (group.repriced) {
       line(`${group.repriced} trade${group.repriced === 1 ? '' : 's'} had a price that did not match the total — `
         + 'a different currency, or pence — so the price was taken from the total.', 'var(--text3)');
+    }
+    if (group.rebalanced) {
+      line(`${group.rebalanced} row${group.rebalanced === 1 ? '' : 's'} taken at the cash the file's balance column shows moved — `
+        + 'the amount column leaves out commissions there.', 'var(--text3)');
     }
     if (group.outside) line(`${group.outside} transaction${group.outside === 1 ? '' : 's'} outside ${chosen} left out.`, 'var(--text3)');
     for (const name of group.empty ?? []) line(`${name}: no transactions${chosen ? ` in ${chosen}` : ''} could be read.`, 'var(--amber)');
@@ -816,8 +819,8 @@ export async function readIbkrFile() {
 
     /**
      * Anything that is not an IBKR statement is read as a table of
-     * transactions, and files laid out alike are grouped so their columns are
-     * matched once. A layout matched before is remembered on this device.
+     * transactions, its columns recognised by the app alone. Files laid out
+     * alike are grouped so their dates and numbers are read the same way.
      */
     if (!isIbkrStatement(text)) {
       const table = parseCsvTable(text);
@@ -828,18 +831,13 @@ export async function readIbkrFile() {
       const key = layoutKey(table.headers);
       let group = csvGroups.find((g) => g.key === key);
       if (!group) {
-        const saved = rememberedLayouts()[key];
-        const mapping = saved?.mapping ?? guessMapping(table.headers);
-        group = {
-          key,
-          headers: table.headers,
-          names: [],
-          tables: [],
-          mapping,
-          formats: saved?.formats ?? detectFormats(table, mapping),
-          // A remembered layout's formats were confirmed once; fresh ones are guesses.
-          chosen: saved?.formats ? { dateOrder: true, numberStyle: true } : {},
-        };
+        const mapping = readableMapping(table);
+        const missing = missingFields(mapping);
+        if (missing.length) {
+          problems.push(`${file.name}: could not find the ${missing.join(' and the ').toLowerCase()} in this file. Export the transaction history from your broker as CSV and try again.`);
+          continue;
+        }
+        group = { key, headers: table.headers, names: [], tables: [], mapping };
         csvGroups.push(group);
       }
       group.names.push(file.name);
@@ -870,59 +868,28 @@ export async function readIbkrFile() {
  */
 let csvGroups = [];
 
-const LAYOUTS_KEY = 'pt_csv_layouts';
-
-function rememberedLayouts() {
-  try { return JSON.parse(localStorage.getItem(LAYOUTS_KEY) || '{}') || {}; } catch { return {}; }
-}
-
-function rememberLayout(key, value) {
-  try {
-    const all = rememberedLayouts();
-    all[key] = value;
-    localStorage.setItem(LAYOUTS_KEY, JSON.stringify(all));
-  } catch { /* it will simply be asked again next time */ }
-}
-
-/**
- * Re-read the other brokers' files with the columns as currently matched, and
- * redraw. Runs on every change to a column choice, so the preview and the
- * sample rows always describe exactly what would be imported.
- */
+/** Read the other brokers' files into the staged years, and redraw the preview. */
 function refreshCsvImport() {
   stagedStatements = stagedStatements.filter((s) => !s.generic);
   const chosen = Number(el('ibkrYear')?.value) || null;
 
   for (const group of csvGroups) {
-    /**
-     * Formats nobody has chosen follow the columns as they are matched.
-     *
-     * They are read from the values in the number and date columns, and until
-     * those columns are known there are no numbers to read — a guess made
-     * before matching had nothing to go on, and read "612,30" as 61,230.
-     */
-    const detected = detectFormats(
+    // Dates and numbers are read off the values of every file in the group at once.
+    group.formats = detectFormats(
       { headers: group.headers, rows: group.tables.flatMap((t) => t.table.rows) },
       group.mapping,
     );
-    for (const key of ['dateOrder', 'numberStyle']) {
-      if (!group.chosen?.[key]) group.formats[key] = detected[key];
-    }
-
-    group.missing = missingFields(group.mapping);
-    group.sample = [];
     group.skipped = [];
     group.outside = 0;
     group.repriced = 0;
+    group.rebalanced = 0;
     group.empty = [];
-    if (group.missing.length) continue;
-    rememberLayout(group.key, { mapping: group.mapping, formats: group.formats });
 
     for (const { name, table } of group.tables) {
-      const { transactions, skipped, repriced } = readTransactions(table, group.mapping, group.formats);
+      const { transactions, skipped, repriced, rebalanced } = readTransactions(table, group.mapping, group.formats);
       group.repriced += repriced;
+      group.rebalanced += rebalanced;
       group.skipped.push(...skipped.map((s) => ({ ...s, name })));
-      if (group.sample.length < 3) group.sample.push(...transactions.slice(0, 3 - group.sample.length));
       const kept = chosen ? transactions.filter((t) => t.date.startsWith(`${chosen}-`)) : transactions;
       group.outside += transactions.length - kept.length;
       const records = transactionRecords(kept, { source: name });
@@ -931,13 +898,6 @@ function refreshCsvImport() {
     }
   }
 
-  /**
-   * Column matching is asked only of files the app could not read by itself.
-   * A file whose columns were all recognised and whose every row was read goes
-   * straight to the preview: pick the year, choose the file, add it.
-   */
-  const needsHelp = csvGroups.filter((g) => g.missing.length || g.skipped.length || g.empty.length);
-  renderCsvMapping(el('csvMapping'), needsHelp, refreshCsvImport);
   if (stagedStatements.length) renderIbkrPreview();
   else el('ibkrPreview').style.display = 'none';
 }
@@ -960,7 +920,6 @@ function describeTransactions({ name, record }) {
 export function cancelIbkrImport() {
   stagedStatements = [];
   csvGroups = [];
-  renderCsvMapping(el('csvMapping'), [], () => {});
   const input = el('ibkrFile');
   if (input) input.value = '';
   el('ibkrPreview').style.display = 'none';

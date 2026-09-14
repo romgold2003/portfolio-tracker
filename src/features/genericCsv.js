@@ -6,13 +6,12 @@
  * agree on the flavour: comma or semicolon, "1,234.56" or "1.234,56",
  * 03/04/2025 meaning March or April, "Buy" or "BUY" or "Achat" or a negative
  * quantity with no action column at all. So nothing here assumes a broker.
- * The table is read, each column is guessed at from its header, the person
- * importing confirms or corrects the guesses, and the rows are turned into one
- * plain list of transactions everything downstream understands.
+ * The table is read, each column is recognised from its header or, failing
+ * that, from its values, and the rows are turned into one plain list of
+ * transactions everything downstream understands — with no questions asked of
+ * the person importing.
  *
- * Pure: no DOM, no storage. The mapping a person chooses is remembered by the
- * caller, keyed by the file's headers, so next year's export from the same
- * broker needs no questions.
+ * Pure: no DOM, no storage.
  */
 
 /* ───────────────────────── the table ───────────────────────── */
@@ -116,35 +115,44 @@ export function parseCsvTable(text) {
 export const FIELDS = [
   {
     key: 'date', label: 'Date', required: true,
-    hints: ['trade date', 'activity date', 'transaction date', 'execution date', 'date/time', 'datetime', 'date', 'time', 'run date', 'process date', 'settlement date', 'datum', 'fecha', 'data'],
+    hints: ['trade date', 'activity date', 'transaction date', 'execution date', 'date/time', 'datetime', 'date', 'time', 'run date', 'process date', 'settlement date', 'datum', 'fecha', 'data', 'תאריך', 'תאריך ערך', 'handelstag', 'buchungstag', 'data operazione', 'data da operação'],
   },
   {
     key: 'ticker', label: 'Ticker / symbol', required: true,
-    hints: ['symbol', 'ticker', 'instrument', 'security', 'stock', 'asset', 'code', 'product', 'titre', 'valeur', 'wertpapier', 'name'],
+    hints: ['symbol', 'ticker', 'instrument', 'security', 'stock', 'asset', 'code', 'product', 'titre', 'valeur', 'wertpapier', 'name', 'שם הנייר', 'נייר', 'סימול', 'símbolo', 'simbolo', 'titolo', 'ativo'],
   },
   {
     key: 'action', label: 'Buy / sell / type',
-    hints: ['action', 'side', 'buy/sell', 'transaction type', 'trans code', 'type', 'activity', 'direction', 'operation', 'order type', 'sens', 'typ'],
+    hints: ['action', 'side', 'buy/sell', 'transaction type', 'trans code', 'type', 'activity', 'direction', 'operation', 'order type', 'sens', 'typ', 'סוג פעולה', 'פעולה', 'סוג', 'tipo', 'operazione', 'transaktionstyp', 'buchungsart'],
   },
   {
     key: 'quantity', label: 'Quantity',
-    hints: ['quantity', 'qty', 'no. of shares', 'number of shares', 'shares', 'units', 'quantité', 'quantite', 'anzahl', 'stück', 'aantal', 'cantidad', 'volume'],
+    hints: ['quantity', 'qty', 'no. of shares', 'number of shares', 'shares', 'units', 'quantité', 'quantite', 'anzahl', 'stück', 'aantal', 'cantidad', 'volume', 'כמות', 'quantità', 'quantidade', 'menge'],
   },
   {
     key: 'price', label: 'Price per share',
-    hints: ['price per share', 'execution price', 'trade price', 'unit price', 'price', 'cours', 'kurs', 'koers', 'precio', 'prix'],
+    hints: ['price per share', 'execution price', 'trade price', 'unit price', 'price', 'cours', 'kurs', 'koers', 'precio', 'prix', 'מחיר ממוצע', 'מחיר', 'שער', 'prezzo', 'preço', 'preco'],
   },
   {
     key: 'amount', label: 'Total amount',
-    hints: ['net amount', 'total amount', 'amount', 'total', 'net', 'value', 'proceeds', 'montant', 'betrag', 'waarde', 'totaal', 'importe'],
+    hints: ['net amount', 'total amount', 'amount', 'total', 'net', 'value', 'proceeds', 'montant', 'betrag', 'waarde', 'totaal', 'importe', 'סכום הפעולה', 'סכום', 'תמורה', 'importo', 'controvalore', 'valor', 'montante'],
   },
   {
     key: 'fees', label: 'Fees / commission',
-    hints: ['commission', 'commissions', 'fees', 'fee', 'charges', 'costs', 'transactiekosten', 'kosten', 'frais', 'gebühren', 'gebuhren', 'comisión'],
+    hints: ['commission', 'commissions', 'fees', 'fee', 'charges', 'costs', 'transactiekosten', 'kosten', 'frais', 'gebühren', 'gebuhren', 'comisión', 'עמלה', 'עמלות', 'commissione', 'commissioni', 'comissão'],
   },
   {
     key: 'currency', label: 'Currency',
-    hints: ['currency', 'ccy', 'devise', 'währung', 'waehrung', 'moneda'],
+    hints: ['currency', 'ccy', 'devise', 'währung', 'waehrung', 'moneda', 'מטבע', 'valuta', 'moeda', 'divisa'],
+  },
+  {
+    /**
+     * The account's cash after each row. Not needed to read a file, but where
+     * a broker's amount column leaves the commission out, the balance is the
+     * only record of the cash that really moved.
+     */
+    key: 'balance', label: 'Cash balance',
+    hints: ['cash balance', 'running balance', 'balance', 'יתרת מזומן', 'יתרה', 'saldo', 'solde', 'kontostand'],
   },
   {
     /**
@@ -153,7 +161,7 @@ export const FIELDS = [
      * positive and say "Transfer to bank" or "Incoming wire" in words.
      */
     key: 'description', label: 'Description',
-    hints: ['description', 'details', 'narrative', 'memo', 'comment', 'libellé', 'libelle', 'omschrijving', 'beschreibung', 'descripción'],
+    hints: ['description', 'details', 'narrative', 'memo', 'comment', 'libellé', 'libelle', 'omschrijving', 'beschreibung', 'descripción', 'תיאור', 'פרטים', 'descrizione', 'descrição'],
   },
 ];
 
@@ -182,7 +190,7 @@ function scoreHeader(header, hints) {
 export function guessMapping(headers) {
   const mapping = {};
   const used = new Set();
-  const order = ['date', 'ticker', 'quantity', 'price', 'fees', 'amount', 'action', 'currency', 'description'];
+  const order = ['date', 'ticker', 'quantity', 'price', 'fees', 'amount', 'action', 'currency', 'balance', 'description'];
   for (const key of order) {
     const field = FIELDS.find((f) => f.key === key);
     let bestIndex = -1;
@@ -205,6 +213,57 @@ export function missingFields(mapping) {
   const need = FIELDS.filter((f) => f.required && !mapping?.[f.key]).map((f) => f.label);
   if (!mapping?.quantity && !mapping?.amount) need.push('Quantity or Total amount');
   return need;
+}
+
+/**
+ * Every column a file can be read by, from its headers and, where a header is
+ * worded in a way the hints do not know, from what is written in the column.
+ *
+ * Files are read with no questions asked, so a field must not go unmatched
+ * when its values make plain what it is: a column of dates is the date, a
+ * column of "Buy" and "Sell" the action, a column of short capitalised codes
+ * the ticker, and a column of signed numbers the amount.
+ */
+export function readableMapping(table) {
+  const headers = table?.headers ?? [];
+  const rows = table?.rows ?? [];
+  const mapping = guessMapping(headers);
+  const used = new Set(Object.values(mapping));
+  const valuesOf = (i) => rows.map((r) => String(r[i] ?? '').trim()).filter(Boolean);
+
+  const claim = (key, testFor, threshold) => {
+    if (mapping[key]) return;
+    let best = -1;
+    let bestShare = threshold;
+    headers.forEach((header, i) => {
+      if (used.has(header)) return;
+      const list = valuesOf(i);
+      if (!list.length) return;
+      const test = testFor(list);
+      const share = list.filter(test).length / list.length;
+      if (share > bestShare || (share === bestShare && best < 0)) { bestShare = share; best = i; }
+    });
+    if (best >= 0) {
+      mapping[key] = headers[best];
+      used.add(headers[best]);
+    }
+  };
+  const never = () => false;
+
+  claim('date', (list) => {
+    const order = detectDateOrder(list);
+    return (v) => Boolean(parseDate(v, order));
+  }, 0.8);
+  claim('action', () => (v) => Boolean(classifyAction(v)), 0.5);
+  // A column of one repeated code is a currency or an account, not the ticker.
+  claim('ticker', (list) => (new Set(list).size > 1 || list.length < 3
+    ? (v) => /^[A-Z][A-Z0-9]{0,5}([.-][A-Z0-9]{1,4})?$/.test(v)
+    : never), 0.6);
+  // A trade is costed from its price or its total; with neither named, the signed column is the total.
+  if (!mapping.amount && !mapping.price) {
+    claim('amount', (list) => (list.some((v) => /^\s*[-(]/.test(v)) ? looksNumeric : never), 0.8);
+  }
+  return mapping;
 }
 
 /* ───────────────────────── numbers ───────────────────────── */
@@ -349,18 +408,19 @@ export function parseDate(value, order = 'dmy') {
 export function classifyAction(text) {
   const t = ` ${String(text ?? '').toLowerCase()} `;
   if (!t.trim()) return null;
-  if (/split/.test(t)) return 'split';
+  // Hebrew has no \b in JavaScript's sense, so its words are matched whole by spaces.
+  if (/split|פיצול|frazionamento|desdobramento/.test(t)) return 'split';
   // A dividend spent on shares: a purchase when it carries a quantity, which is
   // decided where the quantity is known.
   if (/reinvest|\bdrip\b/.test(t)) return 'reinvest';
-  if (/dividend|dividende|\bcdiv\b|\bdiv\b|distribution|ausschüttung/.test(t)) return 'dividend';
-  if (/interest|intérêt|interet|\bzins|\bint\b/.test(t)) return 'interest';
-  if (/withdraw|retrait|auszahlung|\bwdl\b|retiro/.test(t)) return 'withdrawal';
-  if (/deposit|dépôt|depot|einzahlung|funding|top.?up|\bdep\b/.test(t)) return 'deposit';
-  if (/\bfee|commission|frais|gebühr|gebuhr|withholding|\btax|stamp duty|charge/.test(t)) return 'fee';
-  if (/\bsell|\bsold\b|\bsld\b|verkauf|vente|venta|\bstc\b|^\s*s\s*$/.test(t)) return 'sell';
-  if (/\bbuy|\bbought\b|\bbot\b|kauf|achat|compra|purchase|\bbto\b|^\s*b\s*$/.test(t)) return 'buy';
-  if (/transfer|journal|\bach\b|wire|virement|überweisung/.test(t)) return 'transfer';
+  if (/dividend|dividende|dividendo|דיבידנד|\bcdiv\b|\bdiv\b|distribution|ausschüttung/.test(t)) return 'dividend';
+  if (/interest|intérêt|interet|\bzins|\bint\b|ריבית|interessi|juros|intereses/.test(t)) return 'interest';
+  if (/withdraw|retrait|auszahlung|\bwdl\b|retiro|משיכה|prelievo|levantamento|saque/.test(t)) return 'withdrawal';
+  if (/deposit|dépôt|depot|depósito|deposito|einzahlung|funding|top.?up|\bdep\b|הפקדה|versamento|aporte/.test(t)) return 'deposit';
+  if (/\bfee|commission|frais|gebühr|gebuhr|withholding|\btax|stamp duty|charge|עמלה|עמלות|\sמס\s|דמי |commission|comissão|comisión|steuer|impost/.test(t)) return 'fee';
+  if (/\bsell|\bsold\b|\bsld\b|verkauf|vente|venta|venda|vendita|מכירה|\bstc\b|^\s*s\s*$/.test(t)) return 'sell';
+  if (/\bbuy|\bbought\b|\bbot\b|kauf|achat|compra|acquisto|קנייה|קניה|purchase|\bbto\b|^\s*b\s*$/.test(t)) return 'buy';
+  if (/transfer|journal|\bach\b|wire|virement|überweisung|העברה|bonifico|transferência/.test(t)) return 'transfer';
   return null;
 }
 
@@ -406,12 +466,17 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
   const number = (row, key) => (at[key] >= 0 ? parseNumber(row[at[key]], formats.numberStyle) : null);
 
   const transactions = [];
+  const balances = [];
   const skipped = [];
   const currencies = new Set();
   let repriced = 0;
 
   table.rows.forEach((row, index) => {
     const line = index + 1;
+    const add = (t) => {
+      transactions.push(t);
+      balances.push(number(row, 'balance'));
+    };
     const when = parseDate(cell(row, 'date'), formats.dateOrder);
     if (!when) {
       skipped.push({ line, reason: `no date that could be read ("${cell(row, 'date')}")` });
@@ -508,7 +573,7 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
       } else {
         cash = kind === 'buy' ? -(gross + fees) : gross - fees;
       }
-      transactions.push({ ...base, ticker, qty, price: unit, cash });
+      add({ ...base, ticker, qty, price: unit, cash });
       return;
     }
 
@@ -522,15 +587,77 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
      * brokers settle capital-gains tax monthly and credit it back after a
      * losing month; forcing every "tax" row negative charged those twice.
      */
-    const refund = kind === 'fee' && /refund|rebate|reversal|credit|reclaim/i.test(words);
+    const refund = kind === 'fee' && /refund|rebate|reversal|credit|reclaim|זיכוי|rimborso|reembolso|erstattung|remboursement/i.test(words);
     const cash = refund ? Math.abs(value)
       : kind === 'fee' || kind === 'withdrawal' ? -Math.abs(value)
       : kind === 'deposit' ? Math.abs(value)
         : value;
-    transactions.push({ ...base, ticker: ticker || null, cash });
+    add({ ...base, ticker: ticker || null, cash });
   });
 
-  return { transactions, skipped, currencies: [...currencies], repriced };
+  const rebalanced = settleFromBalance(transactions, balances);
+  return { transactions, skipped, currencies: [...currencies], repriced, rebalanced };
+}
+
+/**
+ * The cash each row really moved, from the file's running balance.
+ *
+ * Some brokers' amount column leaves the commission out — an Israeli report
+ * writes a $500 purchase as -500 while its cash balance falls by 501.50 — and
+ * read as written, the account comes out richer by every commission ever paid.
+ * When the balance moves by exactly the amount on most rows, it is the file's
+ * own record of the cash, and a row a few dollars off is taken at what the
+ * balance says. A file listed newest first is read the other way round. A
+ * balance that does not follow the amounts — several currencies in one column,
+ * or the value of the whole account — is left alone.
+ *
+ * Returns how many rows were corrected.
+ */
+function settleFromBalance(transactions, balances) {
+  const known = balances.map((b, i) => (Number.isFinite(b) ? i : -1)).filter((i) => i >= 0);
+  if (known.length < 3) return 0;
+
+  const movesWhen = (oldestFirst) => {
+    const moves = new Map();
+    for (let k = 1; k < known.length; k++) {
+      const [before, row] = oldestFirst ? [known[k - 1], known[k]] : [known[k], known[k - 1]];
+      moves.set(row, balances[row] - balances[before]);
+    }
+    return moves;
+  };
+  const agree = (moves) => [...moves].filter(([i, move]) => Math.abs(move - transactions[i].cash) <= 0.011).length;
+  const forward = movesWhen(true);
+  const backward = movesWhen(false);
+  const oldestFirst = agree(forward) >= agree(backward);
+  const moves = oldestFirst ? forward : backward;
+  if (agree(moves) < moves.size * 0.5) return 0;
+
+  let changed = 0;
+  for (const [i, move] of moves) {
+    const t = transactions[i];
+    const gap = Math.abs(move - t.cash);
+    if (gap <= 0.011 || Math.sign(move) !== Math.sign(t.cash)) continue;
+    if (gap > Math.min(25, 5 + 0.02 * Math.abs(t.cash))) continue;
+    t.cash = Math.round(move * 100) / 100;
+    changed += 1;
+  }
+
+  /**
+   * The balance also settles the order of rows on the same day. Without times
+   * they were ordered by kind, buys ahead of the sales that paid for them, and
+   * the cash went briefly negative on days it never did.
+   */
+  if (transactions.every((t) => t.at.endsWith(' 00:00:00'))) {
+    const inTime = oldestFirst ? transactions : [...transactions].reverse();
+    let day = '';
+    let n = 0;
+    for (const t of inTime) {
+      n = t.date === day ? n + 1 : 0;
+      day = t.date;
+      t.at = `${t.date} 00:${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+    }
+  }
+  return changed;
 }
 
 /** A key for remembering how a broker's files are laid out. */

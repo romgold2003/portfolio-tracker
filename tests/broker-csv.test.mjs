@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 
 import {
   parseCsvTable, guessMapping, missingFields, detectNumberStyle, parseNumber,
-  detectDateOrder, parseDate, classifyAction, readTransactions, detectFormats, layoutKey,
+  detectDateOrder, parseDate, classifyAction, readTransactions, detectFormats, layoutKey, readableMapping,
 } from '../src/features/genericCsv.js';
 import {
   transactionRecords, journalFromTransactions, transactionWarnings, replayTransactions, transactionSummary,
@@ -521,5 +521,95 @@ describe('money that was never in the account', () => {
     const mapping = guessMapping(['Date', 'Trans Code', 'Description', 'Symbol', 'Quantity', 'Price', 'Amount']);
     assert.equal(mapping.action, 'Trans Code');
     assert.equal(mapping.description, 'Description');
+  });
+});
+
+describe('any broker file, read with no questions', () => {
+  /** Read the way the import does: columns recognised by the app alone. */
+  function auto(text) {
+    const table = parseCsvTable(text);
+    const mapping = readableMapping(table);
+    return { mapping, missing: missingFields(mapping), ...readTransactions(table, mapping, detectFormats(table, mapping)) };
+  }
+
+  /**
+   * An Israeli bank's report, saved as CSV: Hebrew headers under a title line,
+   * Hebrew actions, and an amount column that leaves out the $1.50 commission
+   * its own cash balance shows was paid.
+   */
+  const hebrew = [
+    'פירוט תנועות לתקופה 04.03.2025 - 13.09.2026 (במטבע דולר ארה״ב)',
+    'תאריך,סוג פעולה,שם הנייר,כמות,מחיר ממוצע,סכום הפעולה,עמלה,יתרת מזומן',
+    '06/03/2025,הפקדה,,,,500,0,500',
+    '06/03/2025,קנייה,IVV,0.4323,578.25,-249.98,0,250.02',
+    '21/03/2025,דיבידנד,IVV,,,0.56,0,250.58',
+    '21/03/2025,ביטול דיבידנד,IVV,,,-0.01,0,250.57',
+    '05/04/2026,חיוב מס מרץ,,,,-6.61,0,243.96',
+    '03/05/2026,זיכוי מס אפריל,,,,17.8,0,261.76',
+    '14/05/2026,קנייה,OILD,3.1742,47.26,-150,0,110.26',
+    '15/05/2026,מכירה,IVV,0.4323,670.18,289.72,0,398.48',
+    '16/05/2026,משיכה,,,,-100,0,298.48',
+  ].join('\n');
+
+  test('Hebrew headers and actions are recognised', () => {
+    const r = auto(hebrew);
+    assert.deepEqual(r.missing, []);
+    assert.deepEqual(
+      [r.mapping.date, r.mapping.action, r.mapping.ticker, r.mapping.quantity, r.mapping.price, r.mapping.amount, r.mapping.balance],
+      ['תאריך', 'סוג פעולה', 'שם הנייר', 'כמות', 'מחיר ממוצע', 'סכום הפעולה', 'יתרת מזומן'],
+    );
+    assert.deepEqual(r.transactions.map((t) => t.kind),
+      ['deposit', 'buy', 'dividend', 'dividend', 'fee', 'fee', 'buy', 'sell', 'withdrawal']);
+    assert.equal(r.skipped.length, 0);
+    assert.equal(r.transactions[0].date, '2025-03-06');
+  });
+
+  test('the cash balance puts back the commission the amount column left out', () => {
+    const r = auto(hebrew);
+    const oild = r.transactions.find((t) => t.ticker === 'OILD');
+    assert.equal(oild.cash, -151.5);
+    // The sale paid its commission too: 289.72 written, 288.22 received.
+    assert.equal(r.transactions.find((t) => t.kind === 'sell').cash, 288.22);
+    assert.equal(r.rebalanced, 2);
+    assert.equal(r.transactions.find((t) => t.kind === 'fee' && t.cash > 0).cash, 17.8);
+    const cash = r.transactions.reduce((s, t) => s + t.cash, 0);
+    assert.ok(near(cash, 298.48), `${cash}`);
+  });
+
+  test('a file listed newest first is balanced the other way round', () => {
+    const lines = hebrew.split('\n');
+    const r = auto([lines[1], ...lines.slice(2).reverse()].join('\n'));
+    assert.equal(r.transactions.find((t) => t.ticker === 'OILD').cash, -151.5);
+    // The same day's rows keep the file's order in time: the deposit before the purchase it paid for.
+    const book = replayTransactions(r.transactions);
+    assert.ok(book.lowest.value >= 0, `cash went to ${book.lowest.value}`);
+  });
+
+  test('a balance that does not follow the amounts is left alone', () => {
+    const r = auto([
+      'Date,Symbol,Action,Quantity,Price,Amount,Balance',
+      '2026-01-02,AAPL,Buy,1,100,-100,9000',
+      '2026-01-03,MSFT,Buy,1,200,-200,12000',
+      '2026-01-04,AAPL,Sell,1,110,110,8000',
+    ].join('\n'));
+    assert.equal(r.rebalanced, 0);
+    assert.deepEqual(r.transactions.map((t) => t.cash), [-100, -200, 110]);
+  });
+
+  test('headers in words no hint knows are read from what the columns hold', () => {
+    const r = auto([
+      'When,Code,What,Shares,Cash',
+      '02/01/2026,AAPL,Buy,1,-100',
+      '05/01/2026,MSFT,Buy,1,-200',
+      '09/01/2026,AAPL,Sell,1,120',
+    ].join('\n'));
+    assert.deepEqual(r.missing, []);
+    assert.deepEqual([r.mapping.date, r.mapping.ticker, r.mapping.action, r.mapping.amount], ['When', 'Code', 'What', 'Cash']);
+    assert.deepEqual(r.transactions.map((t) => [t.kind, t.ticker]), [['buy', 'AAPL'], ['buy', 'MSFT'], ['sell', 'AAPL']]);
+  });
+
+  test('a column of one repeated code is not taken for the ticker', () => {
+    const table = parseCsvTable('When,Ccy,Stock name,Cash\n2026-01-02,USD,Apple Inc,-100\n2026-01-03,USD,Microsoft,-200\n2026-01-04,USD,Apple Inc,50\n');
+    assert.notEqual(readableMapping(table).ticker, 'Ccy');
   });
 });
