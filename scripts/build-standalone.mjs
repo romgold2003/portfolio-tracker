@@ -83,21 +83,31 @@ async function build() {
     bundleApp(),
   ]);
 
+  /**
+   * Every replacement is passed as a function, never as a string.
+   *
+   * A replacement string is not taken literally: `$&` inside it means "the
+   * text that matched", and `$'` "everything after it". The bundled app is
+   * code, and code can contain either — escaping a character for a regular
+   * expression is written `'\\$&'` — so the app was being spliced with pieces
+   * of the page itself. The first time it happened the entry-point tag was
+   * put straight back where the app should have gone.
+   */
   let out = html
     // The four <link> tags become one inline stylesheet.
     .replace(
       /<!-- Stylesheets[\s\S]*?<link rel="stylesheet" href="styles\/components\.css">/,
-      `<style>\n${css}\n</style>`,
+      () => `<style>\n${css}\n</style>`,
     )
     // The CDN script tag becomes the library itself.
     .replace(
       /<!-- Charting[\s\S]*?<script src="https:\/\/cdnjs[^>]*><\/script>/,
-      chartTag,
+      () => chartTag,
     )
     // The module entry point becomes the whole bundled app.
     .replace(
       /<!-- The app boots[\s\S]*?<script type="module" src="src\/main\.js"><\/script>/,
-      `<script>\n${appCode}\n</script>`,
+      () => `<script>\n${appCode}\n</script>`,
     );
 
   // A missed replacement would ship a file that silently does nothing.

@@ -585,6 +585,17 @@ function readSplits(group) {
 }
 
 /**
+ * True when a file is an Interactive Brokers statement, CSV or HTML, rather
+ * than another broker's export. Decided by whether IBKR's own sections are in
+ * it, which no other broker's table of transactions has.
+ */
+export function isIbkrStatement(text) {
+  if (looksLikeHtmlStatement(text)) return true;
+  const groups = groupSections(String(text ?? ''));
+  return groups.has('trades') || groups.has('positions') || groups.has('nav') || groups.has('statement');
+}
+
+/**
  * Read a statement. Throws only when the file is not one.
  *
  * Takes IBKR's CSV export or its HTML statement page; the page is turned into

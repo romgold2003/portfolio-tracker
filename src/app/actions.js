@@ -16,7 +16,7 @@ import {
   loadState, flushNow,
 } from '../core/store.js';
 import {
-  parseIbkrStatement, describeStatement,
+  parseIbkrStatement, describeStatement, isIbkrStatement,
 } from '../features/ibkr.js';
 import {
   addPosition, addClosedPosition, updatePosition, applyDca as applyDcaToPosition, previewDca,
@@ -34,8 +34,13 @@ import {
   openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears,
 } from '../ui/views/settings.js';
 import {
-  statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn,
+  statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn, sourceOf,
 } from '../features/statementLibrary.js';
+import {
+  parseCsvTable, guessMapping, detectFormats, missingFields, readTransactions, layoutKey,
+} from '../features/genericCsv.js';
+import { transactionRecords, transactionWarnings } from '../features/transactionBook.js';
+import { renderCsvMapping } from '../ui/views/csvMapping.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
@@ -725,24 +730,46 @@ function renderIbkrPreview() {
     summary.append(div);
   };
 
-  for (const { record, parsed } of [...stagedStatements].sort((a, b) => a.record.year - b.record.year)) {
+  for (const staged of [...stagedStatements].sort((a, b) => a.record.year - b.record.year)) {
+    const { record } = staged;
     const replaces = imported.has(record.year) ? ' (replaces the one imported before)' : '';
-    line(`${record.year}${replaces} — ${describeStatement(parsed)}`);
+    line(`${record.year}${replaces} — ${staged.generic ? describeTransactions(staged) : describeStatement(staged.parsed)}`);
   }
 
   const years = records.map((r) => r.year);
   line(`After this your journal covers ${years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : years[0]}.`);
   for (const link of chainReport(records)) {
-    if (link.ok) {
+    if (link.ok && sourceOf(records.find((r) => r.year === link.to)) === 'transactions') {
+      // Nothing to compare in a transaction history, only that no year is missing.
+      line(`${link.from} → ${link.to}: consecutive years, none missing.`, 'var(--green)');
+    } else if (link.ok) {
       line(`${link.from} → ${link.to}: joins up exactly${Number.isFinite(link.value) ? ` at ${moneyText(link.value)}` : ''}.`, 'var(--green)');
     } else {
       line(`${link.from} → ${link.to}: ${link.reason}`, 'var(--amber)');
     }
   }
 
-  const blocked = importBlockedBy(records);
+  const sources = new Set(records.map(sourceOf));
+  const mixed = sources.size > 1
+    ? 'Interactive Brokers statements and histories from other brokers cannot be combined in one journal. Import files from one source, or remove the other years first.'
+    : '';
+  if (!mixed && sources.has('transactions')) {
+    for (const note of transactionWarnings(records)) line(note, 'var(--amber)');
+  }
+  const chosen = Number(el('ibkrYear')?.value) || null;
+  for (const group of csvGroups) {
+    if (group.skipped?.length) {
+      const first = group.skipped[0];
+      line(`${group.skipped.length} row${group.skipped.length === 1 ? '' : 's'} left out as not a transaction `
+        + `(e.g. ${first.name} line ${first.line}: ${first.reason}).`, 'var(--text3)');
+    }
+    if (group.outside) line(`${group.outside} transaction${group.outside === 1 ? '' : 's'} outside ${chosen} left out.`, 'var(--text3)');
+    for (const name of group.empty ?? []) line(`${name}: no transactions${chosen ? ` in ${chosen}` : ''} could be read.`, 'var(--amber)');
+  }
+
+  const blocked = mixed || importBlockedBy(records);
   warning.textContent = blocked
-    || 'Positions and closed trades are rebuilt from these statements, so anything entered by hand is replaced. Export a backup first if you want to keep it.';
+    || 'Positions and closed trades are rebuilt from these files, so anything entered by hand is replaced. Export a backup first if you want to keep it.';
   const confirmButton = el('ibkrConfirm');
   if (confirmButton) confirmButton.disabled = Boolean(blocked);
   el('ibkrPreview').style.display = 'block';
@@ -773,9 +800,45 @@ export async function readIbkrFile() {
    */
   const chosen = Number(el('ibkrYear')?.value) || null;
   const problems = [];
+  csvGroups = [];
   for (const file of files) {
+    const text = await file.text();
+
+    /**
+     * Anything that is not an IBKR statement is read as a table of
+     * transactions, and files laid out alike are grouped so their columns are
+     * matched once. A layout matched before is remembered on this device.
+     */
+    if (!isIbkrStatement(text)) {
+      const table = parseCsvTable(text);
+      if (table.headers.length < 2 || !table.rows.length) {
+        problems.push(`${file.name}: not a statement or a table of transactions that can be read.`);
+        continue;
+      }
+      const key = layoutKey(table.headers);
+      let group = csvGroups.find((g) => g.key === key);
+      if (!group) {
+        const saved = rememberedLayouts()[key];
+        const mapping = saved?.mapping ?? guessMapping(table.headers);
+        group = {
+          key,
+          headers: table.headers,
+          names: [],
+          tables: [],
+          mapping,
+          formats: saved?.formats ?? detectFormats(table, mapping),
+          // A remembered layout's formats were confirmed once; fresh ones are guesses.
+          chosen: saved?.formats ? { dateOrder: true, numberStyle: true } : {},
+        };
+        csvGroups.push(group);
+      }
+      group.names.push(file.name);
+      group.tables.push({ name: file.name, table });
+      continue;
+    }
+
     try {
-      const parsed = parseIbkrStatement(await file.text());
+      const parsed = parseIbkrStatement(text);
       const record = statementRecord(parsed);
       if (chosen && files.length === 1 && record.year !== chosen) {
         problems.push(`${file.name} covers ${record.year}, not ${chosen}. Pick ${record.year}, or "Detect year from file".`);
@@ -788,11 +851,98 @@ export async function readIbkrFile() {
   }
 
   if (problems.length) ibkrError(problems.join(' '));
+  refreshCsvImport();
+}
+
+/**
+ * Files from other brokers, grouped by how their columns are laid out, while an
+ * import is being prepared.
+ */
+let csvGroups = [];
+
+const LAYOUTS_KEY = 'pt_csv_layouts';
+
+function rememberedLayouts() {
+  try { return JSON.parse(localStorage.getItem(LAYOUTS_KEY) || '{}') || {}; } catch { return {}; }
+}
+
+function rememberLayout(key, value) {
+  try {
+    const all = rememberedLayouts();
+    all[key] = value;
+    localStorage.setItem(LAYOUTS_KEY, JSON.stringify(all));
+  } catch { /* it will simply be asked again next time */ }
+}
+
+/**
+ * Re-read the other brokers' files with the columns as currently matched, and
+ * redraw. Runs on every change to a column choice, so the preview and the
+ * sample rows always describe exactly what would be imported.
+ */
+function refreshCsvImport() {
+  stagedStatements = stagedStatements.filter((s) => !s.generic);
+  const chosen = Number(el('ibkrYear')?.value) || null;
+
+  for (const group of csvGroups) {
+    /**
+     * Formats nobody has chosen follow the columns as they are matched.
+     *
+     * They are read from the values in the number and date columns, and until
+     * those columns are known there are no numbers to read — a guess made
+     * before matching had nothing to go on, and read "612,30" as 61,230.
+     */
+    const detected = detectFormats(
+      { headers: group.headers, rows: group.tables.flatMap((t) => t.table.rows) },
+      group.mapping,
+    );
+    for (const key of ['dateOrder', 'numberStyle']) {
+      if (!group.chosen?.[key]) group.formats[key] = detected[key];
+    }
+
+    group.missing = missingFields(group.mapping);
+    group.sample = [];
+    group.skipped = [];
+    group.outside = 0;
+    group.empty = [];
+    if (group.missing.length) continue;
+    rememberLayout(group.key, { mapping: group.mapping, formats: group.formats });
+
+    for (const { name, table } of group.tables) {
+      const { transactions, skipped } = readTransactions(table, group.mapping, group.formats);
+      group.skipped.push(...skipped.map((s) => ({ ...s, name })));
+      if (group.sample.length < 3) group.sample.push(...transactions.slice(0, 3 - group.sample.length));
+      const kept = chosen ? transactions.filter((t) => t.date.startsWith(`${chosen}-`)) : transactions;
+      group.outside += transactions.length - kept.length;
+      const records = transactionRecords(kept, { source: name });
+      if (!records.length) group.empty.push(name);
+      for (const record of records) stagedStatements.push({ name, record, generic: true });
+    }
+  }
+
+  renderCsvMapping(el('csvMapping'), csvGroups, refreshCsvImport);
   if (stagedStatements.length) renderIbkrPreview();
+  else el('ibkrPreview').style.display = 'none';
+}
+
+/** One year of another broker's transactions, in a line. */
+function describeTransactions({ name, record }) {
+  const of = (...kinds) => record.transactions.filter((t) => kinds.includes(t.kind));
+  const trades = of('buy', 'sell').length;
+  const moved = of('deposit', 'withdrawal');
+  const income = of('dividend', 'interest').length;
+  return [
+    name,
+    `${record.from} to ${record.to}`,
+    `${trades} trade${trades === 1 ? '' : 's'}`,
+    moved.length ? `${moved.length} deposit or withdrawal${moved.length === 1 ? '' : 's'} netting ${moneyText(moved.reduce((s, t) => s + t.cash, 0))}` : null,
+    income ? `${income} dividend or interest payment${income === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 export function cancelIbkrImport() {
   stagedStatements = [];
+  csvGroups = [];
+  renderCsvMapping(el('csvMapping'), [], () => {});
   const input = el('ibkrFile');
   if (input) input.value = '';
   el('ibkrPreview').style.display = 'none';
@@ -860,7 +1010,9 @@ export async function confirmIbkrImport() {
   const measure = nav?.twr != null
     ? `Your year is measured the way your broker measures it: their own ${
       nav.twr.toFixed(2)}% through ${nav.through}, plus everything since.`
-    : 'This statement carried no time-weighted return, so the year is measured '
+    : records.some((r) => sourceOf(r) === 'transactions')
+      ? 'These files carry no broker return, so your returns are worked out here from the trades.'
+      : 'This statement carried no time-weighted return, so the year is measured '
       + 'here instead and may read a little above or below your broker.';
 
   const span = years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : `${years[0]}`;

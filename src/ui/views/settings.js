@@ -68,6 +68,10 @@ export function renderStatementYears() {
     const parts = [String(record.year), `${shortDay(record.from)} – ${shortDay(record.to)}`];
     if (Number.isFinite(record.twr)) parts.push(`IBKR return ${record.twr >= 0 ? '+' : ''}${record.twr.toFixed(2)}%`);
     if ((record.accounts ?? []).length > 1) parts.push(`${record.accounts.length} accounts combined`);
+    if (record.kind === 'transactions') {
+      const n = record.transactions?.length ?? 0;
+      parts.push(`${n} transaction${n === 1 ? '' : 's'}${record.source ? ` from ${record.source}` : ''}`);
+    }
     const label = document.createElement('span');
     label.textContent = parts.join(' · ');
 

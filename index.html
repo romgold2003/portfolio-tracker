@@ -470,13 +470,14 @@
     </div>
 
     <div class="modal-field">
-      <label>Import from Interactive Brokers</label>
-      <p style="margin-bottom:10px">Rebuilds your book from Activity Statements — every position, every closed trade with the profit IBKR calculated, your cash, and the deposits that make a real return possible. Add one statement per calendar year, for as many years as you have, and they are joined into a single history.</p>
-      <p style="margin-bottom:10px;color:var(--text3);font-size:11px">In IBKR: <strong>Performance &amp; Reports → Statements → Activity Statement</strong>, one calendar year per file (this year: <strong>Year to Date</strong>), format <strong>CSV</strong>. The annual statements IBKR saves as <strong>HTML</strong> work too. Pick several files at once to add several years.</p>
+      <label>Import statements</label>
+      <p style="margin-bottom:10px">Rebuilds your book from your broker's files — every position, every closed trade and its profit, your cash, and the deposits that make a real return possible. Add as many years as you have and they are joined into a single history. A file covering several years is split into its years automatically.</p>
+      <p style="margin-bottom:10px;color:var(--text3);font-size:11px"><strong>Interactive Brokers:</strong> Performance &amp; Reports → Statements → Activity Statement, one calendar year per file, format CSV (annual HTML statements work too). <strong>Any other broker:</strong> export your transaction or trade history as CSV — you will be asked which column is which the first time. Pick several files at once to add several years.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <select id="ibkrYear" onchange="readIbkrFile()" aria-label="Which year the statement covers" style="font-size:12px"></select>
         <input type="file" id="ibkrFile" multiple accept=".csv,.htm,.html,text/csv,text/html" onchange="readIbkrFile()" style="font-size:12px">
       </div>
+      <div id="csvMapping" style="display:none;margin-top:12px"></div>
       <div id="ibkrPreview" style="display:none;margin-top:12px">
         <div class="hint" id="ibkrSummary" style="margin:0 0 10px"></div>
         <div class="hint" id="ibkrWarning" style="margin:0 0 10px;color:var(--red)"></div>

@@ -32,6 +32,14 @@
  * legs are not movements at all and are left out.
  */
 import { statementToJournal } from './ibkr.js';
+import { journalFromTransactions } from './transactionBook.js';
+
+/**
+ * Where a year came from: an Interactive Brokers statement, which states its
+ * own figures, or another broker's transaction history, from which they are
+ * worked out. Years stored before the distinction existed are IBKR's.
+ */
+export const sourceOf = (record) => record?.kind ?? 'ibkr';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 /** A holding this close to zero has been sold out. */
@@ -58,6 +66,7 @@ export function statementRecord(parsed) {
   }
 
   return {
+    kind: 'ibkr',
     year: Number(from.slice(0, 4)),
     from,
     to,
@@ -174,8 +183,32 @@ export function chainReport(records) {
     const next = records[i];
     const link = { from: prev.year, to: next.year, ok: true, value: next.navChange?.startNav ?? null };
 
+    if (sourceOf(prev) !== sourceOf(next)) {
+      links.push({
+        ...link,
+        ok: false,
+        reason: 'One is an Interactive Brokers statement and the other a history from another broker, which cannot be joined.',
+      });
+      continue;
+    }
+
+    const gap = next.year - prev.year > 2 ? `${prev.year + 1}–${next.year - 1}` : `${prev.year + 1}`;
+
+    /**
+     * A transaction history states no balances to compare, so all that can be
+     * checked between two of its years is that none is missing — and a year
+     * with no file may simply be a year with no trades.
+     */
+    if (sourceOf(next) === 'transactions') {
+      if (next.year !== prev.year + 1) {
+        links.push({ ...link, ok: false, reason: `No file for ${gap} — fine if there were no trades that year.` });
+      } else {
+        links.push({ ...link, value: null });
+      }
+      continue;
+    }
+
     if (next.year !== prev.year + 1) {
-      const gap = next.year - prev.year > 2 ? `${prev.year + 1}–${next.year - 1}` : `${prev.year + 1}`;
       links.push({ ...link, ok: false, reason: `No statement for ${gap}.` });
       continue;
     }
@@ -262,6 +295,14 @@ function runOn(starts, ticker, day) {
 export function journalFromStatements(records, existing = {}) {
   if (!records?.length) throw new Error('There are no statements to build from.');
   const sorted = [...records].sort((a, b) => a.year - b.year);
+
+  const sources = new Set(sorted.map(sourceOf));
+  if (sources.size > 1) {
+    throw new Error('Interactive Brokers statements and histories from other brokers cannot be combined in one journal. '
+      + 'Import files from one source, or remove the other years first.');
+  }
+  if (sources.has('transactions')) return journalFromTransactions(sorted, existing);
+
   const latest = sorted[sorted.length - 1];
   const splits = allSplits(sorted);
   const links = chainReport(sorted);

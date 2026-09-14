@@ -169,7 +169,7 @@ function sanitizeAnchor(value) {
  */
 function sanitizeStatements(list) {
   if (!Array.isArray(list)) return [];
-  const lists = ['positions', 'closed', 'ledger', 'transfers', 'dated', 'flows', 'splits'];
+  const lists = ['positions', 'closed', 'ledger', 'transfers', 'dated', 'flows', 'splits', 'transactions'];
   const records = ['firstBuy', 'netQty', 'openingHoldings', 'openingMarks', 'income', 'navChange'];
   const byYear = new Map();
   for (const r of list) {
