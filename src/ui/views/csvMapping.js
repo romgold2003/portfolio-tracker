@@ -48,7 +48,7 @@ export function renderCsvMapping(container, groups, onChange) {
     const box = node('div', 'margin:0 0 12px;padding:10px 12px;border:0.5px solid var(--border2);border-radius:8px');
     box.append(node('div', 'font-size:12px;font-weight:600;margin-bottom:4px', group.names.join(', ')));
     box.append(node('div', 'font-size:11px;color:var(--text3);margin-bottom:10px',
-      'Not an Interactive Brokers statement, so check which column is which. The guesses are filled in, '
+      'Some of this file could not be read by itself, so check which column is which. The guesses are filled in, '
       + 'and your choice is remembered for files laid out the same way.'));
 
     const grid = node('div', 'display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;font-size:12px');

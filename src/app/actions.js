@@ -931,7 +931,13 @@ function refreshCsvImport() {
     }
   }
 
-  renderCsvMapping(el('csvMapping'), csvGroups, refreshCsvImport);
+  /**
+   * Column matching is asked only of files the app could not read by itself.
+   * A file whose columns were all recognised and whose every row was read goes
+   * straight to the preview: pick the year, choose the file, add it.
+   */
+  const needsHelp = csvGroups.filter((g) => g.missing.length || g.skipped.length || g.empty.length);
+  renderCsvMapping(el('csvMapping'), needsHelp, refreshCsvImport);
   if (stagedStatements.length) renderIbkrPreview();
   else el('ibkrPreview').style.display = 'none';
 }
