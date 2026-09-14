@@ -512,6 +512,11 @@
          at deploy; left as a dash when the page is served straight from source.
          It is here because "I fixed that" and "it still does it" have crossed
          more than once, and the difference was a tab that had never reloaded. -->
+    <!-- Save and quit: keeps the keys, adds the files waiting in the import
+         preview, and closes settings so the result shows at once. -->
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-blue" onclick="saveAndQuit()">Save and quit</button>
+    </div>
     <p class="build-stamp">Build <span id="buildStamp">—</span></p>
   </div>
 </div>

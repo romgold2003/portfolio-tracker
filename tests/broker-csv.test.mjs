@@ -613,3 +613,48 @@ describe('any broker file, read with no questions', () => {
     assert.notEqual(readableMapping(table).ticker, 'Ccy');
   });
 });
+
+describe('warnings the file itself already answers', () => {
+  /**
+   * Reported as errors on a real bank history imported as All years: two
+   * deposits of $200 on one day flagged as a transfer listed twice, and cash
+   * dipping to -$1.47. The file's own cash balance rose by each deposit and
+   * fell to -$1.45 on that day, so neither was a mistake.
+   */
+  const warningsFor = (lines) => {
+    const table = parseCsvTable(lines.join('\n'));
+    const mapping = readableMapping(table);
+    const { transactions } = readTransactions(table, mapping, detectFormats(table, mapping));
+    return transactionWarnings(transactionRecords(transactions));
+  };
+  const withBalance = [
+    'Date,Action,Symbol,Quantity,Price,Amount,Fees,Cash balance',
+    '2025-12-01,Deposit,,,,50,0,50',
+    '2025-12-03,Deposit,,,,200,0,250',
+    '2025-12-03,Buy,IREN,4.9,41,-200.9,0,49.1',
+    '2025-12-03,Deposit,,,,200,0,249.1',
+    '2025-12-04,Buy,VRT,1.5,166,-250,-1.5,-2.4',
+    '2025-12-05,Deposit,,,,100,0,97.6',
+  ];
+
+  test('same-day deposits the balance counted one by one are not called duplicates', () => {
+    assert.ok(!warningsFor(withBalance).some((w) => /listed twice/.test(w)));
+  });
+
+  test('a dip the file\'s own balance shows is not called missing money', () => {
+    assert.ok(!warningsFor(withBalance).some((w) => /Cash goes negative/.test(w)));
+  });
+
+  test('without a balance to settle it, both are still said', () => {
+    const plain = withBalance.map((l) => l.split(',').slice(0, 7).join(','));
+    const warnings = warningsFor(plain);
+    assert.ok(warnings.some((w) => /2 deposits of \$200\.00 on 2025-12-03/.test(w)), warnings.join(' | '));
+    assert.ok(warnings.some((w) => /Cash goes negative/.test(w)), warnings.join(' | '));
+  });
+
+  test('cash going lower than the file\'s own balance ever did is still said', () => {
+    // The first deposit is missing from the file, so cash falls below anything the balance showed.
+    const warnings = warningsFor(withBalance.filter((_, i) => i !== 1));
+    assert.ok(warnings.some((w) => /Cash goes negative/.test(w)), warnings.join(' | '));
+  });
+});

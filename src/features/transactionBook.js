@@ -151,12 +151,20 @@ export function transactionWarnings(records) {
       + 'The oldest file is taken as the year the account opened, so the shares must have been bought '
       + 'before it — add the earlier years, back to when the account opened, to cost them properly.');
   }
-  if (book.lowest.value < -0.01) {
+  const all = records.flatMap((r) => r.transactions ?? []);
+
+  /**
+   * Cash below zero is a sign of missing deposits — unless the file's own cash
+   * balance went just as low, in which case the broker really did let the
+   * account dip, and saying otherwise sends someone hunting for money that was
+   * never missing.
+   */
+  const fileBalances = all.map((t) => t.balance).filter(Number.isFinite);
+  const fileLowest = fileBalances.length ? Math.min(...fileBalances) : 0;
+  if (book.lowest.value < -0.01 && book.lowest.value < fileLowest - 0.5) {
     out.push(`Cash goes negative (${money(book.lowest.value)} on ${book.lowest.date}): the files probably leave out `
       + 'deposits, or the account held cash before the earliest file. Correct it with Edit cash after importing.');
   }
-
-  const all = records.flatMap((r) => r.transactions ?? []);
 
   /**
    * The same transfer listed twice.
@@ -170,9 +178,13 @@ export function transactionWarnings(records) {
   for (const t of all) {
     if (t.kind !== 'deposit' && t.kind !== 'withdrawal') continue;
     const key = `${t.kind}|${t.date}|${t.cash}`;
-    transfers.set(key, (transfers.get(key) ?? 0) + 1);
+    if (!transfers.has(key)) transfers.set(key, []);
+    transfers.get(key).push(t);
   }
-  const doubled = [...transfers].filter(([, n]) => n > 1);
+  // Repeats the file's own cash balance counted one by one are real, and not worth a warning.
+  const doubled = [...transfers]
+    .filter(([, list]) => list.length > 1 && !list.every((t) => t.balanceChecked))
+    .map(([key, list]) => [key, list.length]);
   if (doubled.length) {
     const examples = doubled.slice(0, 3).map(([key, n]) => {
       const [kind, date, cash] = key.split('|');

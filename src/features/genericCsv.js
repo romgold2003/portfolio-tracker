@@ -496,8 +496,11 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
   table.rows.forEach((row, index) => {
     const line = index + 1;
     const add = (t) => {
+      const balance = number(row, 'balance');
+      // Kept on the row: the file's own cash after it, which tells a real dip or a real repeat from a mistake.
+      if (Number.isFinite(balance)) t.balance = balance;
       transactions.push(t);
-      balances.push(number(row, 'balance'));
+      balances.push(balance);
     };
     const when = parseDate(cell(row, 'date'), formats.dateOrder);
     if (!when) {
@@ -658,9 +661,19 @@ function settleFromBalance(transactions, balances) {
   for (const [i, move] of moves) {
     const t = transactions[i];
     const gap = Math.abs(move - t.cash);
-    if (gap <= 0.011 || Math.sign(move) !== Math.sign(t.cash)) continue;
+    /**
+     * A row the balance moved by is one the file itself counted: two deposits
+     * of $200 on one day that each raise the balance by $200 are two deposits,
+     * not one listed twice.
+     */
+    if (gap <= 0.011) {
+      t.balanceChecked = true;
+      continue;
+    }
+    if (Math.sign(move) !== Math.sign(t.cash)) continue;
     if (gap > Math.min(25, 5 + 0.02 * Math.abs(t.cash))) continue;
     t.cash = Math.round(move * 100) / 100;
+    t.balanceChecked = true;
     changed += 1;
   }
 

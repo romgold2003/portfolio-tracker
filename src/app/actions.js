@@ -118,6 +118,31 @@ export async function checkTicker() {
   }
 }
 
+/**
+ * Save and quit: keep the keys, add the files waiting in the import preview,
+ * and close settings so the journal shows the result straight away.
+ *
+ * Files are only added when their preview is on screen and allowed — a blocked
+ * import is not forced through by leaving the page.
+ */
+export async function saveAndQuit() {
+  persistApiKey(readApiKeyInput());
+  saveBenchmarkKey(readBenchKeyInput());
+  const confirmButton = el('ibkrConfirm');
+  const pending = stagedStatements.length > 0
+    && el('ibkrPreview')?.style.display !== 'none'
+    && !confirmButton?.disabled;
+  if (pending) {
+    // Closes settings and redraws once the journal is rebuilt.
+    await confirmIbkrImport();
+    return;
+  }
+  closeSettings();
+  refreshPrices();
+  renderAll();
+  refreshMeasuredBetas();
+}
+
 export function saveApiKey() {
   persistApiKey(readApiKeyInput());
   saveBenchmarkKey(readBenchKeyInput());
@@ -603,7 +628,7 @@ export function installActions(extra = {}) {
   Object.assign(window, {
     // navigation & chrome
     show, toggleTheme, toggleVoice, toggleAmounts,
-    openSettings, closeSettings, saveApiKey,
+    openSettings, closeSettings, saveApiKey, saveAndQuit,
     // trades
     addPos, clearForm, setDir, setSizeMode, updateSizeHint,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
@@ -790,8 +815,15 @@ function renderIbkrPreview() {
         + 'the amount column leaves out commissions there.', 'var(--text3)');
     }
     if (group.outside) {
-      line(`${group.outside} transaction${group.outside === 1 ? '' : 's'} dated outside ${chosen} left out — `
-        + 'choose All years to import the whole file.', 'var(--text3)');
+      /**
+       * Said first and plainly: with one year picked from a file covering
+       * several, the shares bought and the money paid in during the other years
+       * are missing, and every warning below follows from that.
+       */
+      const others = [...group.outsideYears].sort().join(' and ');
+      line(`This file also holds ${group.outside} transaction${group.outside === 1 ? '' : 's'} from ${others}, left out because `
+        + `${chosen} is selected. Choose All years to import the whole file — without them, shares bought and money paid in `
+        + `during ${others} are missing, so the warnings below are expected.`, 'var(--amber)');
     }
     for (const name of group.empty ?? []) {
       line(`${name}: no transactions${chosen ? ` dated in ${chosen}` : ''} could be read.`, 'var(--amber)');
@@ -926,6 +958,7 @@ function refreshCsvImport() {
     );
     group.skipped = [];
     group.outside = 0;
+    group.outsideYears = new Set();
     group.repriced = 0;
     group.rebalanced = 0;
     group.empty = [];
@@ -938,6 +971,7 @@ function refreshCsvImport() {
       // All years: split by the year of each row's date. One year: only its rows.
       const kept = chosen ? transactions.filter((t) => t.date.startsWith(`${chosen}-`)) : transactions;
       group.outside += transactions.length - kept.length;
+      for (const t of transactions) if (chosen && !t.date.startsWith(`${chosen}-`)) group.outsideYears.add(t.date.slice(0, 4));
       const records = transactionRecords(kept, { source: name });
       if (!records.length) group.empty.push(name);
       for (const record of records) stagedStatements.push({ name, record, generic: true });
