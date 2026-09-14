@@ -233,3 +233,26 @@ export function periodReturnFromHistory(rows, from, to) {
     paidIn,
   };
 }
+
+/**
+ * Year to date, by the most reliable measure available.
+ *
+ * The broker's own time-weighted figure chained to today when there is one:
+ * Interactive Brokers statements carry it, and it matches their app exactly.
+ * Otherwise the account valued every day, deposits taken out and the days
+ * compounded — the same measure as every other window.
+ *
+ * What it replaces for a history with no broker figure was profit over the
+ * balance the year opened with. That credits the whole year's profit to the
+ * money the account started the year with, including profit earned on money
+ * paid in since. A bank history that opened 2026 at $2,845, took in $16,350 over
+ * the year and made $2,500 read +88%; valued day by day it made +20.9%.
+ *
+ * Null while the daily values are not there to measure, so a caller can wait
+ * rather than show a figure it knows to be wrong.
+ */
+export function yearToDateReturn(fromTrades, rows, from, to) {
+  if (fromTrades?.method === 'broker') return fromTrades;
+  const measured = periodReturnFromHistory(rows, from, to);
+  return measured ? { ...measured, method: 'history' } : null;
+}

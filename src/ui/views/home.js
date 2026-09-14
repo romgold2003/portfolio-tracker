@@ -18,6 +18,7 @@ import {
 import {
   periodStart, cutoffFor, setBackfill, authoritativeHistory, windowEnd,
 } from '../../core/snapshots.js';
+import { yearToDateReturn as measuredYearToDate } from '../../core/portfolioHistory.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory } from '../../core/portfolioHistory.js';
@@ -484,16 +485,29 @@ function pastPrice(ticker, day) {
   return closeAtOrBefore(rows, day);
 }
 
+/**
+ * The year beside the market's, measured the same way as the year-to-date
+ * figure above it: the broker's own when a statement gave one, otherwise the
+ * account valued day by day. Shows nothing while those values load, rather
+ * than a figure that credits the year's deposits with their profit.
+ */
 function yearToDateReturn(totals) {
-  return accountPerformance({
+  const from = `${new Date().getFullYear()}-01-01`;
+  const to = todayStr();
+  const trades = accountPerformance({
     positions: state.positions,
     account: totals.account,
-    from: `${new Date().getFullYear()}-01-01`,
-    to: todayStr(),
+    from,
+    to,
     flows: state.cashFlows,
     openingNav: state.openingNav,
     startPrices,
   });
+  if (trades.method === 'broker' || !state.ledger?.events?.length) return trades;
+  const history = authoritativeHistory();
+  if (!history.length) return { ...trades, returnPct: null };
+  const measured = measuredYearToDate(trades, history, from, to);
+  return measured ? { ...trades, ...measured } : trades;
 }
 
 /**
@@ -541,6 +555,10 @@ function describeOwnYear(performance) {
     return `Time-weighted return, the same measure your broker reports: ${
       performance.brokerTwr.toFixed(2)}% from their statement to ${
       longDate(performance.brokerThrough)}, compounded with this account's move since.`;
+  }
+  if (performance?.method === 'history') {
+    return `Time-weighted return since 1 January ${year}: your account valued every day from your `
+      + 'imported history, with deposits and withdrawals taken out, so money you paid in never counts as profit.';
   }
   if (performance?.method === 'statement') {
     return `Your return since 1 January ${year}: the year's profit over what the account `
@@ -770,7 +788,22 @@ function timeframePerformance(totals) {
     startPrices: ytd ? startPrices : new Map(),
   });
 
-  if (ytd || !state.ledger?.events?.length) return fromTrades();
+  if (!state.ledger?.events?.length) return fromTrades();
+
+  /**
+   * Year to date keeps the broker's own chained figure when a statement gave
+   * one. Without it — any other broker's history — the year is measured like
+   * every other window, from the account valued day by day: profit over the
+   * January balance read +88% on a bank history that made +20.9%, because the
+   * year's deposits had earned most of the profit.
+   */
+  if (ytd) {
+    const trades = fromTrades();
+    if (trades.method === 'broker') return trades;
+    const history = authoritativeHistory();
+    if (!history.length) return null;
+    return measuredYearToDate(trades, history, from, to) ?? trades;
+  }
 
   const history = authoritativeHistory();
   if (!history.length) return null;
