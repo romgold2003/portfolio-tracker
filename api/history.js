@@ -35,6 +35,18 @@ export default async function handler(req, res) {
 
   // Whole years, so one response answers every timeframe the app offers.
   const years = Math.min(Math.max(Number(url.searchParams.get('years')) || 2, 1), 10);
+
+  /**
+   * The last market day the caller wants, when it names one.
+   *
+   * Every device asking for the same day then gets the same closes. Without it
+   * a device could be handed a copy the edge cached a day earlier, or one with
+   * today's unfinished bar in it, and one account showed different returns on
+   * different phones while its value agreed. A closed day never changes, so a
+   * named day caches long.
+   */
+  const through = url.searchParams.get('through') ?? '';
+  const cutAt = /^\d{4}-\d{2}-\d{2}$/.test(through) ? through : null;
   const to = Math.floor(Date.now() / 1000);
   const from = to - Math.round(years * 365.25 * 86400);
 
@@ -57,13 +69,18 @@ export default async function handler(req, res) {
     for (let i = 0; i < stamps.length; i++) {
       const close = closes[i];
       if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue;
-      rows.push({ date: new Date(stamps[i] * 1000).toISOString().slice(0, 10), close });
+      const date = new Date(stamps[i] * 1000).toISOString().slice(0, 10);
+      if (cutAt && date > cutAt) continue;
+      rows.push({ date, close });
     }
     if (rows.length < 2) return fail(res, 502, 'Price history was empty.');
 
     // A daily close does not change during the day, so let Vercel's edge serve
     // this to everyone for an hour rather than calling upstream each time.
-    res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    res.setHeader('Cache-Control', cutAt
+      // Ends on a closed day: the same answer all day, for everyone.
+      ? 'public, s-maxage=86400, stale-while-revalidate=3600'
+      : 'public, s-maxage=3600, stale-while-revalidate=86400');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify({ symbol, rows }));

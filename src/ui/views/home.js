@@ -265,6 +265,17 @@ let backfillPending = false;
 let backfillFor = null;
 
 /**
+ * A run that came back with price histories missing, and when to try again.
+ *
+ * Latching such a run kept that device's returns built without those tickers
+ * for the rest of the session, while another device that loaded them all showed
+ * different percentages on the same account value.
+ */
+let backfillTriedFor = null;
+let backfillRetryAt = 0;
+let backfillAttempts = 0;
+
+/**
  * Rebuild the account value for the days the app was not open.
  *
  * The recorded curve starts the day this app was first used. The trades, the
@@ -325,13 +336,18 @@ async function loadBackfill() {
     + `${state.positions.length}|${(state.cashFlows ?? []).length}|`
     + `${(state.ledger?.events ?? []).length}`;
   if (key === backfillFor) return;
+  if (key !== backfillTriedFor) backfillAttempts = 0;
+  // A run that came back short is tried again, but not on every redraw.
+  if (key === backfillTriedFor && Date.now() < backfillRetryAt) return;
 
   backfillPending = true;
   try {
-    const loaded = await Promise.all(wanted.map(([symbol]) => dailySeries(symbol)
+    // Six at a time rather than every ticker at once, so a burst is not refused.
+    const loaded = await inBatches(wanted, 6, ([symbol]) => dailySeries(symbol)
       .then((rows) => [symbol, rows])
-      .catch(() => [symbol, null])));
+      .catch(() => [symbol, null]));
     for (const [symbol, rows] of loaded) if (rows?.length) priceHistories.set(symbol, rows);
+    const unpriced = loaded.filter(([, rows]) => !rows?.length).length;
 
     /**
      * The ledger when the broker gave us one, the positions otherwise.
@@ -400,7 +416,19 @@ async function loadBackfill() {
         to: todayStr(),
       }).map((r) => ({ date: r.date, totalAccountValue: r.value })));
     }
-    backfillFor = key;
+    /**
+     * Histories still missing: build with what arrived, and come back for the
+     * rest a little later, three times at most — a ticker the price service
+     * genuinely does not carry should not be asked for all session.
+     */
+    if (unpriced && backfillAttempts < 3) {
+      backfillAttempts += 1;
+      backfillTriedFor = key;
+      backfillRetryAt = Date.now() + 15000 * backfillAttempts;
+      setTimeout(() => renderHome(), 15000 * backfillAttempts + 50);
+    } else {
+      backfillFor = key;
+    }
     renderHome();
   } finally {
     backfillPending = false;
@@ -469,6 +497,15 @@ function datedMarks(ledger) {
     (out[event.ticker] ??= []).push({ date: event.date, price: event.price });
   }
   for (const list of Object.values(out)) list.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
+/** Map over a list a few items at a time, keeping the order. */
+async function inBatches(list, size, fn) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) {
+    out.push(...await Promise.all(list.slice(i, i + size).map(fn)));
+  }
   return out;
 }
 

@@ -12,6 +12,7 @@
  * useful while several dates are being looked up at once.
  */
 import { cloudEnabled } from './cloud.js';
+import { lastClosedSession } from '../config/marketCalendar.js';
 
 const PRICE_CACHE_KEY = 'pt_historic_prices';
 
@@ -80,21 +81,43 @@ export function closeOnOrBefore(rows, date) {
  */
 export async function dailySeries(ticker) { return seriesFor(ticker); }
 
+/**
+ * A ticker's closes up to the last closed market day, asked for by that day.
+ *
+ * Every device asking on the same day gets the same rows. The returns on the
+ * home page are built from these, so a device holding a day-old copy — or one
+ * that lost a ticker to a dropped request — showed the same account value with
+ * different percentages on every timeframe.
+ *
+ * A refused or dropped request is tried again twice, a little later each time.
+ * A request the server rejects outright (not signed in, not a symbol) is not.
+ */
 async function seriesFor(ticker) {
-  if (seriesCache.has(ticker)) return seriesCache.get(ticker);
-  try {
-    const res = await fetch(`/api/history?symbol=${encodeURIComponent(ticker)}&years=3`, {
-      credentials: 'same-origin',
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    const rows = Array.isArray(json?.rows) ? json.rows : null;
-    if (rows) seriesCache.set(ticker, rows);
-    return rows;
-  } catch {
-    return null;
+  const through = lastClosedSession();
+  const cacheKey = `${ticker}@${through}`;
+  if (seriesCache.has(cacheKey)) return seriesCache.get(cacheKey);
+  const url = `/api/history?symbol=${encodeURIComponent(ticker)}&years=3&through=${through}`;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((ok) => { setTimeout(ok, RETRY_DELAY_MS * attempt * attempt); });
+    try {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (res.status === 400 || res.status === 401 || res.status === 404) return null;
+      if (!res.ok) continue;
+      const json = await res.json();
+      const rows = Array.isArray(json?.rows) ? json.rows : null;
+      if (rows) seriesCache.set(cacheKey, rows);
+      return rows;
+    } catch { /* dropped: try again */ }
   }
+  return null;
 }
+
+/** The wait before the first retry; the second waits four times as long. */
+let RETRY_DELAY_MS = 700;
+
+/** For tests: retry without waiting. */
+export function setRetryDelayForTests(ms) { RETRY_DELAY_MS = ms; }
 
 /**
  * What each ticker closed at on or before `date`.
