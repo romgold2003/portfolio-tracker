@@ -13,7 +13,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cutoffFor, periodStart, daysForTimeframe } from '../src/core/snapshots.js';
+import { cutoffFor, periodStart, daysForTimeframe, windowEnd } from '../src/core/snapshots.js';
 
 /** The account in question: first recorded 12 August 2026. */
 const INCEPTION = '2026-08-12';
@@ -68,15 +68,53 @@ describe('the boundary itself', () => {
   });
 });
 
-describe('the other timeframes are unaffected', () => {
-  test('still count days back from now', () => {
-    const now = new Date(2026, 7, 30, 12, 0);
-    for (const [tf, days] of [['1W', 7], ['1M', 30], ['3M', 90], ['1Y', 365]]) {
-      const cutoff = cutoffFor(tf, now);
-      const back = Math.round((now - cutoff) / 86400000);
-      assert.equal(back, days, `${tf} should reach ${days} days back`);
-      assert.equal(daysForTimeframe(tf), days);
+describe('the other timeframes follow the calendar, from the last market close', () => {
+  /**
+   * The complaint: IBKR's app put three months at +25.65% and this app at
+   * +13.4%. Three months was ninety days back from this minute, which on a
+   * Monday morning started on 16 June and skipped the Monday before it, when the
+   * account rose six per cent. The broker counts calendar months back from its
+   * last close — 11 June to 11 September — which measured on the same account
+   * gives +26.04%.
+   */
+  test('count calendar months back from the last close, as a broker does', () => {
+    // Monday 14 September 2026, nine in the morning in New York: the market has
+    // not opened, so the figures run to Friday's close.
+    const now = new Date('2026-09-14T13:00:00Z');
+    const expected = {
+      '1W': '2026-09-04', '1M': '2026-08-11', '3M': '2026-06-11', '6M': '2026-03-11', '1Y': '2025-09-11',
+    };
+    for (const [tf, date] of Object.entries(expected)) {
+      assert.equal(iso(cutoffFor(tf, now)), date, tf);
     }
+    assert.equal(windowEnd('3M', now), '2026-09-11');
+  });
+
+  test('once the market has closed, the window ends today', () => {
+    // Five in the afternoon in New York: Monday's session is over.
+    const now = new Date('2026-09-14T21:00:00Z');
+    assert.equal(windowEnd('3M', now), '2026-09-14');
+    assert.equal(iso(cutoffFor('3M', now)), '2026-06-14');
+  });
+
+  test('the 31st of a short month is the last day of that month', () => {
+    // Tuesday 31 March 2026, after the close.
+    const now = new Date('2026-03-31T21:00:00Z');
+    assert.equal(iso(cutoffFor('1M', now)), '2026-02-28');
+    assert.equal(iso(cutoffFor('3M', now)), '2025-12-31');
+    assert.equal(iso(cutoffFor('6M', now)), '2025-09-30');
+  });
+
+  test('over a holiday the window ends on the last day that traded', () => {
+    // Saturday 26 December 2026: Christmas was a Friday, the 24th closed early.
+    assert.equal(windowEnd('1W', new Date('2026-12-26T15:00:00Z')), '2026-12-24');
+  });
+
+  test('year to date and all time are not windows of this kind', () => {
+    assert.equal(windowEnd('YTD'), null);
+    assert.equal(windowEnd('All'), null);
+    // The day counts are still what the placeholder curve is drawn over.
+    assert.equal(daysForTimeframe('3M'), 90);
   });
 
   test('but are still clipped to when the account started', () => {

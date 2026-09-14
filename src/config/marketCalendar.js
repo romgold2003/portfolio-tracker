@@ -175,3 +175,45 @@ export function sessionBounds(date) {
     ? { close: 13 * 60, settled: 17 * 60 }
     : { close: 16 * 60, settled: 20 * 60 };
 }
+
+/** The New York date and minutes past midnight for an instant, the market's own clock. */
+function newYorkNow(now) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    minutes: (Number(get('hour')) % 24) * 60 + Number(get('minute')),
+  };
+}
+
+/**
+ * The most recent New York trading date whose regular session has closed.
+ *
+ * The day a broker's performance figures run to. On a Monday morning before
+ * the open that is the Friday before; after four in the afternoon it is the
+ * Monday itself; over a weekend or a holiday it is the last day that actually
+ * traded. A window measured to "now" instead ends mid-session or on a day with
+ * no market at all, and then counts back from the wrong place — which, on an
+ * account that jumped six per cent on a Monday, is the difference between the
+ * broker's three months and a different three months entirely.
+ */
+export function lastClosedSession(now = new Date()) {
+  const { date, minutes } = newYorkNow(now);
+  if (!marketHoliday(date) && minutes >= sessionBounds(date).close) return date;
+  const [y, m, d] = date.split('-').map(Number);
+  const cursor = new Date(Date.UTC(y, m - 1, d));
+  for (let i = 0; i < 14; i++) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    const key = cursor.toISOString().slice(0, 10);
+    if (!marketHoliday(key)) return key;
+  }
+  return date;
+}

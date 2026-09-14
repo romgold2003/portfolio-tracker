@@ -6,6 +6,7 @@ import { state, saveSnapshots } from './store.js';
 import { spliceHistory } from './rebuild.js';
 import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
+import { lastClosedSession } from '../config/marketCalendar.js';
 
 /** Record (or overwrite) today's account value. Idempotent within a day. */
 export function recordDailySnapshot() {
@@ -46,9 +47,47 @@ export function cutoffFor(timeframe, now = new Date()) {
   if (timeframe === 'YTD') {
     return new Date(Date.UTC(now.getFullYear(), 0, 1));
   }
+  const span = WINDOW_SPANS[timeframe];
+  if (span) return new Date(`${spanStart(span, lastClosedSession(now))}T00:00:00Z`);
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - daysForTimeframe(timeframe));
   return cutoff;
+}
+
+/**
+ * How far back each window reaches, the way a broker counts it.
+ *
+ * Months are calendar months, not thirty-day blocks: "three months" on 11
+ * September starts on 11 June, as it does in IBKR's app. Counting ninety days
+ * instead started on 16 June, skipped a Monday on which this account rose six
+ * per cent, and reported +13.4% for three months the broker put at +25.65%.
+ */
+const WINDOW_SPANS = {
+  '1W': { days: 7 },
+  '1M': { months: 1 },
+  '3M': { months: 3 },
+  '6M': { months: 6 },
+  '1Y': { months: 12 },
+};
+
+/** The first day of a window ending on `anchor`. The 31st of a short month clamps to its last day. */
+function spanStart(span, anchor) {
+  const [y, m, d] = anchor.split('-').map(Number);
+  if (span.days) {
+    return new Date(Date.UTC(y, m - 1, d - span.days)).toISOString().slice(0, 10);
+  }
+  const month = new Date(Date.UTC(y, m - 1 - span.months, 1));
+  const lastDay = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
+  month.setUTCDate(Math.min(d, lastDay));
+  return month.toISOString().slice(0, 10);
+}
+
+/**
+ * The day a window's figures run to: the last market close for 1W to 1Y, or
+ * null for a window that runs to this moment.
+ */
+export function windowEnd(timeframe, now = new Date()) {
+  return WINDOW_SPANS[timeframe] ? lastClosedSession(now) : null;
 }
 
 /**

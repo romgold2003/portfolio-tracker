@@ -15,7 +15,9 @@ import {
 import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
 } from '../../services/history.js';
-import { periodStart, cutoffFor, setBackfill, authoritativeHistory } from '../../core/snapshots.js';
+import {
+  periodStart, cutoffFor, setBackfill, authoritativeHistory, windowEnd,
+} from '../../core/snapshots.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory } from '../../core/portfolioHistory.js';
@@ -749,7 +751,12 @@ function windowStart() {
  */
 function timeframePerformance(totals) {
   const from = windowStart();
-  const to = todayStr();
+  /**
+   * 1W to 1Y run to the last market close rather than to this minute. That is
+   * the day a broker's own figures run to, and ending mid-session measured a
+   * different three months from the three months IBKR reports.
+   */
+  const to = windowEnd(ui.timeframe) ?? todayStr();
   const ytd = ui.timeframe === 'YTD';
   const fromTrades = () => accountPerformance({
     positions: state.positions,
