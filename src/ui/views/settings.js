@@ -16,6 +16,27 @@ export function openSettings() {
   modal()?.classList.add('show');
 }
 
+/** The earliest year the picker offers. */
+const FIRST_STATEMENT_YEAR = 1980;
+
+/**
+ * The year picker: All years, or one year from now back to 1980.
+ *
+ * Rebuilt every time settings open, so it reaches the new year on its own when
+ * the calendar turns, and so it can mark which years are already imported.
+ */
+function renderYearPicker() {
+  const select = document.getElementById('ibkrYear');
+  if (!select) return;
+  const imported = new Set((state.statements ?? []).map((r) => r.year));
+  const chosen = select.value;
+  select.replaceChildren(new Option('All years — whole history in one file', ''));
+  for (let year = new Date().getFullYear(); year >= FIRST_STATEMENT_YEAR; year--) {
+    select.add(new Option(imported.has(year) ? `${year} · imported` : String(year), String(year)));
+  }
+  select.value = [...select.options].some((o) => o.value === chosen) ? chosen : '';
+}
+
 const shortDay = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
   timeZone: 'UTC', month: 'short', day: 'numeric',
 });
@@ -28,6 +49,7 @@ const shortDay = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-
  * file.
  */
 export function renderStatementYears() {
+  renderYearPicker();
   const box = document.getElementById('ibkrYears');
   if (!box) return;
   box.replaceChildren();

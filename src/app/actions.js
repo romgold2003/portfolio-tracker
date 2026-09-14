@@ -766,6 +766,7 @@ function renderIbkrPreview() {
       + 'check the file holds every transaction of the year.', 'var(--text2)');
     for (const note of transactionWarnings(records)) line(note, 'var(--amber)');
   }
+  const chosen = Number(el('ibkrYear')?.value) || null;
   for (const group of csvGroups) {
     if (group.skipped?.length) {
       const first = group.skipped[0];
@@ -780,7 +781,13 @@ function renderIbkrPreview() {
       line(`${group.rebalanced} row${group.rebalanced === 1 ? '' : 's'} taken at the cash the file's balance column shows moved — `
         + 'the amount column leaves out commissions there.', 'var(--text3)');
     }
-    for (const name of group.empty ?? []) line(`${name}: no transactions could be read.`, 'var(--amber)');
+    if (group.outside) {
+      line(`${group.outside} transaction${group.outside === 1 ? '' : 's'} dated outside ${chosen} left out — `
+        + 'choose All years to import the whole file.', 'var(--text3)');
+    }
+    for (const name of group.empty ?? []) {
+      line(`${name}: no transactions${chosen ? ` dated in ${chosen}` : ''} could be read.`, 'var(--amber)');
+    }
   }
 
   const blocked = mixed || importBlockedBy(records);
@@ -807,10 +814,15 @@ export async function readIbkrFile() {
   if (!files.length) return;
 
   /**
-   * No year is asked for. Each file's year is read from its own dates — a file
-   * spanning two years is split between them — and the oldest year imported is
-   * where the account starts, empty.
+   * All years, or one.
+   *
+   * With All, a file is a whole history: every row goes to the year of its own
+   * date. With a year chosen, the file is attached to that year and rows dated
+   * outside it are left out, so a file picked for the wrong slot is caught
+   * rather than merged. Either way the oldest year imported is where the
+   * account starts, empty.
    */
+  const chosen = Number(el('ibkrYear')?.value) || null;
   const problems = [];
   csvGroups = [];
   for (const file of files) {
@@ -867,6 +879,10 @@ export async function readIbkrFile() {
     try {
       const parsed = parseIbkrStatement(text);
       const record = statementRecord(parsed);
+      if (chosen && record.year !== chosen) {
+        problems.push(`${file.name} covers ${record.year}, not ${chosen}. Pick ${record.year}, or All years.`);
+        continue;
+      }
       stagedStatements.push({ name: file.name, parsed, record });
     } catch (err) {
       problems.push(`${file.name}: ${err.message}`);
@@ -886,6 +902,7 @@ let csvGroups = [];
 /** Read the other brokers' files into the staged years, and redraw the preview. */
 function refreshCsvImport() {
   stagedStatements = stagedStatements.filter((s) => !s.generic);
+  const chosen = Number(el('ibkrYear')?.value) || null;
 
   for (const group of csvGroups) {
     // Dates and numbers are read off the values of every file in the group at once.
@@ -894,6 +911,7 @@ function refreshCsvImport() {
       group.mapping,
     );
     group.skipped = [];
+    group.outside = 0;
     group.repriced = 0;
     group.rebalanced = 0;
     group.empty = [];
@@ -903,8 +921,10 @@ function refreshCsvImport() {
       group.repriced += repriced;
       group.rebalanced += rebalanced;
       group.skipped.push(...skipped.map((s) => ({ ...s, name })));
-      // Split by the year of each row's own date.
-      const records = transactionRecords(transactions, { source: name });
+      // All years: split by the year of each row's date. One year: only its rows.
+      const kept = chosen ? transactions.filter((t) => t.date.startsWith(`${chosen}-`)) : transactions;
+      group.outside += transactions.length - kept.length;
+      const records = transactionRecords(kept, { source: name });
       if (!records.length) group.empty.push(name);
       for (const record of records) stagedStatements.push({ name, record, generic: true });
     }
