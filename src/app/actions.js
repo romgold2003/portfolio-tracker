@@ -54,7 +54,9 @@ import { ui } from '../ui/uiState.js';
 import { toggleTheme } from '../ui/theme.js';
 import { money as $u, signedMoney as $s, pctText as fp, fmtPrice } from '../ui/format.js';
 import { toggleVoice } from '../features/voice.js';
-import { exportBackup, restoreBackup, describeBackup } from '../features/backup.js';
+import {
+  exportBackup, exportPortfolioCsv, restoreBackup, describeBackup,
+} from '../features/backup.js';
 import {
   openImport, closeImport, previewImport, readImportFile, stagedBackup, copyLegacySnippet,
 } from '../ui/views/backupModal.js';
@@ -642,7 +644,7 @@ export function installActions(extra = {}) {
     renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker,
     selectMonth, toggleMonthTrade,
     // backup & restore
-    exportBackup, openImport, closeImport, previewImport, readImportFile, confirmImport,
+    exportBackup, exportPortfolioCsv, openImport, closeImport, previewImport, readImportFile, confirmImport,
     copyLegacySnippet,
     // Interactive Brokers import
     readIbkrFile, cancelIbkrImport, confirmIbkrImport, removeStatementYear,

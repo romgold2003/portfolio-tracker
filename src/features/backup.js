@@ -11,6 +11,9 @@
  */
 import { STORAGE_KEYS } from '../config/constants.js';
 import { sanitizePositions, loadState, flushNow, state } from '../core/store.js';
+import {
+  costOf, unreal, realized, posValue, bookedPnl, pctD, accountTotals, todayStr,
+} from '../core/portfolio.js';
 
 const BACKUP_FORMAT = 1;
 
@@ -122,4 +125,79 @@ export async function restoreBackup(data) {
   try {
     localStorage.setItem(STORAGE_KEYS.priceLog, JSON.stringify(data.priceLog ?? {}));
   } catch { /* history simply will not persist */ }
+}
+
+/* ───────────────────────── the portfolio as a spreadsheet ───────────────────────── */
+
+const CSV_COLUMNS = [
+  'Ticker', 'Asset class', 'Direction', 'Status', 'Open date', 'Close date', 'Quantity',
+  'Entry price', 'Current or exit price', 'Cost', 'Market value', 'Unrealised P&L', 'Realised P&L', 'Return %',
+];
+
+const csvCell = (value) => {
+  if (value == null || value === '') return '';
+  const s = String(value);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const money = (n) => (Number.isFinite(n) ? n.toFixed(2) : '');
+const exact = (n) => (Number.isFinite(n) ? String(+n.toFixed(6)) : '');
+
+/**
+ * The portfolio as a CSV that opens in any spreadsheet: one row per position,
+ * open ones first, then cash and the account's totals.
+ *
+ * The figures are the app's own — the cost, value and profit a position card
+ * shows — so the sheet and the screen cannot disagree. Restoring a journal
+ * still takes the JSON backup; this is the portfolio to read.
+ *
+ * A position entered from a statement as a result rather than as prices has no
+ * quantity or price worth printing, so those cells are left empty.
+ */
+export function portfolioCsv(positions, cash) {
+  const rows = [CSV_COLUMNS];
+  const sorted = [...(positions ?? [])].sort((a, b) => (a.status === b.status ? 0 : a.status === 'Open' ? -1 : 1)
+    || String(b.open ?? '').localeCompare(String(a.open ?? '')));
+
+  for (const p of sorted) {
+    const open = p.status === 'Open';
+    const cost = costOf(p);
+    const unrealised = open ? unreal(p) : null;
+    // An open position's partial exits have already banked something.
+    const realised = open ? bookedPnl(p) : realized(p);
+    rows.push([
+      p.ticker, p.cls, p.dir, p.status, p.open ?? '', open ? '' : (p.close ?? ''),
+      p.summary ? '' : exact(p.qty),
+      p.summary ? '' : exact(p.entry),
+      p.summary ? '' : exact(p.cur),
+      money(cost),
+      open ? money(posValue(p)) : '',
+      open ? money(unrealised) : '',
+      money(realised),
+      money(pctD(open ? unrealised : realised, cost)),
+    ]);
+  }
+
+  const totals = accountTotals(positions ?? [], Number(cash) || 0);
+  const summaryRow = (label, fields) => CSV_COLUMNS.map((column, i) => (i === 0 ? label : fields[column] ?? ''));
+  rows.push(CSV_COLUMNS.map(() => ''));
+  rows.push(summaryRow('Cash', { 'Market value': money(Number(cash) || 0) }));
+  rows.push(summaryRow('Account value', {
+    Cost: money(totals.invested),
+    'Market value': money(totals.account),
+    'Unrealised P&L': money(totals.unrealised),
+    'Realised P&L': money(totals.realised),
+  }));
+  return `${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
+}
+
+/** Download the portfolio as a dated CSV file. */
+export function exportPortfolioCsv() {
+  // The byte-order mark tells Excel the file is UTF-8, or non-English names come out garbled.
+  const blob = new Blob([`\uFEFF${portfolioCsv(state.positions, state.cash)}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `riskbook-portfolio-${todayStr()}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
