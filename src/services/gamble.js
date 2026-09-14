@@ -77,7 +77,12 @@ export const TOPICS = [
   {
     id: 'geo',
     label: 'Geopolitics',
-    match: /\b(iran|israel|gaza|russia|ukraine|china|taiwan|venezuela|north korea|nato|invasion|invade|airstrike|ceasefire|nuclear|sanctions?)\b/i,
+    /**
+     * Countries and the words made from them. The whole-word match took "Iran"
+     * and missed "Iranian", so "Will the Iranian regime fall before 2027?" —
+     * a $254,105 bet — never reached the panel.
+     */
+    match: /\b(iran(ian)?|israel(i)?|gaza|russian?|ukrain(e|ian)|china|chinese|taiwan(ese)?|venezuelan?|north korean?|nato|invasion|invade|airstrikes?|ceasefire|nuclear|sanctions?)\b/i,
   },
   {
     id: 'policy',
