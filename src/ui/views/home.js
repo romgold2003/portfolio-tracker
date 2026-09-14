@@ -18,7 +18,9 @@ import {
 import {
   periodStart, cutoffFor, setBackfill, authoritativeHistory, windowEnd,
 } from '../../core/snapshots.js';
-import { yearToDateReturn as measuredYearToDate } from '../../core/portfolioHistory.js';
+import { yearToDateReturn as measuredYearToDate, asTradedClose } from '../../core/portfolioHistory.js';
+import { splitsOf } from '../../services/history.js';
+import { allSplits } from '../../features/statementLibrary.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory } from '../../core/portfolioHistory.js';
@@ -517,9 +519,27 @@ async function inBatches(list, size, fn) {
  */
 function pastPrice(ticker, day) {
   const position = state.positions.find((p) => p.ticker === ticker);
-  const rows = priceHistories.get(historySymbol(ticker, position?.cls));
+  const symbol = historySymbol(ticker, position?.cls);
+  const rows = priceHistories.get(symbol);
   if (!rows?.length) return null;
-  return closeAtOrBefore(rows, day);
+  /**
+   * As traded that day. The history is adjusted for every later split and the
+   * journal's share counts are not — except splits a broker statement reported,
+   * which the import already rescaled the holdings for.
+   */
+  const applied = splitsAppliedByJournal().filter((s) => s.ticker === ticker);
+  return asTradedClose(closeAtOrBefore(rows, day), day, splitsOf(symbol), applied);
+}
+
+/** The splits the imported statements reported, worked out once per set of statements. */
+let appliedSplitsFor = null;
+let appliedSplits = [];
+function splitsAppliedByJournal() {
+  if (appliedSplitsFor !== state.statements) {
+    appliedSplitsFor = state.statements;
+    appliedSplits = allSplits(state.statements ?? []);
+  }
+  return appliedSplits;
 }
 
 /**

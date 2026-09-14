@@ -52,7 +52,7 @@ export default async function handler(req, res) {
 
   try {
     const upstream = await fetch(
-      `${SOURCE}/${encodeURIComponent(symbol)}?period1=${from}&period2=${to}&interval=1d`,
+      `${SOURCE}/${encodeURIComponent(symbol)}?period1=${from}&period2=${to}&interval=1d&events=split`,
       { headers: { 'User-Agent': 'portfolio-tracker', Accept: 'application/json' } },
     );
     if (!upstream.ok) return fail(res, 502, `Price history unavailable (${upstream.status}).`);
@@ -75,6 +75,21 @@ export default async function handler(req, res) {
     }
     if (rows.length < 2) return fail(res, 502, 'Price history was empty.');
 
+    /**
+     * The splits in the period. The closes are adjusted for every one of them,
+     * all the way back — SCO's April closes read four times what anyone paid,
+     * after its reverse split in May — and a journal's share counts are the ones
+     * actually traded, so the caller needs these to price a past day as it was.
+     */
+    const splits = Object.values(result?.events?.splits ?? {})
+      .map((s) => ({
+        date: new Date(Number(s?.date) * 1000).toISOString().slice(0, 10),
+        numerator: Number(s?.numerator),
+        denominator: Number(s?.denominator),
+      }))
+      .filter((s) => s.numerator > 0 && s.denominator > 0 && /^\d{4}-\d{2}-\d{2}$/.test(s.date))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
     // A daily close does not change during the day, so let Vercel's edge serve
     // this to everyone for an hour rather than calling upstream each time.
     res.setHeader('Cache-Control', cutAt
@@ -83,7 +98,7 @@ export default async function handler(req, res) {
       : 'public, s-maxage=3600, stale-while-revalidate=86400');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ symbol, rows }));
+    res.end(JSON.stringify({ symbol, rows, splits }));
   } catch (err) {
     fail(res, 502, `Could not reach the price history service (${err.message}).`);
   }

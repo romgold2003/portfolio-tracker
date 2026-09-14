@@ -256,3 +256,33 @@ export function yearToDateReturn(fromTrades, rows, from, to) {
   const measured = periodReturnFromHistory(rows, from, to);
   return measured ? { ...measured, method: 'history' } : null;
 }
+
+/**
+ * A split-adjusted close, as the shares were actually priced that day.
+ *
+ * Price histories are adjusted for every split since, all the way back. A
+ * journal's share counts are the ones traded, so a past day valued at an
+ * adjusted close is out by the whole split: SCO's April closes read four times
+ * what was paid after its 1-for-4 reverse split in May, and an account holding
+ * it that week rose sixteen per cent one day and fell twenty the next on moves
+ * that never happened.
+ *
+ * Each split after the day is undone — a 1-for-4 divides the close by four, a
+ * 10-for-1 multiplies it by ten — except one the journal has already expressed
+ * its share counts in. An Interactive Brokers statement reports the splits of
+ * what it held, and the import rescales every earlier holding to after-split
+ * shares; undoing such a split in the price as well would count it twice.
+ * `applied` is those, for this ticker; a split within a few days of one counts
+ * as the same, since the broker and the price service date it a day apart.
+ */
+export function asTradedClose(close, day, splits = [], applied = []) {
+  if (close == null) return null;
+  let factor = 1;
+  for (const split of splits ?? []) {
+    if (!(split?.date > day) || !(split.numerator > 0) || !(split.denominator > 0)) continue;
+    const alreadyApplied = (applied ?? []).some((a) => a?.date
+      && Math.abs(Date.parse(a.date) - Date.parse(split.date)) <= 5 * 86400000);
+    if (!alreadyApplied) factor *= split.numerator / split.denominator;
+  }
+  return close * factor;
+}

@@ -10,7 +10,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { dailySeries, setRetryDelayForTests } from '../src/services/history.js';
+import { dailySeries, setRetryDelayForTests, splitsOf } from '../src/services/history.js';
 import { lastClosedSession } from '../src/config/marketCalendar.js';
 
 const rows = [{ date: '2026-09-10', close: 10 }, { date: '2026-09-11', close: 11 }];
@@ -60,5 +60,21 @@ describe('a ticker\'s price history', () => {
     await dailySeries('EEE');
     assert.deepEqual(await dailySeries('EEE'), rows);
     assert.equal(calls.length, 1);
+  });
+});
+
+describe('the splits a price history is adjusted for', () => {
+  test('come back with the series and are kept for pricing past days', async () => {
+    const splits = [{ date: '2026-05-28', numerator: 1, denominator: 4 }];
+    answer([reply(200, { rows, splits })]);
+    await dailySeries('FFF');
+    assert.deepEqual(splitsOf('FFF'), splits);
+  });
+
+  test('are none for a ticker that never split, or whose series has not loaded', async () => {
+    answer([reply(200, { rows })]);
+    await dailySeries('GGG');
+    assert.deepEqual(splitsOf('GGG'), []);
+    assert.deepEqual(splitsOf('NOT-LOADED'), []);
   });
 });

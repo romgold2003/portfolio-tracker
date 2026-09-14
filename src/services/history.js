@@ -19,6 +19,16 @@ const PRICE_CACHE_KEY = 'pt_historic_prices';
 /** ticker -> rows, for this session only. */
 const seriesCache = new Map();
 
+/** ticker -> the splits its price history is adjusted for, once the series has loaded. */
+const splitCache = new Map();
+
+/**
+ * The splits a ticker's loaded price history is adjusted for, oldest first.
+ *
+ * Empty until its series has been fetched, and for a ticker that never split.
+ */
+export function splitsOf(ticker) { return splitCache.get(ticker) ?? []; }
+
 function readResolved() {
   try {
     const raw = localStorage.getItem(PRICE_CACHE_KEY);
@@ -106,7 +116,11 @@ async function seriesFor(ticker) {
       if (!res.ok) continue;
       const json = await res.json();
       const rows = Array.isArray(json?.rows) ? json.rows : null;
-      if (rows) seriesCache.set(cacheKey, rows);
+      if (rows) {
+        seriesCache.set(cacheKey, rows);
+        splitCache.set(ticker, (Array.isArray(json?.splits) ? json.splits : [])
+          .filter((s) => typeof s?.date === 'string' && s.numerator > 0 && s.denominator > 0));
+      }
       return rows;
     } catch { /* dropped: try again */ }
   }
