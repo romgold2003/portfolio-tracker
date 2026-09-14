@@ -40,6 +40,7 @@ import {
   parseCsvTable, readableMapping, detectFormats, missingFields, readTransactions, layoutKey, tableFromSheets,
 } from '../features/genericCsv.js';
 import { readWorkbook, isZip, isOldExcel } from '../features/xlsx.js';
+import { importPlan } from '../features/statementLibrary.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
@@ -715,7 +716,8 @@ function importBlockedBy(records) {
 }
 
 function renderIbkrPreview() {
-  const records = withStatements(state.statements, stagedStatements.map((s) => s.record));
+  const plan = importPlan(state.statements ?? [], stagedStatements.map((s) => s.record));
+  const { records } = plan;
   const imported = new Set((state.statements ?? []).map((r) => r.year));
   const summary = el('ibkrSummary');
   const warning = el('ibkrWarning');
@@ -754,9 +756,15 @@ function renderIbkrPreview() {
   }
 
   const sources = new Set(records.map(sourceOf));
-  const mixed = sources.size > 1
-    ? 'Interactive Brokers statements and histories from other brokers cannot be combined in one journal. Import files from one source, or remove the other years first.'
+  const mixed = plan.mixed
+    ? 'Interactive Brokers statements and histories from other brokers cannot be imported together. Import the files from one source at a time.'
     : '';
+  const yearsText = (list) => (list.length > 1 ? `${list[0]}–${list[list.length - 1]}` : `${list[0]}`);
+  if (plan.replaced.length) {
+    const what = plan.replacedSource === 'ibkr' ? 'Interactive Brokers statements' : "another broker's history";
+    line(`Your journal holds ${what} for ${yearsText(plan.replaced)}, which cannot be joined with these files. `
+      + 'Adding them replaces those years: the journal becomes this history alone.', 'var(--amber)');
+  }
   if (!mixed && sources.has('transactions')) {
     const s = transactionSummary(records);
     line(`How the account adds up: deposits ${moneyText(s.deposits)}, withdrawals ${moneyText(s.withdrawals)}, `
@@ -790,11 +798,17 @@ function renderIbkrPreview() {
     }
   }
 
-  const blocked = mixed || importBlockedBy(records);
+  // A journal being replaced has no newer year to protect: it is going.
+  const blocked = mixed || (plan.replaced.length ? '' : importBlockedBy(records));
   warning.textContent = blocked
-    || 'Positions and closed trades are rebuilt from these files, so anything entered by hand is replaced. Export a backup first if you want to keep it.';
+    || (plan.replaced.length
+      ? `Your imported ${yearsText(plan.replaced)} and everything built from it are replaced by these files. Export a backup first if you want to keep them.`
+      : 'Positions and closed trades are rebuilt from these files, so anything entered by hand is replaced. Export a backup first if you want to keep it.');
   const confirmButton = el('ibkrConfirm');
-  if (confirmButton) confirmButton.disabled = Boolean(blocked);
+  if (confirmButton) {
+    confirmButton.disabled = Boolean(blocked);
+    confirmButton.textContent = plan.replaced.length ? 'Replace journal' : 'Add to journal';
+  }
   el('ibkrPreview').style.display = 'block';
 }
 
@@ -988,10 +1002,12 @@ export async function removeStatementYear(year) {
 
 export async function confirmIbkrImport() {
   if (!stagedStatements.length) return;
-  const records = withStatements(state.statements, stagedStatements.map((s) => s.record));
-  if (importBlockedBy(records)) return;
+  const plan = importPlan(state.statements ?? [], stagedStatements.map((s) => s.record));
+  const { records } = plan;
+  if (plan.mixed || (!plan.replaced.length && importBlockedBy(records))) return;
   const journal = journalFromStatements(records, {
-    snapshots: state.snapshots,
+    // The daily values of a journal being replaced belong to the other account.
+    snapshots: plan.replaced.length ? [] : state.snapshots,
     apiKey: state.apiKey,
   });
 

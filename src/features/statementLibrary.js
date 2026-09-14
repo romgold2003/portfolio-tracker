@@ -421,3 +421,34 @@ export function chainedBrokerReturn(records, currentYearPct, currentYear) {
   });
   return (growth - 1) * 100;
 }
+
+/**
+ * What a journal's imported years become when files are added.
+ *
+ * Interactive Brokers statements and another broker's history cannot be joined
+ * into one account. Files from a different source than the years already
+ * imported are therefore a new history for the journal, not an addition to it:
+ * they replace every imported year, and the years replaced are returned so the
+ * person importing is told exactly what goes. Files of both kinds in one batch
+ * cannot be imported at all.
+ *
+ * Before this, such a file was refused outright: a journal holding IBKR years
+ * could never take another broker's history, whatever was uploaded.
+ */
+export function importPlan(existing = [], incoming = []) {
+  const incomingSources = new Set(incoming.map(sourceOf));
+  if (incomingSources.size > 1) {
+    return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: true };
+  }
+  const [source] = incomingSources;
+  const other = existing.filter((r) => sourceOf(r) !== source);
+  if (source && other.length) {
+    return {
+      records: withStatements([], incoming),
+      replaced: existing.map((r) => r.year).sort((a, b) => a - b),
+      replacedSource: sourceOf(other[0]),
+      mixed: false,
+    };
+  }
+  return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: false };
+}
