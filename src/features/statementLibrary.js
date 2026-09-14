@@ -435,10 +435,26 @@ export function chainedBrokerReturn(records, currentYearPct, currentYear) {
  * Before this, such a file was refused outright: a journal holding IBKR years
  * could never take another broker's history, whatever was uploaded.
  */
-export function importPlan(existing = [], incoming = []) {
+export function importPlan(existing = [], incoming = [], { replace = false } = {}) {
   const incomingSources = new Set(incoming.map(sourceOf));
   if (incomingSources.size > 1) {
     return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: true };
+  }
+  /**
+   * Replace, when asked: these files are a different account.
+   *
+   * Two people's histories from other brokers are the same kind of file, so
+   * nothing in them says they belong to different people — and adding person
+   * B's 2026 to person A's journal replaced A's 2026 and kept A's 2025, one
+   * account made of two. The person importing knows; this is their answer.
+   */
+  if (replace && existing.length) {
+    return {
+      records: withStatements([], incoming),
+      replaced: existing.map((r) => r.year).sort((a, b) => a - b),
+      replacedSource: sourceOf(existing[0]),
+      mixed: false,
+    };
   }
   const [source] = incomingSources;
   const other = existing.filter((r) => sourceOf(r) !== source);

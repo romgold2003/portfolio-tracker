@@ -607,7 +607,7 @@ export const voiceActions = {
   refreshPrices,
   focusTicker,
   collapseAll,
-  openSettings,
+  openSettings: openSettingsFresh,
   setFormTicker,
   setDirection,
   setAssetClass,
@@ -630,7 +630,7 @@ export function installActions(extra = {}) {
   Object.assign(window, {
     // navigation & chrome
     show, toggleTheme, toggleVoice, toggleAmounts,
-    openSettings, closeSettings, saveApiKey, saveAndQuit,
+    openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
     // trades
     addPos, clearForm, setDir, setSizeMode, updateSizeHint,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
@@ -724,6 +724,13 @@ let signOutAfterDelete = async () => window.location.reload();
  * anything is touched.
  */
 let stagedStatements = [];
+
+/**
+ * Which file choice is current. Reading a file is asynchronous, and choosing a
+ * second file before the first had been read let the first finish last and put
+ * its years back into the preview — the previous person's journal, imported.
+ */
+let importGeneration = 0;
 
 const moneyText = (n) => `${n < 0 ? '-' : ''}$${Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -843,6 +850,23 @@ function renderIbkrPreview() {
     confirmButton.disabled = Boolean(blocked);
     confirmButton.textContent = plan.replaced.length ? 'Replace journal' : 'Add to journal';
   }
+
+  /**
+   * Replace, offered whenever these files would be added to years already
+   * imported. Nothing in two people's files says they are different people, so
+   * adding someone else's 2026 kept the last person's 2025 underneath it. Not
+   * held back by the "add your newer year" check: a replaced journal has no
+   * newer year to protect.
+   */
+  const offerReplace = !plan.mixed && !plan.replaced.length && (state.statements ?? []).length > 0;
+  if (offerReplace) {
+    const kept = (state.statements ?? []).map((r) => r.year).sort((a, b) => a - b);
+    line(`Your journal already has ${yearsText(kept)} imported, and these files are added to it. If they are a different `
+      + "person's account, choose Replace journal so nothing of the other account stays.", 'var(--amber)');
+  }
+  const replaceButton = el('ibkrReplace');
+  // Shown and hidden by style: the button class sets its own display, which would override `hidden`.
+  if (replaceButton) replaceButton.style.display = offerReplace ? '' : 'none';
   el('ibkrPreview').style.display = 'block';
 }
 
@@ -856,6 +880,7 @@ function ibkrError(message) {
 export async function readIbkrFile() {
   const input = el('ibkrFile');
   const files = [...(input?.files ?? [])];
+  const generation = ++importGeneration;
   ibkrError('');
   stagedStatements = [];
   el('ibkrPreview').style.display = 'none';
@@ -875,6 +900,8 @@ export async function readIbkrFile() {
   csvGroups = [];
   for (const file of files) {
     const bytes = new Uint8Array(await file.arrayBuffer());
+    // A newer choice of files has started: this one is no longer wanted.
+    if (generation !== importGeneration) return;
     if (isOldExcel(bytes)) {
       problems.push(`${file.name}: an old Excel file (.xls). Open it and save it as .xlsx or CSV, then upload that.`);
       continue;
@@ -884,7 +911,9 @@ export async function readIbkrFile() {
     let table = null;
     if (isZip(bytes)) {
       try {
-        table = tableFromSheets(await readWorkbook(bytes));
+        const sheets = await readWorkbook(bytes);
+        if (generation !== importGeneration) return;
+        table = tableFromSheets(sheets);
       } catch {
         table = null;
       }
@@ -999,9 +1028,25 @@ function describeTransactions({ name, record }) {
   ].filter(Boolean).join(' · ');
 }
 
+/**
+ * Settings, opened on a clean import form.
+ *
+ * The form used to keep whatever was left in it — a preview of the last
+ * person's files, the file still selected, a single year still picked. Choosing
+ * the same file again then did nothing at all, since a file input only reacts to
+ * a change, and a year left selected quietly dropped the next file's other years.
+ */
+function openSettingsFresh() {
+  cancelIbkrImport();
+  openSettings();
+}
+
 export function cancelIbkrImport() {
+  importGeneration += 1;
   stagedStatements = [];
   csvGroups = [];
+  const year = el('ibkrYear');
+  if (year) year.value = '';
   const input = el('ibkrFile');
   if (input) input.value = '';
   el('ibkrPreview').style.display = 'none';
@@ -1033,9 +1078,10 @@ export async function removeStatementYear(year) {
   renderStatementYears();
 }
 
-export async function confirmIbkrImport() {
+/** Add the staged files to the journal, or with `replace`, make them the whole journal. */
+export async function confirmIbkrImport(replace = false) {
   if (!stagedStatements.length) return;
-  const plan = importPlan(state.statements ?? [], stagedStatements.map((s) => s.record));
+  const plan = importPlan(state.statements ?? [], stagedStatements.map((s) => s.record), { replace: replace === true });
   const { records } = plan;
   if (plan.mixed || (!plan.replaced.length && importBlockedBy(records))) return;
   const journal = journalFromStatements(records, {
