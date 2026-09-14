@@ -344,6 +344,30 @@ export function clearLegacyJournal() {
     .forEach((key) => { try { localStorage.removeItem(key); } catch { /* already gone */ } });
 }
 
+/**
+ * Things to reset whenever a different journal is put in place.
+ *
+ * Views keep what they worked out from the journal — the daily account history
+ * every return is measured from, the prices it was built with — and before this
+ * nothing told them the journal had changed. Replacing one history with another
+ * left the old account's returns on screen until a rebuild happened to notice,
+ * and a rebuild already running for the old book could finish afterwards and
+ * put its figures back.
+ */
+const journalListeners = new Set();
+
+/** Be told each time a journal is loaded or cleared. Returns a function that stops it. */
+export function onJournalLoaded(listener) {
+  journalListeners.add(listener);
+  return () => journalListeners.delete(listener);
+}
+
+function announceJournal() {
+  for (const listener of journalListeners) {
+    try { listener(); } catch { /* a view's cache is not worth failing a load over */ }
+  }
+}
+
 /** Populate `state` from a decrypted vault. */
 export function loadState(journal) {
   const source = journal ?? {};
@@ -356,6 +380,7 @@ export function loadState(journal) {
   state.ledger = sanitizeLedger(source.ledger);
   state.statements = sanitizeStatements(source.statements);
   state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
+  announceJournal();
 }
 
 /** Everything the vault holds, ready to be encrypted. */
@@ -384,6 +409,7 @@ export function clearState() {
   state.ledger = null;
   state.statements = [];
   state.apiKey = '';
+  announceJournal();
 }
 
 /**

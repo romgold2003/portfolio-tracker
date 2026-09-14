@@ -21,6 +21,7 @@ import {
 import { yearToDateReturn as measuredYearToDate, asTradedClose } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
 import { allSplits } from '../../features/statementLibrary.js';
+import { onJournalLoaded } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory } from '../../core/portfolioHistory.js';
@@ -278,6 +279,28 @@ let backfillRetryAt = 0;
 let backfillAttempts = 0;
 
 /**
+ * Which journal the history and prices above were worked out for.
+ *
+ * Replacing one imported history with another left the old account's returns
+ * on screen, because the daily history they are measured from was still the old
+ * one until a rebuild noticed — and a rebuild already running for the old book
+ * could finish after the swap and put its figures back. So a new journal throws
+ * all of it away at once: the returns show nothing until the new history is
+ * built, and a run started for the old book is discarded when it lands.
+ */
+let journalGeneration = 0;
+
+onJournalLoaded(() => {
+  journalGeneration += 1;
+  backfillFor = null;
+  backfillTriedFor = null;
+  backfillRetryAt = 0;
+  backfillAttempts = 0;
+  startPrices = new Map();
+  setBackfill([]);
+});
+
+/**
  * Rebuild the account value for the days the app was not open.
  *
  * The recorded curve starts the day this app was first used. The trades, the
@@ -291,6 +314,7 @@ let backfillAttempts = 0;
  */
 async function loadBackfill() {
   if (backfillPending) return;
+  const generation = journalGeneration;
 
   const earliest = earliestInterest();
   if (!earliest) return;
@@ -350,6 +374,8 @@ async function loadBackfill() {
       .catch(() => [symbol, null]));
     for (const [symbol, rows] of loaded) if (rows?.length) priceHistories.set(symbol, rows);
     const unpriced = loaded.filter(([, rows]) => !rows?.length).length;
+    // The journal was replaced while these loaded: this run is for a book that is gone.
+    if (generation !== journalGeneration) return;
 
     /**
      * The ledger when the broker gave us one, the positions otherwise.
@@ -434,6 +460,8 @@ async function loadBackfill() {
     renderHome();
   } finally {
     backfillPending = false;
+    // Started for a journal since replaced: build straight away for the one loaded now.
+    if (generation !== journalGeneration) setTimeout(() => renderHome(), 0);
   }
 }
 
