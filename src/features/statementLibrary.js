@@ -438,7 +438,7 @@ export function chainedBrokerReturn(records, currentYearPct, currentYear) {
 export function importPlan(existing = [], incoming = [], { replace = false } = {}) {
   const incomingSources = new Set(incoming.map(sourceOf));
   if (incomingSources.size > 1) {
-    return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: true };
+    return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: true, mixedWith: 'batch' };
   }
   /**
    * Replace, when asked: these files are a different account.
@@ -456,14 +456,26 @@ export function importPlan(existing = [], incoming = [], { replace = false } = {
       mixed: false,
     };
   }
+  /**
+   * A file from a different kind of source than the years already imported is
+   * refused, and nothing is replaced.
+   *
+   * It used to replace every other year without being asked, on the reasoning
+   * that an IBKR statement and another broker's history must be different
+   * accounts. Adding one year's file then wiped the others, which is the one
+   * thing adding a year must never do. The two kinds cannot be joined into one
+   * account, so the file is turned away and the years stay exactly as they were;
+   * a different account starts by removing those years first.
+   */
   const [source] = incomingSources;
   const other = existing.filter((r) => sourceOf(r) !== source);
   if (source && other.length) {
     return {
-      records: withStatements([], incoming),
-      replaced: existing.map((r) => r.year).sort((a, b) => a - b),
+      records: withStatements(existing, incoming),
+      replaced: [],
       replacedSource: sourceOf(other[0]),
-      mixed: false,
+      mixed: true,
+      mixedWith: 'journal',
     };
   }
   return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: false };

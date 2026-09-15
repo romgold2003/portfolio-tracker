@@ -799,9 +799,13 @@ function renderIbkrPreview() {
   }
 
   const sources = new Set(records.map(sourceOf));
-  const mixed = plan.mixed
-    ? 'Interactive Brokers statements and histories from other brokers cannot be imported together. Import the files from one source at a time.'
-    : '';
+  const kindOf = (source) => (source === 'ibkr' ? 'Interactive Brokers statements' : "another broker's history");
+  const mixed = !plan.mixed ? ''
+    : plan.mixedWith === 'journal'
+      ? `Your other years are ${kindOf(plan.replacedSource)}, and this file is ${kindOf(plan.replacedSource === 'ibkr' ? 'transactions' : 'ibkr')}. `
+        + 'They cannot be combined into one account, so nothing has been changed. If this file is for a different account, '
+        + 'remove the other years first with the × on each year.'
+      : 'Interactive Brokers statements and histories from other brokers cannot be imported together. Import the files from one source at a time.';
   const yearsText = (list) => (list.length > 1 ? `${list[0]}–${list[list.length - 1]}` : `${list[0]}`);
   if (plan.replaced.length) {
     const what = plan.replacedSource === 'ibkr' ? 'Interactive Brokers statements' : "another broker's history";
@@ -861,21 +865,14 @@ function renderIbkrPreview() {
   }
 
   /**
-   * Replace, offered whenever these files would be added to years already
-   * imported. Nothing in two people's files says they are different people, so
-   * adding someone else's 2026 kept the last person's 2025 underneath it. Not
-   * held back by the "add your newer year" check: a replaced journal has no
-   * newer year to protect.
+   * Adding a file changes its own year and no other. There is no replace here:
+   * a button beside Add that wiped every other year was one click from undoing
+   * a history. A different account starts by removing years with their ×.
    */
-  const offerReplace = !plan.mixed && !plan.replaced.length && (state.statements ?? []).length > 0;
-  if (offerReplace) {
-    const kept = (state.statements ?? []).map((r) => r.year).sort((a, b) => a - b);
-    line(`Your journal already has ${yearsText(kept)} imported, and these files are added to it. If they are a different `
-      + "person's account, choose Replace journal so nothing of the other account stays.", 'var(--amber)');
-  }
-  const replaceButton = el('ibkrReplace');
-  // Shown and hidden by style: the button class sets its own display, which would override `hidden`.
-  if (replaceButton) replaceButton.style.display = offerReplace ? '' : 'none';
+  const kept = (state.statements ?? []).map((r) => r.year)
+    .filter((y) => !stagedStatements.some((s) => s.record.year === y))
+    .sort((a, b) => a - b);
+  if (!plan.mixed && kept.length) line(`${yearsText(kept)} ${kept.length > 1 ? 'stay' : 'stays'} exactly as imported.`, 'var(--text3)');
   el('ibkrPreview').style.display = 'block';
 }
 

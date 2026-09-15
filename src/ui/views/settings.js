@@ -56,19 +56,40 @@ function renderYearGrid() {
   const thisYear = new Date().getFullYear();
   grid.replaceChildren();
   for (let year = thisYear; year >= FIRST_STATEMENT_YEAR; year--) {
-    const tile = document.createElement('button');
-    tile.type = 'button';
+    const tile = document.createElement('div');
     tile.className = 'year-tile'
       + (imported.has(year) ? ' is-imported' : '')
       + (year === thisYear ? ' is-current' : '')
       + (chosenYear === year ? ' is-chosen' : '');
-    tile.setAttribute('onclick', `chooseYearFile(${year})`);
+
+    // The square itself adds a file to its year.
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'year-pick';
+    pick.setAttribute('onclick', `chooseYearFile(${year})`);
     const label = document.createElement('span');
     label.textContent = String(year);
     const tag = document.createElement('span');
     tag.className = 'year-tag';
     tag.textContent = imported.has(year) ? '✓ imported' : year === thisYear ? 'this year' : '';
-    tile.append(label, tag);
+    pick.append(label, tag);
+    tile.append(pick);
+
+    /**
+     * The × in the corner removes that year, and is the only way to. A sibling
+     * of the square rather than inside it, so pressing it never also opens the
+     * file picker.
+     */
+    if (imported.has(year)) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'year-remove';
+      remove.textContent = '×';
+      remove.title = `Remove ${year}`;
+      remove.setAttribute('aria-label', `Remove ${year}`);
+      remove.setAttribute('onclick', `removeStatementYear(${year})`);
+      tile.append(remove);
+    }
     grid.append(tile);
   }
 
@@ -119,13 +140,8 @@ export function renderStatementYears() {
     const label = document.createElement('span');
     label.textContent = parts.join(' · ');
 
-    const remove = document.createElement('button');
-    remove.className = 'btn';
-    remove.style.cssText = 'font-size:11px;padding:3px 9px';
-    remove.textContent = 'Remove';
-    remove.setAttribute('onclick', `removeStatementYear(${record.year})`);
-
-    row.append(label, remove);
+    // Removing a year is the × on its square above.
+    row.append(label);
     box.append(row);
   }
 
