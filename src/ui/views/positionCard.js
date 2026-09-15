@@ -7,7 +7,7 @@
  */
 import { ASSET_CLASSES, MONTHS_LONG } from '../../config/constants.js';
 import {
-  unreal, realized, pctD, costOf, curValOf,
+  unreal, realized, pctD, costOf, marketValueOf,
   dailyDollarExits, dailyDollarTotal,
   todayStr, baseQtyOf, bookedPnl, hasDailyFigure,
 } from '../../core/portfolio.js';
@@ -52,7 +52,7 @@ function detailGrid(p, pnl) {
     ? `<div class="dgi"><div class="dgi-k">Recorded as</div><div class="dgi-v" style="font-size:13px">Result only</div></div>`
     : `<div class="dgi"><div class="dgi-k">Entry price</div><div class="dgi-v">$${fmtPrice(p.entry)}</div></div>`}
     <div class="dgi"><div class="dgi-k">Amount invested</div><div class="dgi-v">${$u(costOf(p))}</div></div>
-    <div class="dgi"><div class="dgi-k">Current value</div><div class="dgi-v" style="color:${clr(pnl)}">${$u(curValOf(p))}</div></div>
+    <div class="dgi"><div class="dgi-k">Current value</div><div class="dgi-v" style="color:${clr(pnl)}">${$u(marketValueOf(p))}</div></div>
     ${p.dailyChg != null ? `<div class="dgi"><div class="dgi-k">Today D%</div><div class="dgi-v" style="color:${clr(p.dailyChg)}">${fp(p.dailyChg)}</div></div>` : ''}
     ${hasDailyFigure(p, today) ? `<div class="dgi"><div class="dgi-k">Today P&L</div><div class="dgi-v" style="color:${clr(dailyDollarTotal(p))}">${$s(+dailyDollarTotal(p).toFixed(2))}</div>${soldToday !== 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:3px">incl. ${$s(+soldToday.toFixed(2))} sold today</div>` : ''}</div>` : ''}
     ${p.weeklyChg != null ? `<div class="dgi"><div class="dgi-k">This week</div><div class="dgi-v" style="color:${clr(p.weeklyChg)}">${fp(p.weeklyChg)}</div></div>` : ''}

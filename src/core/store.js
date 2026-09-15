@@ -368,11 +368,36 @@ function announceJournal() {
   }
 }
 
+/**
+ * How the journal's cash treats short positions.
+ *
+ *   1 (or absent)  opening a short spent cash, as if the shares were bought
+ *   2              opening a short brings its sale proceeds in, as a broker books it
+ */
+export const SHORT_CASH_MODEL = 2;
+
 /** Populate `state` from a decrypted vault. */
 export function loadState(journal) {
   const source = journal ?? {};
   state.positions = sanitizePositions(source.positions ?? []);
   state.cash = Number(source.cash) || 0;
+
+  /**
+   * A journal saved before shorts brought cash in, put right once.
+   *
+   * Its open shorts spent their entry cost when they opened and are now valued
+   * at minus their market value, so each is short of twice that cost in cash:
+   * once for the spending that should have been proceeds, once for the proceeds
+   * themselves. Adding it back leaves the account total exactly where it was.
+   * Closed shorts need nothing — opening and covering net to the same cash under
+   * either rule — and the marker saved with the journal stops it happening twice.
+   */
+  if (Number(source.cashModel) !== SHORT_CASH_MODEL) {
+    for (const p of state.positions) {
+      if (p.dir === 'Short' && p.status === 'Open') state.cash += 2 * p.entry * p.qty;
+    }
+  }
+  state.cashModel = SHORT_CASH_MODEL;
   state.snapshots = Array.isArray(source.snapshots) ? source.snapshots : [];
   state.cashFlows = sanitizeFlows(source.cashFlows);
   state.income = sanitizeIncome(source.income);
@@ -395,6 +420,7 @@ export function journalSnapshot() {
     ledger: state.ledger,
     statements: state.statements,
     apiKey: state.apiKey,
+    cashModel: SHORT_CASH_MODEL,
   };
 }
 
@@ -409,6 +435,7 @@ export function clearState() {
   state.ledger = null;
   state.statements = [];
   state.apiKey = '';
+  state.cashModel = SHORT_CASH_MODEL;
   announceJournal();
 }
 

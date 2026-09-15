@@ -441,7 +441,9 @@ export function reopen(id) {
   if (p.exits?.length) {
     const proceeds = exitProceedsOf(p);
     const plural = p.exits.length > 1 ? 's' : '';
-    if (!confirm(`Reopen ${p.ticker}? This undoes ${p.exits.length} exit${plural} and removes ${$u(proceeds)} from cash.`)) return;
+    // A long's exits paid cash in, so reopening takes it out; a short's covers paid it out, so it goes back.
+    const cashMove = proceeds >= 0 ? `removes ${$u(proceeds)} from cash` : `puts ${$u(-proceeds)} back into cash`;
+    if (!confirm(`Reopen ${p.ticker}? This undoes ${p.exits.length} exit${plural} and ${cashMove}.`)) return;
   }
   reopenPosition(id);
   renderAll();

@@ -30,11 +30,28 @@ export function realized(p) {
 }
 
 /**
- * What the position is worth right now.
- *   Long : entry*qty + (cur-entry)*qty = cur*qty
- *   Short: entry*qty + (entry-cur)*qty = collateral +/- P&L
+ * A position's market value, the way a broker states it.
+ *
+ * A long is its shares at today's price. A short is the same with the sign
+ * turned: 10 shares shorted at $100 are −$1,000 of market value, because the
+ * $1,000 the sale brought in is already sitting in cash and buying the shares
+ * back will take today's price out again. Cash plus market value is then the
+ * account, exactly as a broker's net liquidation value adds up.
+ *
+ * It used to be the other way round — opening a short spent cash, and the
+ * position was worth its collateral plus what it had made. The total came out
+ * the same, but shorting made cash fall where every broker makes it rise, and
+ * the position read as a positive holding rather than a negative one.
+ *
+ * A share count that is itself negative (an imported IBKR short) is priced as
+ * it stands.
  */
-export function posValue(p) { return costOf(p) + unreal(p); }
+export function marketValueOf(p) {
+  return p.dir === 'Short' ? -p.cur * p.qty : p.cur * p.qty;
+}
+
+/** What the position contributes to the account right now: its market value. */
+export function posValue(p) { return marketValueOf(p); }
 
 /**
  * Today's P&L in dollars for one position.
@@ -226,7 +243,12 @@ export function baseQtyOf(p) { return p.origQty != null ? p.origQty : p.qty; }
 export function closeMath(p, price, qty) {
   const costPart = p.entry * qty;
   const pnl = (p.dir === 'Long' ? price - p.entry : p.entry - price) * qty;
-  return { qty, costPart, pnl, proceeds: costPart + pnl, retPct: costPart ? (pnl / costPart) * 100 : 0 };
+  /**
+   * The cash the exit moves. Selling a long pays its price in; covering a short
+   * buys the shares back and pays its price out.
+   */
+  const proceeds = p.dir === 'Short' ? -price * qty : costPart + pnl;
+  return { qty, costPart, pnl, proceeds, retPct: costPart ? (pnl / costPart) * 100 : 0 };
 }
 
 /** P&L already banked across a position's partial exits. */

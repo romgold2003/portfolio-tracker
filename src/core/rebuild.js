@@ -58,8 +58,13 @@ export function daysBetween(from, to) {
  */
 export const carriedIn = (position) => position?.carriedIn === true || !position?.open;
 
-/** What one exit paid back: the capital it released plus what it made on it. */
-const proceedsOf = (position, exit) => position.entry * exit.qty + (exit.pnl ?? 0);
+/**
+ * The cash one exit moved. A long's sale paid back its capital plus what it made;
+ * a short's cover paid the buy-back price out.
+ */
+const proceedsOf = (position, exit) => (position.dir === 'Short'
+  ? -(exit.price ?? position.cur) * exit.qty
+  : position.entry * exit.qty + (exit.pnl ?? 0));
 
 /** The exits of a position, or the single implied one for a closed trade. */
 export function exitsOf(position) {
@@ -113,23 +118,22 @@ export function valueOn(position, day, priceOn) {
       .filter((e) => e?.d && e.d > day)
       .reduce((sum, e) => sum + (e.qty ?? 0), 0);
     const qty = (position.qty ?? 0) + sold;
-    if (!(price > 0)) return { value: position.entry * qty, stale: true };
-    return position.dir === 'Short'
-      ? { value: position.entry * qty + (position.entry - price) * qty, stale: false }
-      : { value: price * qty, stale: false };
+    // A short is held at minus its market value; its sale proceeds are in cash.
+    const sign = position.dir === 'Short' ? -1 : 1;
+    if (!(price > 0)) return { value: sign * position.entry * qty, stale: true };
+    return { value: sign * price * qty, stale: false };
   }
 
+  // Signed like the cash it moved: a short's buy-back is negative, and so is its value on any earlier day.
   const proceeds = proceedsTotal(position);
   const atExit = priceOn(position.ticker, position.close);
   if (!(price > 0) || !(atExit > 0)) {
     // No price path to scale along: hold it at cost, which is flat but right in
     // order of magnitude, and say the value is stale.
-    return { value: position.entry * baseQtyOf(position), stale: true };
+    const sign = position.dir === 'Short' ? -1 : 1;
+    return { value: sign * position.entry * baseQtyOf(position), stale: true };
   }
-  const moved = price / atExit;
-  return position.dir === 'Short'
-    ? { value: proceeds * (2 - moved), stale: false }
-    : { value: proceeds * moved, stale: false };
+  return { value: proceeds * (price / atExit), stale: false };
 }
 
 /**
@@ -149,7 +153,10 @@ export function cashOn(positions, cashToday, flows, day) {
     // Carried in: the money left the account before any day being rebuilt, so
     // there is nothing to add back.
     if (!carriedIn(position) && position.open > day) {
-      cash += position.entry * baseQtyOf(position);
+      // Before a long was bought its cost was still in cash; before a short was
+      // sold its proceeds were not yet.
+      const opened = position.entry * baseQtyOf(position);
+      cash += position.dir === 'Short' ? -opened : opened;
     }
     for (const exit of exitsOf(position)) {
       if (exit?.d && exit.d > day) cash -= proceedsOf(position, exit);
@@ -179,9 +186,8 @@ const STALE_LIMIT = 0.03;
  * What the whole book was worth on each day of a range.
  *
  * `priceOn(ticker, day)` returns that ticker's last close on or before the day,
- * or null. A short is worth its collateral plus what it has made:
- *   entry × qty + (entry − price) × qty
- * which is the same shape as a long and the opposite sign on the move.
+ * or null. A short is held at minus its market value, −price × qty, with the
+ * proceeds of its sale in cash, the way a broker adds up the account.
  */
 export function rebuildDailyValue({
   positions = [], cash = 0, flows = [], priceOn, from, to,

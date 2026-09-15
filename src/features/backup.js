@@ -10,7 +10,9 @@
  * people email to themselves, and a secret should not ride along.
  */
 import { STORAGE_KEYS } from '../config/constants.js';
-import { sanitizePositions, loadState, flushNow, state } from '../core/store.js';
+import {
+  sanitizePositions, loadState, flushNow, state, SHORT_CASH_MODEL,
+} from '../core/store.js';
 import {
   costOf, unreal, realized, posValue, bookedPnl, pctD, accountTotals, todayStr,
 } from '../core/portfolio.js';
@@ -37,6 +39,8 @@ export function buildBackup() {
     data: {
       positions: state.positions,
       cash: state.cash,
+      // Says how that cash treats shorts, so restoring it does not correct it twice.
+      cashModel: SHORT_CASH_MODEL,
       snapshots: state.snapshots,
       priceLog,
     },
@@ -85,6 +89,7 @@ export function parseBackup(text) {
     positions,
     dropped: data.positions.length - positions.length,
     cash: Number(data.cash) || 0,
+    cashModel: Number(data.cashModel) || null,
     snapshots: Array.isArray(data.snapshots) ? data.snapshots : [],
     priceLog: data.priceLog && typeof data.priceLog === 'object' ? data.priceLog : {},
   };
@@ -115,6 +120,7 @@ export async function restoreBackup(data) {
   loadState({
     positions: data.positions,
     cash: data.cash,
+    cashModel: data.cashModel,
     snapshots: data.snapshots,
     // A backup carries no API key on purpose, so keep the one already in use.
     apiKey: state.apiKey,

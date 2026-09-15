@@ -259,11 +259,14 @@ describe('rebuilding from positions, when there is no ledger', () => {
       ticker: 'BBB', dir: 'Short', entry: 100, cur: 80, qty: 10,
       open: '2026-01-01', status: 'Open',
     }];
+    // As a broker holds it: the $1,000 the sale brought in is in cash, beside $1,000 of the account's own,
+    // and the short is minus its shares at the day's price.
     const at = (price) => rebuildDailyValue({
-      positions: short, cash: 0, flows: [], priceOn: flat({ BBB: price }),
+      positions: short, cash: 2000, flows: [], priceOn: flat({ BBB: price }),
       from: '2026-01-02', to: '2026-01-02',
     })[0].value;
-    assert.ok(at(80) > at(120));
+    assert.equal(at(80), 1200);
+    assert.equal(at(120), 800);
   });
 });
 

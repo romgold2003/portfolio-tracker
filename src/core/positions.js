@@ -50,6 +50,20 @@ function spendCash(amount) {
 }
 
 /**
+ * The cash opening (or adding to) a position moves.
+ *
+ * Buying spends it. Shorting is a sale of borrowed shares, so it brings the
+ * proceeds in — the way every broker books it, with the short then held at a
+ * negative market value.
+ */
+const openingCash = (dir, amount) => (dir === 'Short' ? amount : -amount);
+
+function moveOpeningCash(dir, amount) {
+  state.cash += openingCash(dir, amount);
+  saveCash();
+}
+
+/**
  * `qty` is taken when given and derived when not.
  *
  * The form can be filled either way round — cash spent, or shares bought — and
@@ -75,7 +89,7 @@ export function addPosition({ ticker, cls, dir, open, entry, amount, qty, reason
   // Absent means the ticker lookup decides, so an unset sector is not stored.
   if (sector) position.sector = sector;
   state.positions.unshift(position);
-  spendCash(amount);
+  moveOpeningCash(dir, amount);
   savePositions();
   return position;
 }
@@ -87,7 +101,7 @@ export function addPosition({ ticker, cls, dir, open, entry, amount, qty, reason
 export function updatePosition(id, fields) {
   const p = findPosition(id);
   if (!p) return null;
-  const previousCost = costOf(p);
+  const previousCash = openingCash(p.dir, costOf(p));
 
   p.ticker = fields.ticker;
   p.cls = fields.cls;
@@ -103,9 +117,11 @@ export function updatePosition(id, fields) {
   // Not clamped at zero, for the reason in spendCash: an edit that raises the
   // amount past the cash on hand would otherwise leave the extra paid for by
   // nothing and the account total overstated by the difference.
-  const cashDelta = fields.amount - previousCost;
-  if (cashDelta !== 0) {
-    state.cash -= cashDelta;
+  // Direction-aware, so turning a long into a short undoes the purchase and books the sale.
+  const cashChange = openingCash(p.dir, fields.amount) - previousCash;
+  const cashDelta = -cashChange;
+  if (cashChange !== 0) {
+    state.cash += cashChange;
     saveCash();
   }
   savePositions();
@@ -127,7 +143,7 @@ export function applyDca(id, amount, price) {
   p.entry = next.avgEntry;
   p.qty = next.qty;
   p.amount = next.cost;
-  spendCash(amount);
+  moveOpeningCash(p.dir, amount);
   savePositions();
   return { position: p, ...next };
 }
@@ -291,9 +307,14 @@ export function closePosition(id, price, requestedQty) {
   };
 }
 
-/** Total cash that reopening a position would have to claw back. */
+/**
+ * Total cash the exits moved, which reopening has to undo. Positive for a long
+ * (sales paid in); negative for a short (covering paid the buy-back out).
+ */
 export function exitProceedsOf(p) {
-  return (p.exits || []).reduce((sum, e) => sum + p.entry * e.qty + e.pnl, 0);
+  return (p.exits || []).reduce((sum, e) => sum + (p.dir === 'Short'
+    ? -e.price * e.qty
+    : p.entry * e.qty + e.pnl), 0);
 }
 
 export function reopenPosition(id) {
