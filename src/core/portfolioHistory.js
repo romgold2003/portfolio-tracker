@@ -286,3 +286,25 @@ export function asTradedClose(close, day, splits = [], applied = []) {
   }
   return close * factor;
 }
+
+/**
+ * All time: what the account is worth now against everything paid into it.
+ *
+ *   profit = account value − (deposits − withdrawals)
+ *   return = profit ÷ (deposits − withdrawals)
+ *
+ * The plain question "how much has the money I put in grown", asked for in
+ * those words. On a real IBKR account: $30,508.51 paid in, $45,648.87 today,
+ * +$15,140.36 and +49.63%. The compounded broker years said +53.19% and the
+ * daily walk +51.84% — time-weighted figures that ignore how much money was at
+ * work when the account grew, which is not what this number is for.
+ *
+ * Null when nothing was paid in, or when the account shows no value — a journal
+ * with no file for this year yet has no book, and −100% would be a lie.
+ */
+export function allTimeFromDeposits(flows, account) {
+  const paidIn = (flows ?? []).reduce((sum, f) => (Number.isFinite(f?.amount) ? sum + f.amount : sum), 0);
+  if (!(paidIn > 0) || !(account > 0)) return null;
+  const pnl = account - paidIn;
+  return { pnl, returnPct: (pnl / paidIn) * 100, paidIn, endValue: account, method: 'deposits' };
+}

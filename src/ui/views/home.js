@@ -18,7 +18,9 @@ import {
 import {
   periodStart, cutoffFor, setBackfill, authoritativeHistory, windowEnd,
 } from '../../core/snapshots.js';
-import { yearToDateReturn as measuredYearToDate, asTradedClose } from '../../core/portfolioHistory.js';
+import {
+  yearToDateReturn as measuredYearToDate, asTradedClose, allTimeFromDeposits,
+} from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
 import { allSplits } from '../../features/statementLibrary.js';
 import { onJournalLoaded } from '../../core/store.js';
@@ -902,6 +904,18 @@ function timeframePerformance(totals) {
     const history = authoritativeHistory();
     if (!history.length) return null;
     return measuredYearToDate(trades, history, from, to) ?? trades;
+  }
+
+  /**
+   * All time is the account against everything paid into it, whenever deposits
+   * are known: profit is today's value less deposits net of withdrawals, and the
+   * return is that profit over what was paid in. It needs no daily history, so
+   * it shows at once. A journal with no recorded deposits keeps the older
+   * measure below.
+   */
+  if (ui.timeframe === 'All') {
+    const sinceDeposits = allTimeFromDeposits(state.cashFlows, totals.account);
+    if (sinceDeposits) return sinceDeposits;
   }
 
   const history = authoritativeHistory();
