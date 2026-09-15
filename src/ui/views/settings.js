@@ -37,6 +37,49 @@ function renderYearPicker() {
   select.value = [...select.options].some((o) => o.value === chosen) ? chosen : '';
 }
 
+/** The year whose square was pressed, 'all' for a whole history, or null. */
+let chosenYear = null;
+
+export function setChosenYear(year) { chosenYear = year; }
+
+/**
+ * One square per year, this year at the top down to 1980 at the bottom.
+ *
+ * An imported year is marked, this year is outlined because its file is the one
+ * that sets today's book, and the square just pressed stays highlighted while
+ * its file is read.
+ */
+function renderYearGrid() {
+  const grid = document.getElementById('yearsGrid');
+  if (!grid) return;
+  const imported = new Set((state.statements ?? []).map((r) => r.year));
+  const thisYear = new Date().getFullYear();
+  grid.replaceChildren();
+  for (let year = thisYear; year >= FIRST_STATEMENT_YEAR; year--) {
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'year-tile'
+      + (imported.has(year) ? ' is-imported' : '')
+      + (year === thisYear ? ' is-current' : '')
+      + (chosenYear === year ? ' is-chosen' : '');
+    tile.setAttribute('onclick', `chooseYearFile(${year})`);
+    const label = document.createElement('span');
+    label.textContent = String(year);
+    const tag = document.createElement('span');
+    tag.className = 'year-tag';
+    tag.textContent = imported.has(year) ? '✓ imported' : year === thisYear ? 'this year' : '';
+    tile.append(label, tag);
+    grid.append(tile);
+  }
+
+  const chosen = document.getElementById('yearsChosen');
+  if (chosen) {
+    chosen.textContent = chosenYear === 'all'
+      ? 'Whole history: each row goes to the year of its date.'
+      : chosenYear ? `Adding a file to ${chosenYear}.` : '';
+  }
+}
+
 const shortDay = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
   timeZone: 'UTC', month: 'short', day: 'numeric',
 });
@@ -50,6 +93,7 @@ const shortDay = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-
  */
 export function renderStatementYears() {
   renderYearPicker();
+  renderYearGrid();
   const box = document.getElementById('ibkrYears');
   if (!box) return;
   box.replaceChildren();

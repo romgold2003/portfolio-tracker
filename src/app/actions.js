@@ -31,7 +31,7 @@ import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js'
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
 import {
-  openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears,
+  openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears, setChosenYear,
 } from '../ui/views/settings.js';
 import {
   statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn, sourceOf,
@@ -633,6 +633,7 @@ export function installActions(extra = {}) {
     // navigation & chrome
     show, toggleTheme, toggleVoice, toggleAmounts,
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
+    openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
     // trades
     addPos, clearForm, setDir, setSizeMode, updateSizeHint,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
@@ -776,6 +777,12 @@ function renderIbkrPreview() {
 
   const years = records.map((r) => r.year);
   line(`After this your journal covers ${years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : years[0]}.`);
+  const thisYear = new Date().getFullYear();
+  if (years.length && years[years.length - 1] < thisYear) {
+    // Only this year's file sets today's book; these add history.
+    line(`No ${thisYear} file yet: open positions, cash and account value stay empty until you add your ${thisYear} file. `
+      + `${years.length > 1 ? 'These years add' : 'This year adds'} history — closed trades, win rate, monthly and cumulative returns.`, 'var(--amber)');
+  }
   if (sourceOf(records[0]) === 'transactions') {
     // The oldest year has nothing before it: the account opened then, with no cash and no shares.
     line(`${years[0]} is taken as the year the account opened, starting from nothing; every later year builds on it.`, 'var(--text2)');
@@ -1043,6 +1050,43 @@ function openSettingsFresh() {
   openSettings();
 }
 
+/**
+ * The Years performance window, opened from live price settings.
+ *
+ * One square per year replaced a long form: pick the year, choose its file, and
+ * the preview appears right there. It always opens on a clean import.
+ */
+function openYearsPanel() {
+  cancelIbkrImport();
+  setChosenYear(null);
+  renderStatementYears();
+  el('yearsModal')?.classList.add('show');
+}
+
+function closeYearsPanel() {
+  cancelIbkrImport();
+  setChosenYear(null);
+  el('yearsModal')?.classList.remove('show');
+}
+
+/** A year's square: that year's file goes into that year. */
+function chooseYearFile(year) {
+  cancelIbkrImport();
+  setChosenYear(year);
+  renderStatementYears();
+  const select = el('ibkrYear');
+  if (select) select.value = String(year);
+  el('ibkrFile')?.click();
+}
+
+/** One file holding the whole history: every row goes to the year of its date. */
+function chooseWholeHistory() {
+  cancelIbkrImport();
+  setChosenYear('all');
+  renderStatementYears();
+  el('ibkrFile')?.click();
+}
+
 export function cancelIbkrImport() {
   importGeneration += 1;
   stagedStatements = [];
@@ -1101,6 +1145,7 @@ export async function confirmIbkrImport(replace = false) {
   const broken = chainReport(records).filter((link) => !link.ok);
   const nav = journal.openingNav;
   cancelIbkrImport();
+  el('yearsModal')?.classList.remove('show');
   closeSettings();
   renderAll();
   refreshPrices();

@@ -404,6 +404,26 @@ export function loadState(journal) {
   state.openingNav = sanitizeAnchor(source.openingNav);
   state.ledger = sanitizeLedger(source.ledger);
   state.statements = sanitizeStatements(source.statements);
+
+  /**
+   * Today's book comes from this year's file, and only from it.
+   *
+   * Earlier years are history — closed trades, deposits, win rate, the monthly
+   * and cumulative returns — and never today's positions or cash. A journal
+   * whose newest imported year is behind the calendar showed that year's
+   * closing holdings as though they were held now, which read as old positions
+   * on screen. So until this year's file is added there are no open positions,
+   * no cash and no opening balance for the year; and on the first of January
+   * the same rule applies by itself, until the new year's file arrives.
+   *
+   * A journal with no imported files at all — entered by hand — is not touched.
+   */
+  const newestYear = state.statements.reduce((max, r) => Math.max(max, Number(r.year) || 0), 0);
+  if (newestYear && newestYear < new Date().getFullYear()) {
+    state.positions = state.positions.filter((p) => p.status === 'Closed');
+    state.cash = 0;
+    state.openingNav = null;
+  }
   state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
   announceJournal();
 }

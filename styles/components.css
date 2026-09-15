@@ -946,3 +946,20 @@ body.light{--wave-strength:0.34}
 /* Why the strip is fifty coins that are not the fifty you might expect. */
 .cw-coin-note{display:flex;align-items:center;flex:0 0 auto;padding:0 4px 0 10px;
   font-size:9px;color:var(--text4);white-space:nowrap}
+
+/* Years performance: a window over live price settings, one square per year,
+   this year at the top down to 1980. Imported years are green, this year is
+   outlined, and the square just pressed is highlighted while its file is read. */
+.years-bg{z-index:110}
+.years-modal{width:460px}
+.years-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.years-close{padding:4px 11px;font-size:16px;line-height:1}
+.years-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;max-height:260px;overflow-y:auto;padding:2px;margin-bottom:10px}
+.year-tile{background:var(--input);border:0.5px solid var(--border2);border-radius:7px;padding:10px 0 8px;font-size:12px;color:var(--text2);cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:48px}
+.year-tile:hover{background:var(--hover2);color:var(--text)}
+.year-tile .year-tag{font-size:9px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em}
+.year-tile.is-current{border-color:var(--border-blue)}
+.year-tile.is-imported{border-color:var(--green-br);background:var(--green-bg);color:var(--green)}
+.year-tile.is-imported .year-tag{color:var(--green)}
+.year-tile.is-chosen{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
+.years-whole{width:100%;padding:8px 12px;font-size:12px}

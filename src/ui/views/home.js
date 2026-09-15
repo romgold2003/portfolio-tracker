@@ -409,7 +409,7 @@ async function loadBackfill() {
         priceOn: pastPrice,
         lastKnown: datedMarks(ledger),
         from: earliest,
-        to: todayStr(),
+        to: historyEnd(),
       })
       : null;
 
@@ -528,6 +528,20 @@ function datedMarks(ledger) {
   }
   for (const list of Object.values(out)) list.sort((a, b) => a.date.localeCompare(b.date));
   return out;
+}
+
+/**
+ * The last day the imported history is walked to.
+ *
+ * Today, when this year has a file. When it does not, the end of the newest
+ * imported year: the book shows no holdings now, and walking last year's
+ * holdings on to today would draw months the account never had.
+ */
+function historyEnd() {
+  const records = state.statements ?? [];
+  const newest = records[records.length - 1];
+  const year = Number(String(newest?.to ?? '').slice(0, 4));
+  return year && year < new Date().getFullYear() ? newest.to : todayStr();
 }
 
 /** Map over a list a few items at a time, keeping the order. */

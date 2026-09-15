@@ -471,26 +471,9 @@
     </div>
 
     <div class="modal-field">
-      <label>Import statements</label>
-      <p style="margin-bottom:10px">Rebuilds your book from your broker's files — every position, every closed trade and its profit, your cash, and the deposits that make a real return possible. Add as many years as you have and they are joined into a single history. A file covering several years is split into its years automatically.</p>
-      <p style="margin-bottom:10px;color:var(--text3);font-size:11px"><strong>Interactive Brokers:</strong> Performance &amp; Reports → Statements → Activity Statement, one calendar year per file, format CSV (annual HTML statements work too). <strong>Any other broker:</strong> export your transaction or trade history as CSV or Excel — its columns are recognised automatically. Choose the year a file covers, or <strong>All years</strong> for one file with your whole history from the start — each row then goes to the year of its date. The oldest year is taken as when the account opened.</p>
-      <div style="margin-bottom:8px">
-        <select id="ibkrYear" onchange="readIbkrFile()" aria-label="Which year the file covers" style="font-size:12px"></select>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="file" id="ibkrFile" multiple accept=".csv,.xlsx,.htm,.html,text/csv,text/html,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="readIbkrFile()" style="font-size:12px">
-      </div>
-      <div id="ibkrPreview" style="display:none;margin-top:12px">
-        <div class="hint" id="ibkrSummary" style="margin:0 0 10px"></div>
-        <div class="hint" id="ibkrWarning" style="margin:0 0 10px;color:var(--red)"></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn" onclick="cancelIbkrImport()">Cancel</button>
-          <button class="btn btn-blue" id="ibkrConfirm" onclick="confirmIbkrImport()">Add to journal</button>
-          <button class="btn" id="ibkrReplace" onclick="confirmIbkrImport(true)" style="display:none">Replace journal</button>
-        </div>
-      </div>
-      <div id="ibkrError" class="lock-error" style="margin-top:10px"></div>
-      <div id="ibkrYears" style="margin-top:14px"></div>
+      <label>Your broker's files</label>
+      <p style="margin-bottom:10px"><strong>This year's file</strong> sets your open positions, cash and account value. <strong>Earlier years</strong> add their history — closed trades, win rate, monthly and cumulative returns.</p>
+      <button class="btn" onclick="openYearsPanel()">Years performance</button>
     </div>
 
     <div class="modal-field danger-zone">
@@ -520,6 +503,33 @@
       <button class="btn btn-blue" onclick="saveAndQuit()">Save and quit</button>
     </div>
     <p class="build-stamp">Build <span id="buildStamp">—</span></p>
+  </div>
+</div>
+
+<!-- Years performance: opened from live price settings, one square per year. -->
+<div class="modal-bg years-bg" id="yearsModal">
+  <div class="modal years-modal">
+    <div class="years-head">
+      <h3>Years performance</h3>
+      <button class="btn years-close" onclick="closeYearsPanel()" aria-label="Close">×</button>
+    </div>
+    <p>Click a year and choose its file — CSV, Excel, or an Interactive Brokers statement. <strong>This year's</strong> file sets today's positions, cash and account value; earlier years add history.</p>
+    <div class="years-grid" id="yearsGrid"></div>
+    <button class="btn years-whole" onclick="chooseWholeHistory()">One file with my whole history</button>
+    <select id="ibkrYear" hidden aria-hidden="true"></select>
+    <input type="file" id="ibkrFile" multiple hidden accept=".csv,.xlsx,.htm,.html,text/csv,text/html,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="readIbkrFile()">
+    <div class="hint" id="yearsChosen" style="font-style:normal"></div>
+    <div id="ibkrPreview" style="display:none;margin-top:12px">
+      <div class="hint" id="ibkrSummary" style="margin:0 0 10px"></div>
+      <div class="hint" id="ibkrWarning" style="margin:0 0 10px;color:var(--red)"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="cancelIbkrImport()">Cancel</button>
+        <button class="btn btn-blue" id="ibkrConfirm" onclick="confirmIbkrImport()">Add to journal</button>
+        <button class="btn" id="ibkrReplace" onclick="confirmIbkrImport(true)" style="display:none">Replace journal</button>
+      </div>
+    </div>
+    <div id="ibkrError" class="lock-error" style="margin-top:10px"></div>
+    <div id="ibkrYears" style="margin-top:14px"></div>
   </div>
 </div>
 

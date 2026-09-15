@@ -73,9 +73,15 @@ describe('one person, then nobody, then another person', () => {
     startEmpty();
     importFiles(personA());
     removeYear(2026);
-    // The year left is rebuilt on its own: 2025 ended holding IVV and AMZN.
+    // Only this year's file sets today's book: with 2026 gone, 2025 is history —
+    // its trades stay, but its closing holdings are not shown as held today.
     assert.deepEqual(years(), [2025]);
-    assert.deepEqual(openTickers(), ['AMZN', 'IVV']);
+    assert.deepEqual(openTickers(), []);
+    assert.equal(state.cash, 0);
+    // Both of A's 2025 holdings were still open at the year's end, so nothing of
+    // 2025 is a position — its deposit and its days stay as history.
+    assert.deepEqual(everyTicker(), []);
+    assert.equal(state.cashFlows.length, 1);
     removeYear(2025);
     assert.deepEqual(years(), []);
     assert.deepEqual(state.positions, []);
