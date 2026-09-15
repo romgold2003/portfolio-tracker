@@ -39,7 +39,10 @@ import {
 import {
   parseCsvTable, readableMapping, detectFormats, missingFields, readTransactions, layoutKey, tableFromSheets,
 } from '../features/genericCsv.js';
-import { readWorkbook, isZip, isOldExcel } from '../features/xlsx.js';
+import {
+  readWorkbook, isZip, isOldExcel, readZipEntries,
+} from '../features/xlsx.js';
+import { isRiskbookExport } from '../features/genericCsv.js';
 import { importPlan, journalWithoutYear } from '../features/statementLibrary.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
@@ -800,9 +803,14 @@ function renderIbkrPreview() {
 
   const sources = new Set(records.map(sourceOf));
   const kindOf = (source) => (source === 'ibkr' ? 'Interactive Brokers statements' : "another broker's history");
+  // Named with the file each conflicting year came from, so what is in the way is plain.
+  const conflicting = (state.statements ?? [])
+    .filter((r) => sourceOf(r) === plan.replacedSource)
+    .map((r) => (r.source ? `${r.year} (${r.source})` : String(r.year)))
+    .join(', ');
   const mixed = !plan.mixed ? ''
     : plan.mixedWith === 'journal'
-      ? `Your other years are ${kindOf(plan.replacedSource)}, and this file is ${kindOf(plan.replacedSource === 'ibkr' ? 'transactions' : 'ibkr')}. `
+      ? `Your ${conflicting} ${conflicting.includes(',') ? 'are' : 'is'} ${kindOf(plan.replacedSource)}, and this file is ${kindOf(plan.replacedSource === 'ibkr' ? 'transactions' : 'ibkr')}. `
         + 'They cannot be combined into one account, so nothing has been changed. If this file is for a different account, '
         + 'remove the other years first with the × on each year.'
       : 'Interactive Brokers statements and histories from other brokers cannot be imported together. Import the files from one source at a time.';
@@ -904,10 +912,39 @@ export async function readIbkrFile() {
   const chosen = Number(el('ibkrYear')?.value) || null;
   const problems = [];
   csvGroups = [];
+
+  /**
+   * The files to read, with any zip of statements opened first.
+   *
+   * Interactive Brokers sends annual statements as a zip of HTML pages. A zip
+   * that is an Excel workbook is left whole for the workbook reader; any other
+   * zip is replaced by the statement pages and CSVs inside it.
+   */
+  const items = [];
   for (const file of files) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     // A newer choice of files has started: this one is no longer wanted.
     if (generation !== importGeneration) return;
+    if (isZip(bytes)) {
+      const entries = await readZipEntries(bytes).catch(() => null);
+      if (generation !== importGeneration) return;
+      if (entries && !entries.has('xl/workbook.xml')) {
+        const inside = [...entries].filter(([name]) => /\.(html?|csv)$/i.test(name));
+        if (!inside.length) {
+          problems.push([...entries.keys()].some((name) => /\.pdf$/i.test(name))
+            ? `${file.name}: this zip holds only PDF statements. Download the HTML or CSV version of the statement instead.`
+            : `${file.name}: nothing inside this zip can be read.`);
+          continue;
+        }
+        for (const [name, entry] of inside) items.push({ name: `${file.name} › ${name.split('/').pop()}`, bytes: entry });
+        continue;
+      }
+    }
+    items.push({ name: file.name, bytes });
+  }
+
+  for (const file of items) {
+    const { bytes } = file;
     if (isOldExcel(bytes)) {
       problems.push(`${file.name}: an old Excel file (.xls). Open it and save it as .xlsx or CSV, then upload that.`);
       continue;
@@ -938,6 +975,11 @@ export async function readIbkrFile() {
      */
     if (table || !isIbkrStatement(text)) {
       table ??= parseCsvTable(text);
+      if (isRiskbookExport(table.headers)) {
+        problems.push(`${file.name}: this is riskbook's own portfolio export, not a broker's file, so it cannot be read as trades. `
+          + 'To bring back a whole journal, use Import backup with the backup file.');
+        continue;
+      }
       if (table.headers.length < 2 || !table.rows.length) {
         problems.push(`${file.name}: not a statement or a table of transactions that can be read.`);
         continue;

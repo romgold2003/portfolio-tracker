@@ -136,6 +136,17 @@ function sheetRows(xml, shared, isDate, dayOffset) {
   return rows;
 }
 
+/**
+ * Every file inside a zip archive, by name, as bytes.
+ *
+ * For archives that are not workbooks: Interactive Brokers hands out its annual
+ * statements as a zip of HTML pages, and asking someone to unzip it first is a
+ * step the app can take for them.
+ */
+export async function readZipEntries(buffer) {
+  return unzip(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer));
+}
+
 /** Every sheet in a workbook, as { name, rows } with each row an array of cell text. */
 export async function readWorkbook(buffer) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);

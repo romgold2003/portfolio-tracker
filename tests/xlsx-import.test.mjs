@@ -10,9 +10,9 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateRawSync } from 'node:zlib';
 
-import { readWorkbook, isZip, isOldExcel } from '../src/features/xlsx.js';
+import { readWorkbook, isZip, isOldExcel, readZipEntries } from '../src/features/xlsx.js';
 import {
-  tableFromSheets, readableMapping, readTransactions, detectFormats, missingFields,
+  tableFromSheets, readableMapping, readTransactions, detectFormats, missingFields, isRiskbookExport,
 } from '../src/features/genericCsv.js';
 
 /** A zip archive of text files, compressed as Excel does. */
@@ -115,5 +115,33 @@ describe('an Excel workbook', () => {
       ['2025-03-06', 'buy', 'IVV', -249.98],
       ['2025-03-07', 'buy', 'SPY', -249.94],
     ]);
+  });
+});
+
+describe('a zip that is not a workbook', () => {
+  /**
+   * Interactive Brokers sends annual statements as a zip of HTML pages, and a
+   * real one was left unimported because the app only opened zips as Excel.
+   */
+  test('hands back the files inside it', async () => {
+    const archive = zip({
+      'U16279720.2025.html': '<html><body>statement</body></html>',
+      'readme.pdf': '%PDF-1.4',
+    });
+    const entries = await readZipEntries(archive);
+    assert.deepEqual([...entries.keys()].sort(), ['U16279720.2025.html', 'readme.pdf']);
+    assert.equal(new TextDecoder().decode(entries.get('U16279720.2025.html')), '<html><body>statement</body></html>');
+    assert.equal(entries.has('xl/workbook.xml'), false);
+  });
+});
+
+describe("riskbook's own portfolio export", () => {
+  test('is recognised, so it is not read as trades', () => {
+    assert.equal(isRiskbookExport(['Ticker', 'Asset class', 'Direction', 'Status', 'Open date', 'Close date', 'Quantity',
+      'Entry price', 'Current or exit price', 'Cost', 'Market value', 'Unrealised P&L', 'Realised P&L', 'Return %']), true);
+  });
+
+  test('while a broker history is not', () => {
+    assert.equal(isRiskbookExport(['Date', 'Action', 'Symbol', 'Quantity', 'Price', 'Amount', 'Fees', 'Currency']), false);
   });
 });
