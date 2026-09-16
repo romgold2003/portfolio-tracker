@@ -43,7 +43,7 @@ import {
   readWorkbook, isZip, isOldExcel, readZipEntries,
 } from '../features/xlsx.js';
 import { isRiskbookExport } from '../features/genericCsv.js';
-import { importPlan, journalWithoutYear } from '../features/statementLibrary.js';
+import { importPlan, journalWithoutYear, historyGaps } from '../features/statementLibrary.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
@@ -789,6 +789,12 @@ function renderIbkrPreview() {
   if (sourceOf(records[0]) === 'transactions') {
     // The oldest year has nothing before it: the account opened then, with no cash and no shares.
     line(`${years[0]} is taken as the year the account opened, starting from nothing; every later year builds on it.`, 'var(--text2)');
+  }
+  // A file covering only part of its year leaves a hole the chart and returns cannot cross.
+  for (const gap of historyGaps(records)) {
+    line(`${gap.year}: this file covers only ${gap.from} to ${gap.to}, not the whole year. The trades, deposits and daily values `
+      + `${gap.startsLate ? `before ${gap.from}` : `after ${gap.to}`} are missing, so the chart and returns cannot be worked out. `
+      + 'In Interactive Brokers choose the Activity Statement for the full period: Year to date for this year, the whole year for an earlier one.', 'var(--amber)');
   }
   for (const link of chainReport(records)) {
     if (link.brokerChange) {

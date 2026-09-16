@@ -210,6 +210,19 @@ export function periodReturnFromHistory(rows, from, to) {
   let endValue = null;
   let paidIn = 0;
 
+  /**
+   * A window reaching back past where the history begins cannot be measured.
+   *
+   * With a 2026 statement covering only 15 September, the history began that
+   * day already worth $45,193, and "year to date" was measured over a single
+   * day and read 0.00%. When the first day already held money, the days before
+   * it are unknown rather than empty, so there is no figure to give. A history
+   * that starts from nothing — a new account — is the whole window, and is
+   * measured as before.
+   */
+  const first = rows?.[0];
+  if (from && first && first.date > from && first.totalAccountValue > 0) return null;
+
   for (let i = 1; i < (rows?.length ?? 0); i++) {
     const row = rows[i];
     const prev = rows[i - 1];

@@ -2,7 +2,7 @@
 import { state } from '../../core/store.js';
 import { benchmarkKey } from '../../services/benchmark.js';
 import { cloudMode } from '../../core/profiles.js';
-import { chainReport } from '../../features/statementLibrary.js';
+import { chainReport, historyGaps } from '../../features/statementLibrary.js';
 
 const modal = () => document.getElementById('settingsModal');
 
@@ -156,6 +156,13 @@ export function renderStatementYears() {
     box.append(row);
   }
 
+  for (const gap of historyGaps(records)) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:11px;color:var(--amber);margin-top:6px';
+    note.textContent = `${gap.year}: the file covers only ${gap.from} to ${gap.to}. Add the statement for the whole period, `
+      + 'or the chart and returns stay incomplete.';
+    box.append(note);
+  }
   for (const link of chainReport(records).filter((l) => !l.ok)) {
     const note = document.createElement('div');
     note.style.cssText = 'font-size:11px;color:var(--amber);margin-top:6px';

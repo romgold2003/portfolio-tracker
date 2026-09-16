@@ -558,3 +558,28 @@ export function journalWithoutYear(current, year) {
     cashModel: 2,
   };
 }
+
+/**
+ * IBKR years whose file covers only part of the year, where that leaves a hole.
+ *
+ * A year's statement is one window of the account, and the years join into one
+ * history only when each covers its whole year. A daily statement picked for
+ * 2026 — 15 September alone — left 1 January to 14 September with no trades, no
+ * deposits and no daily values: the chart came out flat and every return 0%.
+ *
+ * Flagged: a year that starts after 1 January with an earlier year before it,
+ * and a year that ends before 31 December with a later year after it. The
+ * oldest year may start late — that is when the account opened — and the
+ * newest may end early, since it runs to today.
+ */
+export function historyGaps(records) {
+  const sorted = [...(records ?? [])].sort((a, b) => a.year - b.year);
+  const gaps = [];
+  sorted.forEach((record, i) => {
+    if (sourceOf(record) !== 'ibkr' || !DATE_ONLY.test(record.from ?? '') || !DATE_ONLY.test(record.to ?? '')) return;
+    const startsLate = i > 0 && record.from > `${record.year}-01-01`;
+    const endsEarly = i < sorted.length - 1 && record.to < `${record.year}-12-31`;
+    if (startsLate || endsEarly) gaps.push({ year: record.year, from: record.from, to: record.to, startsLate, endsEarly });
+  });
+  return gaps;
+}

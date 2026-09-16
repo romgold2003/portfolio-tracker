@@ -22,7 +22,7 @@ import {
   yearToDateReturn as measuredYearToDate, asTradedClose, allTimeFromDeposits,
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
-import { allSplits } from '../../features/statementLibrary.js';
+import { allSplits, historyGaps } from '../../features/statementLibrary.js';
 import { onJournalLoaded } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
@@ -608,7 +608,7 @@ function yearToDateReturn(totals) {
   const history = authoritativeHistory();
   if (!history.length) return { ...trades, returnPct: null };
   const measured = measuredYearToDate(trades, history, from, to);
-  return measured ? { ...trades, ...measured } : trades;
+  return measured ? { ...trades, ...measured } : { ...trades, returnPct: null };
 }
 
 /**
@@ -903,7 +903,8 @@ function timeframePerformance(totals) {
     if (trades.method === 'broker') return trades;
     const history = authoritativeHistory();
     if (!history.length) return null;
-    return measuredYearToDate(trades, history, from, to) ?? trades;
+    // Not measurable when the history does not reach back to 1 January: say so rather than guess.
+    return measuredYearToDate(trades, history, from, to);
   }
 
   /**
@@ -914,6 +915,8 @@ function timeframePerformance(totals) {
    * measure below.
    */
   if (ui.timeframe === 'All') {
+    // A year covered only in part is missing its deposits, which the figure would then count as profit.
+    if (historyGaps(state.statements).length) return null;
     const sinceDeposits = allTimeFromDeposits(state.cashFlows, totals.account);
     if (sinceDeposits) return sinceDeposits;
   }
