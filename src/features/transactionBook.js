@@ -69,8 +69,17 @@ export function transactionRecords(transactions, { year = null, source = '' } = 
   });
 }
 
-/** Every transaction replayed in order: lots, profit, cash and the dated events. */
-export function replayTransactions(transactions) {
+/**
+ * Every transaction replayed in order: lots, profit, cash and the dated events.
+ *
+ * `opening`, when given, is what the account already held when these
+ * transactions begin — { cash, holdings: [{ ticker, qty, unit, price, date }] } —
+ * the close of an earlier year read from another broker's file. It is neither
+ * a deposit nor a purchase: it is where this history picks up, so a sale of
+ * those shares is costed against what they cost, not counted as shares from
+ * nowhere.
+ */
+export function replayTransactions(transactions, opening = null) {
   const lots = new Map();
   const runStart = new Map();
   const lastPrice = new Map();
@@ -79,8 +88,14 @@ export function replayTransactions(transactions) {
   const flows = [];
   const events = [];
   const income = { dividends: 0, interest: 0, commissions: 0, tax: 0 };
-  let cash = 0;
-  let lowest = { value: 0, date: null };
+  let cash = Number(opening?.cash) || 0;
+  let lowest = { value: Math.min(0, cash), date: null };
+  for (const held of opening?.holdings ?? []) {
+    if (!held?.ticker || !(held.qty > EMPTY)) continue;
+    lots.set(held.ticker, [{ qty: held.qty, unit: held.unit, date: held.date }]);
+    runStart.set(held.ticker, held.date);
+    if (held.price > 0) lastPrice.set(held.ticker, held.price);
+  }
 
   const heldOf = (ticker) => (lots.get(ticker) ?? []).reduce((s, l) => s + l.qty, 0);
 
@@ -252,9 +267,9 @@ export function transactionSummary(records) {
 }
 
 /** A journal rebuilt from every year of transactions. */
-export function journalFromTransactions(records, existing = {}) {
+export function journalFromTransactions(records, existing = {}, opening = null) {
   const sorted = [...records].sort((a, b) => a.year - b.year);
-  const book = replayTransactions(sorted.flatMap((r) => r.transactions ?? []));
+  const book = replayTransactions(sorted.flatMap((r) => r.transactions ?? []), opening);
   const stamp = Date.now() * 1000;
   let count = 0;
   const nextId = () => { count += 1; return stamp + count; };
@@ -310,9 +325,10 @@ export function journalFromTransactions(records, existing = {}) {
     ledger: {
       from: `${sorted[0].year}-01-01`,
       to: last.to,
-      openingCash: 0,
-      openingHoldings: {},
-      openingMarks: {},
+      // Where the walk starts: nothing, or the close of the year before when it was another broker's.
+      openingCash: Number(opening?.cash) || 0,
+      openingHoldings: Object.fromEntries((opening?.holdings ?? []).filter((h) => h.qty > EMPTY).map((h) => [h.ticker, h.qty])),
+      openingMarks: Object.fromEntries((opening?.holdings ?? []).filter((h) => h.price > 0).map((h) => [h.ticker, h.price])),
       events: book.events.map(({ at, ...rest }) => rest),
       holdings: Object.fromEntries(open.map((p) => [p.ticker, p.qty])),
     },

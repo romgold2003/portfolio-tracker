@@ -123,11 +123,11 @@ describe('another person imported straight over the last one', () => {
     assert.ok(everyTicker().includes('IVV'), 'adding keeps the other person\'s older year');
   });
 
-  test('a CSV added to an IBKR journal is refused, and the IBKR years stay', () => {
+  test('a CSV year added to an IBKR journal joins it, and the IBKR years stay', () => {
     const plan = importPlan([ibkrYear(2024), ibkrYear(2025)], personB());
-    assert.equal(plan.mixed, true);
+    assert.equal(plan.mixed, false);
     assert.deepEqual(plan.replaced, []);
-    assert.deepEqual(plan.records.filter((r) => sourceOf(r) === 'ibkr').map((r) => r.year), [2024, 2025]);
+    assert.deepEqual(plan.records.map((r) => [r.year, sourceOf(r)]), [[2024, 'ibkr'], [2025, 'ibkr'], [2026, 'transactions']]);
   });
 });
 

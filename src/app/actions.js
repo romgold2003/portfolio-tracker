@@ -791,7 +791,9 @@ function renderIbkrPreview() {
     line(`${years[0]} is taken as the year the account opened, starting from nothing; every later year builds on it.`, 'var(--text2)');
   }
   for (const link of chainReport(records)) {
-    if (link.ok && sourceOf(records.find((r) => r.year === link.to)) === 'transactions') {
+    if (link.brokerChange) {
+      line(`${link.from} → ${link.to}: a change of broker, joined into one history.`, 'var(--green)');
+    } else if (link.ok && sourceOf(records.find((r) => r.year === link.to)) === 'transactions') {
       // Nothing to compare in a transaction history, only that no year is missing.
       line(`${link.from} → ${link.to}: consecutive years, none missing.`, 'var(--green)');
     } else if (link.ok) {
@@ -820,7 +822,8 @@ function renderIbkrPreview() {
     line(`Your journal holds ${what} for ${yearsText(plan.replaced)}, which cannot be joined with these files. `
       + 'Adding them replaces those years: the journal becomes this history alone.', 'var(--amber)');
   }
-  if (!mixed && sources.has('transactions')) {
+  // The adding-up is one history's arithmetic; across a change of broker each side is read on its own terms.
+  if (!mixed && sources.size === 1 && sources.has('transactions')) {
     const s = transactionSummary(records);
     line(`How the account adds up: deposits ${moneyText(s.deposits)}, withdrawals ${moneyText(s.withdrawals)}, `
       + `bought ${moneyText(s.bought)}, sold ${moneyText(s.sold)}, dividends and interest ${moneyText(s.income)}, `

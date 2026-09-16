@@ -24,16 +24,18 @@ const bankHistory = () => transactionRecords([
 describe('files from a different source than the journal', () => {
   /**
    * Reported later: adding one year's file removed every other year. A file of
-   * the other kind used to replace the whole journal without being asked. It is
-   * now turned away, and the years already imported stay exactly as they are.
+   * the other kind used to replace the whole journal without being asked. It now
+   * goes into its own year, joined as a change of broker, and the years already
+   * imported stay exactly as they are.
    */
-  test('are refused, and replace nothing', () => {
+  test('go into their own years and leave the others, whatever broker they came from', () => {
     const existing = [ibkrYear(2024), ibkrYear(2025), ibkrYear(2026)];
     const plan = importPlan(existing, bankHistory());
-    assert.equal(plan.mixed, true);
-    assert.equal(plan.mixedWith, 'journal');
+    assert.equal(plan.mixed, false);
     assert.deepEqual(plan.replaced, []);
-    assert.equal(plan.replacedSource, 'ibkr');
+    // The bank history's 2025 and 2026 take those years; 2024 stays the IBKR statement it was.
+    assert.deepEqual(plan.records.map((r) => [r.year, sourceOf(r)]), [[2024, 'ibkr'], [2025, 'transactions'], [2026, 'transactions']]);
+    assert.equal(plan.records[0], existing[0]);
   });
 
   test('replace the journal only when that is explicitly asked for', () => {
@@ -72,7 +74,8 @@ describe('files from the same source as the journal', () => {
   });
 });
 
-test('an IBKR statement and another broker\'s file in one upload still cannot go in together', () => {
+test('an IBKR statement and another broker\'s file in one upload go in together', () => {
   const plan = importPlan([], [ibkrYear(2024), ...bankHistory()]);
-  assert.equal(plan.mixed, true);
+  assert.equal(plan.mixed, false);
+  assert.deepEqual(plan.records.map((r) => r.year), [2024, 2025, 2026]);
 });

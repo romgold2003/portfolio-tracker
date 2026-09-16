@@ -183,12 +183,13 @@ export function chainReport(records) {
     const next = records[i];
     const link = { from: prev.year, to: next.year, ok: true, value: next.navChange?.startNav ?? null };
 
+    /**
+     * A change of broker. The two files state nothing comparable — one a
+     * statement, the other a list of transactions — so there is nothing to
+     * check between them, and the later year carries on from the earlier.
+     */
     if (sourceOf(prev) !== sourceOf(next)) {
-      links.push({
-        ...link,
-        ok: false,
-        reason: 'One is an Interactive Brokers statement and the other a history from another broker, which cannot be joined.',
-      });
+      links.push({ ...link, value: null, brokerChange: true });
       continue;
     }
 
@@ -296,13 +297,81 @@ export function journalFromStatements(records, existing = {}) {
   if (!records?.length) throw new Error('There are no statements to build from.');
   const sorted = [...records].sort((a, b) => a.year - b.year);
 
-  const sources = new Set(sorted.map(sourceOf));
-  if (sources.size > 1) {
-    throw new Error('Interactive Brokers statements and histories from other brokers cannot be combined in one journal. '
-      + 'Import files from one source, or remove the other years first.');
+  // Runs of consecutive years read the same way: IBKR statements, or another broker's history.
+  const segments = [];
+  for (const record of sorted) {
+    const last = segments[segments.length - 1];
+    if (last && sourceOf(last[0]) === sourceOf(record)) last.push(record);
+    else segments.push([record]);
   }
-  if (sources.has('transactions')) return journalFromTransactions(sorted, existing);
+  if (segments.length === 1) {
+    return sourceOf(sorted[0]) === 'transactions'
+      ? journalFromTransactions(sorted, existing)
+      : journalFromIbkr(sorted, existing);
+  }
+  return journalAcrossBrokers(segments, sorted, existing);
+}
 
+/**
+ * One account across a change of broker — Robinhood in 2025, Interactive
+ * Brokers from 2026, say.
+ *
+ * These were refused as impossible to combine, which left anyone who had
+ * switched broker unable to import both. Each run of years is read on its own
+ * terms, and the runs are joined in order:
+ *
+ *   today's positions and cash   the newest run, as for any journal
+ *   closed trades, deposits      every run, since each happened exactly once
+ *   dividends, interest, fees    added up across the runs
+ *   the daily walk               the newest run's, from where that run begins
+ *
+ * An IBKR statement states what it opened with, so it needs nothing from the
+ * run before it. Another broker's history does not, so it starts from what the
+ * run before it closed with — its holdings at their cost and its cash — rather
+ * than from nothing, and a sale of shares carried across is costed against what
+ * they cost rather than read as shares from nowhere.
+ */
+function journalAcrossBrokers(segments, sorted, existing) {
+  const journals = [];
+  for (const segment of segments) {
+    if (sourceOf(segment[0]) === 'ibkr') {
+      journals.push(journalFromIbkr(segment, existing));
+      continue;
+    }
+    const previous = journals[journals.length - 1];
+    const opening = previous ? {
+      cash: previous.cash,
+      holdings: previous.positions
+        .filter((p) => p.status === 'Open' && p.dir !== 'Short' && p.qty > 0)
+        .map((p) => ({ ticker: p.ticker, qty: p.qty, unit: p.entry, price: p.cur, date: p.open ?? `${segment[0].year}-01-01` })),
+    } : null;
+    journals.push(journalFromTransactions(segment, existing, opening));
+  }
+
+  const last = journals[journals.length - 1];
+  const income = {};
+  for (const journal of journals) {
+    for (const [key, value] of Object.entries(journal.income ?? {})) {
+      if (Number.isFinite(value)) income[key] = (income[key] ?? 0) + value;
+    }
+  }
+  const stamp = Date.now() * 1000;
+  const closed = journals.flatMap((j) => j.positions.filter((p) => p.status === 'Closed'));
+  const open = last.positions.filter((p) => p.status === 'Open');
+
+  return {
+    ...last,
+    positions: [...closed, ...open].map((p, i) => ({ ...p, id: stamp + i + 1 })),
+    cashFlows: journals.flatMap((j) => j.cashFlows ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+    income,
+    snapshots: existing.snapshots ?? [],
+    apiKey: existing.apiKey ?? '',
+    statements: sorted,
+  };
+}
+
+/** A journal from consecutive IBKR statement years. */
+function journalFromIbkr(sorted, existing) {
   const latest = sorted[sorted.length - 1];
   const splits = allSplits(sorted);
   const links = chainReport(sorted);
@@ -436,17 +505,12 @@ export function chainedBrokerReturn(records, currentYearPct, currentYear) {
  * could never take another broker's history, whatever was uploaded.
  */
 export function importPlan(existing = [], incoming = [], { replace = false } = {}) {
-  const incomingSources = new Set(incoming.map(sourceOf));
-  if (incomingSources.size > 1) {
-    return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: true, mixedWith: 'batch' };
-  }
   /**
    * Replace, when asked: these files are a different account.
    *
-   * Two people's histories from other brokers are the same kind of file, so
-   * nothing in them says they belong to different people — and adding person
-   * B's 2026 to person A's journal replaced A's 2026 and kept A's 2025, one
-   * account made of two. The person importing knows; this is their answer.
+   * Two people's histories are the same kind of file, so nothing in them says
+   * they belong to different people. The person importing knows; this is their
+   * answer, and it is only ever given explicitly.
    */
   if (replace && existing.length) {
     return {
@@ -457,27 +521,10 @@ export function importPlan(existing = [], incoming = [], { replace = false } = {
     };
   }
   /**
-   * A file from a different kind of source than the years already imported is
-   * refused, and nothing is replaced.
-   *
-   * It used to replace every other year without being asked, on the reasoning
-   * that an IBKR statement and another broker's history must be different
-   * accounts. Adding one year's file then wiped the others, which is the one
-   * thing adding a year must never do. The two kinds cannot be joined into one
-   * account, so the file is turned away and the years stay exactly as they were;
-   * a different account starts by removing those years first.
+   * Otherwise each file goes into its own year and changes no other, whatever
+   * broker it came from. A year from a different broker than its neighbours is
+   * a change of broker, joined into the one history rather than refused.
    */
-  const [source] = incomingSources;
-  const other = existing.filter((r) => sourceOf(r) !== source);
-  if (source && other.length) {
-    return {
-      records: withStatements(existing, incoming),
-      replaced: [],
-      replacedSource: sourceOf(other[0]),
-      mixed: true,
-      mixedWith: 'journal',
-    };
-  }
   return { records: withStatements(existing, incoming), replaced: [], replacedSource: null, mixed: false };
 }
 

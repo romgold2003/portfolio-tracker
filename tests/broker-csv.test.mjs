@@ -395,14 +395,16 @@ describe('years from other brokers alongside the rest', () => {
     assert.deepEqual(chainReport(records).map((l) => l.ok), [true]);
   });
 
-  test('an IBKR statement and another broker cannot be combined in one journal', () => {
+  test('an IBKR statement and another broker join as a change of broker', () => {
     const ibkr = statementRecord({
       periodStart: '2025-01-01', periodEnd: '2025-12-31', positions: [], closed: [], flows: [], navChange: {},
     });
     const other = transactionRecords([tx('2024-05-01', 'deposit', { cash: 1 })]);
     const records = withStatements([], [ibkr, ...other]);
-    assert.throws(() => journalFromStatements(records, {}), /cannot be combined/);
-    assert.match(chainReport(records)[0].reason, /cannot be joined/);
+    assert.doesNotThrow(() => journalFromStatements(records, {}));
+    const [link] = chainReport(records);
+    assert.equal(link.ok, true);
+    assert.equal(link.brokerChange, true);
   });
 
   test('the transactions survive being stored and reloaded', () => {
