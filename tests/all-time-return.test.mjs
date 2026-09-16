@@ -43,3 +43,13 @@ describe('all time from deposits', () => {
     assert.equal(allTimeFromDeposits([{ date: '2025-01-02', amount: 1000 }, { date: '2025-06-02', amount: -1500 }], 800), null);
   });
 });
+
+describe('all time on Interactive Brokers statements', () => {
+  test("is the broker's yearly returns compounded, as its app shows: +51.34% where profit over deposits read +48.13%", async () => {
+    const { chainedBrokerReturn, statementRecord } = await import('../src/features/statementLibrary.js');
+    const year = (y, twr, from = `${y}-01-01`, to = `${y}-12-31`) => ({ ...statementRecord({ periodStart: from, periodEnd: to, positions: [], closed: [], flows: [], navChange: {} }), twr });
+    const records = [year(2024, -2.43), year(2025, 20.36), year(2026, 28.874468018, '2026-01-01', '2026-09-15')];
+    const pct = chainedBrokerReturn(records, 28.874468018, 2026);
+    assert.ok(Math.abs(pct - 51.34) < 0.01, `got ${pct}`);
+  });
+});

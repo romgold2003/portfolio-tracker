@@ -868,6 +868,21 @@ function windowStart() {
  * statements mean a reliable one is seconds away, and a wrong one on screen in
  * the meantime is exactly the complaint.
  */
+/** All time from the broker's yearly returns chained to today, or null when any year is not an IBKR statement. */
+function allTimeFromBroker(totals) {
+  const year = new Date().getFullYear();
+  const thisYear = accountPerformance({
+    positions: state.positions,
+    account: totals.account,
+    from: `${year}-01-01`,
+    to: todayStr(),
+    flows: state.cashFlows,
+    openingNav: state.openingNav,
+    startPrices,
+  });
+  return chainedBrokerReturn(state.statements, thisYear.method === 'broker' ? thisYear.returnPct : null, year);
+}
+
 function timeframePerformance(totals) {
   const from = windowStart();
   /**
@@ -921,6 +936,14 @@ function timeframePerformance(totals) {
     // A year covered only in part is missing its deposits, which the figure would then count as profit.
     if (historyGaps(state.statements).length) return null;
     const sinceDeposits = allTimeFromDeposits(state.cashFlows, totals.account);
+    /**
+     * Every year an IBKR statement: the broker's yearly returns compounded, as
+     * its own app shows since inception. Profit over deposits read +48.1% where
+     * IBKR read +51.3%, because this year's deposits counted as invested from
+     * the first day. The dollar profit stays account less deposits.
+     */
+    const brokerAllTime = allTimeFromBroker(totals);
+    if (brokerAllTime != null) return { ...(sinceDeposits ?? {}), returnPct: brokerAllTime, method: 'broker' };
     if (sinceDeposits) return sinceDeposits;
   }
 
@@ -928,25 +951,6 @@ function timeframePerformance(totals) {
   if (!history.length) return null;
   const measured = periodReturnFromHistory(history, from, to);
   if (!measured) return fromTrades();
-
-  if (ui.timeframe === 'All') {
-    const year = new Date().getFullYear();
-    const thisYear = accountPerformance({
-      positions: state.positions,
-      account: totals.account,
-      from: `${year}-01-01`,
-      to,
-      flows: state.cashFlows,
-      openingNav: state.openingNav,
-      startPrices,
-    });
-    const chained = chainedBrokerReturn(
-      state.statements,
-      thisYear.method === 'broker' ? thisYear.returnPct : null,
-      year,
-    );
-    if (chained != null) return { ...measured, returnPct: chained, method: 'broker' };
-  }
 
   return { ...measured, method: 'history' };
 }
