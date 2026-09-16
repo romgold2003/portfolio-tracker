@@ -6,10 +6,13 @@
  * own columns. So parsing means grouping rows by their first field and reading
  * each group against its own header.
  *
- * Section and column names come out in the account's language. Both English and
- * French are recognised, because that is what this was built against; a
- * statement in a third language will parse to nothing rather than to something
- * wrong, which is the right way round.
+ * Section and column names come out in the account's language. English and
+ * French are recognised by name. Any other language is read by shape: IBKR
+ * keeps the same sections with the same columns in the same order in every
+ * language, and some markers are never translated — DataDiscriminator,
+ * Summary, Order, ISO dates, ISIN codes — so a section whose name is unknown is
+ * identified by what it holds, and its columns are given their English names
+ * by position.
  *
  * What it takes from the file:
  *
@@ -78,7 +81,7 @@ const SECTIONS = {
   /** Splits, which change a share count without a trade. */
   corporateActions: [/^corporate actions$/i, /^opérations sur titres$/i],
   statement: [/^statement$/i],
-  account: [/^account information$/i, /^informations sur le compte$/i],
+  account: [/^account information$/i, /^informations sur le compte$/i, /^informations du compte$/i],
 };
 
 function sectionOf(name) {
@@ -103,24 +106,146 @@ function columnIndex(header, ...names) {
  * shifting every column after them.
  */
 function groupSections(text) {
-  const groups = new Map();
+  // Every section in the file, by its own name and in order.
+  const raw = new Map();
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
     const fields = parseLine(line);
-    const key = sectionOf(fields[0]);
-    if (!key) continue;
-
-    const kind = clean(fields[1]).toLowerCase();
-    if (!groups.has(key)) groups.set(key, { header: null, rows: [] });
-    const group = groups.get(key);
-
+    const name = clean(fields[0] ?? '');
+    if (!name) continue;
+    if (!raw.has(name)) raw.set(name, { header: null, rows: [] });
+    const section = raw.get(name);
+    const kind = clean(fields[1] ?? '').toLowerCase();
     if (kind === 'header') {
-      if (!group.header) group.header = fields.slice(2);
+      if (!section.header) section.header = fields.slice(2);
     } else if (kind === 'data') {
-      group.rows.push(fields.slice(2));
+      section.rows.push(fields.slice(2));
     }
   }
+
+  // Named sections first, merged when two spellings name the same one.
+  const groups = new Map();
+  const named = new Set();
+  for (const [name, section] of raw) {
+    const key = sectionOf(name);
+    if (!key) continue;
+    named.add(name);
+    if (!groups.has(key)) groups.set(key, { header: section.header, rows: [...section.rows] });
+    else {
+      const group = groups.get(key);
+      if (!group.header) group.header = section.header;
+      group.rows.push(...section.rows);
+    }
+  }
+
+  // Then any section in a language not named above, by its shape.
+  for (const [name, section] of raw) {
+    if (named.has(name)) continue;
+    const key = shapeOf(section);
+    if (!key || groups.has(key)) continue;
+    const english = CANONICAL[key]?.[section.header?.length];
+    groups.set(key, { header: english ?? section.header, rows: section.rows });
+  }
   return groups;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_TIME = /^\d{4}-\d{2}-\d{2},\s*\d{1,2}:\d{2}/;
+const ISIN = /\([A-Z]{2}[A-Z0-9]{9}\d\)/;
+const isNumber = (v) => /^-?\d[\d,]*(\.\d+)?$|^-?\.\d+$/.test(clean(String(v ?? '')));
+
+/**
+ * The English columns of each section, by how many there are.
+ *
+ * IBKR writes the same columns in the same order in every language, so a
+ * section recognised by its shape is given these names by position and read by
+ * the same code as an English statement. Checked against real English and
+ * French statements, column for column.
+ */
+const CANONICAL = {
+  positions: {
+    12: ['DataDiscriminator', 'Asset Category', 'Currency', 'Symbol', 'Quantity', 'Mult', 'Cost Price',
+      'Cost Basis', 'Close Price', 'Value', 'Unrealized P/L', 'Code'],
+  },
+  trades: {
+    15: ['DataDiscriminator', 'Asset Category', 'Currency', 'Account', 'Symbol', 'Date/Time', 'Quantity',
+      'T. Price', 'C. Price', 'Proceeds', 'Comm/Fee', 'Basis', 'Realized P/L', 'MTM P/L', 'Code'],
+    14: ['DataDiscriminator', 'Asset Category', 'Currency', 'Symbol', 'Date/Time', 'Quantity',
+      'T. Price', 'C. Price', 'Proceeds', 'Comm/Fee', 'Basis', 'Realized P/L', 'MTM P/L', 'Code'],
+  },
+  nav: { 6: ['Asset Class', 'Prior Total', 'Current Long', 'Current Short', 'Current Total', 'Change'] },
+  mtm: {
+    12: ['Asset Category', 'Symbol', 'Prior Quantity', 'Current Quantity', 'Prior Price', 'Current Price',
+      'Mark-to-Market P/L Position', 'Mark-to-Market P/L Transaction', 'Mark-to-Market P/L Commissions',
+      'Mark-to-Market P/L Other', 'Mark-to-Market P/L Total', 'Code'],
+  },
+  navChange: { 2: ['Field Name', 'Field Value'] },
+  flows: {
+    5: ['Currency', 'Account', 'Settle Date', 'Description', 'Amount'],
+    4: ['Currency', 'Settle Date', 'Description', 'Amount'],
+  },
+  dividends: {
+    5: ['Currency', 'Account', 'Date', 'Description', 'Amount'],
+    4: ['Currency', 'Date', 'Description', 'Amount'],
+  },
+  interest: {
+    5: ['Currency', 'Account', 'Date', 'Description', 'Amount'],
+    4: ['Currency', 'Date', 'Description', 'Amount'],
+  },
+  tax: {
+    6: ['Currency', 'Account', 'Date', 'Description', 'Amount', 'Code'],
+    5: ['Currency', 'Date', 'Description', 'Amount', 'Code'],
+  },
+  transfers: {
+    15: ['Asset Category', 'Currency', 'Account', 'Symbol', 'Date', 'Type', 'Direction', 'Xfer Company',
+      'Xfer Account', 'Qty', 'Xfer Price', 'Market Value', 'Realized P/L', 'Cash Amount', 'Code'],
+  },
+};
+
+/**
+ * Which section this is, from what it holds rather than what it is called.
+ *
+ * Only for sections whose name is in a language not listed above. Each test
+ * leans on what IBKR never translates:
+ *
+ *   positions       DataDiscriminator, and no trade times
+ *   trades          DataDiscriminator, with trade date-times
+ *   net asset value six columns, a label and five figures
+ *   mark-to-market  twelve columns, a symbol, then quantities and prices
+ *   change in NAV   two columns, a label and a figure on every line
+ *   dividends       dated amounts whose descriptions carry an ISIN
+ *   withholding tax the same with a code column after the amount
+ *   interest        dated amounts described by month, as in "Jul-2026"
+ *   deposits        the remaining dated amounts, in a currency
+ *   transfers       fifteen columns with a date and a symbol
+ */
+function shapeOf(section) {
+  const h = section.header ?? [];
+  const rows = section.rows.filter((r) => r.some((f) => clean(f ?? '')));
+  if (!h.length || !rows.length) return null;
+
+  if (clean(h[0]) === 'DataDiscriminator') {
+    const timed = rows.some((r) => r.some((f) => DATE_TIME.test(clean(f ?? ''))));
+    if (timed && (h.length === 14 || h.length === 15)) return 'trades';
+    if (!timed && h.length === 12) return 'positions';
+    return null;
+  }
+  if (h.length === 6 && rows.some((r) => r.length >= 6 && [1, 2, 3, 4, 5].every((i) => isNumber(r[i])))) return 'nav';
+  if (h.length === 12 && rows.some((r) => clean(r[1] ?? '') && isNumber(r[2]) && isNumber(r[4]))) return 'mtm';
+  if (h.length === 2 && rows.length >= 2 && rows.every((r) => isNumber(r[1]))) return 'navChange';
+
+  const dateAt = [1, 2].find((i) => rows.some((r) => ISO_DATE.test(clean(r[i] ?? ''))));
+  if (dateAt != null && rows.some((r) => /^[A-Z]{3}$/.test(clean(r[0] ?? '')))) {
+    const after = h.length - dateAt;
+    const descriptions = rows.map((r) => clean(r[dateAt + 1] ?? ''));
+    const withIsin = descriptions.some((d) => ISIN.test(d));
+    if (after === 4 && withIsin) return 'tax';
+    if (after === 3 && withIsin) return 'dividends';
+    if (after === 3 && descriptions.some((d) => /\p{L}{3,}\.?-\d{4}\b/u.test(d))) return 'interest';
+    if (after === 3) return 'flows';
+  }
+  if (h.length === 15 && rows.some((r) => ISO_DATE.test(clean(r[4] ?? '')) && clean(r[3] ?? ''))) return 'transfers';
+  return null;
 }
 
 /** Rows that are subtotals rather than records. */
@@ -156,7 +281,16 @@ function readOpeningHoldings(group) {
   for (const r of group.rows) {
     if (isTotalRow(r)) continue;
     const category = iClass >= 0 ? clean(r[iClass]) : '';
-    if (!/^(stocks?|actions|equity|equities)$/i.test(category)) continue;
+    /**
+     * Holdings, not the cash line. The Forex row is the cash balance under a
+     * currency's name; it is told apart by that shape rather than by the word
+     * "Stocks", which is only English. Options and futures stay out as before.
+     */
+    const symbol = clean(r[iSymbol] ?? '');
+    const cashLine = /^(forex|fx|devises?)$/i.test(category)
+      || (/^[A-Z]{3}$/.test(symbol) && iPrice >= 0 && num(r[iPrice]) === 1);
+    const notShares = /^(options?|futures?|bonds?|warrants?|cfds?)$/i.test(category);
+    if (cashLine || notShares) continue;
     const ticker = clean(r[iSymbol]).replace(/\s+/g, '.');
     const qty = num(r[iQty]);
     if (!ticker || Math.abs(qty) < 1e-9) continue;
@@ -391,7 +525,7 @@ function readNavCash(group) {
   const iClass = 0;
   const iCurrent = columnIndex(group.header, 'Current Total', 'Total actuel');
   if (iCurrent < 0) return null;
-  const row = group.rows.find((r) => /^(cash|trésorerie)$/i.test(clean(r[iClass])));
+  const row = navCashRow(group, iClass);
   return row ? num(row[iCurrent]) : null;
 }
 
@@ -443,8 +577,17 @@ function readOpeningCash(group) {
   if (!group?.header) return null;
   const iPrior = columnIndex(group.header, 'Prior Total', 'Total précédent');
   if (iPrior < 0) return null;
-  const row = group.rows.find((r) => /^(cash|trésorerie)$/i.test(clean(r[0])));
+  const row = navCashRow(group, 0);
   return row ? num(row[iPrior]) : null;
+}
+
+/**
+ * The cash line of net asset value: by name where the language is known, and
+ * otherwise the first line of figures, since IBKR always lists cash first.
+ */
+function navCashRow(group, iClass) {
+  return group.rows.find((r) => /^(cash|trésorerie)$/i.test(clean(r[iClass] ?? '')))
+    ?? group.rows.find((r) => r.length >= 6 && [1, 2, 3, 4, 5].every((i) => isNumber(r[i])));
 }
 
 /** The "Change in NAV" block is a list of named values rather than a table. */
@@ -467,6 +610,10 @@ function readNavChange(group) {
       if (patterns.some((p) => p.test(label))) out[key] = num(r[1]);
     }
   }
+  // In a language not named above: IBKR opens the list with the starting value and closes it with the ending one.
+  const figures = group.rows.filter((r) => isNumber(r[1]));
+  if (out.startNav == null && figures.length >= 2) out.startNav = num(figures[0][1]);
+  if (out.endNav == null && figures.length >= 2) out.endNav = num(figures[figures.length - 1][1]);
   return out;
 }
 
@@ -510,20 +657,45 @@ function readFlows(group) {
  * computed from it is conservative rather than inflated.
  */
 const MONTH_NAMES = [
-  ['january', 'janvier'], ['february', 'février', 'fevrier'], ['march', 'mars'],
-  ['april', 'avril'], ['may', 'mai'], ['june', 'juin'], ['july', 'juillet'],
-  ['august', 'août', 'aout'], ['september', 'septembre'], ['october', 'octobre'],
-  ['november', 'novembre'], ['december', 'décembre', 'decembre'],
+  ['january', 'janvier', 'januar', 'enero', 'gennaio', 'janeiro', 'januari', 'январь', 'января', 'styczeń', 'stycznia', 'ocak', 'tammikuu', 'tammikuuta'],
+  ['february', 'février', 'februar', 'febrero', 'febbraio', 'fevereiro', 'februari', 'февраль', 'февраля', 'luty', 'lutego', 'şubat', 'helmikuu', 'helmikuuta'],
+  ['march', 'mars', 'märz', 'maerz', 'marzo', 'março', 'maart', 'март', 'марта', 'marzec', 'marca', 'mart', 'maaliskuu', 'maaliskuuta'],
+  ['april', 'avril', 'abril', 'aprile', 'апрель', 'апреля', 'kwiecień', 'kwietnia', 'nisan', 'huhtikuu', 'huhtikuuta'],
+  ['may', 'mai', 'mayo', 'maggio', 'maio', 'mei', 'май', 'мая', 'maj', 'maja', 'mayıs', 'toukokuu', 'toukokuuta'],
+  ['june', 'juin', 'juni', 'junio', 'giugno', 'junho', 'июнь', 'июня', 'czerwiec', 'czerwca', 'haziran', 'kesäkuu', 'kesäkuuta'],
+  ['july', 'juillet', 'juli', 'julio', 'luglio', 'julho', 'июль', 'июля', 'lipiec', 'lipca', 'temmuz', 'heinäkuu', 'heinäkuuta'],
+  ['august', 'août', 'agosto', 'augustus', 'август', 'августа', 'sierpień', 'sierpnia', 'ağustos', 'elokuu', 'elokuuta'],
+  ['september', 'septembre', 'septiembre', 'settembre', 'setembro', 'сентябрь', 'сентября', 'wrzesień', 'września', 'eylül', 'syyskuu', 'syyskuuta'],
+  ['october', 'octobre', 'oktober', 'octubre', 'ottobre', 'outubro', 'октябрь', 'октября', 'październik', 'października', 'ekim', 'lokakuu', 'lokakuuta'],
+  ['november', 'novembre', 'noviembre', 'novembro', 'ноябрь', 'ноября', 'listopad', 'listopada', 'kasım', 'marraskuu', 'marraskuuta'],
+  ['december', 'décembre', 'dezember', 'diciembre', 'dicembre', 'dezembro', 'декабрь', 'декабря', 'grudzień', 'grudnia', 'aralık', 'joulukuu', 'joulukuuta'],
 ];
 
-/** "Août 28, 2026" as 2026-08-28, or null if the month is not one we know. */
+/** Month names folded for comparison: lower case, accents and a trailing full stop dropped. */
+const foldMonth = (s) => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\.$/, '');
+const MONTHS = new Map(MONTH_NAMES.flatMap((names, i) => names.map((name) => [foldMonth(name), i + 1])));
+
+/**
+ * A written date as YYYY-MM-DD, or null.
+ *
+ * "Août 28, 2026" and "September 15, 2026" as IBKR writes them; "15 de
+ * septiembre de 2026" and "15. September 2026" with the day first;
+ * "2026年9月15日" and "2026년 9월 15일" with no month name at all.
+ */
 function readWrittenDate(text) {
-  const match = /([\p{L}]+)\s+(\d{1,2}),?\s+(\d{4})/u.exec(text);
-  if (!match) return null;
-  const month = MONTH_NAMES.findIndex((names) => names.includes(match[1].toLowerCase()));
-  if (month < 0) return null;
+  const t = String(text ?? '');
   const pad = (n) => String(n).padStart(2, '0');
-  return `${match[3]}-${pad(month + 1)}-${pad(Number(match[2]))}`;
+  const valid = (y, m, d) => (m >= 1 && m <= 12 && d >= 1 && d <= 31 ? `${y}-${pad(m)}-${pad(Number(d))}` : null);
+
+  let match = /(\d{4})\s*[年년./-]\s*(\d{1,2})\s*[月월./-]\s*(\d{1,2})/.exec(t);
+  if (match) return valid(match[1], Number(match[2]), Number(match[3]));
+
+  match = /([\p{L}]+)\.?\s+(\d{1,2}),?\s+(\d{4})/u.exec(t);
+  if (match && MONTHS.has(foldMonth(match[1]))) return valid(match[3], MONTHS.get(foldMonth(match[1])), match[2]);
+
+  match = /(\d{1,2})\.?\s+(?:de\s+)?([\p{L}]+)\.?,?\s+(?:de\s+)?(\d{4})/u.exec(t);
+  if (match && MONTHS.has(foldMonth(match[2]))) return valid(match[3], MONTHS.get(foldMonth(match[2])), match[1]);
+  return null;
 }
 
 /**
@@ -546,11 +718,25 @@ function readPeriod(groups, fallbackDates) {
   return { from, to };
 }
 
+/**
+ * The dated amounts added up, for a section whose total line is labelled in a
+ * language not read by name. Only a section given English columns by its shape
+ * has them, so a named section reads exactly as before.
+ */
+function sumOfDated(group) {
+  const iDate = columnIndex(group.header, 'Date', 'Settle Date');
+  const iAmount = columnIndex(group.header, 'Amount');
+  if (iDate < 0 || iAmount < 0) return 0;
+  return group.rows
+    .filter((r) => ISO_DATE.test(clean(r[iDate] ?? '').split(',')[0]))
+    .reduce((sum, r) => sum + num(r[iAmount]), 0);
+}
+
 /** Totals from the simple income sections. */
 function readTotal(group) {
   if (!group?.header) return 0;
   const row = group.rows.find((r) => isTotalRow(r));
-  if (!row) return 0;
+  if (!row) return sumOfDated(group);
   // The amount is the last numeric field on the total line.
   for (let i = row.length - 1; i >= 0; i--) {
     const v = clean(row[i]);

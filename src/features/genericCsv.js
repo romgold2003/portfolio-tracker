@@ -137,35 +137,35 @@ export function tableFromRows(input) {
 export const FIELDS = [
   {
     key: 'date', label: 'Date', required: true,
-    hints: ['trade date', 'activity date', 'transaction date', 'execution date', 'date/time', 'datetime', 'date', 'time', 'run date', 'process date', 'settlement date', 'datum', 'fecha', 'data', 'תאריך', 'תאריך ערך', 'handelstag', 'buchungstag', 'data operazione', 'data da operação'],
+    hints: ['trade date', 'activity date', 'transaction date', 'execution date', 'date/time', 'datetime', 'date', 'time', 'run date', 'process date', 'settlement date', 'datum', 'fecha', 'data', 'תאריך', 'תאריך ערך', 'handelstag', 'buchungstag', 'data operazione', 'data da operação', 'tarih', 'дата', '日付', '約定日', '取引日', '日期', '交易日期', '成交日期', 'dato', 'päivämäärä'],
   },
   {
     key: 'ticker', label: 'Ticker / symbol', required: true,
-    hints: ['symbol', 'ticker', 'instrument', 'security', 'stock', 'asset', 'code', 'product', 'titre', 'valeur', 'wertpapier', 'name', 'שם הנייר', 'נייר', 'סימול', 'símbolo', 'simbolo', 'titolo', 'ativo'],
+    hints: ['symbol', 'ticker', 'instrument', 'security', 'stock', 'asset', 'code', 'product', 'titre', 'valeur', 'wertpapier', 'name', 'שם הנייר', 'נייר', 'סימול', 'símbolo', 'simbolo', 'titolo', 'ativo', 'sembol', 'тикер', 'инструмент', '銘柄', '銘柄コード', '代码', '证券代码', '股票代码', 'walor', 'kod papieru'],
   },
   {
     key: 'action', label: 'Buy / sell / type',
-    hints: ['action', 'side', 'buy/sell', 'transaction type', 'trans code', 'type', 'activity', 'direction', 'operation', 'order type', 'sens', 'typ', 'סוג פעולה', 'פעולה', 'סוג', 'tipo', 'operazione', 'transaktionstyp', 'buchungsart'],
+    hints: ['action', 'side', 'buy/sell', 'transaction type', 'trans code', 'type', 'activity', 'direction', 'operation', 'order type', 'sens', 'typ', 'סוג פעולה', 'פעולה', 'סוג', 'tipo', 'operazione', 'transaktionstyp', 'buchungsart', 'typ transakcji', 'rodzaj', 'işlem türü', 'işlem', 'операция', 'тип операции', '取引', '売買区分', '取引区分', '操作', '买卖方向', '交易类型', 'transaksjonstype', 'tapahtuma'],
   },
   {
     key: 'quantity', label: 'Quantity',
-    hints: ['quantity', 'qty', 'no. of shares', 'number of shares', 'shares', 'units', 'quantité', 'quantite', 'anzahl', 'stück', 'aantal', 'cantidad', 'volume', 'כמות', 'quantità', 'quantidade', 'menge'],
+    hints: ['quantity', 'qty', 'no. of shares', 'number of shares', 'shares', 'units', 'quantité', 'quantite', 'anzahl', 'stück', 'aantal', 'cantidad', 'volume', 'כמות', 'quantità', 'quantidade', 'menge', 'ilość', 'liczba', 'adet', 'miktar', 'количество', '数量', '株数', '股数', 'antall', 'antal', 'määrä', 'počet'],
   },
   {
     key: 'price', label: 'Price per share',
-    hints: ['price per share', 'execution price', 'trade price', 'unit price', 'price', 'cours', 'kurs', 'koers', 'precio', 'prix', 'מחיר ממוצע', 'מחיר', 'שער', 'prezzo', 'preço', 'preco'],
+    hints: ['price per share', 'execution price', 'trade price', 'unit price', 'price', 'cours', 'kurs', 'koers', 'precio', 'prix', 'מחיר ממוצע', 'מחיר', 'שער', 'prezzo', 'preço', 'preco', 'cena', 'fiyat', 'цена', '価格', '単価', '约定价格', '成交价', '成交价格', '价格', 'pris', 'hinta'],
   },
   {
     key: 'amount', label: 'Total amount',
-    hints: ['net amount', 'total amount', 'amount', 'total', 'net', 'value', 'proceeds', 'montant', 'betrag', 'waarde', 'totaal', 'importe', 'סכום הפעולה', 'סכום', 'תמורה', 'importo', 'controvalore', 'valor', 'montante'],
+    hints: ['net amount', 'total amount', 'amount', 'total', 'net', 'value', 'proceeds', 'montant', 'betrag', 'waarde', 'totaal', 'importe', 'סכום הפעולה', 'סכום', 'תמורה', 'importo', 'controvalore', 'valor', 'montante', 'kwota', 'wartość', 'tutar', 'сумма', '金額', '受渡金額', '約定金額', '金额', '成交金额', 'beløp', 'belopp', 'beløb', 'summa', 'částka'],
   },
   {
     key: 'fees', label: 'Fees / commission',
-    hints: ['commission', 'commissions', 'fees', 'fee', 'charges', 'costs', 'transactiekosten', 'kosten', 'frais', 'gebühren', 'gebuhren', 'comisión', 'עמלה', 'עמלות', 'commissione', 'commissioni', 'comissão'],
+    hints: ['commission', 'commissions', 'fees', 'fee', 'charges', 'costs', 'transactiekosten', 'kosten', 'frais', 'gebühren', 'gebuhren', 'comisión', 'עמלה', 'עמלות', 'commissione', 'commissioni', 'comissão', 'prowizja', 'komisyon', 'комиссия', '手数料', '手续费', 'kurtage', 'avgift', 'gebyr', 'palkkio', 'poplatek'],
   },
   {
     key: 'currency', label: 'Currency',
-    hints: ['currency', 'ccy', 'devise', 'währung', 'waehrung', 'moneda', 'מטבע', 'valuta', 'moeda', 'divisa'],
+    hints: ['currency', 'ccy', 'devise', 'währung', 'waehrung', 'moneda', 'מטבע', 'valuta', 'moeda', 'divisa', 'waluta', 'para birimi', 'валюта', '通貨', '币种', '货币', 'měna'],
   },
   {
     /**
@@ -174,7 +174,7 @@ export const FIELDS = [
      * only record of the cash that really moved.
      */
     key: 'balance', label: 'Cash balance',
-    hints: ['cash balance', 'running balance', 'balance', 'יתרת מזומן', 'יתרה', 'saldo', 'solde', 'kontostand'],
+    hints: ['cash balance', 'running balance', 'balance', 'יתרת מזומן', 'יתרה', 'saldo', 'solde', 'kontostand', 'bakiye', 'остаток', '残高', '余额'],
   },
   {
     /**
@@ -183,7 +183,7 @@ export const FIELDS = [
      * positive and say "Transfer to bank" or "Incoming wire" in words.
      */
     key: 'description', label: 'Description',
-    hints: ['description', 'details', 'narrative', 'memo', 'comment', 'libellé', 'libelle', 'omschrijving', 'beschreibung', 'descripción', 'תיאור', 'פרטים', 'descrizione', 'descrição'],
+    hints: ['description', 'details', 'narrative', 'memo', 'comment', 'libellé', 'libelle', 'omschrijving', 'beschreibung', 'descripción', 'תיאור', 'פרטים', 'descrizione', 'descrição', 'opis', 'açıklama', 'описание', '摘要', '备注', '说明', 'beskrivelse', 'beskrivning', 'kuvaus'],
   },
 ];
 
@@ -447,14 +447,14 @@ export function classifyAction(text) {
   // A dividend spent on shares: a purchase when it carries a quantity, which is
   // decided where the quantity is known.
   if (/reinvest|\bdrip\b/.test(t)) return 'reinvest';
-  if (/dividend|dividende|dividendo|דיבידנד|\bcdiv\b|\bdiv\b|distribution|ausschüttung/.test(t)) return 'dividend';
-  if (/interest|intérêt|interet|\bzins|\bint\b|ריבית|interessi|juros|intereses/.test(t)) return 'interest';
-  if (/withdraw|retrait|auszahlung|\bwdl\b|retiro|משיכה|prelievo|levantamento|saque/.test(t)) return 'withdrawal';
-  if (/deposit|dépôt|depot|depósito|deposito|einzahlung|funding|top.?up|\bdep\b|הפקדה|versamento|aporte/.test(t)) return 'deposit';
-  if (/\bfee|commission|frais|gebühr|gebuhr|withholding|\btax|stamp duty|charge|עמלה|עמלות|\sמס\s|דמי |commission|comissão|comisión|steuer|impost/.test(t)) return 'fee';
-  if (/\bsell|\bsold\b|\bsld\b|verkauf|vente|venta|venda|vendita|מכירה|\bstc\b|^\s*s\s*$/.test(t)) return 'sell';
-  if (/\bbuy|\bbought\b|\bbot\b|kauf|achat|compra|acquisto|קנייה|קניה|purchase|\bbto\b|^\s*b\s*$/.test(t)) return 'buy';
-  if (/transfer|journal|\bach\b|wire|virement|überweisung|העברה|bonifico|transferência/.test(t)) return 'transfer';
+  if (/dividend|dividende|dividendo|דיבידנד|\bcdiv\b|\bdiv\b|distribution|ausschüttung|dywidend|temettü|дивиденд|配当|股息|红利|紅利|utbytte|utdelning|udbytte|osinko/.test(t)) return 'dividend';
+  if (/interest|intérêt|interet|\bzins|\bint\b|ריבית|interessi|juros|intereses|odsetki|faiz|процент|利息|ränta|korko/.test(t)) return 'interest';
+  if (/withdraw|retrait|auszahlung|\bwdl\b|retiro|משיכה|prelievo|levantamento|saque|wypłat|para çekme|вывод|снятие|出金|提取|取出|uttak|uttag|udbetaling|nosto|výběr/.test(t)) return 'withdrawal';
+  if (/deposit|dépôt|depot|depósito|deposito|einzahlung|funding|top.?up|\bdep\b|הפקדה|versamento|aporte|wpłat|para yatırma|пополнение|зачисление|入金|存入|innskudd|insättning|indbetaling|talletus|vklad/.test(t)) return 'deposit';
+  if (/\bfee|commission|frais|gebühr|gebuhr|withholding|\btax|stamp duty|charge|עמלה|עמלות|\sמס\s|דמי |commission|comissão|comisión|steuer|impost|prowizj|opłat|podat|komisyon|vergi|комисси|налог|手数料|手续费|手續費|税|avgift|gebyr|kurtage|skatt|palkkio|poplatek/.test(t)) return 'fee';
+  if (/\bsell|\bsold\b|\bsld\b|verkauf|vente|venta|venda|vendita|מכירה|\bstc\b|^\s*s\s*$|sprzeda|satış|продаж|売|卖|賣|salg|sälj|myynti|prodej/.test(t)) return 'sell';
+  if (/\bbuy|\bbought\b|\bbot\b|kauf|achat|compra|acquisto|קנייה|קניה|purchase|\bbto\b|^\s*b\s*$|kupn|zakup|alış|покупк|купля|買|买|kjøp|köp|køb|osto|nákup/.test(t)) return 'buy';
+  if (/transfer|journal|\bach\b|wire|virement|überweisung|העברה|bonifico|transferência|przelew|перевод|振替|转账|overføring|överföring|siirto|převod/.test(t)) return 'transfer';
   return null;
 }
 
@@ -624,7 +624,7 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
      * brokers settle capital-gains tax monthly and credit it back after a
      * losing month; forcing every "tax" row negative charged those twice.
      */
-    const refund = kind === 'fee' && /refund|rebate|reversal|credit|reclaim|זיכוי|rimborso|reembolso|erstattung|remboursement/i.test(words);
+    const refund = kind === 'fee' && /refund|rebate|reversal|credit|reclaim|זיכוי|rimborso|reembolso|erstattung|remboursement|zwrot|iade|возврат|返金|退款|退税|refusjon|återbetalning|palautus/i.test(words);
     const cash = refund ? Math.abs(value)
       : kind === 'fee' || kind === 'withdrawal' ? -Math.abs(value)
       : kind === 'deposit' ? Math.abs(value)
