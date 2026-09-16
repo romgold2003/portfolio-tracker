@@ -583,3 +583,17 @@ export function historyGaps(records) {
   });
   return gaps;
 }
+
+/**
+ * Whether a window from..to overlaps a stretch of a year its file leaves out.
+ *
+ * With 2026 read from a one-day statement, a one-month window ran over months
+ * with no trades and no values and read -0.03%: flat, not measured.
+ */
+export function gapInWindow(gaps, from, to) {
+  return (gaps ?? []).some((gap) => {
+    const missingFrom = gap.startsLate ? `${gap.year}-01-01` : gap.to;
+    const missingTo = gap.startsLate ? gap.from : `${gap.year}-12-31`;
+    return (!from || from < missingTo) && (!to || to > missingFrom);
+  });
+}

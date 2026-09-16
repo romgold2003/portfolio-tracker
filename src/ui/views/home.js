@@ -22,7 +22,7 @@ import {
   yearToDateReturn as measuredYearToDate, asTradedClose, allTimeFromDeposits,
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
-import { allSplits, historyGaps } from '../../features/statementLibrary.js';
+import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
 import { onJournalLoaded } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
@@ -890,6 +890,9 @@ function timeframePerformance(totals) {
   });
 
   if (!state.ledger?.events?.length) return fromTrades();
+
+  // A window over the missing part of a year has no trades or values there: no figure rather than a wrong one.
+  if (gapInWindow(historyGaps(state.statements), from, to)) return null;
 
   /**
    * Year to date keeps the broker's own chained figure when a statement gave

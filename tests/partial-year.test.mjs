@@ -65,3 +65,20 @@ describe('a window reaching back past where the history begins', () => {
     assert.ok(Math.abs(periodReturnFromHistory(rows, '2026-01-01', '2026-03-04').returnPct - 10) < 1e-9);
   });
 });
+
+describe('a window over the missing part of a year', () => {
+  const gaps = historyGaps([year('2025-01-01', '2025-12-31'), year('2026-09-15', '2026-09-15')]);
+
+  test('has no figure when it reaches into the missing months', async () => {
+    const { gapInWindow } = await import('../src/features/statementLibrary.js');
+    assert.equal(gapInWindow(gaps, '2026-08-15', '2026-09-15'), true);
+    assert.equal(gapInWindow(gaps, '2025-09-15', '2026-09-15'), true);
+  });
+
+  test('is measured when it lies after the missing months or before the year', async () => {
+    const { gapInWindow } = await import('../src/features/statementLibrary.js');
+    assert.equal(gapInWindow(gaps, '2026-09-15', '2026-09-16'), false);
+    assert.equal(gapInWindow(gaps, '2025-03-01', '2025-06-01'), false);
+    assert.equal(gapInWindow([], '2026-01-01', '2026-09-16'), false);
+  });
+});
