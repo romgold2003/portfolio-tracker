@@ -966,3 +966,7 @@ body.light{--wave-strength:0.34}
 .year-tile.is-imported .year-tag{color:var(--green)}
 .year-tile.is-chosen{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
 .years-whole{width:100%;padding:8px 12px;font-size:12px}
+
+/* A year with a file picked and waiting for Add to journal. */
+.year-tile.is-pending{border-color:var(--border-blue);background:var(--blue-bg);color:var(--blue)}
+.year-tile.is-pending .year-tag{color:var(--blue)}

@@ -31,7 +31,7 @@ import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js'
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
 import {
-  openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears, setChosenYear,
+  openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears, setChosenYear, setPendingYears,
 } from '../ui/views/settings.js';
 import {
   statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn, sourceOf,
@@ -832,7 +832,6 @@ function renderIbkrPreview() {
       + 'check the file holds every transaction of the year.', 'var(--text2)');
     for (const note of transactionWarnings(records)) line(note, 'var(--amber)');
   }
-  const chosen = Number(el('ibkrYear')?.value) || null;
   for (const group of csvGroups) {
     if (group.skipped?.length) {
       const first = group.skipped[0];
@@ -854,12 +853,12 @@ function renderIbkrPreview() {
        * are missing, and every warning below follows from that.
        */
       const others = [...group.outsideYears].sort().join(' and ');
-      line(`This file also holds ${group.outside} transaction${group.outside === 1 ? '' : 's'} from ${others}, left out because `
-        + `${chosen} is selected. Choose All years to import the whole file — without them, shares bought and money paid in `
-        + `during ${others} are missing, so the warnings below are expected.`, 'var(--amber)');
+      line(`A file also holds ${group.outside} transaction${group.outside === 1 ? '' : 's'} from ${others}, left out because `
+        + 'it was added to a single year. Add it to those years too, or use "One file with my whole history" — without them, '
+        + `shares bought and money paid in during ${others} are missing, so the warnings below are expected.`, 'var(--amber)');
     }
     for (const name of group.empty ?? []) {
-      line(`${name}: no transactions${chosen ? ` dated in ${chosen}` : ''} could be read.`, 'var(--amber)');
+      line(`${name}: no transactions in the year it was added to could be read.`, 'var(--amber)');
     }
   }
 
@@ -897,10 +896,11 @@ function ibkrError(message) {
 export async function readIbkrFile() {
   const input = el('ibkrFile');
   const files = [...(input?.files ?? [])];
-  const generation = ++importGeneration;
+  // Cleared straight away, so choosing the same file again — for another year — still counts as a choice.
+  if (input) input.value = '';
+  // Only Cancel makes a read stale: files picked for several years in a row all stand.
+  const generation = importGeneration;
   ibkrError('');
-  stagedStatements = [];
-  el('ibkrPreview').style.display = 'none';
   if (!files.length) return;
 
   /**
@@ -914,7 +914,21 @@ export async function readIbkrFile() {
    */
   const chosen = Number(el('ibkrYear')?.value) || null;
   const problems = [];
-  csvGroups = [];
+
+  /**
+   * Files wait, year by year, until Add to journal.
+   *
+   * Picking a year's file used to throw away whatever was waiting, so several
+   * years meant adding each one to the journal before picking the next. Now a
+   * file for a year replaces only that year's waiting file, and every year
+   * picked goes in together.
+   */
+  stagedStatements = stagedStatements.filter((s) => s.generic || s.chosen !== chosen);
+  for (const group of csvGroups) {
+    group.tables = group.tables.filter((t) => t.year !== chosen);
+    group.names = group.tables.map((t) => t.name);
+  }
+  csvGroups = csvGroups.filter((g) => g.tables.length);
 
   /**
    * The files to read, with any zip of statements opened first.
@@ -1000,7 +1014,7 @@ export async function readIbkrFile() {
         csvGroups.push(group);
       }
       group.names.push(file.name);
-      group.tables.push({ name: file.name, table });
+      group.tables.push({ name: file.name, table, year: chosen });
       continue;
     }
 
@@ -1011,7 +1025,7 @@ export async function readIbkrFile() {
         problems.push(`${file.name} covers ${record.year}, not ${chosen}. Pick ${record.year}, or All years.`);
         continue;
       }
-      stagedStatements.push({ name: file.name, parsed, record });
+      stagedStatements.push({ name: file.name, parsed, record, chosen });
     } catch (err) {
       problems.push(`${file.name}: ${err.message}`);
     }
@@ -1030,7 +1044,6 @@ let csvGroups = [];
 /** Read the other brokers' files into the staged years, and redraw the preview. */
 function refreshCsvImport() {
   stagedStatements = stagedStatements.filter((s) => !s.generic);
-  const chosen = Number(el('ibkrYear')?.value) || null;
 
   for (const group of csvGroups) {
     // Dates and numbers are read off the values of every file in the group at once.
@@ -1045,7 +1058,8 @@ function refreshCsvImport() {
     group.rebalanced = 0;
     group.empty = [];
 
-    for (const { name, table } of group.tables) {
+    // Each file keeps the year it was picked for, so files for several years wait side by side.
+    for (const { name, table, year: chosen } of group.tables) {
       const { transactions, skipped, repriced, rebalanced } = readTransactions(table, group.mapping, group.formats);
       group.repriced += repriced;
       group.rebalanced += rebalanced;
@@ -1062,6 +1076,13 @@ function refreshCsvImport() {
 
   if (stagedStatements.length) renderIbkrPreview();
   else el('ibkrPreview').style.display = 'none';
+  markWaitingYears();
+}
+
+/** The years with a file waiting to be added, shown on their squares. */
+function markWaitingYears() {
+  setPendingYears([...new Set(stagedStatements.map((s) => s.record.year))]);
+  renderStatementYears();
 }
 
 /** One year of another broker's transactions, in a line. */
@@ -1111,9 +1132,8 @@ function closeYearsPanel() {
   el('yearsModal')?.classList.remove('show');
 }
 
-/** A year's square: that year's file goes into that year. */
+/** A year's square: that year's file joins whatever other years are already waiting. */
 function chooseYearFile(year) {
-  cancelIbkrImport();
   setChosenYear(year);
   renderStatementYears();
   const select = el('ibkrYear');
@@ -1123,9 +1143,10 @@ function chooseYearFile(year) {
 
 /** One file holding the whole history: every row goes to the year of its date. */
 function chooseWholeHistory() {
-  cancelIbkrImport();
   setChosenYear('all');
   renderStatementYears();
+  const select = el('ibkrYear');
+  if (select) select.value = '';
   el('ibkrFile')?.click();
 }
 
@@ -1133,6 +1154,9 @@ export function cancelIbkrImport() {
   importGeneration += 1;
   stagedStatements = [];
   csvGroups = [];
+  setPendingYears([]);
+  setChosenYear(null);
+  renderStatementYears();
   const year = el('ibkrYear');
   if (year) year.value = '';
   const input = el('ibkrFile');

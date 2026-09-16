@@ -42,6 +42,11 @@ let chosenYear = null;
 
 export function setChosenYear(year) { chosenYear = year; }
 
+/** The years with a file picked and waiting for Add to journal. */
+let pendingYears = new Set();
+
+export function setPendingYears(years) { pendingYears = new Set(years ?? []); }
+
 /**
  * One square per year, this year at the top down to 1980 at the bottom.
  *
@@ -60,7 +65,8 @@ function renderYearGrid() {
     tile.className = 'year-tile'
       + (imported.has(year) ? ' is-imported' : '')
       + (year === thisYear ? ' is-current' : '')
-      + (chosenYear === year ? ' is-chosen' : '');
+      + (chosenYear === year ? ' is-chosen' : '')
+      + (pendingYears.has(year) ? ' is-pending' : '');
 
     // The square itself adds a file to its year.
     const pick = document.createElement('button');
@@ -71,7 +77,9 @@ function renderYearGrid() {
     label.textContent = String(year);
     const tag = document.createElement('span');
     tag.className = 'year-tag';
-    tag.textContent = imported.has(year) ? '✓ imported' : year === thisYear ? 'this year' : '';
+    tag.textContent = pendingYears.has(year) ? '● ready to add'
+      : imported.has(year) ? '✓ imported'
+        : year === thisYear ? 'this year' : '';
     pick.append(label, tag);
     tile.append(pick);
 
@@ -95,9 +103,12 @@ function renderYearGrid() {
 
   const chosen = document.getElementById('yearsChosen');
   if (chosen) {
-    chosen.textContent = chosenYear === 'all'
-      ? 'Whole history: each row goes to the year of its date.'
-      : chosenYear ? `Adding a file to ${chosenYear}.` : '';
+    const waiting = [...pendingYears].sort((a, b) => a - b);
+    chosen.textContent = waiting.length
+      ? `Ready to add: ${waiting.join(', ')} — pick another year, or press Add to journal to add ${waiting.length > 1 ? 'them all' : 'it'}.`
+      : chosenYear === 'all'
+        ? 'Whole history: each row goes to the year of its date.'
+        : chosenYear ? `Adding a file to ${chosenYear}.` : '';
   }
 }
 
