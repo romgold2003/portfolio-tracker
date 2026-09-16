@@ -555,5 +555,6 @@ export function journalWithoutYear(current, year) {
     ledger: null,
     statements: [],
     apiKey: current?.apiKey ?? '',
+    cashModel: 2,
   };
 }

@@ -318,6 +318,8 @@ export function journalFromTransactions(records, existing = {}, opening = null) 
   return {
     positions: [...closed, ...open],
     cash: book.cash,
+    // Built with shorts' proceeds in cash (store.js SHORT_CASH_MODEL), so nothing is corrected on load.
+    cashModel: 2,
     snapshots: existing.snapshots ?? [],
     cashFlows: book.flows,
     income: book.income,

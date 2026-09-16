@@ -240,7 +240,12 @@ function readOpenPositions(group) {
       entry: num(r[iCost]),
       cur: iClose >= 0 ? num(r[iClose]) : num(r[iCost]),
     }))
-    .filter((p) => p.qty > 0 && p.entry > 0);
+    /**
+     * Shorts included. A negative quantity is a short position, and dropping it
+     * left the account worth the whole short more than the broker says — USO
+     * short 8 shares put a real account $1,294.88 above its net asset value.
+     */
+    .filter((p) => Math.abs(p.qty) > 0 && p.entry > 0);
 }
 
 /**
@@ -697,7 +702,8 @@ export function statementToJournal(parsed, existing = {}) {
     id: nextId(),
     ticker: p.ticker,
     cls: 'Stocks',
-    dir: 'Long',
+    // A negative quantity is a short: held as that many shares short, valued at minus their price.
+    dir: p.qty < 0 ? 'Short' : 'Long',
     status: 'Open',
     // A holding bought before the statement period has no purchase in it, so
     // its opening date is genuinely unknown and stays null. That is what marks
@@ -710,12 +716,12 @@ export function statementToJournal(parsed, existing = {}) {
      * quantity, and anything above zero means the holding predates the
      * statement however much of it was traded since.
      */
-    carriedIn: p.qty - (lookup(parsed.netQty, p.ticker) ?? 0) > 1e-9,
+    carriedIn: Math.abs(p.qty - (lookup(parsed.netQty, p.ticker) ?? 0)) > 1e-9,
     close: null,
     entry: p.entry,
     cur: p.cur,
-    qty: p.qty,
-    amount: p.entry * p.qty,
+    qty: Math.abs(p.qty),
+    amount: p.entry * Math.abs(p.qty),
     reason: null,
   }));
 
@@ -741,6 +747,8 @@ export function statementToJournal(parsed, existing = {}) {
   });
 
   return {
+    // The broker's cash already holds any short's sale proceeds (store.js SHORT_CASH_MODEL), so nothing is corrected on load.
+    cashModel: 2,
     positions: [...closed, ...open],
     // Accruals ride with cash so the account value equals the broker's NAV.
     cash: (parsed.cash ?? 0) + (parsed.accruals ?? 0),

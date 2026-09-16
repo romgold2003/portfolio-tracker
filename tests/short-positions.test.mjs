@@ -17,6 +17,7 @@ import {
 } from '../src/core/positions.js';
 import { accountTotals, marketValueOf, realized } from '../src/core/portfolio.js';
 import { cashOn, valueOn } from '../src/core/rebuild.js';
+import { parseIbkrStatement, statementToJournal } from '../src/features/ibkr.js';
 
 const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
 const fresh = (cash = 10_000) => loadState({ positions: [], cash, cashModel: SHORT_CASH_MODEL });
@@ -157,5 +158,42 @@ describe('the day-by-day history', () => {
     assert.ok(near(valueOn(p, '2026-09-11', priceOn).value, -950));
     // The whole account on 11 September: 11,000 cash less 950 owed back.
     assert.ok(near(cashOn([p], 10_100, [], '2026-09-11') + valueOn(p, '2026-09-11', priceOn).value, 10_050));
+  });
+});
+
+
+describe('a short in an Interactive Brokers statement', () => {
+  /**
+   * Found on a real statement: USO short 8 shares was dropped on import, and the
+   * account read $1,294.88 above the broker's net asset value.
+   */
+  const statement = [
+    'Statement,Header,Field Name,Field Value',
+    'Statement,Data,Period,"September 15, 2026"',
+    'Net asset value,Header,Asset Class,Prior Total,Current Long,Current Short,Current Total,Change',
+    'Net asset value,Data,Cash,13666.43,13449.97,0,13449.97,-216.46',
+    'Net asset value,Data,Stock,32402.02,5042,-1294.88,3747.12,0',
+    'Net asset value,Data,Total,46068.45,18491.97,-1294.88,17197.09,0',
+    'Open positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult,Cost Price,'
+      + 'Cost Basis,Close Price,Value,Unrealized P/L,Code',
+    'Open positions,Data,Summary,Stocks,USD,AMD,10,1,125.964841,1259.64841,504.2,5042,3782.35,',
+    'Open positions,Data,Summary,Stocks,USD,USO,-8,1,158.58403,-1268.67224,161.86,-1294.88,-26.21,',
+  ].join('\n');
+
+  test('comes in as a short, not dropped', () => {
+    const journal = statementToJournal(parseIbkrStatement(statement));
+    const uso = journal.positions.find((p) => p.ticker === 'USO');
+    assert.ok(uso, 'the short is on the book');
+    assert.equal(uso.dir, 'Short');
+    assert.equal(uso.qty, 8);
+    assert.ok(near(marketValueOf(uso), -1294.88));
+  });
+
+  test("the account adds up to the broker's net asset value, and loading leaves the cash alone", () => {
+    const journal = statementToJournal(parseIbkrStatement(statement));
+    loadState(journal);
+    // Cash 13,449.97 + AMD 5,042 − USO 1,294.88.
+    assert.ok(near(account(), 17_197.09, 0.01), `${account()}`);
+    assert.ok(near(state.cash, 13_449.97, 0.01), `${state.cash}`);
   });
 });
