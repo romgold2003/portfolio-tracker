@@ -226,6 +226,11 @@ export function curveSeries(timeframe) {
 
   const history = accountHistory();
   let points = history.filter((s) => new Date(s.date) >= cutoff);
+  // All starts the day the account first held money, not on 1 January of its first year at $0.
+  if (timeframe === 'All') {
+    const opened = points.findIndex((s) => Number(s.totalAccountValue ?? s.value) > 0);
+    if (opened > 0) points = points.slice(opened);
+  }
   const synthetic = points.length < 2;
 
   if (synthetic) {
