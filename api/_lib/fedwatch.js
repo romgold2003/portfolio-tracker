@@ -121,7 +121,7 @@ export function outcomeOdds(entering, expected, step = 0.25) {
  * carried forward, which is what makes back-to-back meetings work.
  */
 export function readDecision({
-  today, prices, effr, meetings = FOMC_MEETINGS, step = 0.25,
+  today, prices, effr, effrDate, meetings = FOMC_MEETINGS, step = 0.25,
 }) {
   const meeting = nextMeeting(today, meetings);
   if (!meeting) return null;
@@ -149,6 +149,25 @@ export function readDecision({
    */
   let entering = Number.isFinite(effr) ? effr : null;
   let source = 'effr';
+
+  /**
+   * An effective rate from before the last decision took effect is the old rate.
+   *
+   * On 17 September 2026 the latest fixing was 3.63%, dated before the 16
+   * September hike. Taken as the rate October opens at, the futures read the
+   * whole hike a second time — +274bp, 100% on "+50+" — and Kalshi's ladder
+   * shifted a step. The last meeting's own month contract carries the rate
+   * through that decision instead; without it there is no honest answer.
+   */
+  const previous = [...meetings].reverse().find((d) => d < meeting);
+  if (entering != null && previous && effrDate && effrDate <= previous) {
+    const [py, pm, pd] = previous.split('-').map(Number);
+    const avg = rateOf(py, pm);
+    const after = avg == null ? null : impliedRateAfter({ impliedAverage: avg, entering, year: py, month: pm, day: pd });
+    if (after == null) return null;
+    entering = after;
+    source = 'effr+futures';
+  }
 
   if (entering == null) {
     source = 'futures';
@@ -184,7 +203,20 @@ export function readDecision({
   const impliedAverage = rateOf(year, month);
   if (impliedAverage == null) return null;
 
-  const expected = impliedRateAfter({ impliedAverage, entering, year, month, day });
+  /**
+   * A meeting late in its month leaves few days to read it from, and every
+   * basis point of error in the entering rate is multiplied: 28 October leaves
+   * three days, so 1bp in comes out as 10bp. As CME's FedWatch does, the month
+   * after is read instead when it holds no meeting — its average is the rate
+   * the decision leaves behind, directly.
+   */
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextHasMeeting = meetings.some((d) => d.startsWith(`${nextYear}-${String(nextMonth).padStart(2, '0')}`));
+  const following = nextHasMeeting ? null : rateOf(nextYear, nextMonth);
+  const expected = day > daysInMonth(year, month) / 2 && following != null
+    ? following
+    : impliedRateAfter({ impliedAverage, entering, year, month, day });
   if (expected == null) return null;
 
   return {
@@ -215,10 +247,11 @@ export function requiredContracts(today, meetings = FOMC_MEETINGS) {
    * which is a settled and delisted contract by the time it is wanted — six
    * guaranteed 404s on every request.
    */
-  for (let back = 2; back >= 0; back--) {
+  for (let back = 2; back >= -1; back--) {
     let y = year;
     let m = month - back;
     while (m <= 0) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
     wanted.push(contractSymbol(y, m));
   }
   return [...new Set(wanted)];

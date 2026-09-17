@@ -72,7 +72,7 @@ async function effectiveRate() {
     for (let i = lines.length - 1; i >= 0; i--) {
       const value = Number(lines[i].split(',')[1]);
       // A day with no fixing prints a dot; the most recent real one is wanted.
-      if (Number.isFinite(value) && value > 0) return value;
+      if (Number.isFinite(value) && value > 0) return { value, date: lines[i].split(',')[0] };
     }
     return null;
   } catch {
@@ -141,10 +141,10 @@ export default async function handler(req, res) {
     prices[symbol] = r.value.price;
     // The meeting month is the contract the answer actually rests on, so its
     // quote time is the one that decides whether the futures are speaking now.
-    if (symbol === wanted[wanted.length - 1]) quotedAt = r.value.at;
+    if (symbol === wanted[wanted.length - 2]) quotedAt = r.value.at;
   });
 
-  const decision = readDecision({ today, prices, effr });
+  const decision = readDecision({ today, prices, effr: effr?.value, effrDate: effr?.date });
   if (!decision) {
     // The contracts did not answer. Better to say so than to publish odds
     // derived from a rate nobody quoted.
@@ -162,7 +162,8 @@ export default async function handler(req, res) {
    */
   const [poly, kalshi] = await Promise.all([
     polymarketOdds(decision.meeting),
-    kalshiOdds(decision.meeting, effr),
+    // The rate after the last decision, not a fixing from before it: Kalshi's strikes are read from it.
+    kalshiOdds(decision.meeting, decision.entering),
   ]);
 
   /**

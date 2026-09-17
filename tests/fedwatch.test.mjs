@@ -196,10 +196,43 @@ describe('the rate the meeting opens at', () => {
     assert.equal(readDecision({ ...SEPT, prices: {}, effr: 3.63 }), null);
   });
 
-  test('only three contracts are asked for, not seven', () => {
+  test('four contracts are asked for, not seven', () => {
     // Six of the old seven were guaranteed 404s: months already settled.
     const wanted = requiredContracts('2026-09-05', ['2026-09-16']);
-    assert.equal(wanted.length, 3);
+    assert.equal(wanted.length, 4);
+    assert.ok(wanted.includes('ZQV26.CBT'), 'the month after, for a late meeting');
     assert.ok(wanted.includes('ZQU26.CBT'), 'the meeting month must be in there');
+  });
+});
+
+describe('the day after a decision', () => {
+  /**
+   * 17 September 2026: the Fed hiked on the 16th, the latest effective rate
+   * (3.63%) predates it, and the next meeting is 28 October. Read from 3.63%
+   * the futures put 100% on "+50+"; Polymarket had hold 54%, +25 44%.
+   */
+  const prices = { 'ZQU26.CBT': 96.255, 'ZQV26.CBT': 96.105, 'ZQX26.CBT': 95.985 };
+  const d = readDecision({ today: '2026-09-17', prices, effr: 3.63, effrDate: '2026-09-15' });
+
+  test('the rate is carried through the decision the fixing predates', () => {
+    assert.equal(d.meeting, '2026-10-28');
+    assert.equal(d.enteringSource, 'effr+futures');
+    assert.ok(Math.abs(d.entering - 3.8764) < 0.001, `entering ${d.entering}`);
+  });
+
+  test('a late meeting is read from the month after it, and prices a quarter point, not a half', () => {
+    assert.ok(Math.abs(d.expected - 4.015) < 0.001, `expected ${d.expected}`);
+    assert.ok(d.steps.every((s) => s.steps === 0 || s.steps === 1), JSON.stringify(d.steps));
+    assert.ok(d.odds.hold > 0.3 && d.odds.increase < 0.7);
+  });
+
+  test('a fixing from after the decision is used as it is', () => {
+    const later = readDecision({ today: '2026-09-20', prices, effr: 3.88, effrDate: '2026-09-18' });
+    assert.equal(later.enteringSource, 'effr');
+    assert.equal(later.entering, 3.88);
+  });
+
+  test('with the decision month unpriced there is no answer rather than a wrong one', () => {
+    assert.equal(readDecision({ today: '2026-09-17', prices: { 'ZQV26.CBT': 96.105 }, effr: 3.63, effrDate: '2026-09-15' }), null);
   });
 });
