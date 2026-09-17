@@ -66,12 +66,43 @@ async function fetchCryptoPrice(ticker, position) {
   return price;
 }
 
-async function fetchStockPrice(ticker, position) {
+/**
+ * A quote from this app's own server, as Finnhub's shape: `c` the price, `pc`
+ * the previous close.
+ *
+ * Finnhub's free plan does not cover mutual funds — SWPPX, Schwab's S&P 500
+ * fund, answered with a price of zero and could not be added — and needs a key
+ * the person may not have entered yet. The server reads the same exchange data
+ * any ticker has, funds included.
+ */
+async function serverQuote(ticker) {
+  try {
+    const res = await fetch(`/api/quote?symbols=${encodeURIComponent(ticker)}`, { credentials: 'same-origin' });
+    if (!res.ok) return null;
+    const quote = (await res.json())?.quotes?.[0];
+    const price = quote?.regularClose ?? quote?.price;
+    return price > 0 ? { c: price, pc: quote.previousClose } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function finnhubQuote(ticker) {
   const key = currentApiKey();
   if (!key) return null;
-  const res = await fetch(`${API.finnhubQuote}?symbol=${ticker}&token=${key}`);
-  if (!res.ok) return null;
-  const json = await res.json();
+  try {
+    const res = await fetch(`${API.finnhubQuote}?symbol=${ticker}&token=${key}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.c > 0 ? json : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchStockPrice(ticker, position) {
+  const json = (await finnhubQuote(ticker)) ?? (await serverQuote(ticker));
+  if (!json) return null;
   const price = json.c && json.c > 0 ? json.c : null;
   if (position && price) {
     const prevClose = json.pc && json.pc > 0 ? json.pc : null;

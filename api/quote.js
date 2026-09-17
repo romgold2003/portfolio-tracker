@@ -61,7 +61,26 @@ async function quoteFor(symbol) {
   const meta = result?.meta;
   const closes = result?.indicators?.quote?.[0]?.close;
   const stamps = result?.timestamp;
-  if (!meta || !Array.isArray(closes) || !Array.isArray(stamps)) return null;
+  if (!meta) return null;
+
+  /**
+   * A mutual fund prices once a day, after the close, so it has no minute bars
+   * at all — SWPPX came back with none, and the ticker could not be found. Its
+   * daily price is the quote.
+   */
+  if (!Array.isArray(closes) || !Array.isArray(stamps)) {
+    const price = meta.regularMarketPrice;
+    if (!(typeof price === 'number' && price > 0)) return null;
+    const previous = meta.previousClose ?? meta.chartPreviousClose;
+    return {
+      symbol,
+      price,
+      at: Number(meta.regularMarketTime) || null,
+      phase: 'closed',
+      regularClose: price,
+      previousClose: typeof previous === 'number' ? previous : null,
+    };
+  }
 
   // The last bar that actually traded. Extended sessions are thin, so the tail
   // of the series is usually nulls and taking the last entry blindly gets one.

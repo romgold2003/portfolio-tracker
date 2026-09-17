@@ -120,8 +120,6 @@ export async function checkTicker() {
   const price = await fetchPrice(ticker, cls);
   if (price) {
     applyTickerLookup(ticker, price);
-  } else if (!state.apiKey && cls !== 'Crypto') {
-    setTickerStatus('No API key — go to Live price settings in the sidebar', 'amber');
   } else {
     setTickerStatus('Ticker not found — enter price manually', 'amber');
   }
