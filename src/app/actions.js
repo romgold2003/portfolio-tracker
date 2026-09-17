@@ -278,6 +278,7 @@ export function saveEdit(id) {
   }
 
   const { cashDelta } = updatePosition(id, fields);
+  closePanels(id);
 
   // The ticker may have changed — re-quote it.
   fetchPrice(p.ticker, p.cls, p).then((price) => {
@@ -345,6 +346,7 @@ export function applyDca(id) {
   }
   const result = applyDcaToPosition(id, amount, price);
   if (!result) return;
+  closePanels(id);
   renderAll();
   alert(`DCA applied. New avg: $${result.position.entry.toFixed(2)} · Cash updated to: ${$u(state.cash)}`);
 }
@@ -423,6 +425,7 @@ export function confirmClose(id) {
 
   const result = closePosition(id, price, qty);
   ui.expandedId = null;
+  closePanels(id);
   renderAll();
 
   const plural = result.exitCount > 1 ? 's' : '';
@@ -491,6 +494,17 @@ export async function confirmImport() {
 export function toggleExpand(id) {
   ui.expandedId = ui.expandedId === id ? null : id;
   renderPositions();
+}
+
+/**
+ * Shut a position's panels once their action is done. A redraw no longer
+ * closes them — a price refresh used to, every thirty seconds, mid-edit.
+ */
+function closePanels(id) {
+  for (const name of ['edit', 'dca', 'close']) {
+    const panel = el(`${name}-${id}`);
+    if (panel) panel.style.display = 'none';
+  }
 }
 
 /** Only one of the three inline panels (close / edit / DCA) is open at a time. */

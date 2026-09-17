@@ -63,16 +63,48 @@ export function renderPositions() {
 
   const openEl = document.getElementById('openPositions');
   if (openEl) {
-    openEl.innerHTML = open.length
-      ? sortPositions(open, ui.posSort).map((p) => positionCard(p, true)).join('')
-      : '<div class="empty">No open positions. Add one from New trade.</div>';
+    keepOpenPanels(openEl, () => {
+      openEl.innerHTML = open.length
+        ? sortPositions(open, ui.posSort).map((p) => positionCard(p, true)).join('')
+        : '<div class="empty">No open positions. Add one from New trade.</div>';
+    });
   }
 
   const closedEl = document.getElementById('closedPositions');
   if (closedEl) {
-    closedEl.innerHTML = closed.length
-      ? closedByMonth(closed, new Set(open.map((p) => p.ticker))).map(monthGroup).join('')
-      : '<div class="empty">No closed trades</div>';
+    keepOpenPanels(closedEl, () => {
+      closedEl.innerHTML = closed.length
+        ? closedByMonth(closed, new Set(open.map((p) => p.ticker))).map(monthGroup).join('')
+        : '<div class="empty">No closed trades</div>';
+    });
+  }
+}
+
+/**
+ * Rebuild a list of cards without closing the Edit, DCA or Close panel open in it.
+ *
+ * Prices refresh every thirty seconds and redraw every card, which put each
+ * panel back to closed and threw away what was being typed — an edit had to be
+ * finished inside half a minute. The open panel itself is carried over into
+ * the new card, with its values, its preview and the cursor where it was. It
+ * stays until Cancel, Save or the action it belongs to closes it.
+ */
+function keepOpenPanels(host, rebuild) {
+  const open = [...host.querySelectorAll('.dca-panel')].filter((panel) => panel.style.display !== 'none');
+  const active = document.activeElement;
+  const focus = active && open.some((panel) => panel.contains(active))
+    ? { el: active, start: active.selectionStart, end: active.selectionEnd }
+    : null;
+
+  rebuild();
+
+  for (const panel of open) {
+    const fresh = panel.id && host.querySelector(`#${CSS.escape(panel.id)}`);
+    if (fresh) fresh.replaceWith(panel);
+  }
+  if (focus?.el.isConnected) {
+    focus.el.focus({ preventScroll: true });
+    try { focus.el.setSelectionRange(focus.start, focus.end); } catch { /* not a text field */ }
   }
 }
 
