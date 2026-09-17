@@ -376,11 +376,17 @@ function announceJournal() {
  */
 export const SHORT_CASH_MODEL = 2;
 
-/** Populate `state` from a decrypted vault. */
-export function loadState(journal) {
+/**
+ * A journal made ready for `state`: every field sanitised, shorts on the
+ * current cash model, and today's book taken from this year's file only.
+ * Pure, so the combined view can run each sub-account through it.
+ */
+function normalizeJournal(journal) {
   const source = journal ?? {};
-  state.positions = sanitizePositions(source.positions ?? []);
-  state.cash = Number(source.cash) || 0;
+  const out = {
+    positions: sanitizePositions(source.positions ?? []),
+    cash: Number(source.cash) || 0,
+  };
 
   /**
    * A journal saved before shorts brought cash in, put right once.
@@ -393,17 +399,17 @@ export function loadState(journal) {
    * either rule — and the marker saved with the journal stops it happening twice.
    */
   if (Number(source.cashModel) !== SHORT_CASH_MODEL) {
-    for (const p of state.positions) {
-      if (p.dir === 'Short' && p.status === 'Open') state.cash += 2 * p.entry * p.qty;
+    for (const p of out.positions) {
+      if (p.dir === 'Short' && p.status === 'Open') out.cash += 2 * p.entry * p.qty;
     }
   }
-  state.cashModel = SHORT_CASH_MODEL;
-  state.snapshots = Array.isArray(source.snapshots) ? source.snapshots : [];
-  state.cashFlows = sanitizeFlows(source.cashFlows);
-  state.income = sanitizeIncome(source.income);
-  state.openingNav = sanitizeAnchor(source.openingNav);
-  state.ledger = sanitizeLedger(source.ledger);
-  state.statements = sanitizeStatements(source.statements);
+  out.cashModel = SHORT_CASH_MODEL;
+  out.snapshots = Array.isArray(source.snapshots) ? source.snapshots : [];
+  out.cashFlows = sanitizeFlows(source.cashFlows);
+  out.income = sanitizeIncome(source.income);
+  out.openingNav = sanitizeAnchor(source.openingNav);
+  out.ledger = sanitizeLedger(source.ledger);
+  out.statements = sanitizeStatements(source.statements);
 
   /**
    * Today's book comes from this year's file, and only from it.
@@ -418,18 +424,37 @@ export function loadState(journal) {
    *
    * A journal with no imported files at all — entered by hand — is not touched.
    */
-  const newestYear = state.statements.reduce((max, r) => Math.max(max, Number(r.year) || 0), 0);
+  const newestYear = out.statements.reduce((max, r) => Math.max(max, Number(r.year) || 0), 0);
   if (newestYear && newestYear < new Date().getFullYear()) {
-    state.positions = state.positions.filter((p) => p.status === 'Closed');
-    state.cash = 0;
-    state.openingNav = null;
+    out.positions = out.positions.filter((p) => p.status === 'Closed');
+    out.cash = 0;
+    out.openingNav = null;
   }
-  state.apiKey = typeof source.apiKey === 'string' ? source.apiKey : '';
-  announceJournal();
+  return out;
 }
 
-/** Everything the vault holds, ready to be encrypted. */
-export function journalSnapshot() {
+/* ── sub-accounts ──────────────────────────────────────────────────────── */
+
+/** The id the combined view goes by. Never an account's own id. */
+export const ALL_ACCOUNTS = 'all';
+
+/**
+ * The sub-accounts of this sign-in: a day-trading book and a long-term one,
+ * say, each a whole journal of its own.
+ *
+ * `homeId` is the account whose journal the vault keeps at its top level — the
+ * one last opened on its own — so a vault written before sub-accounts existed
+ * is simply one account, and nothing is stored twice. `activeId` is what is on
+ * screen: an account, or ALL_ACCOUNTS.
+ */
+let book = null;
+
+const MAX_NAME = 40;
+const newAccountId = () => `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const cleanName = (name, fallback) => (typeof name === 'string' && name.trim() ? name.trim().slice(0, MAX_NAME) : fallback);
+
+/** The journal fields of what is in `state`, without the settings around them. */
+function stateJournal() {
   return {
     positions: state.positions,
     cash: state.cash,
@@ -439,13 +464,206 @@ export function journalSnapshot() {
     openingNav: state.openingNav,
     ledger: state.ledger,
     statements: state.statements,
+    cashModel: SHORT_CASH_MODEL,
+  };
+}
+
+const JOURNAL_KEYS = ['positions', 'cash', 'snapshots', 'cashFlows', 'income', 'openingNav', 'ledger', 'statements', 'cashModel'];
+const journalPart = (source) => Object.fromEntries(
+  JOURNAL_KEYS.filter((k) => k in (source ?? {})).map((k) => [k, source[k]]),
+);
+
+/** Put the edits of the account on screen back into the book. The combined view is read-only. */
+function commitActive() {
+  if (!book || book.activeId === ALL_ACCOUNTS) return;
+  const account = book.accounts.find((a) => a.id === book.activeId);
+  if (account) account.journal = stateJournal();
+}
+
+/** A vault's sub-accounts, repaired; a vault from before them is one account. */
+function readBook(source) {
+  const listed = Array.isArray(source.accounts) ? source.accounts : [];
+  const seen = new Set();
+  const accounts = [];
+  for (const a of listed) {
+    const id = typeof a?.id === 'string' && /^[\w-]{1,40}$/.test(a.id) && a.id !== ALL_ACCOUNTS ? a.id : null;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    accounts.push({
+      id,
+      name: cleanName(a.name, 'Account'),
+      journal: a.journal && typeof a.journal === 'object' ? a.journal : null,
+    });
+  }
+  let homeId = typeof source.homeId === 'string' && seen.has(source.homeId) ? source.homeId : accounts[0]?.id;
+  if (!accounts.length) {
+    homeId = newAccountId();
+    accounts.push({ id: homeId, name: 'Main account', journal: null });
+  }
+  // The home account's journal is the vault's top level.
+  accounts.find((a) => a.id === homeId).journal = journalPart(source);
+  for (const a of accounts) a.journal ??= {};
+  const activeId = source.activeId === ALL_ACCOUNTS && accounts.length > 1 ? ALL_ACCOUNTS : homeId;
+  return { accounts, homeId, activeId };
+}
+
+/**
+ * The combined view: every sub-account as one portfolio.
+ *
+ * Consolidated the way a broker consolidates linked accounts — positions
+ * listed together, cash, deposits and income added up — with the daily value
+ * built per account and added day by day in the home view, so the combined
+ * return is measured on the combined balance rather than averaged from each
+ * account's. No statements: a broker's yearly return belongs to one account
+ * and cannot be chained across several.
+ */
+function combineJournals(journals) {
+  const usedIds = new Set();
+  const positions = [];
+  journals.forEach((j, index) => {
+    for (const p of j.positions) {
+      let { id } = p;
+      while (usedIds.has(id)) id += 1;
+      usedIds.add(id);
+      positions.push({ ...p, id, account: book.accounts[index]?.id });
+    }
+  });
+  const income = { dividends: 0, interest: 0, commissions: 0, tax: 0 };
+  for (const j of journals) for (const k of Object.keys(income)) income[k] += j.income[k];
+  return {
+    positions,
+    cash: journals.reduce((sum, j) => sum + j.cash, 0),
+    cashModel: SHORT_CASH_MODEL,
+    snapshots: [],
+    cashFlows: journals.flatMap((j) => j.cashFlows).sort((a, b) => a.date.localeCompare(b.date)),
+    income,
+    openingNav: null,
+    ledger: null,
+    statements: [],
+  };
+}
+
+/** Put the active account, or all of them combined, into `state`. */
+function applyActive() {
+  const combined = book.activeId === ALL_ACCOUNTS;
+  const shown = combined
+    ? combineJournals(book.accounts.map((a) => normalizeJournal(a.journal)))
+    : normalizeJournal(book.accounts.find((a) => a.id === book.activeId)?.journal);
+  Object.assign(state, shown);
+  state.combined = combined;
+  announceJournal();
+}
+
+/** Every sub-account with its name, and which is on screen. */
+export function subAccounts() {
+  if (!book) return { accounts: [], activeId: null };
+  return { accounts: book.accounts.map(({ id, name }) => ({ id, name })), activeId: book.activeId };
+}
+
+/** True while the combined view of every sub-account is on screen. */
+export function isCombined() {
+  return book?.activeId === ALL_ACCOUNTS;
+}
+
+/** Each sub-account's journal, ready to use, while the combined view is on screen. */
+export function combinedJournals() {
+  if (!isCombined()) return [];
+  return book.accounts.map((a) => ({ id: a.id, name: a.name, ...normalizeJournal(a.journal) }));
+}
+
+/** Show another sub-account, or ALL_ACCOUNTS. */
+export function switchAccount(id) {
+  if (!book || id === book.activeId) return false;
+  if (id !== ALL_ACCOUNTS && !book.accounts.some((a) => a.id === id)) return false;
+  if (id === ALL_ACCOUNTS && book.accounts.length < 2) return false;
+  commitActive();
+  book.activeId = id;
+  if (id !== ALL_ACCOUNTS) book.homeId = id;
+  applyActive();
+  scheduleFlush();
+  return true;
+}
+
+/** A new, empty sub-account, opened straight away. Returns its id. */
+export function addSubAccount(name) {
+  if (!book) return null;
+  const id = newAccountId();
+  book.accounts.push({
+    id,
+    name: cleanName(name, `Account ${book.accounts.length + 1}`),
+    journal: { cashModel: SHORT_CASH_MODEL },
+  });
+  switchAccount(id);
+  return id;
+}
+
+export function renameSubAccount(id, name) {
+  const account = book?.accounts.find((a) => a.id === id);
+  const clean = cleanName(name, null);
+  if (!account || !clean) return false;
+  account.name = clean;
+  scheduleFlush();
+  return true;
+}
+
+/**
+ * Remove a sub-account and its journal. The last one cannot go: a sign-in
+ * always has an account to put trades in.
+ */
+export function removeSubAccount(id) {
+  if (!book || book.accounts.length < 2) return false;
+  const index = book.accounts.findIndex((a) => a.id === id);
+  if (index < 0) return false;
+  commitActive();
+  const wasShown = book.activeId === id || book.activeId === ALL_ACCOUNTS;
+  book.accounts.splice(index, 1);
+  if (book.homeId === id) book.homeId = book.accounts[0].id;
+  if (book.activeId === id || (book.activeId === ALL_ACCOUNTS && book.accounts.length < 2)) {
+    book.activeId = book.homeId;
+  }
+  if (wasShown) applyActive();
+  scheduleFlush();
+  return true;
+}
+
+/**
+ * Populate `state` from a decrypted vault, or put a journal in place.
+ *
+ * A vault carries its sub-accounts and replaces the whole book. A plain journal
+ * — an import, a restored backup, a year removed — replaces only the account on
+ * screen, so importing a file into the day-trading account leaves the long-term
+ * one exactly as it was.
+ */
+export function loadState(journal) {
+  const source = journal ?? {};
+  if (Array.isArray(source.accounts) || !book) {
+    book = readBook(source);
+  } else {
+    if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
+    book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
+  }
+  if (typeof source.apiKey === 'string') state.apiKey = source.apiKey;
+  applyActive();
+}
+
+/** Everything the vault holds, ready to be encrypted. */
+export function journalSnapshot() {
+  if (!book) book = readBook(stateJournal());
+  commitActive();
+  const home = book.accounts.find((a) => a.id === book.homeId);
+  return {
+    ...home.journal,
     apiKey: state.apiKey,
     cashModel: SHORT_CASH_MODEL,
+    homeId: book.homeId,
+    activeId: book.activeId,
+    accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
   };
 }
 
 /** Drop everything in memory. Called on sign out. */
 export function clearState() {
+  book = null;
   state.positions = [];
   state.cash = 0;
   state.snapshots = [];
@@ -456,6 +674,7 @@ export function clearState() {
   state.statements = [];
   state.apiKey = '';
   state.cashModel = SHORT_CASH_MODEL;
+  state.combined = false;
   announceJournal();
 }
 

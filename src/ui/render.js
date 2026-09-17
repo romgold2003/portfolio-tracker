@@ -10,10 +10,12 @@ import { setOrbitBackdrop } from '../features/orbitBackdrop.js';
 import { renderPositions } from './views/positions.js';
 import { renderMonthly, renderMonthDetail } from './views/monthly.js';
 import { renderNews } from './views/news.js';
+import { renderAccountSwitcher } from './views/accounts.js';
 
 export { updateLivePill };
 
 export function renderAll() {
+  renderAccountSwitcher();
   renderHome();
   renderPositions();
   renderMonthly();

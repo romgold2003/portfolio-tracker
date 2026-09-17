@@ -3,6 +3,7 @@ import { state } from '../../core/store.js';
 import { benchmarkKey } from '../../services/benchmark.js';
 import { cloudMode } from '../../core/profiles.js';
 import { chainReport, historyGaps } from '../../features/statementLibrary.js';
+import { activeAccountName } from './accounts.js';
 
 const modal = () => document.getElementById('settingsModal');
 
@@ -124,6 +125,8 @@ const shortDay = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-
  * file.
  */
 export function renderStatementYears() {
+  const target = document.getElementById('yearsAccount');
+  if (target) target.textContent = `Files go to: ${activeAccountName()}`;
   renderYearPicker();
   renderYearGrid();
   const box = document.getElementById('ibkrYears');

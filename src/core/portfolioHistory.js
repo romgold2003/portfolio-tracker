@@ -321,3 +321,44 @@ export function allTimeFromDeposits(flows, account) {
   const pnl = account - paidIn;
   return { pnl, returnPct: (pnl / paidIn) * 100, paidIn, endValue: account, method: 'deposits' };
 }
+
+/**
+ * Several accounts' daily histories as one, the way a broker consolidates
+ * linked accounts: each day's values, cash and flows added together.
+ *
+ * An account before its first day is worth nothing, and after its last day
+ * keeps its last value. The day an account joins with money already in it —
+ * a history that starts at a statement's opening balance — that balance enters
+ * as a transfer in, not as profit: otherwise the combined return would jump by
+ * the whole account on the day it appears.
+ */
+export function combineHistories(histories) {
+  const lists = (histories ?? []).filter((rows) => Array.isArray(rows) && rows.length);
+  if (!lists.length) return [];
+  const dates = [...new Set(lists.flatMap((rows) => rows.map((r) => r.date)))].sort();
+  const firstDay = dates[0];
+  const cursors = lists.map(() => ({ index: 0, last: null }));
+  const fields = ['totalAccountValue', 'cashValue', 'positionsValue'];
+
+  return dates.map((date) => {
+    const row = {
+      date, totalAccountValue: 0, cashValue: 0, positionsValue: 0, externalCashFlow: 0, deposit: 0, withdrawal: 0,
+    };
+    lists.forEach((rows, i) => {
+      const cursor = cursors[i];
+      const own = rows[cursor.index]?.date === date ? rows[cursor.index++] : null;
+      if (own) {
+        const flow = Number(own.externalCashFlow) || 0;
+        const value = Number(own.totalAccountValue ?? own.value) || 0;
+        const joins = !cursor.last && date > firstDay && value - flow > 0 ? value - flow : 0;
+        row.externalCashFlow += flow + joins;
+        row.deposit += (Number(own.deposit) || Math.max(flow, 0)) + joins;
+        row.withdrawal += Number(own.withdrawal) || Math.min(flow, 0);
+        cursor.last = { ...own, totalAccountValue: value };
+      }
+      if (cursor.last) for (const f of fields) row[f] += Number(cursor.last[f]) || 0;
+    });
+    for (const f of [...fields, 'externalCashFlow', 'deposit', 'withdrawal']) row[f] = round(row[f]);
+    return row;
+  });
+}

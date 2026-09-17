@@ -23,10 +23,10 @@ import {
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
 import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
-import { onJournalLoaded } from '../../core/store.js';
+import { onJournalLoaded, combinedJournals } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
-import { buildPortfolioHistory, periodReturnFromHistory } from '../../core/portfolioHistory.js';
+import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -328,12 +328,13 @@ async function loadBackfill() {
    * carried in from last year and sold in January is a closed row in money, but
    * the ledger still knows it was 250 shares and when they went.
    */
-  const fromLedger = state.ledger
-    ? [...new Set([
-      ...Object.keys(state.ledger.openingHoldings ?? {}),
-      ...Object.keys(state.ledger.holdings ?? {}),
-      ...(state.ledger.events ?? []).map((e) => e.ticker),
-    ].filter(Boolean))]
+  const ledgers = state.combined ? combinedJournals().map((j) => j.ledger).filter(Boolean) : [state.ledger].filter(Boolean);
+  const fromLedger = ledgers.length
+    ? [...new Set(ledgers.flatMap((ledger) => [
+      ...Object.keys(ledger.openingHoldings ?? {}),
+      ...Object.keys(ledger.holdings ?? {}),
+      ...(ledger.events ?? []).map((e) => e.ticker),
+    ]).filter(Boolean))]
     : [];
   /**
    * Every ticker the book has ever touched, with no date filter on it.
@@ -350,7 +351,7 @@ async function loadBackfill() {
    * Missing one costs the year.
    */
   const tickers = fromLedger.length
-    ? fromLedger
+    ? [...new Set([...fromLedger, ...(state.combined ? state.positions.map((p) => p.ticker) : [])])]
     : state.positions.map((p) => p.ticker);
 
   const wanted = [...new Map(tickers.filter(Boolean).map((ticker) => {
@@ -402,7 +403,14 @@ async function loadBackfill() {
      * be done without a statement, and is kept for books that have none.
      */
     const ledger = state.ledger;
-    const forward = ledger?.openingCash != null && ledger.from
+    /**
+     * All accounts: each sub-account's own daily value, added day by day, as a
+     * broker consolidates linked accounts. The combined return is then measured
+     * on the combined balance, not averaged from each account's return.
+     */
+    const forward = state.combined
+      ? combineHistories(combinedJournals().map((j) => journalHistory(j, earliest)))
+      : ledger?.openingCash != null && ledger.from
       ? buildPortfolioHistory({
         opening: {
           date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings,
@@ -467,6 +475,46 @@ async function loadBackfill() {
   }
 }
 
+/** One sub-account's daily value, for the combined view. */
+function journalHistory(journal, earliest) {
+  /**
+   * Ended at the account's own live value, as a single account's history is.
+   * An account with no priced days then still joins the sum as money brought
+   * in on the day it appears, rather than its whole value landing as profit.
+   */
+  const rows = journalDays(journal, earliest);
+  const live = accountTotals(state.positions.filter((p) => p.account === journal.id), journal.cash).account;
+  const today = todayStr();
+  const last = rows[rows.length - 1];
+  if (last?.date === today) rows[rows.length - 1] = { ...last, totalAccountValue: round2(live) };
+  else if (live !== 0 || last) rows.push({ date: today, totalAccountValue: round2(live), externalCashFlow: 0 });
+  return rows;
+}
+
+function journalDays(journal, earliest) {
+  const ledger = journal.ledger;
+  if (ledger?.openingCash != null && ledger.from) {
+    return buildPortfolioHistory({
+      opening: { date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings },
+      events: ledger.events ?? [],
+      priceOn: pastPrice,
+      lastKnown: datedMarks(ledger),
+      from: earliest,
+      to: historyEnd(journal.statements),
+    });
+  }
+  const flows = new Map();
+  for (const f of journal.cashFlows ?? []) flows.set(f.date, (flows.get(f.date) ?? 0) + f.amount);
+  return rebuildDailyValue({
+    positions: journal.positions,
+    cash: journal.cash,
+    flows: journal.cashFlows,
+    priceOn: pastPrice,
+    from: earliest,
+    to: todayStr(),
+  }).map((r) => ({ date: r.date, totalAccountValue: r.value, externalCashFlow: flows.get(r.date) ?? 0 }));
+}
+
 /** The earliest day worth rebuilding: the start of the longest window offered. */
 function earliestInterest() {
   const dates = state.positions.flatMap((p) => [p.open, p.close]).filter(Boolean);
@@ -504,7 +552,9 @@ function earliestInterest() {
    */
   // A statement's period start is the earliest day the ledger can answer for,
   // and it is usually before the first trade inside it.
-  const ledgerFrom = state.ledger?.from;
+  const ledgerFrom = state.combined
+    ? combinedJournals().map((j) => j.ledger?.from).filter(Boolean).sort()[0]
+    : state.ledger?.from;
   let earliest = firstTrade && firstTrade < janFirst ? firstTrade : janFirst;
   if (ledgerFrom && ledgerFrom < earliest) earliest = ledgerFrom;
   const floor = back(3 * 366);
@@ -539,8 +589,8 @@ function datedMarks(ledger) {
  * imported year: the book shows no holdings now, and walking last year's
  * holdings on to today would draw months the account never had.
  */
-function historyEnd() {
-  const records = state.statements ?? [];
+function historyEnd(statements = state.statements) {
+  const records = statements ?? [];
   const newest = records[records.length - 1];
   const year = Number(String(newest?.to ?? '').slice(0, 4));
   return year && year < new Date().getFullYear() ? newest.to : todayStr();
@@ -579,9 +629,11 @@ function pastPrice(ticker, day) {
 let appliedSplitsFor = null;
 let appliedSplits = [];
 function splitsAppliedByJournal() {
-  if (appliedSplitsFor !== state.statements) {
-    appliedSplitsFor = state.statements;
-    appliedSplits = allSplits(state.statements ?? []);
+  // All accounts: the splits every sub-account's statements reported.
+  const source = state.combined ? `combined:${journalGeneration}` : state.statements;
+  if (appliedSplitsFor !== source) {
+    appliedSplitsFor = source;
+    appliedSplits = allSplits(state.combined ? combinedJournals().flatMap((j) => j.statements) : state.statements ?? []);
   }
   return appliedSplits;
 }
@@ -604,7 +656,7 @@ function yearToDateReturn(totals) {
     openingNav: state.openingNav,
     startPrices,
   });
-  if (trades.method === 'broker' || !state.ledger?.events?.length) return trades;
+  if (trades.method === 'broker' || (!state.ledger?.events?.length && !state.combined)) return trades;
   const history = authoritativeHistory();
   if (!history.length) return { ...trades, returnPct: null };
   const measured = measuredYearToDate(trades, history, from, to);
@@ -904,7 +956,7 @@ function timeframePerformance(totals) {
     startPrices: ytd ? startPrices : new Map(),
   });
 
-  if (!state.ledger?.events?.length) return fromTrades();
+  if (!state.ledger?.events?.length && !state.combined) return fromTrades();
 
   // A window over the missing part of a year has no trades or values there: no figure rather than a wrong one.
   if (gapInWindow(historyGaps(state.statements), from, to)) return null;
@@ -932,7 +984,8 @@ function timeframePerformance(totals) {
    * it shows at once. A journal with no recorded deposits keeps the older
    * measure below.
    */
-  if (ui.timeframe === 'All') {
+  // All accounts is measured from the combined daily balance below, like every other window.
+  if (ui.timeframe === 'All' && !state.combined) {
     // A year covered only in part is missing its deposits, which the figure would then count as profit.
     if (historyGaps(state.statements).length) return null;
     const sinceDeposits = allTimeFromDeposits(state.cashFlows, totals.account);

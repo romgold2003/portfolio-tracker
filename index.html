@@ -69,6 +69,12 @@
     <div class="logo-area">
       <div class="logo-name">Portfolio</div>
       <div class="logo-tag">Trading journal</div>
+      <div class="acct-switch" id="acctSwitch">
+        <button class="acct-btn" id="acctBtn" type="button" onclick="toggleAccountMenu()" aria-haspopup="menu" aria-expanded="false" title="Switch sub-account">
+          <span class="acct-lbl">Account</span><span class="acct-name" id="acctName">Main account</span><span class="acct-caret">▾</span>
+        </button>
+        <div class="acct-menu" id="acctMenu" role="menu" hidden></div>
+      </div>
     </div>
     <nav class="nav-links">
       <button class="nl active" onclick="show('home')"><span class="nl-icon">⌂</span> Home</button>
@@ -514,6 +520,7 @@
       <button class="btn years-close" onclick="closeYearsPanel()" aria-label="Close">×</button>
     </div>
     <p>Click a year and choose its file — CSV, Excel, or an Interactive Brokers statement. <strong>This year's</strong> file sets today's positions, cash and account value; earlier years add history.</p>
+    <div class="hint years-account" id="yearsAccount"></div>
     <div class="years-grid" id="yearsGrid"></div>
     <button class="btn years-whole" onclick="chooseWholeHistory()">One file with my whole history</button>
     <select id="ibkrYear" hidden aria-hidden="true"></select>

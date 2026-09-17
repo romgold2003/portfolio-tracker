@@ -13,8 +13,12 @@
  */
 import {
   state, saveCash, saveApiKey as persistApiKey, findPosition, savePositions,
-  loadState, flushNow,
+  loadState, flushNow, isCombined, switchAccount, addSubAccount, renameSubAccount, removeSubAccount, subAccounts,
 } from '../core/store.js';
+import {
+  renderAccountSwitcher, toggleAccountMenu, setAccountMenuOpen, activeAccountName,
+} from '../ui/views/accounts.js';
+import { showToast } from '../ui/toast.js';
 import {
   parseIbkrStatement, describeStatement, isIbkrStatement,
 } from '../features/ibkr.js';
@@ -630,9 +634,70 @@ export const voiceActions = {
  * sign out has to stop the background timers, which only main.js knows about.
  * Passing them in keeps this the single place that writes to `window`.
  */
+/* ── sub-accounts ──────────────────────────────────────────────────────── */
+
+/** Everything that depends on which account is on screen, redrawn after a switch. */
+function afterAccountChange() {
+  setAccountMenuOpen(false);
+  renderAccountSwitcher();
+  renderAll();
+  renderStatementYears();
+  refreshPrices();
+}
+
+export async function selectAccount(id) {
+  // Files picked for the account being left must not land in the next one.
+  cancelIbkrImport();
+  if (switchAccount(id)) afterAccountChange();
+  else setAccountMenuOpen(false);
+}
+
+export function addAccount() {
+  const name = prompt('Name of the new sub-account', `Account ${subAccounts().accounts.length + 1}`);
+  if (name == null) return;
+  cancelIbkrImport();
+  if (addSubAccount(name)) {
+    afterAccountChange();
+    showToast(`${activeAccountName()} created — import its files or add trades`, 'heard', 3500);
+  }
+}
+
+export function renameAccount(id) {
+  const current = subAccounts().accounts.find((a) => a.id === id);
+  if (!current) return;
+  const name = prompt('Rename sub-account', current.name);
+  if (name == null) return;
+  if (renameSubAccount(id, name)) renderAccountSwitcher();
+}
+
+export function removeAccount(id) {
+  const current = subAccounts().accounts.find((a) => a.id === id);
+  if (!current) return;
+  if (!confirm(`Remove "${current.name}" and everything in it — its trades, files and history?\n\nThis cannot be undone. Export a backup first if you may want it back.`)) return;
+  cancelIbkrImport();
+  if (removeSubAccount(id)) afterAccountChange();
+}
+
+/**
+ * Changes go to one account. All accounts adds them up and has nowhere to put
+ * a trade or a file, so anything that writes asks for an account first.
+ */
+const oneAccountOnly = (fn) => (...args) => {
+  if (!isCombined()) return fn(...args);
+  showToast('All accounts is the combined view — choose one account to make changes', 'error', 3500);
+  return undefined;
+};
+
 export function installActions(extra = {}) {
   if (extra.signOut) signOutAfterDelete = extra.signOut;
+  const writes = {
+    addPos, saveEdit, updatePrice, editCash, del, reopen, applyDca, confirmClose,
+    confirmImport, openYearsPanel, chooseYearFile, chooseWholeHistory, readIbkrFile, confirmIbkrImport, removeStatementYear,
+  };
+  for (const [name, fn] of Object.entries(writes)) writes[name] = oneAccountOnly(fn);
   Object.assign(window, {
+    // sub-accounts
+    toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
     show, toggleTheme, toggleVoice, toggleAmounts,
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
@@ -654,6 +719,8 @@ export function installActions(extra = {}) {
     copyLegacySnippet,
     // Interactive Brokers import
     readIbkrFile, cancelIbkrImport, confirmIbkrImport, removeStatementYear,
+    // writes are refused in the combined view
+    ...writes,
     // account deletion
     beginDeleteAccount, cancelDeleteAccount, confirmDeleteAccount,
     ...extra,
