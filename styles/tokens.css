@@ -1,3 +1,7 @@
+/* Graph colours that follow the base theme unless Designer mode sets them.
+   Declared on body so they resolve against the light palette too. */
+body{--curve:var(--green); --star:#f5c542; --marker:#ffffff}
+
 /* Design tokens — every colour in the app resolves through these.
    Dark is the default; `body.light` overrides the same names, so no
    component stylesheet ever needs a light-mode branch. */

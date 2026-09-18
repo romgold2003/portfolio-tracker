@@ -86,9 +86,7 @@
     <div class="sidebar-bot">
       <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" style="margin-bottom:0"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
       <button class="settings-btn" onclick="openSettings()" style="margin-top:8px">⚙ Live price settings</button>
-      <button class="settings-btn" id="themeBtn" onclick="toggleTheme()" style="margin-top:6px">
-        <span id="themeIcon">☀</span> <span id="themeLabel">Light mode</span>
-      </button>
+      <button class="settings-btn" id="themeBtn" onclick="openDesigner()" style="margin-top:6px">🎨 Designer mode</button>
       <div class="account-row" id="accountRow" style="margin-top:10px;display:none">
         <span class="account-email" id="accountEmail"></span>
         <button class="lock-link" onclick="signOut()">Sign out</button>
@@ -447,6 +445,25 @@
     </div>
 
   </main>
+</div>
+
+<div class="modal-bg" id="designerModal" onclick="if(event.target===this)closeDesigner()">
+  <div class="modal designer-modal">
+    <div class="years-head">
+      <h3>Designer mode</h3>
+      <button class="btn years-close" onclick="closeDesigner()" aria-label="Close">×</button>
+    </div>
+    <p>Choose a base, then click any colour to pick your own. Changes show straight away and are kept on this device.</p>
+    <div class="design-base">
+      <button class="sort-btn" data-design-base="dark" onclick="setThemeBase('dark')">☾ Dark</button>
+      <button class="sort-btn" data-design-base="light" onclick="setThemeBase('light')">☀ Light</button>
+    </div>
+    <div id="designerGroups"></div>
+    <div class="design-actions">
+      <button class="btn" onclick="resetDesign()">Reset colours</button>
+      <button class="btn btn-blue" onclick="closeDesigner()">Done</button>
+    </div>
+  </div>
 </div>
 
 <div class="modal-bg" id="settingsModal">

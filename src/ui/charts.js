@@ -26,6 +26,7 @@ function chartColors() {
     txt: cssVar('--text3', '#555'),
     green: cssVar('--green', '#3dba6a'),
     red: cssVar('--red', '#e34948'),
+    curve: cssVar('--curve', cssVar('--green', '#3dba6a')),
   };
 }
 
@@ -48,7 +49,7 @@ function cashFlowMarks(marks) {
       const { ctx } = chart;
       const meta = chart.getDatasetMeta(0);
       ctx.save();
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = cssVar('--marker', '#ffffff');
       ctx.globalAlpha = 0.92;
       for (const mark of marks) {
         const point = meta.data[mark.index];
@@ -142,16 +143,16 @@ export function renderCurve(timeframe) {
     // Built around this window's flows rather than handed them afterwards: a
     // plugin assigned after the constructor misses the first paint entirely,
     // and only reappeared because the animation redrew a frame later.
-    plugins: [cashFlowMarks(flows), allTimeHighMark(high, cssVar('--amber', '#f5c542'))],
+    plugins: [cashFlowMarks(flows), allTimeHighMark(high, cssVar('--star', '#f5c542'))],
     data: {
       labels,
       datasets: [{
         data,
-        borderColor: c.green,
+        borderColor: c.curve,
         borderWidth: 2,
         pointRadius: 0,
         fill: true,
-        backgroundColor: c.green + '14',
+        backgroundColor: c.curve + '14',
         tension: 0.4,
       }],
     },

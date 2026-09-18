@@ -58,7 +58,9 @@ import {
 } from '../ui/views/addTrade.js';
 import { show } from '../ui/router.js';
 import { ui } from '../ui/uiState.js';
-import { toggleTheme } from '../ui/theme.js';
+import {
+  toggleTheme, openDesigner, closeDesigner, setThemeBase, resetDesign,
+} from '../ui/theme.js';
 import { money as $u, signedMoney as $s, pctText as fp, fmtPrice } from '../ui/format.js';
 import { toggleVoice } from '../features/voice.js';
 import {
@@ -712,6 +714,7 @@ export function installActions(extra = {}) {
     toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
     show, toggleTheme, toggleVoice, toggleAmounts,
+    openDesigner, closeDesigner, setThemeBase, resetDesign,
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
     // trades
