@@ -982,5 +982,7 @@ body.light{--wave-strength:0.34}
 .design-row input[type=color]{width:38px;height:24px;padding:0;border:0.5px solid var(--border2);border-radius:5px;background:none;cursor:pointer}
 .design-row input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
 .design-row input[type=color]::-webkit-color-swatch{border:none;border-radius:3px}
-.design-dot{width:6px;height:6px;border-radius:50%;background:var(--blue)}
+.design-reset{background:none;border:0.5px solid var(--border2);border-radius:5px;color:var(--blue);font-size:13px;line-height:1;padding:4px 7px;cursor:pointer;font-family:inherit}
+.design-reset:hover:not(:disabled){background:var(--hover2)}
+.design-reset:disabled{color:var(--text4);border-color:var(--border);cursor:default;opacity:0.5}
 .design-actions{display:flex;justify-content:space-between;gap:8px;margin-top:6px}

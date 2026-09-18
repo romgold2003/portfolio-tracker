@@ -157,11 +157,16 @@ export function renderDesigner() {
       // Live while dragging through the palette; the charts redraw once it is let go.
       picker.addEventListener('input', () => setDesignColour(token, picker.value, false));
       picker.addEventListener('change', () => setDesignColour(token, picker.value, true));
-      const changed = document.createElement('span');
-      changed.className = 'design-dot';
-      changed.title = 'Changed from the default';
-      changed.hidden = !design[base][token];
-      row.append(name, changed, picker);
+      // Brings back this one colour; only live once it has been changed.
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'design-reset';
+      reset.textContent = '↺';
+      reset.title = `Original ${label.toLowerCase()} colour`;
+      reset.setAttribute('aria-label', reset.title);
+      reset.disabled = !design[base][token];
+      reset.addEventListener('click', (e) => { e.preventDefault(); resetDesignColour(token); });
+      row.append(name, picker, reset);
       section.append(row);
     }
     return section;
@@ -173,9 +178,23 @@ export function setDesignColour(token, value, redrawCharts = true) {
   design[baseOf()][token] = value;
   saveDesign();
   document.body.style.setProperty(token, value);
-  const dot = document.querySelector(`input[data-token="${token}"]`)?.parentElement?.querySelector('.design-dot');
-  if (dot) dot.hidden = false;
+  const reset = document.querySelector(`input[data-token="${token}"]`)?.parentElement?.querySelector('.design-reset');
+  if (reset) reset.disabled = false;
   if (redrawCharts) redraw();
+}
+
+/** One colour back to the base's own. */
+export function resetDesignColour(token) {
+  delete design[baseOf()][token];
+  saveDesign();
+  document.body.style.removeProperty(token);
+  const picker = document.querySelector(`input[data-token="${token}"]`);
+  if (picker) {
+    picker.value = hexOf(token);
+    const reset = picker.parentElement?.querySelector('.design-reset');
+    if (reset) reset.disabled = true;
+  }
+  redraw();
 }
 
 /** Back to the base's own colours. */
