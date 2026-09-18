@@ -15,25 +15,24 @@ const row = (symbol, side, usd, at = 1000, extra = {}) => ({
 
 describe('filters', () => {
   const rows = [
-    row('BTC', 'buy', 600_000), row('BTC', 'sell', 3_000_000), row('ETH', 'buy', 30_000_000),
-    row('ETH', 'sell', 7_000_000), row('SOL', 'buy', 400_000),
+    row('BTC', 'buy', 6_000_000), row('BTC', 'sell', 12_000_000), row('ETH', 'buy', 30_000_000),
+    row('ETH', 'sell', 10_000_000), row('SOL', 'buy', 4_900_000),
   ];
 
-  test('bands are half-open and start at $500k', () => {
+  test('bands are $5M–10M, $10M–25M and $25M+, half-open', () => {
     assert.equal(filterRows(rows, { band: 'b1' }).length, 1);
-    assert.equal(filterRows(rows, { band: 'b2' }).length, 1);
+    assert.equal(filterRows(rows, { band: 'b2' }).length, 2, 'exactly $10M is in $10M–25M');
     assert.equal(filterRows(rows, { band: 'b3' }).length, 1);
-    assert.equal(filterRows(rows, { band: 'b4' }).length, 1);
-    assert.equal(filterRows(rows, { band: 'all' }).length, 4, 'under $500k is never shown');
+    assert.equal(filterRows(rows, { band: 'all' }).length, 4, 'under $5M is never shown');
   });
 
   test('buys and sells are filtered and summed apart', () => {
     assert.deepEqual(filterRows(rows, { side: 'buy' }).map((r) => r.side), ['buy', 'buy']);
     assert.deepEqual(filterRows(rows, { side: 'sell' }).map((r) => r.side), ['sell', 'sell']);
     const s = summarise(filterRows(rows));
-    assert.equal(s.buyUsd, 30_600_000);
-    assert.equal(s.sellUsd, 10_000_000);
-    assert.equal(s.net, 20_600_000);
+    assert.equal(s.buyUsd, 36_000_000);
+    assert.equal(s.sellUsd, 22_000_000);
+    assert.equal(s.net, 14_000_000);
   });
 
   test('one coin, and the counts each band button shows', () => {

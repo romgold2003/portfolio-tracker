@@ -10,12 +10,17 @@
  * browser; the view only draws what these return.
  */
 
+/**
+ * The sizes shown. Nothing under $5M appears.
+ *
+ * The collectors still keep everything from $500k, so the bands can be moved
+ * down again without losing history.
+ */
 export const BANDS = [
-  { id: 'all', label: 'All $500k+', min: 500_000, max: Infinity },
-  { id: 'b1', label: '$500k–1M', min: 500_000, max: 1_000_000 },
-  { id: 'b2', label: '$1M–5M', min: 1_000_000, max: 5_000_000 },
-  { id: 'b3', label: '$5M–25M', min: 5_000_000, max: 25_000_000 },
-  { id: 'b4', label: '$25M+', min: 25_000_000, max: Infinity },
+  { id: 'all', label: 'All $5M+', min: 5_000_000, max: Infinity },
+  { id: 'b1', label: '$5M–10M', min: 5_000_000, max: 10_000_000 },
+  { id: 'b2', label: '$10M–25M', min: 10_000_000, max: 25_000_000 },
+  { id: 'b3', label: '$25M+', min: 25_000_000, max: Infinity },
 ];
 
 export const bandOf = (id) => BANDS.find((b) => b.id === id) ?? BANDS[0];

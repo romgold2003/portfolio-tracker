@@ -243,7 +243,7 @@ function saveHyperliquid() {
 /**
  * Fills of one order arrive within a moment of each other, sometimes split
  * across messages. Each order is kept open and added to as its fills come in,
- * and judged against the $500k floor two seconds after its last fill.
+ * and kept from $500k, two seconds after its last fill; the bands decide what shows.
  *
  * Not a quiet-period timer over all fills: with forty coins streaming there is
  * never a quiet period, and waiting for one meant no order was ever finished.
@@ -269,7 +269,7 @@ function settleOrders() {
   for (const [id, o] of hl.open) {
     if (now - o.seen < SETTLE_MS) continue;
     hl.open.delete(id);
-    if (o.usd >= BANDS[0].min && !hlRows.some((r) => r.id === id)) classify(o);
+    if (o.usd >= 500_000 && !hlRows.some((r) => r.id === id)) classify(o);
   }
 }
 
