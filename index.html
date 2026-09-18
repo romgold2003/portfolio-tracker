@@ -425,19 +425,8 @@
                  holder card and for both sections below. -->
             <div class="cw-coins" id="cwCoins"></div>
 
-            <section class="wt-section" id="levSection">
-              <div class="cw-section-hd">Leveraged whale trades</div>
-              <p class="wt-explain">Whales opening and closing leveraged positions on Hyperliquid and GMX. OPEN LONG and CLOSE SHORT need the price to rise (green); OPEN SHORT and CLOSE LONG need it to fall (red). An outlined label is a close.</p>
-              <div class="wt-filters">
-                <div class="opt-picker" id="levSpan"></div>
-                <div class="opt-picker" id="levSide"></div>
-              </div>
-              <div class="opt-picker wt-bands" id="levBand"></div>
-              <div class="wt-summary" id="levSummary"></div>
-              <div id="levRows"></div>
-              <p class="gam-src" id="levSrc"></p>
-            </section>
-
+            <!-- Spot on the left, leveraged on the right; one above the other on a phone. -->
+            <div class="wt-pair">
             <section class="wt-section" id="spotSection">
               <div class="cw-section-hd">Spot whale buys & sells</div>
               <p class="wt-explain">Whales buying and selling the coin itself on on-chain exchanges — Uniswap, PancakeSwap, Raydium and others. Only buys and sells: no transfers between wallets or exchanges.</p>
@@ -450,6 +439,20 @@
               <div id="spotRows"></div>
               <p class="gam-src" id="spotSrc"></p>
             </section>
+
+            <section class="wt-section" id="levSection">
+              <div class="cw-section-hd">Leveraged whale trades</div>
+              <p class="wt-explain">Whales opening and closing leveraged positions on Hyperliquid and GMX. OPEN LONG and CLOSE SHORT need the price to rise (green); OPEN SHORT and CLOSE LONG need it to fall (red). An outlined label is a close.</p>
+              <div class="wt-filters">
+                <div class="opt-picker" id="levSpan"></div>
+                <div class="opt-picker" id="levSide"></div>
+              </div>
+              <div class="opt-picker wt-bands" id="levBand"></div>
+              <div class="wt-summary" id="levSummary"></div>
+              <div id="levRows"></div>
+              <p class="gam-src" id="levSrc"></p>
+            </section>
+            </div>
           </div>
         </div>
       </div>

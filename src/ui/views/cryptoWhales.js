@@ -97,8 +97,7 @@ function rowHtml(r, pill, where) {
     <div class="wt-when" title="${escapeHtml(new Date(r.at * 1000).toLocaleString())}">${escapeHtml(ago(r.at))}</div>
     ${coinHtml(r.symbol)}
     <div class="wt-act">${pill}<span class="wt-where">${escapeHtml(where)}</span></div>
-    <div class="wt-amt">${escapeHtml(amountText(r.amount))} <span>${escapeHtml(r.symbol)}</span></div>
-    <div class="wt-usd">${escapeHtml(money(r.usd))}</div>
+    <div class="wt-usd">${escapeHtml(money(r.usd))}<span class="wt-amt">${escapeHtml(amountText(r.amount))} ${escapeHtml(r.symbol)}</span></div>
     <div>${walletHtml(r)}</div>
   </div>`;
 }
@@ -118,7 +117,7 @@ function spotRow(r) {
   return rowHtml(r, pill, `${dexName(r.dex)} · ${r.network}`);
 }
 
-const HEAD = '<div class="wt-head wt-grid"><div>When</div><div>Coin</div><div>Action</div><div>Amount</div><div>Value</div><div>Wallet</div></div>';
+const HEAD = '<div class="wt-head wt-grid"><div>When</div><div>Coin</div><div>Action</div><div>Value</div><div>Wallet</div></div>';
 
 /* ── drawing ─────────────────────────────────────────────────────────── */
 
