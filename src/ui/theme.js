@@ -214,8 +214,122 @@ export function resetDesign() {
   redraw();
 }
 
+/* ── share codes ───────────────────────────────────────────────────────── */
+
+/**
+ * A design as a short code anyone can paste: the base and the colours that
+ * differ from it, and nothing else.
+ *
+ * The code carries the design itself rather than pointing at a copy kept on a
+ * server, so it works for anyone, offline, for ever, and costs nothing to keep.
+ * Bytes: a version, the base, a 24-bit mask of which colours are set (in the
+ * order of DESIGN_GROUPS), then three bytes per set colour — in base64url, so
+ * only letters, digits, - and _. A design with five colours changed is 29
+ * characters.
+ */
+const CODE_PREFIX = 'RB-';
+const CODE_VERSION = 1;
+
+export function encodeDesign(base, colours) {
+  const bytes = [CODE_VERSION, base === 'light' ? 1 : 0, 0, 0, 0];
+  ALL_TOKENS.forEach((token, i) => {
+    const value = colours?.[token];
+    if (!/^#[0-9a-f]{6}$/i.test(value ?? '')) return;
+    bytes[2 + (i >> 3)] |= 1 << (i & 7);
+    for (let k = 1; k < 7; k += 2) bytes.push(parseInt(value.slice(k, k + 2), 16));
+  });
+  const text = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return CODE_PREFIX + text;
+}
+
+/** The design in a code, or null when it is not one. */
+export function decodeDesign(code) {
+  const clean = String(code ?? '').trim().replace(/^RB-/i, '').replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9_-]{7,}$/.test(clean)) return null;
+  let bytes;
+  try {
+    const b64 = clean.replace(/-/g, '+').replace(/_/g, '/');
+    bytes = [...atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4))].map((c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+  if (bytes[0] !== CODE_VERSION || bytes[1] > 1 || bytes.length < 5) return null;
+  const colours = {};
+  let at = 5;
+  for (let i = 0; i < ALL_TOKENS.length; i++) {
+    if (!(bytes[2 + (i >> 3)] & (1 << (i & 7)))) continue;
+    if (at + 3 > bytes.length) return null;
+    colours[ALL_TOKENS[i]] = '#' + bytes.slice(at, at + 3).map((b) => b.toString(16).padStart(2, '0')).join('');
+    at += 3;
+  }
+  if (at !== bytes.length) return null;
+  return { base: bytes[1] ? 'light' : 'dark', colours };
+}
+
+/** Show this design's code, ready to copy. */
+export function shareDesign() {
+  const box = document.getElementById('designShare');
+  const field = document.getElementById('designShareCode');
+  if (!box || !field) return;
+  field.value = encodeDesign(baseOf(), design[baseOf()]);
+  box.hidden = false;
+  field.select();
+}
+
+export async function copyDesignCode() {
+  const field = document.getElementById('designShareCode');
+  const button = document.getElementById('designCopyBtn');
+  if (!field) return;
+  try {
+    await navigator.clipboard.writeText(field.value);
+  } catch {
+    field.select();
+    document.execCommand?.('copy');
+  }
+  if (button) {
+    button.textContent = 'Copied ✓';
+    setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+  }
+}
+
+export function toggleDesignPaste() {
+  const box = document.getElementById('designPaste');
+  if (!box) return;
+  box.hidden = !box.hidden;
+  const note = document.getElementById('designPasteNote');
+  if (note) note.textContent = '';
+  if (!box.hidden) document.getElementById('designPasteCode')?.focus();
+}
+
+/** Put a pasted code's design in place of that base's own. */
+export function applyDesignCode() {
+  const field = document.getElementById('designPasteCode');
+  const note = document.getElementById('designPasteNote');
+  const decoded = decodeDesign(field?.value);
+  if (!decoded) {
+    if (note) note.textContent = 'That is not a design code. It starts with RB- — check it was copied whole.';
+    return;
+  }
+  design[decoded.base] = decoded.colours;
+  saveDesign();
+  if (decoded.base !== baseOf()) {
+    applyTheme(decoded.base);
+  } else {
+    applyDesign();
+    renderDesigner();
+    redraw();
+  }
+  if (field) field.value = '';
+  const box = document.getElementById('designPaste');
+  if (box) box.hidden = true;
+}
+
 export function openDesigner() {
   renderDesigner();
+  for (const id of ['designShare', 'designPaste']) {
+    const box = document.getElementById(id);
+    if (box) box.hidden = true;
+  }
   document.getElementById('designerModal')?.classList.add('show');
 }
 

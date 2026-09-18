@@ -60,6 +60,7 @@ import { show } from '../ui/router.js';
 import { ui } from '../ui/uiState.js';
 import {
   toggleTheme, openDesigner, closeDesigner, setThemeBase, resetDesign,
+  shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
 } from '../ui/theme.js';
 import { money as $u, signedMoney as $s, pctText as fp, fmtPrice } from '../ui/format.js';
 import { toggleVoice } from '../features/voice.js';
@@ -715,6 +716,7 @@ export function installActions(extra = {}) {
     // navigation & chrome
     show, toggleTheme, toggleVoice, toggleAmounts,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
+    shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
     // trades

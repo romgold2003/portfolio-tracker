@@ -986,3 +986,12 @@ body.light{--wave-strength:0.34}
 .design-reset:hover:not(:disabled){background:var(--hover2)}
 .design-reset:disabled{color:var(--text4);border-color:var(--border);cursor:default;opacity:0.5}
 .design-actions{display:flex;justify-content:space-between;gap:8px;margin-top:6px}
+.design-head-actions{display:flex;align-items:center;gap:8px}
+.design-left{display:flex;gap:8px;flex-wrap:wrap}
+.design-code{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.design-code[hidden]{display:none}
+.design-code input{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:8px 10px;background:var(--input);border:0.5px solid var(--border2);border-radius:7px;color:var(--text)}
+.design-code .btn{padding:8px 14px}
+.design-note{flex-basis:100%;font-size:11px;color:var(--text3)}
+#designPasteNote{color:var(--red)}
+#designPasteNote:empty{display:none}

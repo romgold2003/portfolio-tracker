@@ -451,7 +451,15 @@
   <div class="modal designer-modal">
     <div class="years-head">
       <h3>Designer mode</h3>
-      <button class="btn years-close" onclick="closeDesigner()" aria-label="Close">×</button>
+      <div class="design-head-actions">
+        <button class="sort-btn" onclick="toggleDesignPaste()" title="Paste a design code someone shared">Paste code</button>
+        <button class="btn years-close" onclick="closeDesigner()" aria-label="Close">×</button>
+      </div>
+    </div>
+    <div class="design-code" id="designPaste" hidden>
+      <input type="text" id="designPasteCode" placeholder="RB-…" spellcheck="false" autocomplete="off" oninput="document.getElementById('designPasteNote').textContent=''" onkeydown="if(event.key==='Enter')applyDesignCode()">
+      <button class="btn btn-blue" onclick="applyDesignCode()">Apply</button>
+      <div class="design-note" id="designPasteNote"></div>
     </div>
     <p>Choose a base, then click any colour to pick your own. Changes show straight away and are kept on this device. Press Dark or Light again to bring back its original colours.</p>
     <div class="design-base">
@@ -459,8 +467,16 @@
       <button class="sort-btn" data-design-base="light" onclick="setThemeBase('light')">☀ Light</button>
     </div>
     <div id="designerGroups"></div>
+    <div class="design-code" id="designShare" hidden>
+      <input type="text" id="designShareCode" readonly spellcheck="false" onclick="this.select()">
+      <button class="btn btn-blue" id="designCopyBtn" onclick="copyDesignCode()">Copy</button>
+      <div class="design-note">Anyone who pastes this code gets this design.</div>
+    </div>
     <div class="design-actions">
-      <button class="btn" onclick="resetDesign()">Reset colours</button>
+      <div class="design-left">
+        <button class="btn" onclick="shareDesign()">Share code</button>
+        <button class="btn" onclick="resetDesign()">Reset colours</button>
+      </div>
       <button class="btn btn-blue" onclick="closeDesigner()">Done</button>
     </div>
   </div>
