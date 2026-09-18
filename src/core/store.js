@@ -60,7 +60,30 @@ export const state = {
   statements: [],
   /** Finnhub key for stock/ETF quotes. Stays on this device. */
   apiKey: '',
+  /** Five places for Designer mode codes, kept with the account: {name, code} or null. */
+  favoriteDesigns: [],
 };
+
+export const FAVORITE_SLOTS = 5;
+
+/** The favourite designs, five places, each {name, code} or null. */
+function sanitizeFavorites(list) {
+  const out = [];
+  for (let i = 0; i < FAVORITE_SLOTS; i++) {
+    const slot = Array.isArray(list) ? list[i] : null;
+    const code = typeof slot?.code === 'string' ? slot.code.trim().slice(0, 200) : '';
+    out.push(/^(RB-)?[A-Za-z0-9_-]{7,}$/i.test(code)
+      ? { name: typeof slot.name === 'string' ? slot.name.trim().slice(0, 30) : '', code }
+      : null);
+  }
+  return out;
+}
+
+/** Replace the favourite designs and save them with the account. */
+export function setFavoriteDesigns(list) {
+  state.favoriteDesigns = sanitizeFavorites(list);
+  scheduleFlush();
+}
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -638,6 +661,7 @@ export function loadState(journal) {
   const source = journal ?? {};
   if (Array.isArray(source.accounts) || !book) {
     book = readBook(source);
+    state.favoriteDesigns = sanitizeFavorites(source.favoriteDesigns);
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -655,6 +679,7 @@ export function journalSnapshot() {
     ...home.journal,
     apiKey: state.apiKey,
     cashModel: SHORT_CASH_MODEL,
+    favoriteDesigns: state.favoriteDesigns,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -675,6 +700,7 @@ export function clearState() {
   state.apiKey = '';
   state.cashModel = SHORT_CASH_MODEL;
   state.combined = false;
+  state.favoriteDesigns = [];
   announceJournal();
 }
 

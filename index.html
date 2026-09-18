@@ -475,10 +475,22 @@
     <div class="design-actions">
       <div class="design-left">
         <button class="btn" onclick="shareDesign()">Share code</button>
+        <button class="btn fav-star" onclick="openFavorites()" title="Favourite designs" aria-label="Favourite designs">★</button>
         <button class="btn" onclick="resetDesign()">Reset colours</button>
       </div>
       <button class="btn btn-blue" onclick="closeDesigner()">Done</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-bg favs-bg" id="favsModal" onclick="if(event.target===this)closeFavorites()">
+  <div class="modal favs-modal">
+    <div class="years-head">
+      <h3>★ Favourite designs</h3>
+      <button class="btn years-close" onclick="closeFavorites()" aria-label="Close">×</button>
+    </div>
+    <p>Five places for your design codes. They are saved with your account, so they follow you to any device you sign in on.</p>
+    <div id="favsList"></div>
   </div>
 </div>
 

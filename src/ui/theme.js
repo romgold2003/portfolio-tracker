@@ -307,14 +307,10 @@ export function toggleDesignPaste() {
 }
 
 /** Put a pasted code's design in place of that base's own. */
-export function applyDesignCode() {
-  const field = document.getElementById('designPasteCode');
-  const note = document.getElementById('designPasteNote');
-  const decoded = decodeDesign(field?.value);
-  if (!decoded) {
-    if (note) note.textContent = 'That is not a design code. It starts with RB- — check it was copied whole.';
-    return;
-  }
+/** Put a code's design on screen. False when it is not a design code. */
+export function applyCode(code) {
+  const decoded = decodeDesign(code);
+  if (!decoded) return false;
   design[decoded.base] = decoded.colours;
   saveDesign();
   if (decoded.base !== baseOf()) {
@@ -323,6 +319,21 @@ export function applyDesignCode() {
     applyDesign();
     renderDesigner();
     redraw();
+  }
+  return true;
+}
+
+/** The code of the design on screen. */
+export function currentDesignCode() {
+  return encodeDesign(baseOf(), design[baseOf()]);
+}
+
+export function applyDesignCode() {
+  const field = document.getElementById('designPasteCode');
+  const note = document.getElementById('designPasteNote');
+  if (!applyCode(field?.value)) {
+    if (note) note.textContent = 'That is not a design code. It starts with RB- — check it was copied whole.';
+    return;
   }
   if (field) field.value = '';
   const box = document.getElementById('designPaste');

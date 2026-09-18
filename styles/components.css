@@ -995,3 +995,21 @@ body.light{--wave-strength:0.34}
 .design-note{flex-basis:100%;font-size:11px;color:var(--text3)}
 #designPasteNote{color:var(--red)}
 #designPasteNote:empty{display:none}
+
+/* Favourite designs */
+.favs-bg{z-index:120}
+.favs-modal{width:560px}
+.fav-star{color:var(--star);padding:10px 14px}
+.fav-slot{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:0.5px solid var(--border)}
+.fav-num{width:22px;height:22px;flex-shrink:0;border-radius:50%;background:var(--input);border:0.5px solid var(--border2);font-size:11px;color:var(--text3);display:flex;align-items:center;justify-content:center;margin-top:5px}
+.fav-fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.fav-fields input{width:100%;padding:6px 9px;background:var(--input);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);font-family:inherit;font-size:12px}
+.fav-name{font-weight:600}
+.fav-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace!important;font-size:11px!important}
+.fav-note{font-size:11px;color:var(--green);min-height:0}
+.fav-note:empty{display:none}
+.fav-note.is-bad{color:var(--red)}
+.fav-buttons{display:flex;gap:6px;flex-shrink:0}
+.fav-buttons .btn{padding:6px 10px;font-size:12px}
+.fav-buttons .btn:disabled{opacity:0.45;cursor:default}
+@media (max-width:560px){.fav-slot{flex-wrap:wrap}.fav-buttons{width:100%;padding-left:32px}}

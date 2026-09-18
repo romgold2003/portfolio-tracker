@@ -153,3 +153,21 @@ describe('the combined daily value', () => {
     assert.equal(periodReturnFromHistory(rows, null, '2026-01-02').returnPct, 0);
   });
 });
+
+describe('favourite designs', () => {
+  test('are kept with the account, whichever sub-account is on screen, and survive the vault', async () => {
+    const { setFavoriteDesigns } = await import('../src/core/store.js');
+    clearState();
+    loadState(longTerm);
+    setFavoriteDesigns([{ name: 'Navy', code: 'RB-AQABCAAbEDD_Zsw' }, null, { name: 'x', code: 'not a code!' }]);
+    addSubAccount('Day trading');
+    loadState(dayTrading); // an import does not touch them
+    const saved = JSON.parse(JSON.stringify(journalSnapshot()));
+    clearState();
+    assert.deepEqual(state.favoriteDesigns, []);
+    loadState(saved);
+    assert.equal(state.favoriteDesigns.length, 5);
+    assert.deepEqual(state.favoriteDesigns[0], { name: 'Navy', code: 'RB-AQABCAAbEDD_Zsw' });
+    assert.equal(state.favoriteDesigns[2], null, 'a broken code is not kept');
+  });
+});

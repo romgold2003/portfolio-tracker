@@ -19,6 +19,7 @@ import {
   renderAccountSwitcher, toggleAccountMenu, setAccountMenuOpen, activeAccountName,
 } from '../ui/views/accounts.js';
 import { showToast } from '../ui/toast.js';
+import { openFavorites, closeFavorites } from '../ui/views/favorites.js';
 import {
   parseIbkrStatement, describeStatement, isIbkrStatement,
 } from '../features/ibkr.js';
@@ -717,6 +718,7 @@ export function installActions(extra = {}) {
     show, toggleTheme, toggleVoice, toggleAmounts,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
+    openFavorites, closeFavorites,
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
     // trades
