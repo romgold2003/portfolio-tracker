@@ -1044,3 +1044,5 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
   .wt-grid>div:nth-child(4),.wt-grid>div:nth-child(6){display:none}
   .wt-net{margin-left:0}
 }
+.wt-section{margin-top:20px;padding-top:14px;border-top:0.5px solid var(--border)}
+.wt-muted{color:var(--text2)}

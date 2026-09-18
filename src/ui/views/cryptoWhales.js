@@ -1,47 +1,58 @@
 /**
- * Crypto whales: big buys and sells of the top-fifty coins, in two parts.
+ * The crypto whale page.
  *
- *   Spot       real purchases and sales — trades on decentralised exchanges,
- *              plus coins withdrawn from or deposited to exchanges, which is
- *              how buying and selling on Binance or Coinbase shows on-chain.
- *              From this app's server, which collects every ten minutes.
- *   Leveraged  Hyperliquid, live. Every trade there is public with both
- *              wallets, so a whale's order appears the moment it fills.
+ * On top, unchanged: stablecoin dominance, exchange netflow and the top holders
+ * of the chosen coin (whaleOverview.js), with the coin strip. Below them, in
+ * place of the old transfer tape, two sections about the top-fifty coins,
+ * stablecoins left out:
  *
- * Only buys and sells: no transfers between wallets, no internal moves.
+ *   Leveraged  whales opening and closing leveraged positions — OPEN LONG,
+ *              CLOSE SHORT and so on — on Hyperliquid (live, in the browser)
+ *              and GMX (collected by the server every ten minutes).
+ *   Spot       whales buying and selling on decentralised exchanges. Only
+ *              buys and sells: no transfers between wallets or exchanges.
+ *
+ * The coin strip chooses the coin for the holder card and both sections.
  */
 import {
-  BANDS, bandOf, filterRows, summarise, countByBand, groupFills, hyperliquidMarkets,
+  BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
+  hyperliquidAction, leveragedLabel, filterLeveraged, summariseLeveraged,
   walletLink, shortAddress,
 } from '../../services/whaleTrades.js';
+import {
+  renderOverview, tickOverview, setCoinListener, overviewCoins,
+} from './whaleOverview.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
 
 const HL_INFO = 'https://api.hyperliquid.xyz/info';
 const HL_WS = 'wss://api.hyperliquid.xyz/ws';
-const LEVERAGED_KEY = 'pt_hl_orders';
+const HL_KEY = 'pt_hl_orders_v2';
 const DAY = 86_400;
 
-let mode = 'spot';
 let coin = '';
-let band = 'all';
-let side = 'both';
-let span = DAY;
-
 let coins = [];
+
+/** Each section's own filters. */
+const sections = {
+  lev: { band: 'all', side: 'both', span: DAY },
+  spot: { band: 'all', side: 'both', span: DAY },
+};
+
 let spotRows = [];
-let spotLoadedAt = 0;
-let spotError = '';
-let leveragedRows = readLeveraged();
-let hl = { socket: null, markets: new Map(), status: 'idle', open: new Map(), sweep: null };
+let gmxRows = [];
+let hlRows = readHyperliquid();
+let loadedAt = 0;
+let loadError = '';
+const hl = { socket: null, markets: new Map(), status: 'idle', open: new Map(), sweep: null };
 
 /* ── formatting ──────────────────────────────────────────────────────── */
 
 function money(usd) {
-  if (usd >= 1e9) return `$${(usd / 1e9).toFixed(2)}B`;
-  if (usd >= 1e6) return `$${(usd / 1e6).toFixed(2)}M`;
-  return `$${Math.round(usd / 1e3).toLocaleString()}k`;
+  const a = Math.abs(usd);
+  const s = a >= 1e9 ? `$${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `$${(a / 1e6).toFixed(2)}M` : `$${Math.round(a / 1e3).toLocaleString()}k`;
+  return usd < 0 ? `−${s}` : s;
 }
 
 function amountText(n) {
@@ -67,144 +78,167 @@ const DEX_NAMES = {
 };
 const dexName = (id) => DEX_NAMES[id] ?? (id ? String(id).split(/[_-]/)[0].replace(/^./, (c) => c.toUpperCase()) : 'DEX');
 
-/** The action pill, and the line under it saying where the trade happened. */
-function action(r) {
-  if (r.side === 'withdraw') {
-    return ['wt-pill is-buy is-flow', 'WITHDRAWN', `Left ${r.venue} — held`];
-  }
-  if (r.side === 'deposit') {
-    return ['wt-pill is-sell is-flow', 'DEPOSITED', `Sent to ${r.venue} — may sell`];
-  }
-  const where = r.source === 'hyperliquid' ? 'Hyperliquid perp' : `${dexName(r.dex)} · ${r.network}`;
-  return r.side === 'buy' ? ['wt-pill is-buy', 'BUY', where] : ['wt-pill is-sell', 'SELL', where];
+function walletHtml(r) {
+  if (!r.address) return '<span class="wt-wallet">—</span>';
+  const link = walletLink(r);
+  const text = escapeHtml(shortAddress(r.address));
+  return link
+    ? `<a class="wt-wallet" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(r.address)}">${text}</a>`
+    : `<span class="wt-wallet" title="${escapeHtml(r.address)}">${text}</span>`;
 }
 
-function rowHtml(r) {
-  const [pill, label, where] = action(r);
-  const link = walletLink(r);
-  const wallet = r.address
-    ? (link
-      ? `<a class="wt-wallet" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(r.address)}">${escapeHtml(shortAddress(r.address))}</a>`
-      : `<span class="wt-wallet" title="${escapeHtml(r.address)}">${escapeHtml(shortAddress(r.address))}</span>`)
-    : '<span class="wt-wallet">—</span>';
-  const logo = coins.find((c) => c.symbol === r.symbol)?.logo;
+function coinHtml(symbol) {
+  const logo = coins.find((c) => c.symbol === symbol)?.logo;
+  return `<div class="wt-coin">${logo ? `<img src="${escapeHtml(logo)}" alt="" width="16" height="16" loading="lazy">` : ''}${escapeHtml(symbol)}</div>`;
+}
+
+function rowHtml(r, pill, where) {
   return `<div class="wt-row wt-grid">
     <div class="wt-when" title="${escapeHtml(new Date(r.at * 1000).toLocaleString())}">${escapeHtml(ago(r.at))}</div>
-    <div class="wt-coin">${logo ? `<img src="${escapeHtml(logo)}" alt="" width="16" height="16" loading="lazy">` : ''}${escapeHtml(r.symbol)}</div>
-    <div class="wt-act"><span class="${pill}">${label}</span><span class="wt-where">${escapeHtml(where)}</span></div>
+    ${coinHtml(r.symbol)}
+    <div class="wt-act">${pill}<span class="wt-where">${escapeHtml(where)}</span></div>
     <div class="wt-amt">${escapeHtml(amountText(r.amount))} <span>${escapeHtml(r.symbol)}</span></div>
     <div class="wt-usd">${escapeHtml(money(r.usd))}</div>
-    <div>${wallet}</div>
+    <div>${walletHtml(r)}</div>
   </div>`;
 }
 
-/* ── drawing ─────────────────────────────────────────────────────────── */
-
-function pickerHtml(items, current, attr) {
-  return items.map(([id, label, count]) => `<button class="opt-tab${id === current ? ' active' : ''}${count === 0 ? ' is-empty' : ''}"
-    data-${attr}="${escapeHtml(id)}">${escapeHtml(label)}${count == null ? '' : `<span class="gam-count">${count}</span>`}</button>`).join('');
+function leveragedRow(r) {
+  const { text, bullish, opening } = leveragedLabel(r);
+  const pill = `<span class="wt-pill ${bullish ? 'is-buy' : 'is-sell'}${opening ? '' : ' is-flow'}">${escapeHtml(text)}</span>`;
+  const venue = r.source === 'hyperliquid' ? 'Hyperliquid' : `GMX · ${r.network === 'avalanche' ? 'Avalanche' : 'Arbitrum'}`;
+  const pnl = r.pnl != null && Math.abs(r.pnl) >= 1 ? ` · P&L ${r.pnl >= 0 ? '+' : ''}${money(r.pnl)}` : '';
+  return rowHtml(r, pill, venue + pnl);
 }
 
-function currentRows() {
-  return mode === 'spot' ? spotRows : leveragedRows;
+function spotRow(r) {
+  const pill = r.side === 'buy'
+    ? '<span class="wt-pill is-buy">BUY</span>'
+    : '<span class="wt-pill is-sell">SELL</span>';
+  return rowHtml(r, pill, `${dexName(r.dex)} · ${r.network}`);
+}
+
+const HEAD = '<div class="wt-head wt-grid"><div>When</div><div>Coin</div><div>Action</div><div>Amount</div><div>Value</div><div>Wallet</div></div>';
+
+/* ── drawing ─────────────────────────────────────────────────────────── */
+
+function pickerHtml(items, current) {
+  return items.map(([id, label, count]) => `<button class="opt-tab${String(id) === String(current) ? ' active' : ''}${count === 0 ? ' is-empty' : ''}"
+    data-value="${escapeHtml(String(id))}">${escapeHtml(label)}${count == null ? '' : `<span class="gam-count">${count}</span>`}</button>`).join('');
+}
+
+const leveragedRows = () => [...hlRows, ...gmxRows];
+
+function drawSection(key) {
+  const f = sections[key];
+  const since = Math.floor(Date.now() / 1000) - f.span;
+  const lev = key === 'lev';
+  const all = lev ? leveragedRows() : spotRows;
+  const pick = lev ? filterLeveraged : filterRows;
+  const base = { coin, side: f.side, since };
+
+  const bandCounts = new Map(BANDS.map((b) => [b.id, pick(all, { ...base, band: b.id }).length]));
+  el(`${key}Band`).innerHTML = pickerHtml(BANDS.map((b) => [b.id, b.label, bandCounts.get(b.id)]), f.band);
+  el(`${key}Side`).innerHTML = pickerHtml(lev
+    ? [['both', 'Longs & shorts'], ['long', 'Longs'], ['short', 'Shorts']]
+    : [['both', 'Buys & sells'], ['buy', 'Buys'], ['sell', 'Sells']], f.side);
+  el(`${key}Span`).innerHTML = pickerHtml([[DAY, '24h'], [7 * DAY, '7d']], f.span);
+
+  const rows = pick(all, { ...base, band: f.band });
+  const summary = el(`${key}Summary`);
+  if (lev) {
+    const s = summariseLeveraged(rows);
+    summary.innerHTML = rows.length
+      ? `<span class="cw-in">Opened long ${money(s.longUsd)} <small>(${s.longs})</small></span>
+         <span class="cw-out">Opened short ${money(s.shortUsd)} <small>(${s.shorts})</small></span>
+         <span class="wt-muted">Closed ${money(s.closedUsd)} <small>(${s.closes})</small></span>`
+      : '';
+  } else {
+    const s = summarise(rows);
+    const net = s.net >= 0 ? `net buying ${money(s.net)}` : `net selling ${money(-s.net)}`;
+    summary.innerHTML = rows.length
+      ? `<span class="cw-in">Bought ${money(s.buyUsd)} <small>(${s.buys})</small></span>
+         <span class="cw-out">Sold ${money(s.sellUsd)} <small>(${s.sells})</small></span>
+         <span class="wt-net ${s.net >= 0 ? 'cw-in' : 'cw-out'}">${net}</span>`
+      : '';
+  }
+
+  const shown = rows.slice(0, 150);
+  el(`${key}Rows`).innerHTML = shown.length
+    ? HEAD + shown.map(lev ? leveragedRow : spotRow).join('')
+    : `<div class="empty">${escapeHtml(emptyText(key))}</div>`;
+
+  el(`${key}Src`).textContent = lev ? leveragedSource() : spotSource();
+}
+
+function emptyText(key) {
+  const f = sections[key];
+  const b = bandOf(f.band).label;
+  const what = coin || 'the top-50 coins';
+  if (key === 'lev') {
+    return `No ${b} leveraged trades on ${what} in this period. Hyperliquid trades appear here the moment they fill.`;
+  }
+  if (loadError) return loadError;
+  return `No ${b} spot buys or sells of ${what} in this period.${coin ? ' Some coins trade almost only on centralised exchanges, where wallets are not public.' : ''}`;
+}
+
+function leveragedSource() {
+  const live = {
+    live: `Hyperliquid live (${hl.markets.size} of ${coins.length} coins)`,
+    connecting: 'Hyperliquid connecting…',
+    closed: 'Hyperliquid reconnecting…',
+    idle: 'Hyperliquid',
+  }[hl.status] ?? 'Hyperliquid';
+  return `${live} · GMX on Arbitrum and Avalanche, every 10 minutes · P&L is the profit or loss realised by a close`;
+}
+
+function spotSource() {
+  return loadedAt
+    ? `Uniswap, PancakeSwap, Raydium and other on-chain exchanges via GeckoTerminal · trading bots removed · updated ${ago(Math.floor(loadedAt / 1000))}`
+    : 'Loading…';
 }
 
 function draw() {
-  const host = el('cwRows');
-  if (!host) return;
-
-  const since = Math.floor(Date.now() / 1000) - span;
-  const base = { coin, side, since };
-  const all = currentRows();
-
-  el('cwMode').innerHTML = pickerHtml([['spot', 'Spot'], ['leveraged', 'Leveraged']], mode, 'mode');
-  el('cwExplain').textContent = mode === 'spot'
-    ? 'Real purchases and sales. BUY / SELL are trades on decentralised exchanges; WITHDRAWN / DEPOSITED are coins leaving or entering Binance, Coinbase and other exchanges — kept, or made ready to sell.'
-    : 'Leveraged bets on Hyperliquid, live: a BUY is a bet the price rises, a SELL that it falls. Orders appear as they fill while this page is open.';
-
-  const select = el('cwCoin');
-  if (select) {
-    const counts = new Map();
-    for (const r of filterRows(all, { ...base, coin: '', band })) counts.set(r.symbol, (counts.get(r.symbol) ?? 0) + 1);
-    const options = [`<option value="">All top-50 coins (${filterRows(all, { ...base, coin: '', band }).length})</option>`]
-      .concat(coins.map((c) => {
-        const noMarket = mode === 'leveraged' && hl.markets.size && !hl.markets.has(c.symbol);
-        return `<option value="${escapeHtml(c.symbol)}"${c.symbol === coin ? ' selected' : ''}>#${c.rank} ${escapeHtml(c.symbol)} — ${escapeHtml(c.name)}${noMarket ? ' (not on Hyperliquid)' : ` (${counts.get(c.symbol) ?? 0})`}</option>`;
-      }));
-    select.innerHTML = options.join('');
-  }
-
-  const bandCounts = countByBand(all, base);
-  el('cwBand').innerHTML = pickerHtml(BANDS.map((b) => [b.id, b.label, bandCounts.get(b.id)]), band, 'band');
-  el('cwSide').innerHTML = pickerHtml([['both', 'Buys & sells'], ['buy', 'Buys'], ['sell', 'Sells']], side, 'side');
-  el('cwSpan').innerHTML = pickerHtml(mode === 'spot' ? [[String(DAY), '24h'], [String(7 * DAY), '7d']] : [[String(DAY), '24h']], String(span), 'span');
-
-  const rows = filterRows(all, { ...base, band });
-  const s = summarise(rows);
-  const net = s.net >= 0 ? `net buying ${money(s.net)}` : `net selling ${money(-s.net)}`;
-  el('cwSummary').innerHTML = rows.length
-    ? `<span class="cw-in">Buying ${money(s.buyUsd)} <small>(${s.buys})</small></span>
-       <span class="cw-out">Selling ${money(s.sellUsd)} <small>(${s.sells})</small></span>
-       <span class="wt-net ${s.net >= 0 ? 'cw-in' : 'cw-out'}">${net}</span>`
-    : '';
-
-  const shown = rows.slice(0, 200);
-  host.innerHTML = shown.length
-    ? `<div class="wt-head wt-grid"><div>When</div><div>Coin</div><div>Action</div><div>Amount</div><div>Value</div><div>Wallet</div></div>${shown.map(rowHtml).join('')}`
-    : `<div class="empty">${escapeHtml(emptyText())}</div>`;
-
-  el('cwSrc').textContent = mode === 'spot'
-    ? (spotError || (spotLoadedAt ? `On-chain trades via GeckoTerminal · exchange flows from the chains · updated ${ago(Math.floor(spotLoadedAt / 1000))}` : 'Loading…'))
-    : ({
-      live: `Live from Hyperliquid · ${hl.markets.size} of ${coins.length} coins listed there`,
-      connecting: 'Connecting to Hyperliquid…',
-      closed: 'Connection to Hyperliquid lost — reconnecting…',
-      idle: 'Opens a live connection to Hyperliquid while this page is on screen.',
-    })[hl.status] ?? '';
+  if (!el('levRows')) return;
+  drawSection('lev');
+  drawSection('spot');
 }
 
-function emptyText() {
-  const b = bandOf(band).label;
-  const what = coin || 'the top-50 coins';
-  if (mode === 'leveraged') {
-    if (coin && hl.markets.size && !hl.markets.has(coin)) return `${coin} is not traded on Hyperliquid.`;
-    return `No ${b} leveraged orders on ${what} yet — they appear here as they happen.`;
-  }
-  if (spotError) return spotError;
-  return `No ${b} spot buys or sells of ${what} in this period.${coin ? ' Coins that trade mostly on centralised exchanges show only exchange withdrawals and deposits here.' : ''}`;
-}
+/* ── the server's side: spot trades and GMX ──────────────────────────── */
 
-/* ── spot: from the server ───────────────────────────────────────────── */
-
-async function loadSpot() {
+async function loadServer() {
   try {
-    const res = await fetch('/api/whales?resource=spot', { credentials: 'same-origin' });
-    if (!res.ok) throw new Error(res.status === 401 ? 'Sign in to see whale trades.' : `The server answered ${res.status}.`);
-    const json = await res.json();
-    coins = Array.isArray(json.coins) ? json.coins : coins;
+    const [spot, lev] = await Promise.all([
+      fetch('/api/whales?resource=spot', { credentials: 'same-origin' }),
+      fetch('/api/whales?resource=leveraged', { credentials: 'same-origin' }),
+    ]);
+    if (!spot.ok) throw new Error(spot.status === 401 ? 'Sign in to see whale trades.' : `The server answered ${spot.status}.`);
+    const json = await spot.json();
+    if (Array.isArray(json.coins) && json.coins.length) coins = json.coins;
     spotRows = Array.isArray(json.rows) ? json.rows : [];
-    spotLoadedAt = Date.now();
-    spotError = '';
+    if (lev.ok) gmxRows = (await lev.json())?.rows ?? gmxRows;
+    loadedAt = Date.now();
+    loadError = '';
   } catch (err) {
-    spotError = err.message || 'Could not load the spot trades.';
+    loadError = err.message || 'Could not load the whale trades.';
   }
   draw();
 }
 
-/* ── leveraged: live from Hyperliquid ────────────────────────────────── */
+/* ── Hyperliquid, live ───────────────────────────────────────────────── */
 
-function readLeveraged() {
+function readHyperliquid() {
   try {
-    const rows = JSON.parse(localStorage.getItem(LEVERAGED_KEY) ?? '[]');
-    const since = Math.floor(Date.now() / 1000) - DAY;
+    const rows = JSON.parse(localStorage.getItem(HL_KEY) ?? '[]');
+    const since = Math.floor(Date.now() / 1000) - 7 * DAY;
     return Array.isArray(rows) ? rows.filter((r) => r?.at >= since) : [];
   } catch {
     return [];
   }
 }
 
-function saveLeveraged() {
-  try { localStorage.setItem(LEVERAGED_KEY, JSON.stringify(leveragedRows.slice(0, 1000))); } catch { /* ignore */ }
+function saveHyperliquid() {
+  try { localStorage.setItem(HL_KEY, JSON.stringify(hlRows.slice(0, 1000))); } catch { /* ignore */ }
 }
 
 /**
@@ -226,35 +260,62 @@ function takeFills(fills) {
   const now = Date.now();
   for (const o of orders) {
     const open = hl.open.get(o.id);
-    if (open) { open.amount += o.amount; open.usd += o.usd; open.seen = now; }
-    else hl.open.set(o.id, { ...o, seen: now });
+    if (open) { open.amount += o.amount; open.usd += o.usd; open.tids.push(...o.tids); open.seen = now; } else hl.open.set(o.id, { ...o, seen: now });
   }
   if (!hl.sweep) hl.sweep = setInterval(settleOrders, 1_000);
 }
 
 function settleOrders() {
   const now = Date.now();
-  const done = [];
   for (const [id, o] of hl.open) {
     if (now - o.seen < SETTLE_MS) continue;
     hl.open.delete(id);
-    if (o.usd >= BANDS[0].min) {
-      const { seen, ...order } = o;
-      done.push(order);
-    }
+    if (o.usd >= BANDS[0].min && !hlRows.some((r) => r.id === id)) classify(o);
   }
-  if (!done.length) return;
-  const known = new Set(leveragedRows.map((r) => r.id));
-  const fresh = done.filter((o) => !known.has(o.id));
-  if (!fresh.length) return;
-  const since = Math.floor(now / 1000) - DAY;
-  leveragedRows = [...fresh, ...leveragedRows].filter((r) => r.at >= since).sort((a, b) => b.at - a.at);
-  saveLeveraged();
-  if (mode === 'leveraged') draw();
 }
 
-async function connectLeveraged() {
-  if (hl.socket || !coins.length) return;
+/**
+ * Ask the wallet's own fills what the order did.
+ *
+ * The public trade says buy or sell. The wallet's fill says "Open Long",
+ * "Close Short" and so on, and carries the profit a close realised. If the
+ * lookup fails the order still shows, as the long or short side it bought or
+ * sold into.
+ */
+async function classify(o) {
+  const { seen, tids, ...order } = o;
+  const ids = new Set(tids);
+  let action = null;
+  let pnl = null;
+  try {
+    const res = await fetch(HL_INFO, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'userFillsByTime', user: o.address, startTime: o.at * 1000 - 60_000, endTime: o.at * 1000 + 60_000,
+      }),
+    });
+    const fills = (await res.json()).filter((f) => ids.has(f.tid) || (o.hash && f.hash === o.hash));
+    if (fills.length) {
+      action = hyperliquidAction(fills[0], fills.reduce((sum, f) => sum + Number(f.sz), 0));
+      pnl = fills.reduce((sum, f) => sum + (Number(f.closedPnl) || 0), 0);
+    }
+  } catch { /* shown by its side alone */ }
+  const row = {
+    ...order,
+    verb: action?.verb ?? 'unknown',
+    side: action?.side ?? (order.side === 'buy' ? 'long' : 'short'),
+    pnl: action && action.verb !== 'open' && action.verb !== 'add' ? pnl : null,
+  };
+  hlRows = [row, ...hlRows.filter((r) => r.id !== row.id)]
+    .filter((r) => r.at >= Math.floor(Date.now() / 1000) - 7 * DAY)
+    .sort((a, b) => b.at - a.at);
+  saveHyperliquid();
+  draw();
+}
+
+async function connectHyperliquid() {
+  if (hl.socket || hl.status === 'connecting' || !coins.length) return;
   hl.status = 'connecting';
   try {
     const res = await fetch(HL_INFO, {
@@ -264,7 +325,7 @@ async function connectLeveraged() {
     hl.markets = hyperliquidMarkets(coins.map((c) => c.symbol), meta?.universe);
   } catch {
     hl.status = 'closed';
-    setTimeout(connectLeveraged, 15_000);
+    setTimeout(connectHyperliquid, 15_000);
     return;
   }
 
@@ -275,7 +336,7 @@ async function connectLeveraged() {
     for (const { market } of hl.markets.values()) {
       socket.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'trades', coin: market } }));
     }
-    if (mode === 'leveraged') draw();
+    draw();
   });
   socket.addEventListener('message', (e) => {
     try {
@@ -286,8 +347,8 @@ async function connectLeveraged() {
   socket.addEventListener('close', () => {
     hl.socket = null;
     hl.status = 'closed';
-    if (mode === 'leveraged') draw();
-    setTimeout(connectLeveraged, 5_000);
+    draw();
+    setTimeout(connectHyperliquid, 5_000);
   });
 }
 
@@ -295,31 +356,39 @@ async function connectLeveraged() {
 
 function bind() {
   const card = el('cryptoWhaleCard');
-  if (!card || card.dataset.bound === '1') return;
-  card.dataset.bound = '1';
-  card.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-mode],button[data-band],button[data-side],button[data-span]');
-    if (!b) return;
-    if (b.dataset.mode) {
-      mode = b.dataset.mode;
-      if (mode === 'leveraged') { span = DAY; connectLeveraged(); }
+  if (!card || card.dataset.tradesBound === '1') return;
+  card.dataset.tradesBound = '1';
+  for (const key of Object.keys(sections)) {
+    for (const [part, field, cast] of [['Band', 'band', String], ['Side', 'side', String], ['Span', 'span', Number]]) {
+      el(`${key}${part}`)?.addEventListener('click', (e) => {
+        const value = e.target.closest('button[data-value]')?.dataset.value;
+        if (value == null) return;
+        sections[key][field] = cast(value);
+        drawSection(key);
+      });
     }
-    if (b.dataset.band) band = b.dataset.band;
-    if (b.dataset.side) side = b.dataset.side;
-    if (b.dataset.span) span = Number(b.dataset.span);
-    draw();
-  });
-  el('cwCoin')?.addEventListener('change', (e) => { coin = e.target.value; draw(); });
+  }
+  setCoinListener((symbol) => { coin = symbol; draw(); });
 }
 
 export async function renderCryptoWhales() {
   bind();
   draw();
-  await loadSpot();
-  // The live connection starts with the panel, so orders are gathered before Leveraged is opened.
-  connectLeveraged();
+  renderOverview().then(() => {
+    if (!coins.length) coins = overviewCoins().map((c) => ({ symbol: c.symbol, name: c.name, rank: c.rank, logo: c.logo }));
+    connectHyperliquid();
+    draw();
+  });
+  await loadServer();
+  connectHyperliquid();
 }
 
+/**
+ * The two trackers inside the Gamble tab.
+ *
+ * Bound once, on the strip rather than on each button, so redrawing either
+ * panel cannot leave a stale handler behind.
+ */
 export function installGambleTabs({ onMacro } = {}) {
   const strip = el('gambleTabs');
   if (!strip || strip.dataset.bound === '1') return;
@@ -341,7 +410,7 @@ export function installGambleTabs({ onMacro } = {}) {
   });
 }
 
-/** Spot is re-read every minute while on screen; "ago" times tick with it. */
+/** Refreshed every minute while on screen; the cards above keep their own clocks. */
 const EVERY_MS = 60_000;
 let timer = null;
 
@@ -351,7 +420,7 @@ export function startCryptoWhales() {
     const card = el('cryptoWhaleCard');
     const onScreen = card && card.offsetParent !== null && document.visibilityState === 'visible';
     if (!onScreen) return;
-    if (mode === 'spot') loadSpot();
-    else draw();
+    tickOverview();
+    loadServer();
   }, EVERY_MS);
 }

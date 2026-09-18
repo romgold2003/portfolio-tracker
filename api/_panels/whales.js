@@ -32,7 +32,7 @@ import * as holderhistory from '../_lib/holderhistory.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
 import { platformMap } from '../_lib/topcoins.js';
 import * as dexspot from '../_lib/dexspot.js';
-import { ACTIONS } from '../_lib/activity.js';
+import * as gmxlev from '../_lib/gmxlev.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -612,11 +612,14 @@ export default async function handler(req, res) {
 
     const now = Date.now();
     /**
-     * Two jobs, side by side: the transfers (whose exchange withdrawals and
-     * deposits are the Spot panel's centralised side) and the DEX trades.
+     * Four jobs, side by side: the transfers behind the netflow and holder
+     * cards, one coin's holder movements, the spot trades on decentralised
+     * exchanges, and the leveraged trades on GMX.
      */
-    const [poll, spot] = await Promise.all([
+    const [poll, holders, spot, leveraged] = await Promise.all([
       topUp(now, { force: true }),
+      // One coin's holder movements, rotating by the clock across polls.
+      enrichNextCoin(now).catch((err) => ({ failed: err.message })),
       (async () => {
         try {
           const { coins } = await topCoins();
@@ -626,11 +629,12 @@ export default async function handler(req, res) {
           return { failed: err.message };
         }
       })(),
+      gmxlev.collectGmx({ now }).catch((err) => ({ failed: err.message })),
     ]);
 
     res.setHeader('Cache-Control', 'no-store');
     return send(res, 200, {
-      written: poll.written, failed: poll.failed, at: poll.at, spot,
+      written: poll.written, failed: poll.failed, at: poll.at, holders, spot, leveraged,
     });
   }
 
@@ -638,13 +642,28 @@ export default async function handler(req, res) {
   if (!user) return fail(res, 401, 'Not signed in.');
 
   /**
-   * The Spot panel: every large buy and sell of a top-fifty coin.
+   * Leveraged whale trades held by the server: GMX, a week of them.
+   * Hyperliquid is read live by the browser and is not here.
+   */
+  if (resource === 'leveraged') {
+    try {
+      const since = Math.floor(Date.now() / 1000) - 7 * 86400;
+      const { coins } = await topCoins();
+      const listed = new Set(coins.map((c) => c.symbol));
+      const rows = (await gmxlev.readLeveraged({ since })).filter((r) => listed.has(r.symbol));
+      res.setHeader('Cache-Control', 'private, max-age=30');
+      return send(res, 200, { rows });
+    } catch (err) {
+      return fail(res, 502, `Could not read the leveraged trades (${err.message}).`);
+    }
+  }
+
+  /**
+   * The Spot panel: large buys and sells of a top-fifty coin, and only those.
    *
-   * Two kinds of row, one list. DEX trades are purchases and sales outright.
-   * Exchange withdrawals and deposits are how a whale buying or selling on
-   * Binance or Coinbase shows on-chain — coins leaving an exchange for a
-   * private wallet are being kept, coins sent to one are usually about to be
-   * sold — and they are labelled as that, never as a trade.
+   * Trades on decentralised exchanges, where the wallet and the direction are
+   * both on-chain. Transfers — wallet to wallet, onto or off an exchange — are
+   * not purchases and are not here.
    */
   if (resource === 'spot') {
     try {
@@ -656,39 +675,10 @@ export default async function handler(req, res) {
       const dex = dexspot.withoutBots(await dexspot.readSpot({ since }))
         .filter((r) => listed.has(r.symbol));
 
-      let cex = [];
-      try {
-        const byAddress = await loadExchanges();
-        const held = await store.read({ minUsd: dexspot.FLOOR_USD, limit: 3000 });
-        cex = held
-          .filter((t) => t.at >= since && listed.has(t.symbol))
-          .map((t) => {
-            const kind = classifyActivity(t, { byAddress }).action;
-            if (kind !== ACTIONS.WITHDRAWAL && kind !== ACTIONS.DEPOSIT) return null;
-            const withdrawal = kind === ACTIONS.WITHDRAWAL;
-            const venue = exchangeOf(withdrawal ? t.from?.address : t.to?.address, byAddress)?.venue
-              ?? (withdrawal ? t.from?.owner : t.to?.owner) ?? 'an exchange';
-            return {
-              id: t.id,
-              at: t.at,
-              symbol: t.symbol,
-              side: withdrawal ? 'withdraw' : 'deposit',
-              amount: t.amount,
-              usd: t.usd,
-              address: (withdrawal ? t.to?.address : t.from?.address) ?? null,
-              venue,
-              network: t.blockchain,
-              hash: t.hash,
-              source: 'cex',
-            };
-          })
-          .filter(Boolean);
-      } catch { /* the DEX side still answers */ }
-
       res.setHeader('Cache-Control', 'private, max-age=30');
       return send(res, 200, {
         coins: coins.map((c) => ({ symbol: c.symbol, name: c.name, rank: c.rank, logo: c.logo, price: c.price })),
-        rows: [...dex, ...cex].sort((a, b) => b.at - a.at),
+        rows: dex,
       });
     } catch (err) {
       return fail(res, 502, `Could not read the spot trades (${err.message}).`);

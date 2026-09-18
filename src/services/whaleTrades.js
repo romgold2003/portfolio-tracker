@@ -2,10 +2,9 @@
  * Whale buys and sells of the top-fifty coins, spot and leveraged.
  *
  * Spot rows come from this app's server: trades on decentralised exchanges,
- * which are purchases and sales outright, and exchange withdrawals and
- * deposits, which are how buying and selling on Binance or Coinbase shows up
- * on-chain. Leveraged rows come straight from Hyperliquid, live, where every
- * trade is public with both wallets on it.
+ * which are purchases and sales outright. Leveraged rows come from GMX, via the
+ * server, and from Hyperliquid, live, where every trade is public with both
+ * wallets on it and each wallet's fill says whether it opened or closed.
  *
  * Everything here is plain data in, plain data out, so it is tested without a
  * browser; the view only draws what these return.
@@ -21,8 +20,8 @@ export const BANDS = [
 
 export const bandOf = (id) => BANDS.find((b) => b.id === id) ?? BANDS[0];
 
-/** Buying sides and selling sides. A withdrawal is kept coins, a deposit coins made ready to sell. */
-const BUYING = new Set(['buy', 'withdraw']);
+/** Buying sides and selling sides. */
+const BUYING = new Set(['buy']);
 export const isBuying = (row) => BUYING.has(row.side);
 
 /**
@@ -105,8 +104,11 @@ export function groupFills(fills, { scaleOf = () => 1, symbolOf = (m) => m } = {
       usd: 0,
       address: taker,
       hash: zeroHash ? null : f.hash,
+      // Trade ids too: a fill with no transaction hash can only be found by its id.
+      tids: [],
       source: 'hyperliquid',
     };
+    if (f.tid != null) order.tids.push(f.tid);
     order.amount += sz * scale;
     order.usd += px * sz;
     orders.set(key, order);
@@ -144,3 +146,59 @@ export function walletLink(row) {
 }
 
 export const shortAddress = (a) => (typeof a === 'string' && a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a ?? '');
+
+/* ── leveraged actions ───────────────────────────────────────────────── */
+
+/**
+ * What a Hyperliquid order did, from the wallet's own fill.
+ *
+ * The public trade only says who bought and who sold. The wallet's fill says
+ * "Open Long", "Close Short", "Long > Short" and so on, and its starting
+ * position tells a first entry from adding more, and a full exit from a part
+ * one.
+ */
+export function hyperliquidAction(fill, size) {
+  const dir = String(fill?.dir ?? '');
+  const start = Math.abs(Number(fill?.startPosition) || 0);
+  const side = /short/i.test(dir.split('>').pop()) ? 'short' : 'long';
+  if (/>/.test(dir)) return { verb: 'flip', side };
+  if (/liquidat/i.test(dir)) return { verb: 'liquidated', side: /short/i.test(dir) ? 'short' : 'long' };
+  if (/^open/i.test(dir)) return { verb: start > 1e-9 ? 'add' : 'open', side };
+  if (/^close/i.test(dir)) return { verb: size && start - size > 1e-9 * Math.max(1, start) ? 'reduce' : 'close', side };
+  return null;
+}
+
+/** The label on the pill, and whether it is a bet on the price rising. */
+export function leveragedLabel(row) {
+  const side = row.side === 'short' ? 'SHORT' : 'LONG';
+  const words = {
+    open: `OPEN ${side}`, add: `ADD ${side}`, close: `CLOSE ${side}`, reduce: `REDUCE ${side}`,
+    liquidated: `${side} LIQUIDATED`, flip: `FLIP → ${side}`,
+  };
+  // Opening a long or closing a short both need the price up; the reverse needs it down.
+  // Open or close unknown: the trade still shows, as the side it bought or sold.
+  if (row.verb === 'unknown') return { text: row.side === 'short' ? 'SELL' : 'BUY', bullish: row.side !== 'short', opening: true };
+  const opening = row.verb === 'open' || row.verb === 'add' || row.verb === 'flip';
+  const bullish = opening ? row.side === 'long' : row.side === 'short';
+  return { text: words[row.verb] ?? side, bullish, opening };
+}
+
+/** Leveraged rows filtered by position side instead of buy/sell. */
+export function filterLeveraged(rows, { coin = '', band = 'all', side = 'both', since = 0 } = {}) {
+  const { min, max } = bandOf(band);
+  return (rows ?? [])
+    .filter((r) => r.at >= since && r.usd >= min && r.usd < max)
+    .filter((r) => !coin || r.symbol === coin)
+    .filter((r) => side === 'both' || r.side === side)
+    .sort((a, b) => b.at - a.at);
+}
+
+/** Money opened long, opened short, and closed, for the summary line. */
+export function summariseLeveraged(rows) {
+  const out = { longUsd: 0, shortUsd: 0, closedUsd: 0, longs: 0, shorts: 0, closes: 0 };
+  for (const r of rows ?? []) {
+    const { opening } = leveragedLabel(r);
+    if (!opening) { out.closedUsd += r.usd; out.closes += 1; } else if (r.side === 'long') { out.longUsd += r.usd; out.longs += 1; } else { out.shortUsd += r.usd; out.shorts += 1; }
+  }
+  return out;
+}

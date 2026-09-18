@@ -15,8 +15,8 @@ const row = (symbol, side, usd, at = 1000, extra = {}) => ({
 
 describe('filters', () => {
   const rows = [
-    row('BTC', 'buy', 600_000), row('BTC', 'sell', 3_000_000), row('ETH', 'withdraw', 30_000_000),
-    row('ETH', 'deposit', 7_000_000), row('SOL', 'buy', 400_000),
+    row('BTC', 'buy', 600_000), row('BTC', 'sell', 3_000_000), row('ETH', 'buy', 30_000_000),
+    row('ETH', 'sell', 7_000_000), row('SOL', 'buy', 400_000),
   ];
 
   test('bands are half-open and start at $500k', () => {
@@ -27,9 +27,9 @@ describe('filters', () => {
     assert.equal(filterRows(rows, { band: 'all' }).length, 4, 'under $500k is never shown');
   });
 
-  test('a withdrawal counts with buying and a deposit with selling', () => {
-    assert.deepEqual(filterRows(rows, { side: 'buy' }).map((r) => r.side).sort(), ['buy', 'withdraw']);
-    assert.deepEqual(filterRows(rows, { side: 'sell' }).map((r) => r.side).sort(), ['deposit', 'sell']);
+  test('buys and sells are filtered and summed apart', () => {
+    assert.deepEqual(filterRows(rows, { side: 'buy' }).map((r) => r.side), ['buy', 'buy']);
+    assert.deepEqual(filterRows(rows, { side: 'sell' }).map((r) => r.side), ['sell', 'sell']);
     const s = summarise(filterRows(rows));
     assert.equal(s.buyUsd, 30_600_000);
     assert.equal(s.sellUsd, 10_000_000);
@@ -111,4 +111,44 @@ describe('spot trades on decentralised exchanges', () => {
     assert.deepEqual(tokensFor({ symbol: 'LINK' }, { ethereum: '0x514910771af9ca656af840dff83e8264ecf986ca', 'some-chain': '0x1' }),
       [['eth', '0x514910771af9ca656af840dff83e8264ecf986ca']]);
   });
+});
+
+describe('leveraged: open, close, long, short', () => {
+  test('a Hyperliquid fill says what the order did', async () => {
+    const { hyperliquidAction } = await import('../src/services/whaleTrades.js');
+    assert.deepEqual(hyperliquidAction({ dir: 'Open Long', startPosition: '0' }, 5), { verb: 'open', side: 'long' });
+    assert.deepEqual(hyperliquidAction({ dir: 'Open Short', startPosition: '-2' }, 5), { verb: 'add', side: 'short' });
+    assert.deepEqual(hyperliquidAction({ dir: 'Close Short', startPosition: '-5' }, 5), { verb: 'close', side: 'short' });
+    assert.deepEqual(hyperliquidAction({ dir: 'Close Long', startPosition: '8' }, 5), { verb: 'reduce', side: 'long' });
+    assert.deepEqual(hyperliquidAction({ dir: 'Long > Short', startPosition: '3' }, 8), { verb: 'flip', side: 'short' });
+  });
+
+  test('a close of a short is bullish, an open of one bearish', async () => {
+    const { leveragedLabel, summariseLeveraged } = await import('../src/services/whaleTrades.js');
+    assert.deepEqual(leveragedLabel({ verb: 'close', side: 'short' }), { text: 'CLOSE SHORT', bullish: true, opening: false });
+    assert.deepEqual(leveragedLabel({ verb: 'open', side: 'short' }), { text: 'OPEN SHORT', bullish: false, opening: true });
+    const s = summariseLeveraged([
+      { verb: 'open', side: 'long', usd: 2e6 }, { verb: 'open', side: 'short', usd: 1e6 }, { verb: 'close', side: 'long', usd: 3e6 },
+    ]);
+    assert.deepEqual([s.longUsd, s.shortUsd, s.closedUsd], [2e6, 1e6, 3e6]);
+  });
+
+  test('GMX orders are read as open, add, reduce, close and liquidation', async () => {
+    const { actionOf, coinSymbol } = await import('../api/_lib/gmxlev.js');
+    const usd = (n) => (BigInt(n) * 10n ** 30n).toString();
+    assert.deepEqual(actionOf({ orderType: 2, isLong: true, positionSizeInUsd: usd(1_000_000), sizeDeltaUsd: usd(1_000_000) }), { verb: 'open', side: 'long' });
+    assert.deepEqual(actionOf({ orderType: 2, isLong: true, positionSizeInUsd: usd(3_000_000), sizeDeltaUsd: usd(1_000_000) }), { verb: 'add', side: 'long' });
+    assert.deepEqual(actionOf({ orderType: 4, isLong: false, positionSizeInUsd: usd(0), sizeDeltaUsd: usd(700_000) }), { verb: 'close', side: 'short' });
+    assert.deepEqual(actionOf({ orderType: 5, isLong: false, positionSizeInUsd: usd(200_000), sizeDeltaUsd: usd(700_000) }), { verb: 'reduce', side: 'short' });
+    assert.deepEqual(actionOf({ orderType: 7, isLong: false, positionSizeInUsd: usd(0), sizeDeltaUsd: usd(1_000_000) }), { verb: 'liquidated', side: 'short' });
+    assert.equal(actionOf({ orderType: 0, isLong: true }), null, 'a swap is not a position');
+    assert.equal(coinSymbol('WBTC.b'), 'BTC');
+    assert.equal(coinSymbol('WETH'), 'ETH');
+  });
+});
+
+test('a leveraged order whose open or close is unknown shows as a plain buy or sell', async () => {
+  const { leveragedLabel } = await import('../src/services/whaleTrades.js');
+  assert.equal(leveragedLabel({ verb: 'unknown', side: 'long' }).text, 'BUY');
+  assert.equal(leveragedLabel({ verb: 'unknown', side: 'short' }).text, 'SELL');
 });
