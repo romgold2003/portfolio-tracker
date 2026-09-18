@@ -57,6 +57,11 @@ export const DESIGN_GROUPS = [
       ['--red', 'Losses'],
       ['--blue', 'Buttons and links'],
       ['--amber', 'Warnings'],
+      // Added after the first twenty, so codes made before them still read.
+      ['--blue-bg', 'Button fill'],
+      ['--border-blue', 'Button outline'],
+      ['--green-bg', 'Gain highlight'],
+      ['--red-bg', 'Loss highlight'],
     ],
   },
 ];
