@@ -78,3 +78,25 @@ describe('the splits a price history is adjusted for', () => {
     assert.deepEqual(splitsOf('NOT-LOADED'), []);
   });
 });
+
+describe('the all-time high', () => {
+  test('is the highest value of the whole history, the latest day it was reached', async () => {
+    const { allTimeHigh } = await import('../src/core/snapshots.js');
+    const rows = [
+      { date: '2026-01-01', totalAccountValue: 100 },
+      { date: '2026-02-01', totalAccountValue: 130 },
+      { date: '2026-03-01', totalAccountValue: 120 },
+      { date: '2026-04-01', totalAccountValue: 130 },
+    ];
+    assert.deepEqual(allTimeHigh(rows), { date: '2026-04-01', value: 130 });
+    assert.equal(allTimeHigh([]), null);
+  });
+
+  test('moves to a new high the day there is one', async () => {
+    const { allTimeHigh } = await import('../src/core/snapshots.js');
+    const rows = [{ date: '2026-01-01', value: 100 }, { date: '2026-01-02', value: 99 }];
+    assert.equal(allTimeHigh(rows).date, '2026-01-01');
+    rows.push({ date: '2026-01-03', value: 101 });
+    assert.equal(allTimeHigh(rows).date, '2026-01-03');
+  });
+});

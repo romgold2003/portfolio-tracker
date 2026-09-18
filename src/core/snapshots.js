@@ -214,6 +214,24 @@ export function accountHistory() {
 }
 
 /**
+ * The highest the account has ever been worth, and the day it got there.
+ *
+ * Over the whole history, whatever window is on screen, and recomputed on every
+ * draw — the last day is today's live value, so a new high moves the mark the
+ * moment it happens. A later day that only equals the high takes it: that is
+ * the most recent time the account stood there.
+ */
+export function allTimeHigh(rows = accountHistory()) {
+  let best = null;
+  for (const row of rows ?? []) {
+    const value = Number(row?.totalAccountValue ?? row?.value);
+    if (!row?.date || !(value > 0)) continue;
+    if (!best || value >= best.value) best = { date: row.date, value };
+  }
+  return best;
+}
+
+/**
  * The series for the account curve.
  *
  * A fresh install has no history, so with fewer than two real snapshots we draw
@@ -313,11 +331,16 @@ export function curveSeries(timeframe) {
   );
   const short = !synthetic && wanted != null && firstRecorded != null && firstRecorded > wanted;
 
+  // Marked only when that day is on screen, and never on the placeholder curve.
+  const high = synthetic ? null : allTimeHigh(history);
+  const highIndex = high ? dates.lastIndexOf(high.date) : -1;
+
   return {
     labels,
     data,
     dates,
     synthetic,
+    allTimeHigh: highIndex >= 0 ? { ...high, index: highIndex } : null,
     from,
     to,
     coveredDays,

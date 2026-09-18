@@ -76,6 +76,41 @@ function cashFlowMarks(marks) {
   };
 }
 
+/**
+ * A small yellow star on the account's all-time high.
+ *
+ * Drawn a little above the line so it never hides the value it marks. Hovering
+ * that day names it in the tooltip, with the date and the value.
+ */
+function allTimeHighMark(high, colour) {
+  return {
+    id: 'allTimeHighMark',
+    afterDatasetsDraw(chart) {
+      if (!high) return;
+      const point = chart.getDatasetMeta(0).data[high.index];
+      if (!point) return;
+      const { ctx } = chart;
+      const cx = point.x;
+      const cy = point.y - 10;
+      const outer = 7;
+      const inner = 3;
+      ctx.save();
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const radius = i % 2 ? inner : outer;
+        const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+        ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+      }
+      ctx.closePath();
+      ctx.fillStyle = colour;
+      ctx.shadowColor = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 3;
+      ctx.fill();
+      ctx.restore();
+    },
+  };
+}
+
 /** Draws the account-value curve and returns the period return it implies. */
 export function renderCurve(timeframe) {
   const canvas = document.getElementById('curve');
@@ -83,6 +118,7 @@ export function renderCurve(timeframe) {
   const series = curveSeries(timeframe);
   const { labels, data } = series;
   const c = chartColors();
+  const high = series.allTimeHigh;
 
   /**
    * The external flows inside this window, matched to the point they sit on.
@@ -106,7 +142,7 @@ export function renderCurve(timeframe) {
     // Built around this window's flows rather than handed them afterwards: a
     // plugin assigned after the constructor misses the first paint entirely,
     // and only reappeared because the animation redrew a frame later.
-    plugins: [cashFlowMarks(flows)],
+    plugins: [cashFlowMarks(flows), allTimeHighMark(high, cssVar('--amber', '#f5c542'))],
     data: {
       labels,
       datasets: [{
@@ -122,6 +158,8 @@ export function renderCurve(timeframe) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // Room above the line for the all-time-high star, which always sits at the top.
+      layout: { padding: { top: 18, right: 8 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -135,17 +173,28 @@ export function renderCurve(timeframe) {
              * it, and both facts have to reach whoever is reading the day.
              */
             afterBody: (items) => {
-              const flow = flows.find((f) => f.index === items[0]?.dataIndex);
-              if (!flow) return '';
-              const when = new Date(flow.date + 'T00:00:00Z').toLocaleDateString(undefined, {
+              const index = items[0]?.dataIndex;
+              const day = (date) => new Date(date + 'T00:00:00Z').toLocaleDateString(undefined, {
                 timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric',
               });
-              const sign = flow.amount > 0 ? '+$' : '−$';
-              return [
-                flow.amount > 0 ? 'Deposit' : 'Withdrawal',
-                'Date: ' + when,
-                'Amount: ' + sign + Math.abs(flow.amount).toLocaleString(),
-              ];
+              const lines = [];
+              if (high && high.index === index) {
+                lines.push(
+                  '★ All-time high',
+                  'Date: ' + day(high.date),
+                  'Account value: $' + high.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                );
+              }
+              const flow = flows.find((f) => f.index === index);
+              if (flow) {
+                const sign = flow.amount > 0 ? '+$' : '−$';
+                lines.push(
+                  flow.amount > 0 ? 'Deposit' : 'Withdrawal',
+                  'Date: ' + day(flow.date),
+                  'Amount: ' + sign + Math.abs(flow.amount).toLocaleString(),
+                );
+              }
+              return lines;
             },
           },
         },
