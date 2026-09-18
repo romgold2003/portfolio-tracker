@@ -106,8 +106,13 @@ export function toggleTheme() {
   applyTheme(baseOf() === 'light' ? 'dark' : 'light');
 }
 
+/**
+ * Switch to Dark or Light. Pressing the one already in use again takes that
+ * base back to its original colours.
+ */
 export function setThemeBase(theme) {
   if (theme !== baseOf()) applyTheme(theme);
+  else if (Object.keys(design[theme] ?? {}).length) resetDesign();
 }
 
 /** Stored preference wins; otherwise follow the operating system. */
@@ -135,7 +140,10 @@ export function renderDesigner() {
   if (!host) return;
   const base = baseOf();
   for (const button of document.querySelectorAll('[data-design-base]')) {
-    button.classList.toggle('active', button.dataset.designBase === base);
+    const current = button.dataset.designBase === base;
+    button.classList.toggle('active', current);
+    const name = button.dataset.designBase === 'light' ? 'Light' : 'Dark';
+    button.title = current ? `Press again for the original ${name} colours` : `Switch to ${name}`;
   }
   host.replaceChildren(...DESIGN_GROUPS.map((group) => {
     const section = document.createElement('div');
