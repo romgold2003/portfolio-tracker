@@ -844,11 +844,11 @@ describe('cash that is not a stablecoin', () => {
     assert.ok(!coins.some((c) => c.symbol === 'BUIDL'));
   });
 
-  test('a staking derivative is a position and stays', async () => {
-    // The pattern must not reach past cash funds into things that are bets.
+  test('a staking derivative is the same coin again, and is left out', async () => {
+    // Staked ether is ether: listed on its own it would split one coin's whales across two rows.
     resetTopCoinsCache();
     resetStableCache();
     const { coins } = await topCoins({ fetcher, limit: 10 });
-    assert.deepEqual(coins.map((c) => c.symbol), ['BTC', 'ETH', 'STETH']);
+    assert.deepEqual(coins.map((c) => c.symbol), ['BTC', 'ETH']);
   });
 });

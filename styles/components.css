@@ -1013,3 +1013,34 @@ body.light{--wave-strength:0.34}
 .fav-buttons .btn{padding:6px 10px;font-size:12px}
 .fav-buttons .btn:disabled{opacity:0.45;cursor:default}
 @media (max-width:560px){.fav-slot{flex-wrap:wrap}.fav-buttons{width:100%;padding-left:32px}}
+
+/* Crypto whales: spot and leveraged buys and sells */
+.wt-explain{font-size:11px;color:var(--text3);line-height:1.5;margin:4px 0 12px}
+.wt-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.wt-select{background:var(--input);border:0.5px solid var(--border2);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--text);font-family:inherit;max-width:100%}
+.wt-bands{flex-wrap:wrap;margin-bottom:10px}
+.wt-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;font-weight:600;margin-bottom:8px;font-variant-numeric:tabular-nums}
+.wt-summary small{font-weight:400;color:var(--text3)}
+.wt-net{margin-left:auto}
+.wt-grid{display:grid;grid-template-columns:62px 74px minmax(0,1.5fr) minmax(0,1fr) 78px 104px;gap:10px;align-items:center;padding:8px 2px}
+.wt-head{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em}
+.wt-row{border-top:0.5px solid var(--input);font-size:12px}
+.wt-when{color:var(--text3);font-size:11px;font-variant-numeric:tabular-nums}
+.wt-coin{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--text)}
+.wt-coin img{border-radius:50%}
+.wt-act{display:flex;flex-direction:column;gap:3px;min-width:0}
+.wt-where{font-size:10px;color:var(--text4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wt-pill{align-self:flex-start;font-size:10px;font-weight:700;letter-spacing:0.05em;padding:2px 8px;border-radius:4px}
+.wt-pill.is-buy{background:var(--green-bg);color:var(--green)}
+.wt-pill.is-sell{background:var(--red-bg);color:var(--red)}
+.wt-pill.is-flow{background:none;border:0.5px solid currentColor}
+.wt-amt{font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wt-amt span{color:var(--text4);font-size:10px}
+.wt-usd{font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.wt-wallet{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;text-decoration:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
+@media (max-width:640px){
+  .wt-grid{grid-template-columns:48px 58px minmax(0,1fr) 70px;gap:8px}
+  .wt-grid>div:nth-child(4),.wt-grid>div:nth-child(6){display:none}
+  .wt-net{margin-left:0}
+}

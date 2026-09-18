@@ -30,6 +30,9 @@ import * as cexflow from '../_lib/cexflow.js';
 import * as stablecoins from '../_lib/stablecoins.js';
 import * as holderhistory from '../_lib/holderhistory.js';
 import { CHAINS, priceFor } from '../_lib/chainfeeds.js';
+import { platformMap } from '../_lib/topcoins.js';
+import * as dexspot from '../_lib/dexspot.js';
+import { ACTIONS } from '../_lib/activity.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -608,33 +611,89 @@ export default async function handler(req, res) {
     if (!timingSafeEqual(given, expected)) return fail(res, 401, 'Wrong key.');
 
     const now = Date.now();
-    const poll = await topUp(now, { force: true });
-
     /**
-     * And one coin's holder movements, rotating.
-     *
-     * Twenty-five addresses at fifteen seconds each is too much for one poll,
-     * so each poll takes one coin and the next takes the one after it. The
-     * rotation is driven by the clock rather than by stored state, so it keeps
-     * turning across cold starts instead of restarting at the first coin
-     * forever.
+     * Two jobs, side by side: the transfers (whose exchange withdrawals and
+     * deposits are the Spot panel's centralised side) and the DEX trades.
      */
-    let holderWork = null;
-    try {
-      holderWork = await enrichNextCoin(now);
-    } catch (err) {
-      // A slow indexer costs this poll its holder work and nothing else.
-      holderWork = { failed: err.message };
-    }
+    const [poll, spot] = await Promise.all([
+      topUp(now, { force: true }),
+      (async () => {
+        try {
+          const { coins } = await topCoins();
+          const platforms = await platformMap();
+          return await dexspot.collectSpot({ coins, platformsOf: (c) => platforms?.get(c.id) ?? {}, now });
+        } catch (err) {
+          return { failed: err.message };
+        }
+      })(),
+    ]);
 
     res.setHeader('Cache-Control', 'no-store');
     return send(res, 200, {
-      written: poll.written, failed: poll.failed, at: poll.at, holders: holderWork,
+      written: poll.written, failed: poll.failed, at: poll.at, spot,
     });
   }
 
   const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
   if (!user) return fail(res, 401, 'Not signed in.');
+
+  /**
+   * The Spot panel: every large buy and sell of a top-fifty coin.
+   *
+   * Two kinds of row, one list. DEX trades are purchases and sales outright.
+   * Exchange withdrawals and deposits are how a whale buying or selling on
+   * Binance or Coinbase shows on-chain — coins leaving an exchange for a
+   * private wallet are being kept, coins sent to one are usually about to be
+   * sold — and they are labelled as that, never as a trade.
+   */
+  if (resource === 'spot') {
+    try {
+      const now = Date.now();
+      const since = Math.floor(now / 1000) - 7 * 86400;
+      const { coins } = await topCoins();
+      const listed = new Set(coins.map((c) => c.symbol));
+
+      const dex = dexspot.withoutBots(await dexspot.readSpot({ since }))
+        .filter((r) => listed.has(r.symbol));
+
+      let cex = [];
+      try {
+        const byAddress = await loadExchanges();
+        const held = await store.read({ minUsd: dexspot.FLOOR_USD, limit: 3000 });
+        cex = held
+          .filter((t) => t.at >= since && listed.has(t.symbol))
+          .map((t) => {
+            const kind = classifyActivity(t, { byAddress }).action;
+            if (kind !== ACTIONS.WITHDRAWAL && kind !== ACTIONS.DEPOSIT) return null;
+            const withdrawal = kind === ACTIONS.WITHDRAWAL;
+            const venue = exchangeOf(withdrawal ? t.from?.address : t.to?.address, byAddress)?.venue
+              ?? (withdrawal ? t.from?.owner : t.to?.owner) ?? 'an exchange';
+            return {
+              id: t.id,
+              at: t.at,
+              symbol: t.symbol,
+              side: withdrawal ? 'withdraw' : 'deposit',
+              amount: t.amount,
+              usd: t.usd,
+              address: (withdrawal ? t.to?.address : t.from?.address) ?? null,
+              venue,
+              network: t.blockchain,
+              hash: t.hash,
+              source: 'cex',
+            };
+          })
+          .filter(Boolean);
+      } catch { /* the DEX side still answers */ }
+
+      res.setHeader('Cache-Control', 'private, max-age=30');
+      return send(res, 200, {
+        coins: coins.map((c) => ({ symbol: c.symbol, name: c.name, rank: c.rank, logo: c.logo, price: c.price })),
+        rows: [...dex, ...cex].sort((a, b) => b.at - a.at),
+      });
+    } catch (err) {
+      return fail(res, 502, `Could not read the spot trades (${err.message}).`);
+    }
+  }
 
   if (resource === 'coins') {
     try {

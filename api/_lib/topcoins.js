@@ -147,6 +147,26 @@ const isStablecoin = (coin, ids) => ids.has(coin.id)
   || CASH_FUND.test(coin.name ?? '');
 
 /**
+ * Another coin under another name: wrapped, bridged or staked copies.
+ *
+ * WBTC is bitcoin and stETH is ether. Listed on their own they take places in
+ * the top fifty from real coins and split one coin's whales across two rows.
+ */
+const DERIVATIVE_SYMBOLS = new Set([
+  'WBTC', 'WETH', 'WBNB', 'WTRX', 'WEETH', 'STETH', 'WSTETH', 'RETH', 'CBETH', 'METH', 'EZETH', 'RSETH',
+  'CBBTC', 'LBTC', 'SOLVBTC', 'TBTC', 'BTCB', 'CLBTC', 'JITOSOL', 'MSOL', 'BNSOL', 'JUPSOL', 'SSOL', 'STSOL',
+  'WBETH', 'SAVAX', 'STHYPE', 'KHYPE', 'OSETH', 'SWETH', 'ETHX',
+]);
+const DERIVATIVE_NAME = /\b(wrapped|bridged|staked|restaked|liquid staking)\b/i;
+export const isDerivative = (coin) => DERIVATIVE_SYMBOLS.has(String(coin.symbol ?? '').toUpperCase())
+  || DERIVATIVE_NAME.test(coin.name ?? '');
+
+/** CoinGecko's contract addresses per network, keyed by coin id. Null when unavailable. */
+export async function platformMap({ fetcher = fetch, now = Date.now() } = {}) {
+  try { return await platformsById({ fetcher, now }); } catch { return null; }
+}
+
+/**
  * @returns {Promise<{coins: object[], chains: object[], watchable: number}>}
  */
 export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() } = {}) {
@@ -251,7 +271,7 @@ export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() }
    * Dropping them from the sweep as well as the picker would have quietly
    * emptied half the whale tape.
    */
-  const coins = built.filter((c) => !isStablecoin(c, stables)).slice(0, limit);
+  const coins = built.filter((c) => !isStablecoin(c, stables) && !isDerivative(c)).slice(0, limit);
 
   const value = {
     coins,
