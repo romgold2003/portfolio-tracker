@@ -23,7 +23,23 @@ export const BANDS = [
   { id: 'b3', label: '$25M+', min: 25_000_000, max: Infinity },
 ];
 
-export const bandOf = (id) => BANDS.find((b) => b.id === id) ?? BANDS[0];
+/**
+ * Spot has its own, lower sizes.
+ *
+ * Single on-chain spot trades are far smaller than leveraged orders: across the
+ * eighteen largest pools of ETH, BTC, SOL and BNB, a day held seventeen trades
+ * over $500k and none over $1M, while GMX alone sees one or two orders over $5M
+ * a week. The same $5M floor would leave Spot empty; $1M gives it about as many
+ * rows as Leveraged.
+ */
+export const SPOT_BANDS = [
+  { id: 'all', label: 'All $1M+', min: 1_000_000, max: Infinity },
+  { id: 'b1', label: '$1M–2M', min: 1_000_000, max: 2_000_000 },
+  { id: 'b2', label: '$2M–5M', min: 2_000_000, max: 5_000_000 },
+  { id: 'b3', label: '$5M+', min: 5_000_000, max: Infinity },
+];
+
+export const bandOf = (id, bands = BANDS) => bands.find((b) => b.id === id) ?? bands[0];
 
 /** Buying sides and selling sides. */
 const BUYING = new Set(['buy']);
@@ -38,8 +54,8 @@ export const isBuying = (row) => BUYING.has(row.side);
  * @param {string} o.side   'both', 'buy' or 'sell'
  * @param {number} o.since  unix seconds; older rows are left out
  */
-export function filterRows(rows, { coin = '', band = 'all', side = 'both', since = 0 } = {}) {
-  const { min, max } = bandOf(band);
+export function filterRows(rows, { coin = '', band = 'all', side = 'both', since = 0, bands = SPOT_BANDS } = {}) {
+  const { min, max } = bandOf(band, bands);
   return (rows ?? [])
     .filter((r) => r.at >= since && r.usd >= min && r.usd < max)
     .filter((r) => !coin || r.symbol === coin)
@@ -59,7 +75,8 @@ export function summarise(rows) {
 
 /** How many rows each band holds, for the counts on its button. */
 export function countByBand(rows, filters) {
-  return new Map(BANDS.map((b) => [b.id, filterRows(rows, { ...filters, band: b.id }).length]));
+  const bands = filters?.bands ?? SPOT_BANDS;
+  return new Map(bands.map((b) => [b.id, filterRows(rows, { ...filters, bands, band: b.id }).length]));
 }
 
 /* ── Hyperliquid ─────────────────────────────────────────────────────── */

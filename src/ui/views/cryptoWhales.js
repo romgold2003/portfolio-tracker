@@ -15,7 +15,7 @@
  * The coin strip chooses the coin for the holder card and both sections.
  */
 import {
-  BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
+  BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
   hyperliquidAction, leveragedLabel, filterLeveraged, summariseLeveraged,
   walletLink, shortAddress,
 } from '../../services/whaleTrades.js';
@@ -136,8 +136,9 @@ function drawSection(key) {
   const pick = lev ? filterLeveraged : filterRows;
   const base = { coin, side: f.side, since };
 
-  const bandCounts = new Map(BANDS.map((b) => [b.id, pick(all, { ...base, band: b.id }).length]));
-  el(`${key}Band`).innerHTML = pickerHtml(BANDS.map((b) => [b.id, b.label, bandCounts.get(b.id)]), f.band);
+  const bands = lev ? BANDS : SPOT_BANDS;
+  const bandCounts = new Map(bands.map((b) => [b.id, pick(all, { ...base, band: b.id }).length]));
+  el(`${key}Band`).innerHTML = pickerHtml(bands.map((b) => [b.id, b.label, bandCounts.get(b.id)]), f.band);
   el(`${key}Side`).innerHTML = pickerHtml(lev
     ? [['both', 'Longs & shorts'], ['long', 'Longs'], ['short', 'Shorts']]
     : [['both', 'Buys & sells'], ['buy', 'Buys'], ['sell', 'Sells']], f.side);
@@ -172,7 +173,7 @@ function drawSection(key) {
 
 function emptyText(key) {
   const f = sections[key];
-  const b = bandOf(f.band).label;
+  const b = bandOf(f.band, key === 'lev' ? BANDS : SPOT_BANDS).label;
   const what = coin || 'the top-50 coins';
   if (key === 'lev') {
     return `No ${b} leveraged trades on ${what} in this period. Hyperliquid trades appear here the moment they fill.`;

@@ -15,24 +15,33 @@ const row = (symbol, side, usd, at = 1000, extra = {}) => ({
 
 describe('filters', () => {
   const rows = [
-    row('BTC', 'buy', 6_000_000), row('BTC', 'sell', 12_000_000), row('ETH', 'buy', 30_000_000),
-    row('ETH', 'sell', 10_000_000), row('SOL', 'buy', 4_900_000),
+    row('BTC', 'buy', 1_500_000), row('BTC', 'sell', 3_000_000), row('ETH', 'buy', 6_000_000),
+    row('ETH', 'sell', 2_000_000), row('SOL', 'buy', 900_000),
   ];
 
-  test('bands are $5M–10M, $10M–25M and $25M+, half-open', () => {
+  test('spot bands are $1M–2M, $2M–5M and $5M+, half-open', () => {
     assert.equal(filterRows(rows, { band: 'b1' }).length, 1);
-    assert.equal(filterRows(rows, { band: 'b2' }).length, 2, 'exactly $10M is in $10M–25M');
+    assert.equal(filterRows(rows, { band: 'b2' }).length, 2, 'exactly $2M is in $2M–5M');
     assert.equal(filterRows(rows, { band: 'b3' }).length, 1);
-    assert.equal(filterRows(rows, { band: 'all' }).length, 4, 'under $5M is never shown');
+    assert.equal(filterRows(rows, { band: 'all' }).length, 4, 'under $1M is never shown');
+  });
+
+  test('leveraged keeps $5M–10M, $10M–25M and $25M+', async () => {
+    const { filterLeveraged } = await import('../src/services/whaleTrades.js');
+    const lev = [
+      { symbol: 'BTC', side: 'long', usd: 6e6, at: 1 }, { symbol: 'BTC', side: 'short', usd: 10e6, at: 1 },
+      { symbol: 'ETH', side: 'long', usd: 30e6, at: 1 }, { symbol: 'ETH', side: 'long', usd: 4.9e6, at: 1 },
+    ];
+    assert.deepEqual(['b1', 'b2', 'b3', 'all'].map((band) => filterLeveraged(lev, { band }).length), [1, 1, 1, 3]);
   });
 
   test('buys and sells are filtered and summed apart', () => {
     assert.deepEqual(filterRows(rows, { side: 'buy' }).map((r) => r.side), ['buy', 'buy']);
     assert.deepEqual(filterRows(rows, { side: 'sell' }).map((r) => r.side), ['sell', 'sell']);
     const s = summarise(filterRows(rows));
-    assert.equal(s.buyUsd, 36_000_000);
-    assert.equal(s.sellUsd, 22_000_000);
-    assert.equal(s.net, 14_000_000);
+    assert.equal(s.buyUsd, 7_500_000);
+    assert.equal(s.sellUsd, 5_000_000);
+    assert.equal(s.net, 2_500_000);
   });
 
   test('one coin, and the counts each band button shows', () => {
