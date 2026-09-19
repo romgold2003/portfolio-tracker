@@ -205,6 +205,30 @@ function newYorkNow(now) {
  * account that jumped six per cent on a Monday, is the difference between the
  * broker's three months and a different three months entirely.
  */
+/**
+ * The trading day a day's move describes: today in New York when the market
+ * trades today, otherwise the last day it did.
+ *
+ * On Saturday the quotes still describe Friday — the price is Friday's close
+ * and the previous close Thursday's — so Friday's trades belong to the day on
+ * screen. Dating it by the calendar left a sale made on Friday out of Friday's
+ * move: +1.68% where IBKR had +2.12%. And New York's date rather than the
+ * local one, because late on a Friday evening in Israel it is already Saturday
+ * while the American session has not closed.
+ */
+export function tradingDay(now = new Date()) {
+  const { date } = newYorkNow(now);
+  if (!marketHoliday(date)) return date;
+  const [y, m, d] = date.split('-').map(Number);
+  const cursor = new Date(Date.UTC(y, m - 1, d));
+  for (let i = 0; i < 14; i++) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    const key = cursor.toISOString().slice(0, 10);
+    if (!marketHoliday(key)) return key;
+  }
+  return date;
+}
+
 export function lastClosedSession(now = new Date()) {
   const { date, minutes } = newYorkNow(now);
   if (!marketHoliday(date) && minutes >= sessionBounds(date).close) return date;

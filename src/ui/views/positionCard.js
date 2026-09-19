@@ -9,7 +9,7 @@ import { ASSET_CLASSES, MONTHS_LONG } from '../../config/constants.js';
 import {
   unreal, realized, pctD, costOf, marketValueOf,
   dailyDollarExits, dailyDollarTotal,
-  todayStr, baseQtyOf, bookedPnl, hasDailyFigure,
+  dayOf, baseQtyOf, bookedPnl, hasDailyFigure,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
@@ -43,7 +43,8 @@ function exitsBlock(p) {
 
 /** The grid of key figures at the top of an expanded card. */
 function detailGrid(p, pnl) {
-  const today = todayStr();
+  // The trading session the day's figures describe, not the calendar date.
+  const today = dayOf(p);
   const soldToday = dailyDollarExits(p, today);
   return `<div class="dg">
     ${p.summary

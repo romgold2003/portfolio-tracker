@@ -5,10 +5,28 @@
  */
 import { BETA } from '../config/constants.js';
 import { sectorOf, sectorColour, CASH_COLOUR } from '../config/sectors.js';
+import { tradingDay } from '../config/marketCalendar.js';
 
 /** Today as YYYY-MM-DD, the key format used throughout the app. */
 export function todayStr() {
   return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * The day a position's daily move belongs to: the last trading session for
+ * anything that trades on an exchange, the calendar day for crypto, which
+ * trades every day.
+ */
+export function dayOf(p) {
+  return p?.cls === 'Crypto' ? todayStr() : tradingDay();
+}
+
+/** A position's previous close: quoted outright, or recovered from the day's change. */
+export function prevCloseOf(p) {
+  if (Number.isFinite(p?.prevClose) && p.prevClose > 0) return p.prevClose;
+  if (p?.dailyChg == null || !Number.isFinite(p.dailyChg)) return null;
+  const factor = 1 + p.dailyChg / 100;
+  return factor > 0 ? p.cur / factor : null;
 }
 
 export function costOf(p) { return p.entry * p.qty; }
@@ -67,7 +85,7 @@ export function posValue(p) { return marketValueOf(p); }
  * Returns null when the starting price cannot be established, which for a
  * position held from before today means no quote has arrived yet.
  */
-export function dailyDollar(p, today = todayStr()) {
+export function dailyDollar(p, today = dayOf(p)) {
   // Shares bought today were not owned at yesterday's close, so their day
   // starts at the price paid, not at the previous close. Counting the whole
   // day's move for them credits the portfolio with a gain it never had, and the
@@ -113,7 +131,7 @@ export function dailyDollar(p, today = todayStr()) {
  * exit price. Shares sold today still moved today, so they belong in the day's
  * total. Without this, closing a winner makes the daily figure collapse.
  */
-export function dailyDollarExits(p, today = todayStr()) {
+export function dailyDollarExits(p, today = dayOf(p)) {
   if (!p.exits || !p.exits.length) return 0;
   // Shares bought and sold on the same day started at the price paid, so their
   // move is knowable even when no quote was ever recorded for them.
@@ -131,13 +149,13 @@ export function dailyDollarExits(p, today = todayStr()) {
 }
 
 /** Everything one position contributed today: the part still held, plus anything sold today. */
-export function dailyDollarTotal(p, today = todayStr()) {
+export function dailyDollarTotal(p, today = dayOf(p)) {
   const held = p.status === 'Open' ? (dailyDollar(p, today) || 0) : 0;
   return held + dailyDollarExits(p, today);
 }
 
 /** True when a position has no daily figure at all — neither held nor sold today. */
-export function hasDailyFigure(p, today = todayStr()) {
+export function hasDailyFigure(p, today = dayOf(p)) {
   return dailyDollar(p, today) != null || dailyDollarExits(p, today) !== 0;
 }
 
@@ -824,11 +842,72 @@ export function sectorBreakdown(positions, cash = 0) {
  *           + what the shares SOLD today moved before they were sold
  *   percent = dollars / YESTERDAY's NLV (today's NLV minus today's P&L)
  */
-export function dailyPortfolioMove(positions, account, today = todayStr()) {
+export function dailyPortfolioMove(positions, account, today, trades = []) {
   const open = positions.filter((p) => p.status === 'Open');
-  const quoted = open.filter((p) => dailyDollar(p, today) != null);
-  const held = quoted.reduce((sum, p) => sum + dailyDollar(p, today), 0);
-  const sold = positions.reduce((sum, p) => sum + dailyDollarExits(p, today), 0);
+
+  /**
+   * Tickers the broker's ledger says were traded on the day, priced as the
+   * broker prices them.
+   *
+   * A statement keeps a sale as its proceeds, with no previous close, so the
+   * shares sold on the day could not be measured and the day came out short:
+   * 140 ETHA sold on the 18th had moved $204 before they went, which is the
+   * whole gap between +1.68% and IBKR's +2.12%. The ledger has every trade's
+   * shares and price, and with the ticker's previous close the day is exact:
+   *
+   *   shares held now × (price now − previous close)
+   *   + each trade's shares × (previous close − trade price), less its fee
+   *
+   * which counts a sale from the close to its price and a purchase from its
+   * price to now. Shares signed: bought positive, sold negative, so shorts
+   * need nothing of their own.
+   */
+  const ledger = new Map();
+  for (const e of trades ?? []) {
+    if (e?.kind !== 'trade' || !e.ticker || !(Number(e.price) > 0) || !Number(e.qty)) continue;
+    const holders = open.filter((p) => p.ticker === e.ticker);
+    const day = today ?? (holders.length ? dayOf(holders[0]) : tradingDay());
+    if (e.date !== day) continue;
+    const close = holders.map(prevCloseOf).find((c) => c > 0);
+    // Without the previous close the trade cannot be priced for the day; the older path stands.
+    if (!close) continue;
+    const entry = ledger.get(e.ticker) ?? { close, trades: [] };
+    entry.trades.push(e);
+    ledger.set(e.ticker, entry);
+  }
+
+  let held = 0;
+  let sold = 0;
+  let quotedCount = 0;
+  for (const p of open) {
+    const fromLedger = ledger.get(p.ticker);
+    if (fromLedger) {
+      const signed = p.dir === 'Long' ? p.qty : -p.qty;
+      held += (p.cur - fromLedger.close) * signed;
+      quotedCount += 1;
+      continue;
+    }
+    const move = dailyDollar(p, today);
+    if (move != null) { held += move; quotedCount += 1; }
+  }
+  for (const { close, trades: made } of ledger.values()) {
+    for (const e of made) {
+      /**
+       * The trade's cash, where the ledger has it, carries the commission too,
+       * as the broker's day does: shares × close + cash, which for a sale is
+       * shares × (price − close) less the fee.
+       */
+      const cash = Number(e.cash);
+      const part = Number.isFinite(cash) && cash !== 0
+        ? Number(e.qty) * close + cash
+        : Number(e.qty) * (close - Number(e.price));
+      if (Number(e.qty) < 0) sold += part; else held += part;
+    }
+  }
+  // Sales entered by hand; a ticker the ledger priced is already counted.
+  sold += positions.reduce((sum, p) => (ledger.has(p.ticker) ? sum : sum + dailyDollarExits(p, today)), 0);
+
+  const quoted = { length: quotedCount };
   const dollars = held + sold;
   const prevNLV = account - dollars;
   return {

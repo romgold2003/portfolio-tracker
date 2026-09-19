@@ -100,7 +100,7 @@ function miniRow(p) {
   const retPct = pctD(pnl, costOf(p));
   const daily = p.dailyChg ?? null;
   const weekly = p.weeklyChg ?? null;
-  const dailyMoney = dailyDollar(p) == null && dailyDollarExits(p, todayStr()) === 0
+  const dailyMoney = dailyDollar(p) == null && dailyDollarExits(p) === 0
     ? null
     : dailyDollarTotal(p);
 
@@ -133,7 +133,8 @@ function miniRow(p) {
 }
 
 function renderDailyMove(totals) {
-  const move = dailyPortfolioMove(state.positions, totals.account);
+  // The ledger prices the shares bought and sold on the day, as the broker does.
+  const move = dailyPortfolioMove(state.positions, totals.account, undefined, state.ledger?.events ?? []);
   const pctEl = document.getElementById('portfolioDailyPct');
   const amtEl = document.getElementById('portfolioDailyAmt');
   if (!pctEl || !amtEl) return;
