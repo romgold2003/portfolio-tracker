@@ -9,7 +9,7 @@
  */
 import { escapeHtml } from '../format.js';
 import {
-  fetchCoins, explorerTx, chainLabel,
+  fetchCoins, explorerTx, explorerAddress, chainLabel,
   shortAddress, money, tokens,
   fetchNetflow, SIGNAL_TONE, fetchTopHolders, STATUS_TONE,
   STANCE_TONE, percent, holdingChange,
@@ -79,6 +79,15 @@ function drawTopHolders() {
   if (!symbol) {
     box.innerHTML = `${hd}<div class="cw-card-empty">Choose a coin in the selector below to
       see who holds the most of it.</div>`;
+    return;
+  }
+  /**
+   * Only ever the chosen coin's holders. Switching coin used to leave the
+   * previous coin's list on screen under the new coin's name until — or,
+   * when the request failed, instead of — the new one arriving.
+   */
+  if (topHolders?.forSymbol !== symbol) {
+    box.innerHTML = `${hd}<div class="cw-card-empty">Reading ${escapeHtml(symbol)} holders…</div>`;
     return;
   }
   if (topHolders?.unsupported) {
@@ -706,9 +715,22 @@ async function load({ force = null } = {}) {
   // a different coin is a different question and cannot wait for the clock.
   if (due('holders') || holdersFor !== symbol) {
     holdersFor = symbol;
-    jobs.push(fetchTopHolders({ symbol }).then(settle('holders', (top) => {
-      if (top?.error == null || !topHolders) topHolders = top;
-    })));
+    const asked = symbol;
+    /**
+     * Kept whenever it lands, as long as the coin is still the one chosen.
+     *
+     * It went through the shared load token, so a refresh starting while a
+     * slow holder list was loading threw that list away — and as the coin had
+     * already been asked for, it was never asked for again. The old coin's
+     * holders stayed on screen for good.
+     */
+    jobs.push(fetchTopHolders({ symbol: asked }).then((top) => {
+      if (asked !== symbol) return;
+      // A failed refresh keeps this coin's last good list; never another coin's.
+      if (top?.error == null || topHolders?.forSymbol !== asked) topHolders = { ...top, forSymbol: asked };
+      fetchedAt.holders = Date.now();
+      draw();
+    }));
   }
 
   if (!jobs.length) return;
