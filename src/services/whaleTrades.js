@@ -224,3 +224,64 @@ export function summariseLeveraged(rows) {
   }
   return out;
 }
+
+/* ── what a leveraged row says ───────────────────────────────────────── */
+
+const shortMoney = (usd) => {
+  const a = Math.abs(usd);
+  const s = a >= 1e9 ? `$${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `$${(a / 1e6).toFixed(2)}M`
+    : a >= 1e3 ? `$${Math.round(a / 1e3).toLocaleString()}k` : `$${Math.round(a)}`;
+  return usd < 0 ? `−${s}` : s;
+};
+
+const signedMoney = (usd) => (usd >= 0 ? `+${shortMoney(usd)}` : shortMoney(usd));
+
+const priceText = (price) => (price > 0
+  ? `$${price.toLocaleString(undefined, { maximumFractionDigits: price >= 100 ? 0 : price >= 1 ? 2 : 6 })}`
+  : null);
+
+/** "40×", or nothing when the leverage is unknown. */
+export function leverageText(row) {
+  const x = Number(row?.leverage);
+  if (!(x > 0.05)) return '';
+  return `${x >= 10 ? Math.round(x) : x.toFixed(1)}×`;
+}
+
+/**
+ * The row's own sentence: what the whale did, and what became of it.
+ *
+ * An opening says the leverage it was taken at, where it got in and where it
+ * would be liquidated. A close says what it made or lost, and what that was
+ * against the margin actually put up — the number that says whether the bet
+ * worked. A position still open carries its running profit, refreshed while
+ * the panel is on screen, so the row keeps telling the story rather than
+ * freezing at the moment it appeared.
+ */
+export function positionStory(row) {
+  if (!row) return '';
+  const parts = [];
+  const margin = row.leverage > 0 ? row.usd / row.leverage : null;
+  const onMargin = (pnl) => (margin > 0 ? ` (${pnl >= 0 ? '+' : '−'}${Math.abs((pnl / margin) * 100).toFixed(0)}% of margin)` : '');
+
+  if (row.verb === 'liquidated') {
+    parts.push(row.pnl != null ? `Wiped out — lost ${shortMoney(Math.abs(row.pnl))}` : 'Wiped out by the exchange');
+  } else if (row.verb === 'close' || row.verb === 'reduce') {
+    const what = row.verb === 'close' ? 'Closed' : 'Took some off';
+    parts.push(row.pnl == null ? what
+      : `${what} — ${row.pnl >= 0 ? 'profit' : 'loss'} ${shortMoney(Math.abs(row.pnl))}${onMargin(row.pnl)}`);
+  } else {
+    const entry = priceText(Number(row.entry));
+    const liq = priceText(Number(row.liq));
+    if (entry) parts.push(`entry ${entry}`);
+    if (liq) parts.push(`liquidation ${liq}`);
+  }
+
+  const live = row.live;
+  if (live) {
+    if (live.gone) parts.push('position since closed');
+    else if (Number.isFinite(live.pnl)) {
+      parts.push(`now ${signedMoney(live.pnl)}${Number.isFinite(live.roe) ? ` (${live.roe >= 0 ? '+' : '−'}${Math.abs(live.roe * 100).toFixed(0)}% of margin)` : ''}`);
+    }
+  }
+  return parts.join(' · ');
+}

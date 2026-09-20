@@ -17,7 +17,7 @@
 import {
   BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
   hyperliquidAction, leveragedLabel, filterLeveraged, summariseLeveraged,
-  walletLink, shortAddress,
+  leverageText, positionStory, walletLink, shortAddress,
 } from '../../services/whaleTrades.js';
 import {
   renderOverview, tickOverview, setCoinListener, overviewCoins,
@@ -43,6 +43,8 @@ const sections = {
 let spotRows = [];
 let gmxRows = [];
 let hlRows = readHyperliquid();
+/** What each opening is worth now, kept apart from the rows so a refresh cannot wipe it. */
+const live = new Map();
 let loadedAt = 0;
 let loadError = '';
 const hl = { socket: null, markets: new Map(), status: 'idle', open: new Map(), sweep: null };
@@ -92,22 +94,23 @@ function coinHtml(symbol) {
   return `<div class="wt-coin">${logo ? `<img src="${escapeHtml(logo)}" alt="" width="16" height="16" loading="lazy">` : ''}${escapeHtml(symbol)}</div>`;
 }
 
-function rowHtml(r, pill, where) {
-  return `<div class="wt-row wt-grid">
+function rowHtml(r, pill, where, story = '') {
+  return `<div class="wt-row${story ? '' : ' wt-grid'}">${story ? '<div class="wt-grid">' : ''}
     <div class="wt-when" title="${escapeHtml(new Date(r.at * 1000).toLocaleString())}">${escapeHtml(ago(r.at))}</div>
     ${coinHtml(r.symbol)}
     <div class="wt-act">${pill}<span class="wt-where">${escapeHtml(where)}</span></div>
     <div class="wt-usd">${escapeHtml(money(r.usd))}<span class="wt-amt">${escapeHtml(amountText(r.amount))} ${escapeHtml(r.symbol)}</span></div>
     <div>${walletHtml(r)}</div>
-  </div>`;
+  ${story ? `</div><div class="wt-story">${escapeHtml(story)}</div>` : ''}</div>`;
 }
 
 function leveragedRow(r) {
   const { text, bullish, opening } = leveragedLabel(r);
-  const pill = `<span class="wt-pill ${bullish ? 'is-buy' : 'is-sell'}${opening ? '' : ' is-flow'}">${escapeHtml(text)}</span>`;
+  const lev = leverageText(r);
+  const pill = `<span class="wt-pill ${bullish ? 'is-buy' : 'is-sell'}${opening ? '' : ' is-flow'}">${escapeHtml(text)}${
+    lev ? `<span class="wt-lev">${escapeHtml(lev)}</span>` : ''}</span>`;
   const venue = r.source === 'hyperliquid' ? 'Hyperliquid' : `GMX · ${r.network === 'avalanche' ? 'Avalanche' : 'Arbitrum'}`;
-  const pnl = r.pnl != null && Math.abs(r.pnl) >= 1 ? ` · P&L ${r.pnl >= 0 ? '+' : ''}${money(r.pnl)}` : '';
-  return rowHtml(r, pill, venue + pnl);
+  return rowHtml(r, pill, venue, positionStory({ ...r, live: live.get(r.id) }));
 }
 
 function spotRow(r) {
@@ -223,6 +226,8 @@ async function loadServer() {
     loadError = err.message || 'Could not load the whale trades.';
   }
   draw();
+  // The rows are here; now ask what became of the positions they opened.
+  refreshLive();
 }
 
 /* ── Hyperliquid, live ───────────────────────────────────────────────── */
@@ -238,7 +243,7 @@ function readHyperliquid() {
 }
 
 function saveHyperliquid() {
-  try { localStorage.setItem(HL_KEY, JSON.stringify(hlRows.slice(0, 1000))); } catch { /* ignore */ }
+  try { localStorage.setItem(HL_KEY, JSON.stringify(hlRows.slice(0, 200))); } catch { /* ignore */ }
 }
 
 /**
@@ -275,6 +280,29 @@ function settleOrders() {
 }
 
 /**
+ * What the wallet holds on Hyperliquid right now: the leverage it is running,
+ * where it got in, and where it would be liquidated.
+ */
+async function hyperliquidPosition(address, symbol) {
+  const res = await fetch(HL_INFO, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'clearinghouseState', user: address }),
+  });
+  const state = await res.json();
+  const market = hl.markets.get(symbol)?.market ?? symbol;
+  const held = (state?.assetPositions ?? []).map((a) => a?.position).find((p) => p?.coin === market);
+  if (!held) return null;
+  return {
+    leverage: Number(held.leverage?.value) || null,
+    entry: Number(held.entryPx) || null,
+    liq: Number(held.liquidationPx) || null,
+    pnl: Number(held.unrealizedPnl),
+    roe: Number(held.returnOnEquity),
+  };
+}
+
+/**
  * Ask the wallet's own fills what the order did.
  *
  * The public trade says buy or sell. The wallet's fill says "Open Long",
@@ -307,6 +335,14 @@ async function classify(o) {
     side: action?.side ?? (order.side === 'buy' ? 'long' : 'short'),
     pnl: action && action.verb !== 'open' && action.verb !== 'add' ? pnl : null,
   };
+
+  // The position behind the order: its leverage, entry and liquidation price.
+  if (row.verb === 'open' || row.verb === 'add' || row.verb === 'flip') {
+    try {
+      const held = await hyperliquidPosition(row.address, row.symbol);
+      if (held) Object.assign(row, { leverage: held.leverage, entry: held.entry, liq: held.liq });
+    } catch { /* the size and side still stand */ }
+  }
   hlRows = [row, ...hlRows.filter((r) => r.id !== row.id)]
     .filter((r) => r.at >= Math.floor(Date.now() / 1000) - 7 * DAY)
     .sort((a, b) => b.at - a.at);
@@ -350,6 +386,68 @@ async function connectHyperliquid() {
     draw();
     setTimeout(connectHyperliquid, 5_000);
   });
+}
+
+/* ── following the open positions ────────────────────────────────────── */
+
+const GMX_GRAPHQL = {
+  arbitrum: 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql',
+  avalanche: 'https://gmx.squids.live/gmx-synthetics-avalanche:prod/api/graphql',
+};
+
+const GMX_POSITIONS = `query($accounts: [String!]!) {
+  positions(limit: 200, where: { account_in: $accounts, isSnapshot_eq: false }) {
+    account market isLong unrealizedPnl sizeInUsd leverage
+  }
+}`;
+
+/** GMX carries dollars with thirty decimals. */
+const gmxUsd = (raw) => Number(BigInt(raw ?? 0) / 10n ** 24n) / 1e6;
+
+/**
+ * Keep the openings up to date: what each position is worth now, and whether
+ * it is still there at all. Only the newest few are followed, so the panel
+ * costs a handful of requests a minute however long the list is.
+ */
+const FOLLOWED = 12;
+
+async function refreshLive() {
+  const open = leveragedRows()
+    .filter((r) => ['open', 'add', 'flip'].includes(r.verb))
+    .slice(0, FOLLOWED);
+  if (!open.length) return;
+  let changed = false;
+
+  for (const r of open.filter((x) => x.source === 'hyperliquid')) {
+    try {
+      const held = await hyperliquidPosition(r.address, r.symbol);
+      live.set(r.id, held ? { pnl: held.pnl, roe: held.roe } : { gone: true });
+      changed = true;
+    } catch { /* leave the row as it was */ }
+  }
+
+  for (const [network, url] of Object.entries(GMX_GRAPHQL)) {
+    const rows = open.filter((r) => r.source === 'gmx' && r.network === network && r.market);
+    if (!rows.length) continue;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: GMX_POSITIONS, variables: { accounts: [...new Set(rows.map((r) => r.address))] } }),
+      });
+      const held = new Map(((await res.json())?.data?.positions ?? []).map((p) => [
+        `${String(p.account).toLowerCase()}|${String(p.market).toLowerCase()}|${p.isLong ? 'long' : 'short'}`,
+        { pnl: gmxUsd(p.unrealizedPnl), size: gmxUsd(p.sizeInUsd), leverage: Number(p.leverage) / 10_000 },
+      ]));
+      for (const r of rows) {
+        const p = held.get(`${r.address.toLowerCase()}|${String(r.market).toLowerCase()}|${r.side}`);
+        live.set(r.id, p ? { pnl: p.pnl, roe: p.leverage > 0 && p.size > 0 ? p.pnl / (p.size / p.leverage) : null } : { gone: true });
+        changed = true;
+      }
+    } catch { /* leave those rows as they were */ }
+  }
+
+  if (changed) draw();
 }
 
 /* ── wiring ──────────────────────────────────────────────────────────── */
@@ -422,5 +520,6 @@ export function startCryptoWhales() {
     if (!onScreen) return;
     tickOverview();
     loadServer();
+    refreshLive();
   }, EVERY_MS);
 }

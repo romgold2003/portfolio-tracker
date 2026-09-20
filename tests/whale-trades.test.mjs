@@ -160,3 +160,42 @@ test('a leveraged order whose open or close is unknown shows as a plain buy or s
   assert.equal(leveragedLabel({ verb: 'unknown', side: 'long' }).text, 'BUY');
   assert.equal(leveragedLabel({ verb: 'unknown', side: 'short' }).text, 'SELL');
 });
+
+describe('what a leveraged row says', () => {
+  const load = () => import('../src/services/whaleTrades.js');
+
+  test('an opening names its leverage, entry and liquidation price', async () => {
+    const { leverageText, positionStory } = await load();
+    const row = { verb: 'open', side: 'long', usd: 6e6, leverage: 40, entry: 78835.4, liq: 78258.97 };
+    assert.equal(leverageText(row), '40×');
+    assert.equal(positionStory(row), 'entry $78,835 · liquidation $78,259');
+  });
+
+  test('a close says what it made, and what that was on the margin put up', async () => {
+    const { positionStory } = await load();
+    // $5M at 10× is $500k of margin; +$117k on that is +23%.
+    assert.equal(positionStory({ verb: 'close', side: 'long', usd: 5e6, leverage: 10, pnl: 117_000 }),
+      'Closed — profit $117k (+23% of margin)');
+    assert.equal(positionStory({ verb: 'reduce', side: 'short', usd: 2e6, leverage: 4, pnl: -50_000 }),
+      'Took some off — loss $50k (−10% of margin)');
+  });
+
+  test('a liquidation says so plainly', async () => {
+    const { positionStory } = await load();
+    assert.equal(positionStory({ verb: 'liquidated', side: 'long', usd: 5.88e6, leverage: 71, pnl: -63_313 }),
+      'Wiped out — lost $63k');
+  });
+
+  test('a position still open carries its running profit; one since closed says that', async () => {
+    const { positionStory } = await load();
+    const open = { verb: 'open', side: 'long', usd: 1e6, leverage: 5, entry: 100, live: { pnl: 42_000, roe: 0.21 } };
+    assert.equal(positionStory(open), 'entry $100 · now +$42k (+21% of margin)');
+    assert.equal(positionStory({ ...open, live: { gone: true } }), 'entry $100 · position since closed');
+  });
+
+  test('unknown leverage is simply left out', async () => {
+    const { leverageText, positionStory } = await load();
+    assert.equal(leverageText({ usd: 1e6 }), '');
+    assert.equal(positionStory({ verb: 'close', usd: 1e6, pnl: 10_000 }), 'Closed — profit $10k');
+  });
+});

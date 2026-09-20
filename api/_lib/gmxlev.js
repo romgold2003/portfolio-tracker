@@ -33,6 +33,9 @@ const INCREASE = new Set([2, 3, 8]);
 const DECREASE = new Set([4, 5, 6]);
 const LIQUIDATION = 7;
 
+/** A price carries thirty decimals less the token's own. */
+const priceOf = (raw, decimals) => (raw == null ? null : Number(BigInt(raw) / 10n ** BigInt(Math.max(0, 30 - decimals - 6))) / 1e6);
+
 /** GMX dollar amounts carry thirty decimals. */
 const usdOf = (raw) => Number(BigInt(raw ?? 0) / 10n ** 24n) / 1e6;
 
@@ -84,10 +87,16 @@ const SCHEMA = [
      pnl      TEXT,
      address  TEXT NOT NULL,
      network  TEXT NOT NULL,
-     hash     TEXT NOT NULL
+     hash     TEXT NOT NULL,
+     leverage TEXT,
+     entry    TEXT,
+     market   TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS lev_trades_at ON lev_trades (at)`,
 ];
+
+/** Columns added after the table first shipped; a live database keeps its rows. */
+const ADDED = ['leverage', 'entry', 'market'];
 
 let ready = false;
 export function resetTableCache() { ready = false; }
@@ -95,6 +104,10 @@ export function resetTableCache() { ready = false; }
 async function ensureTables() {
   if (ready) return;
   for (const statement of SCHEMA) await query(statement, []);
+  for (const column of ADDED) {
+    // Already there on a new table, and on an old one this is the migration.
+    try { await query(`ALTER TABLE lev_trades ADD COLUMN ${column} TEXT`, []); } catch { /* present */ }
+  }
   ready = true;
 }
 
@@ -145,6 +158,37 @@ export function rowsOf(actions, markets, network) {
       address: String(a.account),
       network,
       hash: String(a.transactionHash),
+      market: String(a.marketAddress),
+    });
+  }
+  return out;
+}
+
+/**
+ * The positions those wallets hold right now: how much leverage they took and
+ * where they got in. A row can then read "opened a 12× long at $81,420"
+ * rather than only naming a size, and the panel can follow the position
+ * afterwards.
+ *
+ * Snapshots are excluded: the indexer keeps a copy of a position per change,
+ * and only the live row describes the position as it stands.
+ */
+const POSITIONS_QUERY = `query($accounts: [String!]!) {
+  positions(limit: 500, where: { account_in: $accounts, isSnapshot_eq: false }) {
+    account market isLong leverage entryPrice sizeInUsd unrealizedPnl
+  }
+}`;
+
+/** GMX prices carry thirty decimals less the token's own; leverage is per ten thousand. */
+export function positionsOf(list) {
+  const out = new Map();
+  for (const p of list ?? []) {
+    const lev = Number(p?.leverage) / 10_000;
+    out.set(`${String(p.account).toLowerCase()}|${String(p.market).toLowerCase()}|${p.isLong ? 'long' : 'short'}`, {
+      leverage: lev > 0.05 && lev < 1000 ? lev : null,
+      entry: p.entryPrice ?? null,
+      sizeUsd: usdOf(p.sizeInUsd),
+      pnl: usdOf(p.unrealizedPnl),
     });
   }
   return out;
@@ -178,7 +222,28 @@ export async function collectGmx({ now = Date.now(), fetcher = fetch } = {}) {
       });
       const json = await res.json();
       if (json?.errors?.length) throw new Error(json.errors[0].message);
-      written += await record(rowsOf(json?.data?.tradeActions, markets, chain.id));
+      const rows = rowsOf(json?.data?.tradeActions, markets, chain.id);
+
+      // The leverage and entry of the positions those trades belong to.
+      const accounts = [...new Set(rows.map((r) => r.address))];
+      if (accounts.length) {
+        try {
+          const held = await fetcher(chain.graphql, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: POSITIONS_QUERY, variables: { accounts } }),
+          }).then((r) => r.json());
+          const positions = positionsOf(held?.data?.positions);
+          for (const r of rows) {
+            const p = positions.get(`${r.address.toLowerCase()}|${String(r.market).toLowerCase()}|${r.side}`);
+            if (!p) continue;
+            r.leverage = p.leverage;
+            // Prices are scaled by the token's decimals; stored as plain dollars.
+            r.entry = p.entry == null ? null : priceOf(p.entry, markets.get(String(r.market).toLowerCase())?.decimals ?? 18);
+          }
+        } catch { /* sizes and sides still stand without it */ }
+      }
+      written += await record(rows);
     } catch (err) {
       failed.push(`${chain.id}: ${err.message}`);
     }
@@ -195,10 +260,12 @@ export async function record(rows) {
     const held = await query('SELECT id FROM lev_trades WHERE id = $1', [r.id]);
     if (held.rows.length) continue;
     await query(
-      `INSERT INTO lev_trades (id, at, venue, symbol, verb, side, amount, usd, pnl, address, network, hash)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      `INSERT INTO lev_trades (id, at, venue, symbol, verb, side, amount, usd, pnl, address, network, hash, leverage, entry, market)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
       [r.id, r.at, r.venue, r.symbol, r.verb, r.side, r.amount == null ? null : String(r.amount),
-        String(r.usd), r.pnl == null ? null : String(r.pnl), r.address, r.network, r.hash],
+        String(r.usd), r.pnl == null ? null : String(r.pnl), r.address, r.network, r.hash,
+        r.leverage == null ? null : String(r.leverage), r.entry == null ? null : String(r.entry),
+        r.market == null ? null : String(r.market)],
     );
     written += 1;
   }
@@ -222,6 +289,10 @@ export async function readLeveraged({ since = 0 } = {}) {
     address: r.address,
     network: r.network,
     hash: r.hash,
+    leverage: r.leverage == null ? null : Number(r.leverage),
+    /** The index price the position was opened at, in GMX's own scale. */
+    entry: r.entry ?? null,
+    market: r.market ?? null,
     source: 'gmx',
   }));
 }
