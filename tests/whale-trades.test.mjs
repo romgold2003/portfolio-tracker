@@ -199,3 +199,22 @@ describe('what a leveraged row says', () => {
     assert.equal(positionStory({ verb: 'close', usd: 1e6, pnl: 10_000 }), 'Closed — profit $10k');
   });
 });
+
+describe('leverage from a GMX trade itself', () => {
+  test("the size moved over the collateral moved with it — a closed position has no other source", async () => {
+    const { leverageOf } = await import('../api/_lib/gmxlev.js');
+    // The real liquidation of 20 Sep 2026: $5,876,449 on $74,449 of USDC.
+    const lev = leverageOf({
+      sizeDeltaUsd: (5_876_449n * 10n ** 30n).toString(),
+      initialCollateralDeltaAmount: '74458504519',
+      collateralTokenPriceMin: '999876455000000000000000',
+    });
+    assert.ok(Math.abs(lev - 78.9) < 0.2, `got ${lev}`);
+  });
+
+  test('no collateral on the trade means no leverage claimed', async () => {
+    const { leverageOf } = await import('../api/_lib/gmxlev.js');
+    assert.equal(leverageOf({ sizeDeltaUsd: (1_000_000n * 10n ** 30n).toString(), initialCollateralDeltaAmount: '0', collateralTokenPriceMin: '0' }), null);
+    assert.equal(leverageOf({}), null);
+  });
+});

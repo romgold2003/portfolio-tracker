@@ -134,6 +134,22 @@ async function marketsOf(chain, fetcher) {
   return map;
 }
 
+/**
+ * The leverage a trade itself implies: the size it moved over the collateral
+ * that moved with it.
+ *
+ * The position's own leverage is better and is used when the position is still
+ * open, but a position that has been closed or liquidated no longer has one —
+ * and those are exactly the rows worth reading. Collateral is an amount in its
+ * own token with a price beside it, both carrying thirty decimals between them.
+ */
+export function leverageOf(a) {
+  const collateral = Number(BigInt(a?.initialCollateralDeltaAmount ?? 0) * BigInt(a?.collateralTokenPriceMin ?? 0) / 10n ** 30n);
+  if (!(collateral > 0)) return null;
+  const lev = usdOf(a.sizeDeltaUsd) / collateral;
+  return lev > 0.05 && lev < 1000 ? lev : null;
+}
+
 /** Turn GMX's trade actions into rows, keeping positions of $500k and more. */
 export function rowsOf(actions, markets, network) {
   const out = [];
@@ -159,6 +175,7 @@ export function rowsOf(actions, markets, network) {
       network,
       hash: String(a.transactionHash),
       market: String(a.marketAddress),
+      leverage: leverageOf(a),
     });
   }
   return out;
@@ -199,6 +216,7 @@ const QUERY = `query($since: Int!, $floor: BigInt!) {
     eventName_eq: "OrderExecuted", timestamp_gt: $since, sizeDeltaUsd_gte: $floor
   }) {
     account marketAddress isLong orderType sizeDeltaUsd sizeDeltaInTokens positionSizeInUsd pnlUsd timestamp transactionHash
+    initialCollateralDeltaAmount collateralTokenPriceMin
   }
 }`;
 
@@ -237,7 +255,8 @@ export async function collectGmx({ now = Date.now(), fetcher = fetch } = {}) {
           for (const r of rows) {
             const p = positions.get(`${r.address.toLowerCase()}|${String(r.market).toLowerCase()}|${r.side}`);
             if (!p) continue;
-            r.leverage = p.leverage;
+            // The open position's own leverage, where there still is one.
+            if (p.leverage) r.leverage = p.leverage;
             // Prices are scaled by the token's decimals; stored as plain dollars.
             r.entry = p.entry == null ? null : priceOf(p.entry, markets.get(String(r.market).toLowerCase())?.decimals ?? 18);
           }
@@ -248,8 +267,40 @@ export async function collectGmx({ now = Date.now(), fetcher = fetch } = {}) {
       failed.push(`${chain.id}: ${err.message}`);
     }
   }
+  const filled = await backfill({ now, fetcher });
   await query('DELETE FROM lev_trades WHERE at < $1', [Math.floor((now - RETAIN_MS) / 1000)]);
-  return { written, failed };
+  return { written, filled, failed };
+}
+
+/**
+ * Rows kept before the leverage was recorded, filled in from the same trades.
+ *
+ * Only while any are left: once the week has turned over, every row held was
+ * written with its leverage and this costs nothing.
+ */
+async function backfill({ now, fetcher }) {
+  const missing = (await query('SELECT id FROM lev_trades WHERE leverage IS NULL AND at >= $1', [Math.floor((now - RETAIN_MS) / 1000)])).rows;
+  if (!missing.length) return 0;
+  const wanted = new Set(missing.map((r) => r.id));
+  const since = Math.floor((now - RETAIN_MS) / 1000);
+  const floor = (BigInt(FLOOR_USD) * 10n ** 30n).toString();
+  let filled = 0;
+  for (const chain of CHAINS) {
+    try {
+      const markets = await marketsOf(chain, fetcher);
+      const json = await fetcher(chain.graphql, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: QUERY, variables: { since, floor } }),
+      }).then((r) => r.json());
+      for (const r of rowsOf(json?.data?.tradeActions, markets, chain.id)) {
+        if (!wanted.has(r.id) || r.leverage == null) continue;
+        await query('UPDATE lev_trades SET leverage = $2, market = $3 WHERE id = $1', [r.id, String(r.leverage), r.market]);
+        filled += 1;
+      }
+    } catch { /* the next poll tries again */ }
+  }
+  return filled;
 }
 
 export async function record(rows) {
