@@ -16,8 +16,8 @@
  */
 import {
   BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
-  hyperliquidAction, leveragedLabel, filterLeveraged, summariseLeveraged,
-  leverageText, positionStory, walletLink, shortAddress,
+  hyperliquidAction, filterLeveraged, buildPositions, positionSummary, positionMoves,
+  summarisePositions, leverageText, positionStory, walletLink, shortAddress,
 } from '../../services/whaleTrades.js';
 import {
   renderOverview, tickOverview, setCoinListener, overviewCoins,
@@ -33,6 +33,8 @@ const DAY = 86_400;
 
 let coin = '';
 let coins = [];
+/** The position whose moves are open on screen, or null. */
+let expanded = null;
 
 /** Each section's own filters. */
 const sections = {
@@ -94,23 +96,45 @@ function coinHtml(symbol) {
   return `<div class="wt-coin">${logo ? `<img src="${escapeHtml(logo)}" alt="" width="16" height="16" loading="lazy">` : ''}${escapeHtml(symbol)}</div>`;
 }
 
-function rowHtml(r, pill, where, story = '') {
-  return `<div class="wt-row${story ? '' : ' wt-grid'}">${story ? '<div class="wt-grid">' : ''}
+function rowHtml(r, pill, where, story = '', { id = null, expanded: isOpen = false, extra = '' } = {}) {
+  return `<div class="wt-row${story ? '' : ' wt-grid'}${id ? ' wt-clickable' : ''}${isOpen ? ' is-open' : ''}"${
+    id ? ` data-position="${escapeHtml(id)}"` : ''}>${story ? '<div class="wt-grid">' : ''}
     <div class="wt-when" title="${escapeHtml(new Date(r.at * 1000).toLocaleString())}">${escapeHtml(ago(r.at))}</div>
     ${coinHtml(r.symbol)}
     <div class="wt-act">${pill}<span class="wt-where">${escapeHtml(where)}</span></div>
     <div class="wt-usd">${escapeHtml(money(r.usd))}<span class="wt-amt">${escapeHtml(amountText(r.amount))} ${escapeHtml(r.symbol)}</span></div>
     <div>${walletHtml(r)}</div>
-  ${story ? `</div><div class="wt-story">${escapeHtml(story)}</div>` : ''}</div>`;
+  ${story ? `</div><div class="wt-story">${id ? `<span class="wt-caret">${isOpen ? '▾' : '▸'}</span>` : ''}${escapeHtml(story)}</div>` : ''}${extra}</div>`;
 }
 
-function leveragedRow(r) {
-  const { text, bullish, opening } = leveragedLabel(r);
-  const lev = leverageText(r);
+function leveragedRow(p) {
+  const { text, bullish, opening } = positionSummary(p);
+  const lev = leverageText(p);
   const pill = `<span class="wt-pill ${bullish ? 'is-buy' : 'is-sell'}${opening ? '' : ' is-flow'}">${escapeHtml(text)}${
     lev ? `<span class="wt-lev">${escapeHtml(lev)}</span>` : ''}</span>`;
-  const venue = r.source === 'hyperliquid' ? 'Hyperliquid' : `GMX · ${r.network === 'avalanche' ? 'Avalanche' : 'Arbitrum'}`;
-  return rowHtml(r, pill, venue, positionStory({ ...r, live: live.get(r.id) }));
+  const venue = p.source === 'hyperliquid' ? 'Hyperliquid' : `GMX · ${p.network === 'avalanche' ? 'Avalanche' : 'Arbitrum'}`;
+
+  /**
+   * The position's own sentence. A closed one reads as its ending; an open one
+   * as where it got in and what it is worth now. The moves behind it are a
+   * click away rather than rows of their own.
+   */
+  const story = [
+    positionStory({
+      verb: p.ending ?? 'open',
+      usd: p.usd,
+      leverage: p.leverage,
+      pnl: p.closed ? p.pnl : null,
+      entry: p.entry,
+      liq: p.liq,
+      live: p.closed ? null : live.get(p.id),
+    }),
+    p.events.length > 1 ? `${p.events.length} moves` : '',
+    p.partial ? 'opened before this window' : '',
+  ].filter(Boolean).join(' · ');
+
+  const isOpen = expanded === p.id;
+  return rowHtml(p, pill, venue, story, { id: p.id, expanded: isOpen, extra: isOpen ? movesHtml(p) : '' });
 }
 
 function spotRow(r) {
@@ -131,11 +155,26 @@ function pickerHtml(items, current) {
 
 const leveragedRows = () => [...hlRows, ...gmxRows];
 
+/** One row per position: a whale's coin and side, from its opening to its close. */
+const leveragedPositions = () => buildPositions(leveragedRows());
+
+/** The moves inside a position, shown when its row is opened. */
+function movesHtml(position) {
+  const rows = positionMoves(position).reverse().map((m) => `<div class="wt-move">
+    <span class="wt-move-when">${escapeHtml(ago(m.at))}</span>
+    <span class="wt-move-what">${escapeHtml(m.what)}</span>
+    <span class="wt-move-size">${escapeHtml(money(m.usd))} <span>${escapeHtml(amountText(m.amount))} ${escapeHtml(m.symbol)}</span></span>
+    <span class="wt-move-pnl ${m.pnl == null ? '' : m.pnl >= 0 ? 'cw-in' : 'cw-out'}">${
+  m.pnl == null || Math.abs(m.pnl) < 1 ? '' : `${m.pnl >= 0 ? '+' : ''}${money(m.pnl)}`}</span>
+  </div>`).join('');
+  return `<div class="wt-moves">${rows}</div>`;
+}
+
 function drawSection(key) {
   const f = sections[key];
   const since = Math.floor(Date.now() / 1000) - f.span;
   const lev = key === 'lev';
-  const all = lev ? leveragedRows() : spotRows;
+  const all = lev ? leveragedPositions() : spotRows;
   const pick = lev ? filterLeveraged : filterRows;
   const base = { coin, side: f.side, since };
 
@@ -150,11 +189,12 @@ function drawSection(key) {
   const rows = pick(all, { ...base, band: f.band });
   const summary = el(`${key}Summary`);
   if (lev) {
-    const s = summariseLeveraged(rows);
+    const s = summarisePositions(rows);
+    const realised = Math.abs(s.closedPnl) >= 1 ? ` <small>${s.closedPnl >= 0 ? '+' : ''}${money(s.closedPnl)}</small>` : '';
     summary.innerHTML = rows.length
-      ? `<span class="cw-in">Opened long ${money(s.longUsd)} <small>(${s.longs})</small></span>
-         <span class="cw-out">Opened short ${money(s.shortUsd)} <small>(${s.shorts})</small></span>
-         <span class="wt-muted">Closed ${money(s.closedUsd)} <small>(${s.closes})</small></span>`
+      ? `<span class="cw-in">Long ${money(s.longUsd)} <small>(${s.longs} open)</small></span>
+         <span class="cw-out">Short ${money(s.shortUsd)} <small>(${s.shorts} open)</small></span>
+         <span class="wt-muted">Closed ${money(s.closedUsd)} <small>(${s.closes})</small>${realised}</span>`
       : '';
   } else {
     const s = summarise(rows);
@@ -412,9 +452,7 @@ const gmxUsd = (raw) => Number(BigInt(raw ?? 0) / 10n ** 24n) / 1e6;
 const FOLLOWED = 12;
 
 async function refreshLive() {
-  const open = leveragedRows()
-    .filter((r) => ['open', 'add', 'flip'].includes(r.verb))
-    .slice(0, FOLLOWED);
+  const open = leveragedPositions().filter((p) => !p.closed).slice(0, FOLLOWED);
   if (!open.length) return;
   let changed = false;
 
@@ -466,6 +504,13 @@ function bind() {
       });
     }
   }
+  // A position's moves open and close on its row.
+  el('levRows')?.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-position]');
+    if (!row || e.target.closest('a')) return;
+    expanded = expanded === row.dataset.position ? null : row.dataset.position;
+    drawSection('lev');
+  });
   setCoinListener((symbol) => { coin = symbol; draw(); });
 }
 

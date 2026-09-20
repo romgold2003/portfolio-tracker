@@ -218,3 +218,59 @@ describe('leverage from a GMX trade itself', () => {
     assert.equal(leverageOf({}), null);
   });
 });
+
+describe('one row per position', () => {
+  const ev = (id, at, verb, usd, extra = {}) => ({
+    id, at, verb, usd, side: 'long', symbol: 'ETH', address: '0xWhale', source: 'hyperliquid', network: null, amount: usd / 2500, ...extra,
+  });
+
+  test('adds and partial closes join the position they belong to', async () => {
+    const { buildPositions } = await import('../src/services/whaleTrades.js');
+    const positions = buildPositions([
+      ev('a', 100, 'open', 5e6, { leverage: 25, entry: 2582 }),
+      ev('b', 200, 'add', 2e6),
+      ev('c', 300, 'reduce', 1e6, { pnl: -95_000 }),
+    ]);
+    assert.equal(positions.length, 1);
+    const [p] = positions;
+    assert.deepEqual([p.usd, p.pnl, p.closed, p.leverage, p.events.length], [7e6, -95_000, false, 25, 3]);
+    assert.equal(p.openedAt, 100);
+    assert.equal(p.at, 300, 'the row is ordered by its latest move');
+  });
+
+  test('a close ends it, and the next opening is a new row', async () => {
+    const { buildPositions, positionSummary } = await import('../src/services/whaleTrades.js');
+    const positions = buildPositions([
+      ev('a', 100, 'open', 5e6), ev('b', 200, 'close', 5e6, { pnl: 120_000 }),
+      ev('c', 300, 'open', 3e6),
+    ]);
+    assert.equal(positions.length, 2);
+    assert.equal(positions[0].openedAt, 300, 'newest first');
+    assert.equal(positionSummary(positions[1]).text, 'CLOSED LONG');
+    assert.equal(positions[1].pnl, 120_000);
+  });
+
+  test('a liquidation is named as one', async () => {
+    const { buildPositions, positionSummary } = await import('../src/services/whaleTrades.js');
+    const [p] = buildPositions([ev('a', 100, 'open', 5e6), ev('b', 200, 'liquidated', 5e6, { pnl: -63_000 })]);
+    assert.equal(positionSummary(p).text, 'LONG LIQUIDATED');
+    assert.equal(p.closed, true);
+  });
+
+  test('two wallets, two coins and two sides never share a row', async () => {
+    const { buildPositions } = await import('../src/services/whaleTrades.js');
+    const positions = buildPositions([
+      ev('a', 100, 'open', 5e6),
+      ev('b', 110, 'open', 5e6, { address: '0xOther' }),
+      ev('c', 120, 'open', 5e6, { symbol: 'BTC' }),
+      ev('d', 130, 'open', 5e6, { side: 'short' }),
+    ]);
+    assert.equal(positions.length, 4);
+  });
+
+  test('a close with no opening in the window still gets its row', async () => {
+    const { buildPositions } = await import('../src/services/whaleTrades.js');
+    const [p] = buildPositions([ev('a', 100, 'close', 5e6, { pnl: 10_000 })]);
+    assert.deepEqual([p.partial, p.closed, p.usd], [true, true, 5e6]);
+  });
+});

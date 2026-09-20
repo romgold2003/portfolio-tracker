@@ -215,6 +215,21 @@ export function filterLeveraged(rows, { coin = '', band = 'all', side = 'both', 
     .sort((a, b) => b.at - a.at);
 }
 
+/** The same, for positions: what is open on each side, and what has been closed. */
+export function summarisePositions(positions) {
+  const out = {
+    longUsd: 0, shortUsd: 0, longs: 0, shorts: 0, closedUsd: 0, closes: 0, closedPnl: 0,
+  };
+  for (const p of positions ?? []) {
+    if (p.closed) {
+      out.closedUsd += p.usd;
+      out.closes += 1;
+      out.closedPnl += p.pnl;
+    } else if (p.side === 'long') { out.longUsd += p.usd; out.longs += 1; } else { out.shortUsd += p.usd; out.shorts += 1; }
+  }
+  return out;
+}
+
 /** Money opened long, opened short, and closed, for the summary line. */
 export function summariseLeveraged(rows) {
   const out = { longUsd: 0, shortUsd: 0, closedUsd: 0, longs: 0, shorts: 0, closes: 0 };
@@ -284,4 +299,103 @@ export function positionStory(row) {
     }
   }
   return parts.join(' · ');
+}
+
+/* ── positions ───────────────────────────────────────────────────────── */
+
+/**
+ * The trades of one whale gathered into the positions they belong to.
+ *
+ * A dashboard row should be a decision, not a keystroke: adding to a long,
+ * taking a third off and finally closing it are one position, and listing them
+ * separately fills the page with the same wallet over and over. So the rows
+ * become one position per wallet, coin and side, which ends when the position
+ * is closed or liquidated — and the next opening starts a new one.
+ *
+ * Trades seen after a position ended, with no opening in the window, still get
+ * a position of their own: the opening happened before the panel was watching,
+ * and the close is worth seeing.
+ */
+export function buildPositions(rows) {
+  const open = new Map();
+  const out = [];
+
+  for (const r of [...(rows ?? [])].sort((a, b) => a.at - b.at)) {
+    const key = `${r.source}|${r.network ?? ''}|${String(r.address).toLowerCase()}|${r.symbol}|${r.side}`;
+    const starts = r.verb === 'open' || r.verb === 'flip';
+    let position = open.get(key);
+
+    if (!position || starts) {
+      position = {
+        id: r.id,
+        source: r.source,
+        network: r.network ?? null,
+        address: r.address,
+        symbol: r.symbol,
+        side: r.side,
+        openedAt: r.at,
+        at: r.at,
+        usd: 0,
+        amount: 0,
+        pnl: 0,
+        leverage: r.leverage ?? null,
+        entry: r.entry ?? null,
+        liq: r.liq ?? null,
+        events: [],
+        closed: false,
+        ending: null,
+        /** True when the opening itself happened before the rows on hand. */
+        partial: !starts,
+      };
+      open.set(key, position);
+      out.push(position);
+    }
+
+    position.events.push(r);
+    position.at = r.at;
+    if (r.leverage) position.leverage ??= r.leverage;
+    if (r.entry) position.entry ??= r.entry;
+    if (r.liq) position.liq ??= r.liq;
+
+    if (starts || r.verb === 'add') {
+      position.usd += r.usd;
+      position.amount += Number(r.amount) || 0;
+    } else {
+      position.pnl += Number(r.pnl) || 0;
+      // A close or a liquidation ends it; the next trade opens a new position.
+      if (r.verb === 'close' || r.verb === 'liquidated') {
+        position.closed = true;
+        position.ending = r.verb;
+        open.delete(key);
+      }
+      // A reduce on a position we never saw opened still needs a size to show.
+      if (!position.usd) position.usd = r.usd;
+      if (!position.amount) position.amount = Number(r.amount) || 0;
+    }
+  }
+
+  return out.sort((a, b) => b.at - a.at);
+}
+
+/** What one position's row says, and how it reads. */
+export function positionSummary(position) {
+  const side = position.side === 'short' ? 'SHORT' : 'LONG';
+  if (position.ending === 'liquidated') return { text: `${side} LIQUIDATED`, bullish: position.side === 'short', opening: false };
+  if (position.closed) return { text: `CLOSED ${side}`, bullish: position.side === 'short', opening: false };
+  return { text: `${side}`, bullish: position.side === 'long', opening: true };
+}
+
+/** The moves inside a position, oldest first, for the expanded row. */
+export function positionMoves(position) {
+  const words = {
+    open: 'Opened', add: 'Added', reduce: 'Took some off', close: 'Closed', liquidated: 'Liquidated', flip: 'Flipped into', unknown: 'Traded',
+  };
+  return (position?.events ?? []).map((e) => ({
+    at: e.at,
+    what: words[e.verb] ?? e.verb,
+    usd: e.usd,
+    amount: e.amount,
+    pnl: e.pnl,
+    symbol: e.symbol,
+  }));
 }
