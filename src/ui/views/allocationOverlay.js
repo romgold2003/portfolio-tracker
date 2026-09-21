@@ -214,5 +214,6 @@ export function initAllocationOverlay() {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAllocation(); }
   });
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeAllocation(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllocation(); });
+  // Esc is handled by ui/escape.js with every other window, so one press closes
+  // one window rather than this one as well as whatever sits above it.
 }

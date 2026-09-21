@@ -63,6 +63,8 @@ import {
   toggleTheme, openDesigner, closeDesigner, setThemeBase, resetDesign,
   shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
 } from '../ui/theme.js';
+import { initEscapeToClose } from '../ui/escape.js';
+import { closeAllocation } from '../ui/views/allocationOverlay.js';
 import { money as $u, signedMoney as $s, pctText as fp, fmtPrice } from '../ui/format.js';
 import { toggleVoice } from '../features/voice.js';
 import {
@@ -744,6 +746,19 @@ export function installActions(extra = {}) {
     beginDeleteAccount, cancelDeleteAccount, confirmDeleteAccount,
     ...extra,
   });
+
+  // Esc closes the window on top. Each one closes through its own function, so
+  // Esc does exactly what that window's close button does — the years panel
+  // drops its half-finished import, the allocation view frees its chart.
+  initEscapeToClose([
+    { id: 'favsModal', close: closeFavorites },
+    { id: 'designerModal', close: closeDesigner },
+    { id: 'yearsModal', close: closeYearsPanel },
+    { id: 'settingsModal', close: closeSettings },
+    { id: 'importModal', close: closeImport },
+    { id: 'allocOverlay', close: closeAllocation },
+    { id: 'acctMenu', close: () => setAccountMenuOpen(false), isOpen: (node) => !node.hidden },
+  ]);
 }
 
 /**
