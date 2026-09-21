@@ -23,7 +23,7 @@ import {
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
 import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
-import { onJournalLoaded, combinedJournals } from '../../core/store.js';
+import { onJournalLoaded, combinedJournals, subAccounts } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
@@ -132,12 +132,53 @@ function miniRow(p) {
   </div>`;
 }
 
-function renderDailyMove(totals) {
+/**
+ * Which of the two ways brokers measure a day this account's broker uses.
+ *
+ * IBKR divides the day's gain by the whole account, cash included; Schwab,
+ * Blink and most broker apps divide it by the holdings. Same dollars, and with
+ * cash in the account the two percentages differ — which read as "the app is
+ * wrong" to anyone comparing it with their broker.
+ *
+ * An account built from IBKR statements is measured IBKR's way, which matches
+ * it to the cent. Any other account is measured on its holdings. Clicking the
+ * figure switches it, remembered per account on this device, so an account
+ * whose broker turns out to do the other can be matched in one click.
+ */
+const DAY_BASIS_KEY = 'rb_day_basis';
+
+function dayBasis() {
+  const id = subAccounts().activeId ?? 'home';
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(DAY_BASIS_KEY) ?? '{}')?.[id]; } catch { /* private window */ }
+  if (saved === 'account' || saved === 'invested') return saved;
+  return state.statements?.length ? 'account' : 'invested';
+}
+
+let lastDailyTotals = null;
+
+export function toggleDayBasis() {
+  const id = subAccounts().activeId ?? 'home';
+  const next = dayBasis() === 'account' ? 'invested' : 'account';
+  try {
+    const all = JSON.parse(localStorage.getItem(DAY_BASIS_KEY) ?? '{}') || {};
+    all[id] = next;
+    localStorage.setItem(DAY_BASIS_KEY, JSON.stringify(all));
+  } catch { /* not remembered, but still switched for now */ }
+  if (lastDailyTotals) renderDailyMove(lastDailyTotals, next);
+}
+
+function renderDailyMove(totals, basis = dayBasis()) {
+  lastDailyTotals = totals;
   // The ledger prices the shares bought and sold on the day, as the broker does.
   const move = dailyPortfolioMove(state.positions, totals.account, undefined, state.ledger?.events ?? []);
   const pctEl = document.getElementById('portfolioDailyPct');
   const amtEl = document.getElementById('portfolioDailyAmt');
   if (!pctEl || !amtEl) return;
+
+  pctEl.title = basis === 'account'
+    ? "Today's gain on the whole account, cash included — how IBKR shows it. Click to measure on your holdings only."
+    : "Today's gain on your holdings, cash left out — how Schwab and most broker apps show it. Click to measure on the whole account.";
 
   if (!move.hasData) {
     pctEl.textContent = '—';
@@ -147,8 +188,9 @@ function renderDailyMove(totals) {
     return;
   }
 
-  pctEl.textContent = fp(move.percent);
-  pctEl.style.color = clr(move.percent);
+  const percent = basis === 'account' ? move.percent : move.investedPercent;
+  pctEl.textContent = fp(percent);
+  pctEl.style.color = clr(percent);
 
   // Today's move in currency is masked with the rest: left visible it sits
   // beside its own percentage, and the two together give the account size away.

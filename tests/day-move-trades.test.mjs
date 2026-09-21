@@ -94,3 +94,40 @@ describe('money paid in or out on the day', () => {
     assert.ok(Math.abs(m.percent - 1.0) < 1e-9);
   });
 });
+
+describe('the day measured on the holdings, as Schwab and most broker apps show it', () => {
+  test('cash in the account: the dollars agree, the two percentages differ as the brokers do', () => {
+    // $20,000 of SPY up $200, and $30,000 of cash beside it.
+    const m = dailyPortfolioMove([pos('SPY', 100, 202, 200)], 50_200, '2026-09-18', []);
+    assert.equal(m.dollars, 200);
+    assert.ok(Math.abs(m.percent - 0.4) < 1e-9, `whole account: got ${m.percent}`);
+    assert.ok(Math.abs(m.investedPercent - 1.0) < 1e-9, `holdings: got ${m.investedPercent}`);
+  });
+
+  test('with no cash the two agree', () => {
+    const m = dailyPortfolioMove([pos('SPY', 100, 202, 200)], 20_200, '2026-09-18', []);
+    assert.ok(Math.abs(m.percent - m.investedPercent) < 1e-9);
+  });
+
+  test('shares sold that day were held at the open: the ETHA case', () => {
+    // 291 ETHA at the open (151 kept, 140 sold), at an 18.47 previous close.
+    const positions = [pos('ETHA', 151, 19.92, 18.47)];
+    const trades = [trade('ETHA', -100, 19.925, 1991.4391545), trade('ETHA', -40, 19.94, 796.57564944)];
+    const m = dailyPortfolioMove(positions, 10_000, '2026-09-18', trades);
+    assert.ok(Math.abs(m.investedPercent - (m.dollars / (291 * 18.47)) * 100) < 1e-9);
+  });
+
+  test('shares bought that day count at what was paid for them', () => {
+    // 10 bought today at 100, now 105: +$50 on the $1,000 put at risk.
+    const m = dailyPortfolioMove([pos('NEW', 10, 105, 100, { entry: 100, open: '2026-09-18' })], 5_000, '2026-09-18', []);
+    assert.ok(Math.abs(m.investedPercent - 5.0) < 1e-9, `got ${m.investedPercent}`);
+  });
+
+  test('a short counts by its size, not as money owed against the longs', () => {
+    // Long $10,000 up $100, short $10,000 that rose $100 (a $100 loss): flat on $20,000 at risk.
+    const positions = [pos('AAA', 100, 101, 100), pos('BBB', 100, 101, 100, { dir: 'Short' })];
+    const m = dailyPortfolioMove(positions, 20_000, '2026-09-18', []);
+    assert.equal(m.dollars, 0);
+    assert.equal(m.investedPercent, 0);
+  });
+});
