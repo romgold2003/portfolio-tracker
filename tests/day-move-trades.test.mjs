@@ -65,3 +65,32 @@ describe('shares traded on the day', () => {
     assert.ok(Math.abs(dailyPortfolioMove(positions, 10_000, '2026-09-18', [old]).dollars - 151 * 1.45) < 1e-9);
   });
 });
+
+describe('money paid in or out on the day', () => {
+  // $20,000 of shares up $200 on the day, and $5,000 deposited that day, so the
+  // account now reads $25,200. The day was +1.0% on the $20,000 that was at risk.
+  const positions = [pos('SPY', 100, 202, 200)];
+  const deposit = (cash, date = '2026-09-18') => ({ date, kind: 'flow', cash });
+
+  test("a deposit made that day is not counted as capital the day's move was earned on", () => {
+    const m = dailyPortfolioMove(positions, 25_200, '2026-09-18', [deposit(5_000)]);
+    assert.equal(m.dollars, 200);
+    assert.ok(Math.abs(m.percent - 1.0) < 1e-9, `got ${m.percent}%, expected 1.00%`);
+  });
+
+  test('without the fix the same day read +0.8% — dollars right, percentage low', () => {
+    const m = dailyPortfolioMove(positions, 25_200, '2026-09-18', []);
+    assert.ok(Math.abs(m.percent - 200 / 25_000 * 100) < 1e-9);
+  });
+
+  test('a withdrawal that day is added back: it was in the account at the open', () => {
+    // $30,200 at risk... then $10,000 taken out, leaving $20,200 showing.
+    const m = dailyPortfolioMove(positions, 20_200, '2026-09-18', [deposit(-10_000)]);
+    assert.ok(Math.abs(m.percent - 200 / 30_000 * 100) < 1e-9);
+  });
+
+  test("a deposit on another day changes nothing about today's percentage", () => {
+    const m = dailyPortfolioMove(positions, 20_200, '2026-09-18', [deposit(5_000, '2026-09-10')]);
+    assert.ok(Math.abs(m.percent - 1.0) < 1e-9);
+  });
+});

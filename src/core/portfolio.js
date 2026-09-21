@@ -909,7 +909,20 @@ export function dailyPortfolioMove(positions, account, today, trades = []) {
 
   const quoted = { length: quotedCount };
   const dollars = held + sold;
-  const prevNLV = account - dollars;
+
+  /**
+   * Money paid in or taken out on the day was never at risk in it. The account
+   * value already includes it, so left in, a $5,000 deposit into a $20,000
+   * account turns a +$200 day from +1.0% into +0.8% — the dollars right, the
+   * percentage too low. The day is measured on what the account held at the
+   * start of it, as brokers measure it.
+   */
+  const flowDay = today ?? (open.length ? dayOf(open[0]) : tradingDay());
+  const paidInToday = (trades ?? []).reduce(
+    (sum, e) => (e?.kind === 'flow' && e.date === flowDay && Number.isFinite(Number(e.cash)) ? sum + Number(e.cash) : sum),
+    0,
+  );
+  const prevNLV = account - dollars - paidInToday;
   return {
     dollars,
     sold,
