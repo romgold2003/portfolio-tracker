@@ -31,7 +31,7 @@ import {
 import { baseQtyOf } from '../core/portfolio.js';
 import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
-import { renderHome, toggleAmounts, toggleDayBasis } from '../ui/views/home.js';
+import { renderHome, toggleAmounts } from '../ui/views/home.js';
 import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
@@ -744,8 +744,6 @@ export function installActions(extra = {}) {
     ...writes,
     // account deletion
     beginDeleteAccount, cancelDeleteAccount, confirmDeleteAccount,
-    // today's percentage: on the whole account, or on the holdings
-    toggleDayBasis,
     ...extra,
   });
 

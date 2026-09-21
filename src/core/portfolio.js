@@ -923,54 +923,10 @@ export function dailyPortfolioMove(positions, account, today, trades = []) {
     0,
   );
   const prevNLV = account - dollars - paidInToday;
-
-  /**
-   * The same day measured the other way brokers measure it: on what was
-   * INVESTED at the start of the day, cash left out.
-   *
-   * IBKR divides the day by the whole account, cash included — that is
-   * `percent`, and it matches IBKR to the cent. Schwab, Blink and most broker
-   * apps divide by the holdings instead, so an account with cash in it reads
-   * higher there with the dollars identical: $200 on $20,000 of shares is +1.0%
-   * on the holdings and +0.4% on an account that also holds $30,000 of cash.
-   *
-   * The holdings as they stood at the open: each position at its previous
-   * close, shares traded that day added back or taken out, and shares bought
-   * that day counted at what was paid for them, which is what they risked.
-   * Shorts count by size, so a short book does not cancel a long one.
-   */
-  let investedAtOpen = 0;
-  for (const p of open) {
-    if (ledger.has(p.ticker)) continue;              // counted per ticker below
-    if (p.open === (today ?? dayOf(p))) { investedAtOpen += Math.abs(p.qty * p.entry); continue; }
-    const close = prevCloseOf(p);
-    investedAtOpen += Math.abs(p.qty) * (close > 0 ? close : p.cur);
-  }
-  for (const [ticker, { close, trades: made }] of ledger) {
-    const heldNow = open.filter((p) => p.ticker === ticker)
-      .reduce((s, p) => s + (p.dir === 'Long' ? p.qty : -p.qty), 0);
-    const traded = made.reduce((s, e) => s + Number(e.qty), 0);
-    investedAtOpen += Math.abs(heldNow - traded) * close;
-    // Adding to the position that day put new money at risk; closing it did not.
-    for (const e of made) {
-      if (Math.sign(Number(e.qty)) === Math.sign(heldNow)) investedAtOpen += Math.abs(Number(e.qty)) * Number(e.price);
-    }
-  }
-  for (const p of positions) {
-    if (ledger.has(p.ticker) || !p.exits?.length) continue;
-    const day = today ?? dayOf(p);
-    for (const e of p.exits) {
-      if (e.d !== day) continue;
-      const from = p.open === day ? p.entry : (e.prevClose > 0 ? e.prevClose : null);
-      if (from != null) investedAtOpen += Math.abs(e.qty) * from;
-    }
-  }
-
   return {
     dollars,
     sold,
     percent: prevNLV > 0 ? (dollars / prevNLV) * 100 : 0,
-    investedPercent: investedAtOpen > 0 ? (dollars / investedAtOpen) * 100 : 0,
     hasData: quoted.length > 0 || sold !== 0,
     pending: open.length - quoted.length,
   };
