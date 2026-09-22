@@ -60,23 +60,59 @@ function pnlSplit(p, unrealised, positions) {
       <div style="font-size:10px;color:var(--text3);margin-top:3px">on the ${held} still held</div></div>`;
 }
 
+/** One figure: a label over a value, optionally coloured and right-aligned. */
+function figure(label, value, { color = null, right = false } = {}) {
+  return `<div${right ? ' style="text-align:right"' : ''}>
+      <div class="dgi-k">${label}</div>
+      <div class="dgi-v"${color ? ` style="color:${color}"` : ''}>${value}</div>
+    </div>`;
+}
+
+/**
+ * Two figures that belong together in one box: the before on the left and the
+ * now on the right, so what you paid and what it is worth read as a pair.
+ * Either side may be missing, and then the box holds the one that is there.
+ */
+function pairBox(left, right) {
+  if (!left && !right) return '';
+  if (!left || !right) return `<div class="dgi">${left || right}</div>`;
+  // A pair needs two figures' width; on a phone it takes the whole row (components.css).
+  return `<div class="dgi dgi-pair">${left}${right}</div>`;
+}
+
 /** The grid of key figures at the top of an expanded card. */
 function detailGrid(p, pnl, positions = null) {
   // The trading session the day's figures describe, not the calendar date.
   const today = dayOf(p);
   const soldToday = dailyDollarExits(p, today);
+  const held = p.status === 'Open';
+
+  // Entered from a statement as a result, with no prices behind it. Showing the
+  // stake in a box labelled "entry price" would be inventing one, and there is
+  // no share price to put beside it either.
+  const prices = p.summary
+    ? pairBox(`<div><div class="dgi-k">Recorded as</div><div class="dgi-v" style="font-size:13px">Result only</div></div>`, '')
+    : pairBox(
+      figure('Entry price', `$${fmtPrice(p.entry)}`),
+      figure(held ? 'Current price' : 'Exit price', `$${fmtPrice(p.cur)}`, { color: held ? clr(pnl) : null, right: true }),
+    );
+
+  const values = pairBox(
+    figure('Amount invested', $u(costOf(p))),
+    figure(held ? 'Current value' : 'Value at exit', $u(marketValueOf(p)), { color: clr(pnl), right: true }),
+  );
+
+  const moves = pairBox(
+    p.dailyChg != null ? figure('Today D%', fp(p.dailyChg), { color: clr(p.dailyChg) }) : '',
+    p.weeklyChg != null ? figure('This week W%', fp(p.weeklyChg), { color: clr(p.weeklyChg), right: p.dailyChg != null }) : '',
+  );
+
   return `<div class="dg">
-    ${p.summary
-    // Entered from a statement as a result, with no prices behind it. Showing
-    // the stake in a box labelled "entry price" would be inventing one.
-    ? `<div class="dgi"><div class="dgi-k">Recorded as</div><div class="dgi-v" style="font-size:13px">Result only</div></div>`
-    : `<div class="dgi"><div class="dgi-k">Entry price</div><div class="dgi-v">$${fmtPrice(p.entry)}</div></div>`}
-    <div class="dgi"><div class="dgi-k">Amount invested</div><div class="dgi-v">${$u(costOf(p))}</div></div>
-    <div class="dgi"><div class="dgi-k">Current value</div><div class="dgi-v" style="color:${clr(pnl)}">${$u(marketValueOf(p))}</div></div>
+    ${prices}
+    ${values}
     ${positions ? pnlSplit(p, pnl, positions) : ''}
-    ${p.dailyChg != null ? `<div class="dgi"><div class="dgi-k">Today D%</div><div class="dgi-v" style="color:${clr(p.dailyChg)}">${fp(p.dailyChg)}</div></div>` : ''}
+    ${moves}
     ${hasDailyFigure(p, today) ? `<div class="dgi"><div class="dgi-k">Today P&L</div><div class="dgi-v" style="color:${clr(dailyDollarTotal(p))}">${$s(+dailyDollarTotal(p).toFixed(2))}</div>${soldToday !== 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:3px">incl. ${$s(+soldToday.toFixed(2))} sold today</div>` : ''}</div>` : ''}
-    ${p.weeklyChg != null ? `<div class="dgi"><div class="dgi-k">This week</div><div class="dgi-v" style="color:${clr(p.weeklyChg)}">${fp(p.weeklyChg)}</div></div>` : ''}
   </div>`;
 }
 

@@ -242,6 +242,8 @@
 .pos-body{border-top:0.5px solid var(--border)}
 .detail-rows{padding:16px 18px}
 .dg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.dgi-pair{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+@media (max-width:640px){.dg{grid-template-columns:repeat(2,minmax(0,1fr))}.dgi-pair{grid-column:1/-1}}
 .dgi{background:var(--panel2);border:0.5px solid var(--input);border-radius:7px;padding:11px 13px}
 .dgi-k{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px}
 .dgi-v{font-size:15px;font-weight:600;color:var(--text)}
