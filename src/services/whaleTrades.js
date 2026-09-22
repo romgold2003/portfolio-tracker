@@ -11,16 +11,25 @@
  */
 
 /**
- * The sizes shown. Nothing under $5M appears.
+ * The sizes shown for leveraged. Nothing under $10M appears.
+ *
+ * These are much larger than what the market actually produces: measured over
+ * thirty days, GMX saw about 1.4 orders a week over $5M and NONE at all over
+ * $25M, so $25M–40M and $40M+ will often be empty and even $10M–20M will be
+ * quiet. That is the size asked for, and the rows that do appear are the very
+ * biggest. Lower the numbers here to see more.
+ *
+ * $20M–25M falls between two bands on purpose, so those orders show under
+ * All $10M+ but in none of the three tabs.
  *
  * The collectors still keep everything from $500k, so the bands can be moved
- * down again without losing history.
+ * down again without losing any history.
  */
 export const BANDS = [
-  { id: 'all', label: 'All $5M+', min: 5_000_000, max: Infinity },
-  { id: 'b1', label: '$5M–10M', min: 5_000_000, max: 10_000_000 },
-  { id: 'b2', label: '$10M–25M', min: 10_000_000, max: 25_000_000 },
-  { id: 'b3', label: '$25M+', min: 25_000_000, max: Infinity },
+  { id: 'all', label: 'All $10M+', min: 10_000_000, max: Infinity },
+  { id: 'b1', label: '$10M–20M', min: 10_000_000, max: 20_000_000 },
+  { id: 'b2', label: '$25M–40M', min: 25_000_000, max: 40_000_000 },
+  { id: 'b3', label: '$40M+', min: 40_000_000, max: Infinity },
 ];
 
 /**
@@ -29,14 +38,16 @@ export const BANDS = [
  * Single on-chain spot trades are far smaller than leveraged orders: across the
  * eighteen largest pools of ETH, BTC, SOL and BNB, a day held seventeen trades
  * over $500k and none over $1M, while GMX alone sees one or two orders over $5M
- * a week. The same $5M floor would leave Spot empty; $1M gives it about as many
- * rows as Leveraged.
+ * a week. A $2M floor is therefore already above almost everything a day
+ * produces, and $10M–25M and $25M+ will rarely hold anything.
+ *
+ * $5M–10M falls between two bands on purpose, the same way as above.
  */
 export const SPOT_BANDS = [
-  { id: 'all', label: 'All $1M+', min: 1_000_000, max: Infinity },
-  { id: 'b1', label: '$1M–2M', min: 1_000_000, max: 2_000_000 },
-  { id: 'b2', label: '$2M–5M', min: 2_000_000, max: 5_000_000 },
-  { id: 'b3', label: '$5M+', min: 5_000_000, max: Infinity },
+  { id: 'all', label: 'All $2M+', min: 2_000_000, max: Infinity },
+  { id: 'b1', label: '$2M–5M', min: 2_000_000, max: 5_000_000 },
+  { id: 'b2', label: '$10M–25M', min: 10_000_000, max: 25_000_000 },
+  { id: 'b3', label: '$25M+', min: 25_000_000, max: Infinity },
 ];
 
 export const bandOf = (id, bands = BANDS) => bands.find((b) => b.id === id) ?? bands[0];
