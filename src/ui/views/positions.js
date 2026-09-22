@@ -65,7 +65,7 @@ export function renderPositions() {
   if (openEl) {
     keepOpenPanels(openEl, () => {
       openEl.innerHTML = open.length
-        ? sortPositions(open, ui.posSort).map((p) => positionCard(p, true)).join('')
+        ? sortPositions(open, ui.posSort).map((p) => positionCard(p, true, state.positions)).join('')
         : '<div class="empty">No open positions. Add one from New trade.</div>';
     });
   }

@@ -9,7 +9,7 @@ import { ASSET_CLASSES, MONTHS_LONG } from '../../config/constants.js';
 import {
   unreal, realized, pctD, costOf, marketValueOf,
   dailyDollarExits, dailyDollarTotal,
-  dayOf, baseQtyOf, bookedPnl, hasDailyFigure,
+  dayOf, baseQtyOf, bookedPnl, hasDailyFigure, realisedSoFar,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
 import { ui } from '../uiState.js';
@@ -41,8 +41,27 @@ function exitsBlock(p) {
   </div>`;
 }
 
+/**
+ * Banked and still on paper, side by side, for a position still held.
+ *
+ * Realised is what the shares already sold made; unrealised is what the shares
+ * still held are up or down right now. Together they are the whole trade so far.
+ */
+function pnlSplit(p, unrealised, positions) {
+  const banked = realisedSoFar(p, positions);
+  const muted = banked === 0;
+  // 151 shares read as 151, and 0.25 BTC keeps its decimals.
+  const held = Math.abs(p.qty).toLocaleString('en-US', { maximumFractionDigits: 6 });
+  return `<div class="dgi"><div class="dgi-k">Realised P&L</div>
+      <div class="dgi-v" style="color:${muted ? 'var(--text3)' : clr(banked)}">${muted ? '$0.00' : $s(+banked.toFixed(2))}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">${muted ? 'nothing sold yet' : 'on shares already sold'}</div></div>
+    <div class="dgi"><div class="dgi-k">Unrealised P&L</div>
+      <div class="dgi-v" style="color:${clr(unrealised)}">${$s(+unrealised.toFixed(2))}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">on the ${held} still held</div></div>`;
+}
+
 /** The grid of key figures at the top of an expanded card. */
-function detailGrid(p, pnl) {
+function detailGrid(p, pnl, positions = null) {
   // The trading session the day's figures describe, not the calendar date.
   const today = dayOf(p);
   const soldToday = dailyDollarExits(p, today);
@@ -54,6 +73,7 @@ function detailGrid(p, pnl) {
     : `<div class="dgi"><div class="dgi-k">Entry price</div><div class="dgi-v">$${fmtPrice(p.entry)}</div></div>`}
     <div class="dgi"><div class="dgi-k">Amount invested</div><div class="dgi-v">${$u(costOf(p))}</div></div>
     <div class="dgi"><div class="dgi-k">Current value</div><div class="dgi-v" style="color:${clr(pnl)}">${$u(marketValueOf(p))}</div></div>
+    ${positions ? pnlSplit(p, pnl, positions) : ''}
     ${p.dailyChg != null ? `<div class="dgi"><div class="dgi-k">Today D%</div><div class="dgi-v" style="color:${clr(p.dailyChg)}">${fp(p.dailyChg)}</div></div>` : ''}
     ${hasDailyFigure(p, today) ? `<div class="dgi"><div class="dgi-k">Today P&L</div><div class="dgi-v" style="color:${clr(dailyDollarTotal(p))}">${$s(+dailyDollarTotal(p).toFixed(2))}</div>${soldToday !== 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:3px">incl. ${$s(+soldToday.toFixed(2))} sold today</div>` : ''}</div>` : ''}
     ${p.weeklyChg != null ? `<div class="dgi"><div class="dgi-k">This week</div><div class="dgi-v" style="color:${clr(p.weeklyChg)}">${fp(p.weeklyChg)}</div></div>` : ''}
@@ -219,7 +239,8 @@ function progressBadge(p) {
   return '';
 }
 
-export function positionCard(p, isOpen) {
+/** `positions` is the whole book, so a held position can find its own imported sales. */
+export function positionCard(p, isOpen, positions = []) {
   const pnl = isOpen ? unreal(p) : realized(p);
   const retPct = pctD(pnl, costOf(p));
   const expanded = ui.expandedId === p.id;
@@ -239,7 +260,7 @@ export function positionCard(p, isOpen) {
 
   const body = expanded
     ? `<div class="pos-body"><div class="detail-rows">
-        ${detailGrid(p, pnl)}
+        ${detailGrid(p, pnl, isOpen && !p.summary ? positions : null)}
         ${isOpen ? reasonBlock(p) + exitsBlock(p) + openBody(p) : closedBody(p, retPct)}
       </div></div>`
     : '';

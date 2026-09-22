@@ -274,6 +274,36 @@ export function bookedPnl(p) {
   return (p.exits || []).reduce((sum, e) => sum + e.pnl, 0);
 }
 
+/**
+ * What a holding has already banked by selling part of it.
+ *
+ * A sale lives in one of two places. Sold in the app, it is an exit on the
+ * position itself. Imported from a broker, it is a closed trade of its own under
+ * the same ticker — ETHA's 140 shares sold on 18 September are a closed trade
+ * beside the 151 still held. Both are this holding's realised profit.
+ *
+ * Only sales of THIS holding count, not an earlier round trip in the same stock:
+ * a closed trade belongs to it when it was sold after the holding began. On the
+ * day it began, only a sale whose own holding also began that day — sold out and
+ * bought back the same morning is two holdings, and the first one's sale is not
+ * this one's. Same account too, so the combined view never borrows a sale from
+ * another account. A holding with no start date keeps only its own exits,
+ * because anything else would be a guess.
+ */
+export function realisedSoFar(p, positions = []) {
+  const own = bookedPnl(p);
+  const since = p.open;
+  if (!since) return own;
+  const sold = positions.filter((q) => q !== p
+    && q.status === 'Closed'
+    && q.ticker === p.ticker
+    && q.dir === p.dir
+    && (q.account ?? null) === (p.account ?? null)
+    && q.close
+    && (q.close > since || (q.close === since && (q.open || '') >= since)));
+  return own + sold.reduce((sum, q) => sum + realized(q), 0);
+}
+
 export function pctD(pnl, base) { return base ? (pnl / base) * 100 : 0; }
 
 /**
