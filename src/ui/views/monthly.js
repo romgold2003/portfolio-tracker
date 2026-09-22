@@ -190,6 +190,71 @@ function renderSummaryTable() {
   }).join('');
 }
 
+/**
+ * Sales of the same holding, shown as one trade.
+ *
+ * Selling 291 ETHA in four goes is one position being got out of, not four
+ * trades. Grouped by ticker, direction and the holding they came from — the
+ * date it was bought — so an earlier round trip in the same name stays its own
+ * row, and so does a second account's.
+ *
+ * Every sale survives as an exit inside the row, which is what the expanded
+ * breakdown lists. Entry and exit are set so that the row's realised P&L is
+ * exactly the sum of its parts rather than a re-derived number.
+ */
+function holdingKey(p) {
+  return `${p.ticker}|${p.dir}|${p.open ?? ''}|${p.account ?? ''}`;
+}
+
+function mergeSales(parts) {
+  if (parts.length === 1) return parts[0];
+  const sorted = [...parts].sort((a, b) => (a.close || '').localeCompare(b.close || ''));
+  const cost = sorted.reduce((sum, p) => sum + costOf(p), 0);
+  const pnl = sorted.reduce((sum, p) => sum + realized(p), 0);
+  // A statement records a sale as a result with no share price, and its "units"
+  // are meaningless; real exits keep their units.
+  const summary = sorted.every((p) => p.summary);
+  const qty = summary ? 1 : sorted.reduce((sum, p) => sum + p.qty, 0);
+
+  const exits = sorted.flatMap((p) => {
+    const own = p.exits?.length ? p.exits : [{ d: p.close, qty: p.qty, price: p.cur, pnl: realized(p) }];
+    const partCost = costOf(p);
+    return own.map((e) => ({
+      ...e,
+      d: e.d || p.close,
+      // What this slice cost, so its share and its own return stay right once
+      // the parts sit inside one row.
+      cost: p.exits?.length ? p.entry * e.qty : partCost,
+    }));
+  });
+  for (const e of exits) e.pct = cost > 0 ? (e.cost / cost) * 100 : 0;
+
+  return {
+    ...sorted[sorted.length - 1],
+    merged: true,
+    partCount: sorted.length,
+    exits,
+    qty,
+    origQty: qty,
+    entry: cost / qty,
+    cur: (cost + pnl) / qty,
+    amount: cost,
+    close: sorted[sorted.length - 1].close,
+    firstExit: sorted[0].close,
+    reason: [...new Set(sorted.map((p) => p.reason).filter(Boolean))].join('\n\n') || null,
+  };
+}
+
+export function mergedTrades(trades) {
+  const groups = new Map();
+  for (const p of trades) {
+    const key = holdingKey(p);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  return [...groups.values()].map(mergeSales);
+}
+
 /** The per-exit breakdown shown when a trade row is expanded. */
 function exitBreakdown(p, pnl, retPct) {
   const exits = p.exits?.length ? p.exits : [{ d: p.close, qty: p.qty, price: p.cur, pnl }];
@@ -204,14 +269,16 @@ function exitBreakdown(p, pnl, retPct) {
         <tbody>
         ${exits.map((e) => {
           const slicePct = e.pct != null ? e.pct : (totalQty ? (e.qty / totalQty) * 100 : 0);
-          const sliceCost = p.entry * e.qty;
+          // A merged row carries each slice's own cost; on a single trade the
+          // slice cost is its share of the entry.
+          const sliceCost = e.cost ?? p.entry * e.qty;
           const sliceRet = sliceCost ? (e.pnl / sliceCost) * 100 : 0;
           return `<tr>
             <td style="color:var(--text3);font-size:12px">${escapeHtml(e.d)}</td>
             <td style="font-weight:600;color:var(--amber)">${slicePct.toFixed(1)}%</td>
-            <td style="font-size:12px">${fmtQty(e.qty)}</td>
-            <td style="font-size:12px">$${fmtPrice(e.price)}</td>
-            <td style="font-size:12px">${$u(e.qty * e.price)}</td>
+            <td style="font-size:12px">${p.summary ? '—' : fmtQty(e.qty)}</td>
+            <td style="font-size:12px">${p.summary ? '—' : `$${fmtPrice(e.price)}`}</td>
+            <td style="font-size:12px">${$u(p.summary ? e.cost + e.pnl : e.qty * e.price)}</td>
             <td style="color:${clr(e.pnl)};font-weight:600">${$s(+e.pnl.toFixed(2))}</td>
             <td style="color:${clr(sliceRet)}">${fp(sliceRet)}</td>
           </tr>`;
@@ -220,8 +287,11 @@ function exitBreakdown(p, pnl, retPct) {
       </table>
       <div style="margin-top:12px;padding-top:12px;border-top:0.5px solid var(--border2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div style="font-size:12px;color:var(--text3)">
-          Entry $${fmtPrice(p.entry)} · ${fmtQty(totalQty)} units · invested ${$u(costOf(p))}
-          ${p.exits?.length > 1 ? ` · avg exit $${fmtPrice(p.cur)}` : ''}
+          ${p.summary
+    // Recorded from a statement as results, with no share prices behind them.
+    ? `Invested ${$u(costOf(p))} · sold for ${$u(costOf(p) + pnl)}`
+    : `Entry $${fmtPrice(p.entry)} · ${fmtQty(totalQty)} units · invested ${$u(costOf(p))}`
+      + (p.exits?.length > 1 ? ` · avg exit $${fmtPrice(p.cur)}` : '')}
         </div>
         <div style="font-size:13px;font-weight:600">
           <span style="color:var(--text3);font-weight:400;font-size:12px">Overall&nbsp;</span>
@@ -290,7 +360,7 @@ export function renderMonthDetail() {
     </div>
     <table>
       <thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
-      <tbody>${[...trades].sort((a, b) => new Date(b.close) - new Date(a.close)).map(tradeRow).join('')}</tbody>
+      <tbody>${mergedTrades(trades).sort((a, b) => new Date(b.close) - new Date(a.close)).map(tradeRow).join('')}</tbody>
     </table>`;
 }
 
