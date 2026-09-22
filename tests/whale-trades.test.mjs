@@ -19,29 +19,27 @@ describe('filters', () => {
     row('ETH', 'sell', 7_000_000), row('SOL', 'buy', 1_500_000),
   ];
 
-  test('spot bands are $2M–5M, $10M–25M and $25M+, half-open', () => {
-    assert.equal(filterRows(rows, { band: 'b1' }).length, 1);
+  test('spot bands are $2M–10M, $10M–25M and $25M+, half-open', () => {
+    assert.equal(filterRows(rows, { band: 'b1' }).length, 2);
     assert.equal(filterRows(rows, { band: 'b2' }).length, 1);
     assert.equal(filterRows(rows, { band: 'b3' }).length, 1);
     assert.equal(filterRows(rows, { band: 'all' }).length, 4, 'under $2M is never shown');
   });
 
-  test('$5M–10M sits between two bands: in All, in none of the three', () => {
-    const gap = filterRows(rows, { band: 'all' }).filter((r) => r.usd === 7_000_000);
-    assert.equal(gap.length, 1);
-    for (const band of ['b1', 'b2', 'b3']) {
-      assert.equal(filterRows(rows, { band }).some((r) => r.usd === 7_000_000), false, band);
-    }
+  test('the bands meet, so the three tabs add up to All', () => {
+    const tabs = ['b1', 'b2', 'b3'].flatMap((band) => filterRows(rows, { band }).map((r) => r.usd));
+    const all = filterRows(rows, { band: 'all' }).map((r) => r.usd);
+    assert.deepEqual([...tabs].sort((a, b) => a - b), [...all].sort((a, b) => a - b));
   });
 
-  test('leveraged keeps $10M–20M, $25M–40M and $40M+', async () => {
+  test('leveraged keeps $10M–20M, $20M–40M and $40M+', async () => {
     const { filterLeveraged } = await import('../src/services/whaleTrades.js');
     const lev = [
-      { symbol: 'BTC', side: 'long', usd: 12e6, at: 1 }, { symbol: 'BTC', side: 'short', usd: 30e6, at: 1 },
-      { symbol: 'ETH', side: 'long', usd: 50e6, at: 1 }, { symbol: 'ETH', side: 'long', usd: 22e6, at: 1 },
+      { symbol: 'BTC', side: 'long', usd: 12e6, at: 1 }, { symbol: 'BTC', side: 'short', usd: 22e6, at: 1 },
+      { symbol: 'ETH', side: 'long', usd: 50e6, at: 1 }, { symbol: 'ETH', side: 'long', usd: 30e6, at: 1 },
       { symbol: 'SOL', side: 'long', usd: 8e6, at: 1 },
     ];
-    assert.deepEqual(['b1', 'b2', 'b3', 'all'].map((band) => filterLeveraged(lev, { band }).length), [1, 1, 1, 4]);
+    assert.deepEqual(['b1', 'b2', 'b3', 'all'].map((band) => filterLeveraged(lev, { band }).length), [1, 2, 1, 4]);
     assert.equal(filterLeveraged(lev, { band: 'all' }).some((r) => r.usd === 8e6), false, 'under $10M is never shown');
   });
 

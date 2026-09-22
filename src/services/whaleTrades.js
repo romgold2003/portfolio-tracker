@@ -19,8 +19,8 @@
  * quiet. That is the size asked for, and the rows that do appear are the very
  * biggest. Lower the numbers here to see more.
  *
- * $20M–25M falls between two bands on purpose, so those orders show under
- * All $10M+ but in none of the three tabs.
+ * The three bands meet exactly, so every order above the floor is in one of
+ * them and the tabs add up to All.
  *
  * The collectors still keep everything from $500k, so the bands can be moved
  * down again without losing any history.
@@ -28,7 +28,7 @@
 export const BANDS = [
   { id: 'all', label: 'All $10M+', min: 10_000_000, max: Infinity },
   { id: 'b1', label: '$10M–20M', min: 10_000_000, max: 20_000_000 },
-  { id: 'b2', label: '$25M–40M', min: 25_000_000, max: 40_000_000 },
+  { id: 'b2', label: '$20M–40M', min: 20_000_000, max: 40_000_000 },
   { id: 'b3', label: '$40M+', min: 40_000_000, max: Infinity },
 ];
 
@@ -41,11 +41,11 @@ export const BANDS = [
  * a week. A $2M floor is therefore already above almost everything a day
  * produces, and $10M–25M and $25M+ will rarely hold anything.
  *
- * $5M–10M falls between two bands on purpose, the same way as above.
+ * These meet exactly too: every trade above the floor lands in one tab.
  */
 export const SPOT_BANDS = [
   { id: 'all', label: 'All $2M+', min: 2_000_000, max: Infinity },
-  { id: 'b1', label: '$2M–5M', min: 2_000_000, max: 5_000_000 },
+  { id: 'b1', label: '$2M–10M', min: 2_000_000, max: 10_000_000 },
   { id: 'b2', label: '$10M–25M', min: 10_000_000, max: 25_000_000 },
   { id: 'b3', label: '$25M+', min: 25_000_000, max: Infinity },
 ];
