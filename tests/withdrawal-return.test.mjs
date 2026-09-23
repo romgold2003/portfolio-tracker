@@ -84,3 +84,28 @@ describe('the all-time high follows performance, not the size of the account', (
     assert.equal(allTimeHigh([day('2026-01-01', 0)]), null);
   });
 });
+
+describe('a withdrawal recorded from the button', () => {
+  // What withdrawMoney() writes: a dated, negative flow and cash down by the same.
+  const flowFor = (amount) => ({ date: '2026-09-23', amount: -amount, description: 'Withdrawal' });
+
+  test('the money leaves the account value and the profit does not move', () => {
+    const paidIn = [{ date: '2026-01-01', amount: 10_000 }];
+    const before = periodReturnFromHistory(
+      [day('2026-01-01', 10_000, 0), day('2026-06-01', 10_500)], '2026-01-01', '2026-12-31',
+    );
+    const after = periodReturnFromHistory(
+      [day('2026-01-01', 10_000, 0), day('2026-06-01', 10_500), day('2026-06-02', 7_500, -3_000)],
+      '2026-01-01', '2026-12-31',
+    );
+    assert.ok(Math.abs(after.returnPct - before.returnPct) < 1e-9, 'the return is untouched');
+    assert.ok(Math.abs(after.pnl - before.pnl) < 1e-9, 'and so is the profit');
+    assert.equal(paidIn.concat(flowFor(3_000)).reduce((s, f) => s + f.amount, 0), 7_000);
+  });
+
+  test('taking out more than the cash on hand is still just a flow', () => {
+    const rows = [day('2026-01-01', 10_000, 0), day('2026-06-01', 10_500), day('2026-06-02', 500, -10_000)];
+    const r = periodReturnFromHistory(rows, '2026-01-01', '2026-12-31');
+    assert.ok(Math.abs(r.returnPct - 5) < 1e-9, `got ${r.returnPct}%`);
+  });
+});

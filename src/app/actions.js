@@ -359,6 +359,53 @@ export function editCash() {
   renderAll();
 }
 
+/**
+ * Money taken out of the broker, recorded as what it is.
+ *
+ * A withdrawal lowers the account and is never profit or loss, so it leaves
+ * every percentage exactly where it was — the point of recording it rather than
+ * quietly editing cash down, which reads as value the account lost.
+ *
+ * The account it will come out of is named in the question and again in the
+ * confirmation, because with several sub-accounts the wrong one is a mistake
+ * you cannot see afterwards: the money simply leaves the wrong book.
+ */
+export function withdrawMoney() {
+  const account = activeAccountName();
+  const typed = prompt(`Withdraw from ${account}\n\n`
+    + `Cash in this account: ${$u(state.cash)}\n\n`
+    + 'How much did you take out of your broker? ($)');
+  if (typed === null) return;
+
+  const amount = Math.abs(parseFloat(typed));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    alert('Enter the amount you withdrew, as a number.');
+    return;
+  }
+
+  /**
+   * More than the cash on hand is allowed — a broker can settle a withdrawal
+   * against a position, and refusing it would make the journal disagree with
+   * the account — but it is said plainly rather than left to be discovered.
+   */
+  const short = amount > state.cash
+    ? `\n\nThis is more than the ${$u(state.cash)} of cash here, so cash goes to ${$u(state.cash - amount)}.`
+    : '';
+  if (!confirm(`Take ${$u(amount)} out of ${account}?${short}\n\n`
+    + 'The account value falls by this much. It is not a loss, so your returns do not change.')) return;
+
+  state.cashFlows = [...(state.cashFlows ?? []), {
+    date: todayStr(),
+    amount: -amount,
+    description: 'Withdrawal',
+  }].sort((a, b) => a.date.localeCompare(b.date));
+  state.cash -= amount;
+  saveCashFlows();
+  saveCash();
+  renderAll();
+  showToast(`${$u(amount)} withdrawn from ${account}`, 'heard', 3500);
+}
+
 // ─── DCA ─────────────────────────────────────────────────────────
 
 export function calcDca(id) {
@@ -744,6 +791,7 @@ export function installActions(extra = {}) {
     addPos, saveEdit, updatePrice, editCash, del, reopen, applyDca, confirmClose,
     confirmImport, openYearsPanel, chooseYearFile, chooseWholeHistory, readIbkrFile, confirmIbkrImport, removeStatementYear,
     eraseJournal,
+    withdrawMoney,
   };
   for (const [name, fn] of Object.entries(writes)) writes[name] = oneAccountOnly(fn);
   Object.assign(window, {

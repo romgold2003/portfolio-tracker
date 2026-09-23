@@ -106,6 +106,8 @@
         </div>
         <div class="topbar-right">
           <div class="live-pill" id="livePill"><span class="live-dot"></span><span id="livePillTxt">Live prices on</span></div>
+          <!-- Money out of the broker: lowers the account, never the returns. -->
+          <button class="topbar-btn topbar-btn-warn" onclick="withdrawMoney()" title="Record money taken out of your broker">↓ Withdraw</button>
           <button class="topbar-btn" onclick="show('add')">+ New trade</button>
         </div>
       </div>
