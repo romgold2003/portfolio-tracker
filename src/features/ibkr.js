@@ -880,11 +880,23 @@ export function parseIbkrStatement(text) {
 /** A value from a Map, or from the plain object a stored statement keeps instead. */
 const lookup = (source, key) => (source instanceof Map ? source.get(key) : source?.[key]);
 
+/**
+ * A statement's own lists, which an older or partly written record can be
+ * missing.
+ *
+ * Read straight, a record without them threw while the journal was being
+ * rebuilt — and every caller rebuilds: adding a file, removing a year, opening
+ * the app. Removing a year was where it showed, because the × threw and so did
+ * nothing at all. A statement with no closed trades is an ordinary thing; a
+ * record that cannot say is treated the same way, as none.
+ */
+const listOf = (value) => (Array.isArray(value) ? value : []);
+
 export function statementToJournal(parsed, existing = {}) {
   let id = Date.now() * 1000;
   const nextId = () => { id += 1; return id; };
 
-  const open = parsed.positions.map((p) => ({
+  const open = listOf(parsed.positions).map((p) => ({
     id: nextId(),
     ticker: p.ticker,
     cls: 'Stocks',
@@ -911,7 +923,7 @@ export function statementToJournal(parsed, existing = {}) {
     reason: null,
   }));
 
-  const closed = parsed.closed.map((c) => {
+  const closed = listOf(parsed.closed).map((c) => {
     const ended = c.cost + c.pnl;
     return {
       id: nextId(),
@@ -978,7 +990,7 @@ export function statementToJournal(parsed, existing = {}) {
         ...(parsed.dated ?? []),
       ].sort((a, b) => a.date.localeCompare(b.date)),
       /** The closing quantities, kept so the walk can be checked against them. */
-      holdings: Object.fromEntries(parsed.positions.map((p) => [p.ticker, p.qty])),
+      holdings: Object.fromEntries(listOf(parsed.positions).map((p) => [p.ticker, p.qty])),
     },
     income: parsed.income,
     /**

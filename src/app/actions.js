@@ -1335,8 +1335,20 @@ export async function removeStatementYear(year) {
       : `Remove ${year}? Its closed trades and deposits leave your journal.`;
   if (!confirm(message)) return;
 
-  loadState(journalWithoutYear(state, year));
-  await flushNow();
+  /**
+   * Rebuilding the journal can fail on a record the app cannot read, and when
+   * it did the × appeared to do nothing at all: the year stayed, with no
+   * dialog, no message and nothing in the panel. A failure now says so.
+   */
+  try {
+    loadState(journalWithoutYear(state, year));
+    await flushNow();
+  } catch (err) {
+    console.error(`Removing ${year} failed.`, err);
+    ibkrError(`${year} could not be removed: ${err.message}. Your journal is unchanged.`);
+    showToast(`${year} could not be removed — nothing was changed`, 'error', 4000);
+    return;
+  }
   renderAll();
   renderStatementYears();
 }
