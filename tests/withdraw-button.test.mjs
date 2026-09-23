@@ -133,3 +133,65 @@ describe('all time counts money taken out as value earned, not money never put i
     assert.ok(Math.abs(r.returnPct - 130) < 1e-9, `${r.returnPct}%`);
   });
 });
+
+/**
+ * The whole point, as one account.
+ *
+ * $10,000 — $3,000 of cash and 10 shares marked at $700 — flat since January.
+ * $3,000 is taken out on 1 June, and the shares then rise 10% the next day.
+ *
+ * Nothing that already happened may move: the year is still flat through 31
+ * May, and 1 June itself is 0.00%. What comes after is measured on the smaller
+ * account, which is the real consequence of taking money out — the same $700
+ * earned on 2 June is 10% of what is left, where it would have been 7% of the
+ * account that kept the money.
+ */
+describe('taking $3,000 out of a $10,000 account', () => {
+  const priceOn = (_ticker, day) => (day < '2026-06-02' ? 700 : 770);
+  const history = (flows) => buildPortfolioHistory({
+    opening: { date: '2026-01-01', cash: 3000, holdings: { VOO: 10 } },
+    events: withManualFlows([], flows),
+    priceOn,
+    lastKnown: {},
+    from: '2026-01-01',
+    to: '2026-06-02',
+  });
+
+  const took = history([withdrawal('2026-06-01', 3000)]);
+  const kept = history([]);
+  const on = (rows, date) => rows.find((r) => r.date === date);
+
+  test('the account falls by exactly the amount, and only then', () => {
+    assert.equal(on(took, '2026-05-31').totalAccountValue, 10_000);
+    assert.equal(on(took, '2026-06-01').totalAccountValue, 7000);
+    assert.equal(on(kept, '2026-06-01').totalAccountValue, 10_000);
+  });
+
+  test('no percentage already earned moves: the year is flat up to the day', () => {
+    const before = periodReturnFromHistory(took, '2026-01-01', '2026-05-31');
+    const same = periodReturnFromHistory(kept, '2026-01-01', '2026-05-31');
+    assert.ok(Math.abs(before.returnPct) < 1e-9, `${before.returnPct}%`);
+    assert.ok(Math.abs(before.returnPct - same.returnPct) < 1e-9);
+  });
+
+  test('the day it is taken out reads 0.00%, not −30%', () => {
+    const day = periodReturnFromHistory(took, '2026-06-01', '2026-06-01');
+    assert.ok(Math.abs(day.returnPct) < 1e-9, `${day.returnPct}%`);
+  });
+
+  test('afterwards it is measured on what is left, which is the whole effect', () => {
+    // $700 earned on 2 June: 10% of the $7,000 left, 7% of the $10,000 kept.
+    const after = periodReturnFromHistory(took, '2026-06-02', '2026-06-02');
+    const had = periodReturnFromHistory(kept, '2026-06-02', '2026-06-02');
+    assert.ok(Math.abs(after.returnPct - 10) < 1e-9, `${after.returnPct}%`);
+    assert.ok(Math.abs(had.returnPct - 7) < 1e-9, `${had.returnPct}%`);
+    // Same dollars earned either way — the account is simply smaller.
+    assert.ok(Math.abs(after.pnl - had.pnl) < 1e-9);
+  });
+
+  test('and the year reads the two stretches compounded, as it should', () => {
+    const year = periodReturnFromHistory(took, '2026-01-01', '2026-12-31');
+    assert.ok(Math.abs(year.returnPct - 10) < 1e-9, `${year.returnPct}%`);
+    assert.ok(Math.abs(year.pnl - 700) < 1e-9, `${year.pnl}`);
+  });
+});
