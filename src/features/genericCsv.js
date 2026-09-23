@@ -449,7 +449,15 @@ export function classifyAction(text) {
   if (/reinvest|\bdrip\b/.test(t)) return 'reinvest';
   if (/dividend|dividende|dividendo|דיבידנד|\bcdiv\b|\bdiv\b|distribution|ausschüttung|dywidend|temettü|дивиденд|配当|股息|红利|紅利|utbytte|utdelning|udbytte|osinko/.test(t)) return 'dividend';
   if (/interest|intérêt|interet|\bzins|\bint\b|ריבית|interessi|juros|intereses|odsetki|faiz|процент|利息|ränta|korko/.test(t)) return 'interest';
-  if (/withdraw|retrait|auszahlung|\bwdl\b|retiro|משיכה|prelievo|levantamento|saque|wypłat|para çekme|вывод|снятие|出金|提取|取出|uttak|uttag|udbetaling|nosto|výběr/.test(t)) return 'withdrawal';
+  /**
+   * Money leaving, checked before money arriving, because several brokers
+   * describe a withdrawal in words that also name the funding that pays for
+   * one. Schwab writes "Client Requested Electronic Funding Disbursement" for
+   * money going OUT, and read for "funding" alone it was booked as a deposit —
+   * the account grew by what had just left it, and the return fell because the
+   * app thought that money had been paid in.
+   */
+  if (/withdraw|disburse|remittance|\bpayout\b|cash out\b|check paid|cheque paid|retrait|auszahlung|\bwdl\b|retiro|משיכה|prelievo|levantamento|saque|wypłat|para çekme|вывод|снятие|出金|提取|取出|uttak|uttag|udbetaling|nosto|výběr/.test(t)) return 'withdrawal';
   if (/deposit|dépôt|depot|depósito|deposito|einzahlung|funding|top.?up|\bdep\b|הפקדה|versamento|aporte|wpłat|para yatırma|пополнение|зачисление|入金|存入|innskudd|insättning|indbetaling|talletus|vklad/.test(t)) return 'deposit';
   if (/\bfee|commission|frais|gebühr|gebuhr|withholding|\btax|stamp duty|charge|עמלה|עמלות|\sמס\s|דמי |commission|comissão|comisión|steuer|impost|prowizj|opłat|podat|komisyon|vergi|комисси|налог|手数料|手续费|手續費|税|avgift|gebyr|kurtage|skatt|palkkio|poplatek/.test(t)) return 'fee';
   if (/\bsell|\bsold\b|\bsld\b|verkauf|vente|venta|venda|vendita|מכירה|\bstc\b|^\s*s\s*$|sprzeda|satış|продаж|売|卖|賣|salg|sälj|myynti|prodej/.test(t)) return 'sell';
@@ -466,7 +474,7 @@ export function classifyAction(text) {
  */
 export function transferDirection(text) {
   const t = ` ${String(text ?? '').toLowerCase()} `;
-  if (/withdraw|retrait|auszahlung|outgoing|payout|\bsent\b|(transfer|wire|ach|payment)\s+(out\b|to\b)|\bto (bank|checking|savings|current account|account ending)/.test(t)) return 'out';
+  if (/withdraw|disburse|remittance|outgoing|payout|\bsent\b|\bdebit\b|(transfer|wire|ach|payment)\s+(out\b|to\b)|\bto (bank|checking|savings|current account|account ending)/.test(t)) return 'out';
   if (/deposit|dépôt|depot|einzahlung|incoming|received|(transfer|wire|ach)\s+(in\b|from\b)|\bfrom (bank|checking|savings|current account)/.test(t)) return 'in';
   return null;
 }
@@ -530,6 +538,7 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
 
     const words = `${cell(row, 'action') ?? ''} ${cell(row, 'description') ?? ''}`;
     let kind = classifyAction(cell(row, 'action')) ?? classifyAction(cell(row, 'description'));
+    let guessedDirection = false;
     if (kind === 'reinvest') kind = ticker && rawQty ? 'buy' : 'dividend';
     if (!kind && ticker && rawQty) kind = rawQty < 0 ? 'sell' : 'buy';
     if (!kind && !ticker && amount) kind = 'transfer';
@@ -547,6 +556,10 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
       kind = direction === 'out' ? 'withdrawal'
         : direction === 'in' ? 'deposit'
           : (amount > 0 ? 'deposit' : 'withdrawal');
+      // Nothing in the words said which way it went, so the sign decided — and
+      // a file that writes every amount positive would have every withdrawal
+      // read as a deposit. The balance column overrules this later if it has one.
+      guessedDirection = direction == null;
     }
     if (!kind) {
       skipped.push({ line, reason: `not a kind of transaction this can read ("${cell(row, 'action')}")` });
@@ -563,6 +576,7 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
       order: index,
       kind,
       currency: currency || null,
+      guessedDirection,
     };
 
     if (kind === 'buy' || kind === 'sell') {
@@ -632,8 +646,10 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
     add({ ...base, ticker: ticker || null, cash });
   });
 
-  const rebalanced = settleFromBalance(transactions, balances);
-  return { transactions, skipped, currencies: [...currencies], repriced, rebalanced };
+  const { changed: rebalanced, flipped } = settleFromBalance(transactions, balances);
+  // Cash movements whose direction was guessed and that no balance column could check.
+  const guessedCash = transactions.filter((t) => t.guessedDirection && !t.balanceChecked).length;
+  return { transactions, skipped, currencies: [...currencies], repriced, rebalanced, flipped, guessedCash };
 }
 
 /**
@@ -652,7 +668,8 @@ export function readTransactions(table, mapping, formats = detectFormats(table, 
  */
 function settleFromBalance(transactions, balances) {
   const known = balances.map((b, i) => (Number.isFinite(b) ? i : -1)).filter((i) => i >= 0);
-  if (known.length < 3) return 0;
+  const nothing = { changed: 0, flipped: 0 };
+  if (known.length < 3) return nothing;
 
   const movesWhen = (oldestFirst) => {
     const moves = new Map();
@@ -667,9 +684,10 @@ function settleFromBalance(transactions, balances) {
   const backward = movesWhen(false);
   const oldestFirst = agree(forward) >= agree(backward);
   const moves = oldestFirst ? forward : backward;
-  if (agree(moves) < moves.size * 0.5) return 0;
+  if (agree(moves) < moves.size * 0.5) return nothing;
 
   let changed = 0;
+  let flipped = 0;
   for (const [i, move] of moves) {
     const t = transactions[i];
     const gap = Math.abs(move - t.cash);
@@ -680,6 +698,23 @@ function settleFromBalance(transactions, balances) {
      */
     if (gap <= 0.011) {
       t.balanceChecked = true;
+      continue;
+    }
+    /**
+     * A cash movement whose direction was only guessed from the sign, where the
+     * balance moved the same amount the other way: the file's own balance is
+     * the record of what happened, so it wins. This is the case brokers create
+     * by writing every amount positive and putting "to bank" nowhere the
+     * classifier can see it — without this the withdrawal is booked as a
+     * deposit, and the account grows by the money that just left it.
+     */
+    if (t.guessedDirection && (t.kind === 'deposit' || t.kind === 'withdrawal')
+      && Math.sign(move) !== Math.sign(t.cash)
+      && Math.abs(Math.abs(move) - Math.abs(t.cash)) <= 0.011) {
+      t.cash = Math.round(move * 100) / 100;
+      t.kind = move < 0 ? 'withdrawal' : 'deposit';
+      t.balanceChecked = true;
+      flipped += 1;
       continue;
     }
     if (Math.sign(move) !== Math.sign(t.cash)) continue;
@@ -704,7 +739,7 @@ function settleFromBalance(transactions, balances) {
       t.at = `${t.date} 00:${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
     }
   }
-  return changed;
+  return { changed, flipped };
 }
 
 /** A key for remembering how a broker's files are laid out. */

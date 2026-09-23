@@ -953,6 +953,14 @@ function renderIbkrPreview() {
       line(`${group.rebalanced} row${group.rebalanced === 1 ? '' : 's'} taken at the cash the file's balance column shows moved — `
         + 'the amount column leaves out commissions there.', 'var(--text3)');
     }
+    if (group.flipped) {
+      line(`${group.flipped} cash movement${group.flipped === 1 ? '' : 's'} turned out to be going the other way — `
+        + "the file's balance column shows the money left the account, so they are withdrawals, not deposits.", 'var(--text3)');
+    }
+    if (group.guessedCash) {
+      line(`${group.guessedCash} cash movement${group.guessedCash === 1 ? ' does not say' : 's do not say'} whether the money came in or out, `
+        + 'so the sign of the amount decided. Check any that look wrong — money paid in or taken out never counts as profit either way.', 'var(--amber)');
+    }
     if (group.outside) {
       /**
        * Said first and plainly: with one year picked from a file covering
@@ -1163,13 +1171,17 @@ function refreshCsvImport() {
     group.outsideYears = new Set();
     group.repriced = 0;
     group.rebalanced = 0;
+    group.flipped = 0;
+    group.guessedCash = 0;
     group.empty = [];
 
     // Each file keeps the year it was picked for, so files for several years wait side by side.
     for (const { name, table, year: chosen } of group.tables) {
-      const { transactions, skipped, repriced, rebalanced } = readTransactions(table, group.mapping, group.formats);
+      const { transactions, skipped, repriced, rebalanced, flipped, guessedCash } = readTransactions(table, group.mapping, group.formats);
       group.repriced += repriced;
       group.rebalanced += rebalanced;
+      group.flipped += flipped;
+      group.guessedCash += guessedCash;
       group.skipped.push(...skipped.map((s) => ({ ...s, name })));
       // All years: split by the year of each row's date. One year: only its rows.
       const kept = chosen ? transactions.filter((t) => t.date.startsWith(`${chosen}-`)) : transactions;
