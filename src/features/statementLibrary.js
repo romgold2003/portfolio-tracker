@@ -86,8 +86,10 @@ export function statementRecord(parsed) {
     flows: parsed.flows ?? [],
     splits: parsed.splits ?? [],
     openingCash: parsed.openingCash ?? null,
-    openingHoldings: parsed.openingHoldings ?? {},
-    openingMarks: parsed.openingMarks ?? {},
+    // null, not {}: a statement without a mark-to-market summary never says
+    // what it opened holding, and that is not the same as opening with nothing.
+    openingHoldings: parsed.openingHoldings ?? null,
+    openingMarks: parsed.openingMarks ?? null,
     cash: parsed.cash ?? null,
     accruals: parsed.accruals ?? 0,
     income: parsed.income ?? {},
@@ -223,6 +225,19 @@ export function chainReport(records) {
         reason: `${prev.year} closed at ${money(closed)} but ${next.year} opens at ${money(opened)} — `
           + 'one of them may cover a different set of accounts or a shorter period.',
       });
+      continue;
+    }
+
+    /**
+     * A statement generated without a mark-to-market summary never says what it
+     * opened holding. There is nothing to compare, so nothing can disagree —
+     * and reading its silence as "held nothing" broke the join between every
+     * such pair of years: the earlier year was dropped, the account began the
+     * newer one from nothing, and a year that had grown normally reported
+     * hundreds of percent either way.
+     */
+    if (next.openingHoldings == null) {
+      links.push({ ...link, value: null, opensUnstated: true });
       continue;
     }
 

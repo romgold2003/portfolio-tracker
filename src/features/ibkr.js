@@ -267,14 +267,23 @@ function isTotalRow(fields) {
  * out by the whole cash figure. The Total rows carry no quantity but do carry
  * figures, and summing them would double the book.
  */
+/**
+ * What the statement says was held when the period opened — and null when it
+ * does not say.
+ *
+ * Only the mark-to-market summary states this, and plenty of statements are
+ * generated without that section. Reporting an empty set for those made "the
+ * file is silent" indistinguishable from "the account held nothing", and the
+ * two mean opposite things when a year is checked against the one before it.
+ */
 function readOpeningHoldings(group) {
-  if (!group?.header) return { holdings: {}, marks: {} };
+  if (!group?.header) return { holdings: null, marks: null };
   const h = group.header;
   const iClass = columnIndex(h, 'Asset Category', "Catégorie d'actifs");
   const iSymbol = columnIndex(h, 'Symbol', 'Symbole');
   const iQty = columnIndex(h, 'Prior Quantity', 'Avant Quantité');
   const iPrice = columnIndex(h, 'Prior Price', 'Avant Prix');
-  if (iSymbol < 0 || iQty < 0) return { holdings: {}, marks: {} };
+  if (iSymbol < 0 || iQty < 0) return { holdings: null, marks: null };
 
   const holdings = {};
   const marks = {};
