@@ -80,7 +80,7 @@ describe('the splits a price history is adjusted for', () => {
 });
 
 describe('the all-time high', () => {
-  test('is the highest value of the whole history, the latest day it was reached', async () => {
+  test('is the best the account has performed, the day it first got there', async () => {
     const { allTimeHigh } = await import('../src/core/snapshots.js');
     const rows = [
       { date: '2026-01-01', totalAccountValue: 100 },
@@ -88,7 +88,11 @@ describe('the all-time high', () => {
       { date: '2026-03-01', totalAccountValue: 120 },
       { date: '2026-04-01', totalAccountValue: 130 },
     ];
-    assert.deepEqual(allTimeHigh(rows), { date: '2026-04-01', value: 130 });
+    const high = allTimeHigh(rows);
+    // February and April stand at the same +30%, and February got there first.
+    assert.equal(high.date, '2026-02-01');
+    assert.equal(high.value, 130);
+    assert.ok(Math.abs(high.returnPct - 30) < 1e-9);
     assert.equal(allTimeHigh([]), null);
   });
 

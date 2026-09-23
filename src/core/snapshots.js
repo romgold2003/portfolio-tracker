@@ -223,10 +223,38 @@ export function accountHistory() {
  */
 export function allTimeHigh(rows = accountHistory()) {
   let best = null;
+  let growth = 1;
+  let prevValue = null;
+
   for (const row of rows ?? []) {
     const value = Number(row?.totalAccountValue ?? row?.value);
     if (!row?.date || !(value > 0)) continue;
-    if (!best || value >= best.value) best = { date: row.date, value };
+
+    /**
+     * The high is the best the account has ever PERFORMED, not the most money
+     * it has ever held.
+     *
+     * Measured on value, paying money in sets a new high on a day nothing was
+     * earned, and taking money out puts the high out of reach for good: draw
+     * $20,000 out of a $50,000 account and the star stays on the day before the
+     * withdrawal until the remaining $30,000 has grown by two thirds, however
+     * well it does. So each day is compounded the way a return is — the change
+     * in value less the money that moved that day, over the day before — and
+     * the star marks the peak of that.
+     */
+    if (prevValue != null) {
+      const flow = Number(row.externalCashFlow) || 0;
+      const earned = value - flow;
+      if (earned > 0) growth *= earned / prevValue;
+    }
+    prevValue = value;
+
+    // Strictly better, so a flat stretch keeps the day the account FIRST
+    // reached its best. Otherwise a deposit, which earns nothing, would carry
+    // the star forward onto itself and look like it set the high.
+    if (!best || growth > best.growth) {
+      best = { date: row.date, value, growth, returnPct: (growth - 1) * 100 };
+    }
   }
   return best;
 }

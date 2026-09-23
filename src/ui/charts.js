@@ -180,9 +180,14 @@ export function renderCurve(timeframe) {
               });
               const lines = [];
               if (high && high.index === index) {
+                // The best the account has performed, which is what the star
+                // marks; the value it stood at that day is the second line.
                 lines.push(
                   '★ All-time high',
                   'Date: ' + day(high.date),
+                  ...(Number.isFinite(high.returnPct)
+                    ? [`Return: ${high.returnPct >= 0 ? '+' : ''}${high.returnPct.toFixed(2)}%`]
+                    : []),
                   'Account value: $' + high.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                 );
               }

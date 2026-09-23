@@ -13,7 +13,7 @@
  */
 import {
   state, saveCash, saveApiKey as persistApiKey, findPosition, savePositions,
-  loadState, flushNow, isCombined, switchAccount, addSubAccount, renameSubAccount, removeSubAccount, subAccounts,
+  loadState, flushNow, saveCashFlows, isCombined, switchAccount, addSubAccount, renameSubAccount, removeSubAccount, subAccounts,
 } from '../core/store.js';
 import {
   renderAccountSwitcher, toggleAccountMenu, setAccountMenuOpen, activeAccountName,
@@ -28,7 +28,7 @@ import {
   closePosition, reopenPosition, deletePosition, setCurrentPrice,
   normalizeTicker, exitProceedsOf,
 } from '../core/positions.js';
-import { baseQtyOf } from '../core/portfolio.js';
+import { baseQtyOf, todayStr } from '../core/portfolio.js';
 import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
 import { renderHome, toggleAmounts } from '../ui/views/home.js';
@@ -314,6 +314,19 @@ export function updatePrice(id) {
   renderAll();
 }
 
+/**
+ * Setting the cash balance by hand, and saying what the change was.
+ *
+ * Cash changing on its own is one of two different events, and they are not
+ * interchangeable. Money paid in or taken out is a CASH FLOW: the account is
+ * worth more or less afterwards, but nothing was earned or lost, so it must not
+ * touch any return. Correcting a balance that was simply wrong is not a flow;
+ * it is the record catching up with reality.
+ *
+ * Left unasked, every withdrawal read as a loss — take $3,000 out of a $10,000
+ * account and the year fell 30% on a day nothing happened, because the app saw
+ * the value drop with nothing to explain it.
+ */
 export function editCash() {
   const input = prompt(`Set your cash balance ($):\nCurrent: ${$u(state.cash)}\n\nThis is updated automatically when you close positions.`);
   if (input === null) return;
@@ -322,6 +335,25 @@ export function editCash() {
     alert('Invalid amount');
     return;
   }
+
+  const delta = +(amount - state.cash).toFixed(2);
+  if (delta !== 0) {
+    const movement = delta > 0 ? 'paying in' : 'taking out';
+    const asFlow = confirm(`${$u(Math.abs(delta))} ${delta > 0 ? 'more' : 'less'} than the balance now.\n\n`
+      + `OK — you are ${movement} this money.\n`
+      + `It changes the account value and is never counted as profit or loss.\n\n`
+      + 'Cancel — you are correcting a wrong balance.\n'
+      + 'It is treated as value the account already had.');
+    if (asFlow) {
+      state.cashFlows = [...(state.cashFlows ?? []), {
+        date: todayStr(),
+        amount: delta,
+        description: delta > 0 ? 'Deposit' : 'Withdrawal',
+      }].sort((a, b) => a.date.localeCompare(b.date));
+      saveCashFlows();
+    }
+  }
+
   state.cash = amount;
   saveCash();
   renderAll();
