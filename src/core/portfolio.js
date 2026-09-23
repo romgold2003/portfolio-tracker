@@ -148,6 +148,25 @@ export function dailyDollarExits(p, today = dayOf(p)) {
   }, 0);
 }
 
+/**
+ * What today's sales turned into cash without anyone being able to price them.
+ *
+ * A sale needs the price the shares started the day at, and a statement keeps
+ * only the proceeds. When that starting price is missing the sale contributes
+ * nothing to the day — which is right — but its proceeds are sitting in the
+ * cash balance all the same, and measuring the day against them charges the
+ * account for a move nobody could see. This is the amount to leave out.
+ */
+export function unpricedExits(p, today = dayOf(p)) {
+  if (!p.exits || !p.exits.length) return 0;
+  if (p.open === today) return 0;
+  return p.exits.reduce((sum, e) => {
+    if (e.d !== today) return sum;
+    const priced = e.prevClose != null && Number.isFinite(e.prevClose) && e.prevClose > 0;
+    return priced ? sum : sum + Math.abs(Number(e.price) * Number(e.qty) || 0);
+  }, 0);
+}
+
 /** Everything one position contributed today: the part still held, plus anything sold today. */
 export function dailyDollarTotal(p, today = dayOf(p)) {
   const held = p.status === 'Open' ? (dailyDollar(p, today) || 0) : 0;
@@ -870,7 +889,9 @@ export function sectorBreakdown(positions, cash = 0) {
  * The portfolio's move today.
  *   dollars = what the shares still held moved today
  *           + what the shares SOLD today moved before they were sold
- *   percent = dollars / YESTERDAY's NLV (today's NLV minus today's P&L)
+ *   percent = dollars / YESTERDAY's NLV over the part of the account that
+ *             could be priced for today (today's NLV, less today's P&L, less
+ *             money moved today, less anything today had no price for)
  */
 export function dailyPortfolioMove(positions, account, today, trades = []) {
   const open = positions.filter((p) => p.status === 'Open');
@@ -909,6 +930,18 @@ export function dailyPortfolioMove(positions, account, today, trades = []) {
   let held = 0;
   let sold = 0;
   let quotedCount = 0;
+  /**
+   * Value the day could not be measured over.
+   *
+   * A holding with no previous close contributes nothing to the day's dollars,
+   * and left in the base it drags the percentage towards zero by its whole
+   * size. Eight tickers up 2% beside one unquoted holding ten times their size
+   * read +0.15%: the dollars right, the percentage almost nothing, which is
+   * exactly how it was reported. The day is measured over the part of the
+   * account that was actually priced for it, and 'pending' says how much was
+   * not.
+   */
+  let unpriced = 0;
   for (const p of open) {
     const fromLedger = ledger.get(p.ticker);
     if (fromLedger) {
@@ -918,7 +951,7 @@ export function dailyPortfolioMove(positions, account, today, trades = []) {
       continue;
     }
     const move = dailyDollar(p, today);
-    if (move != null) { held += move; quotedCount += 1; }
+    if (move != null) { held += move; quotedCount += 1; } else unpriced += posValue(p);
   }
   for (const { close, trades: made } of ledger.values()) {
     for (const e of made) {
@@ -935,7 +968,12 @@ export function dailyPortfolioMove(positions, account, today, trades = []) {
     }
   }
   // Sales entered by hand; a ticker the ledger priced is already counted.
-  sold += positions.reduce((sum, p) => (ledger.has(p.ticker) ? sum : sum + dailyDollarExits(p, today)), 0);
+  for (const p of positions) {
+    if (ledger.has(p.ticker)) continue;
+    sold += dailyDollarExits(p, today);
+    // Proceeds nobody could price are in the cash balance, not in the day.
+    unpriced += unpricedExits(p, today);
+  }
 
   const quoted = { length: quotedCount };
   const dollars = held + sold;
@@ -952,7 +990,7 @@ export function dailyPortfolioMove(positions, account, today, trades = []) {
     (sum, e) => (e?.kind === 'flow' && e.date === flowDay && Number.isFinite(Number(e.cash)) ? sum + Number(e.cash) : sum),
     0,
   );
-  const prevNLV = account - dollars - paidInToday;
+  const prevNLV = account - dollars - paidInToday - unpriced;
   return {
     dollars,
     sold,
