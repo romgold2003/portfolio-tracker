@@ -269,13 +269,13 @@ export function saveEdit(id) {
     dir: value('dir'),
     open: value('date'),
     entry: parseFloat(value('entry')),
-    amount: parseFloat(value('amount')),
+    qty: parseFloat(value('qty')),
     reason: value('reason')?.trim(),
     exit: value('exit') ? parseFloat(value('exit')) : null,
     close: value('close') || null,
   };
-  if (!fields.ticker || !fields.entry || !fields.amount) {
-    alert('Ticker, entry price and amount are required.');
+  if (!fields.ticker || !fields.entry || !fields.qty) {
+    alert('Ticker, entry price and number of shares are required.');
     return;
   }
 

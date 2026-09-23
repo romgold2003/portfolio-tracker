@@ -66,13 +66,13 @@ describe('buying does not conjure money', () => {
 });
 
 describe('editing does not conjure money', () => {
-  test('raising the amount past the cash on hand still balances', () => {
+  test('raising the size past the cash on hand still balances', () => {
     loadState({ positions: [], cash: 12000, cashFlows: [], snapshots: [] });
     const p = buy();
     const before = account();
     updatePosition(p.id, {
       ticker: 'AAA', cls: 'Stocks', dir: 'Long', open: '2026-09-06',
-      entry: 100, amount: 30000, reason: null,
+      entry: 100, qty: 300, reason: null,
     });
     assert.ok(near(account(), before), `account moved by ${account() - before}`);
     assert.ok(near(state.cash, 12000 - 30000), `cash is ${state.cash}`);

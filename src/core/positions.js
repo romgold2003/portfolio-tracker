@@ -95,21 +95,28 @@ export function addPosition({ ticker, cls, dir, open, entry, amount, qty, reason
 }
 
 /**
- * Apply an edit. Changing the invested amount moves cash by the difference, so
- * the account value stays consistent with what was actually deployed.
+ * Apply an edit. Changing the size moves cash by the difference, so the account
+ * value stays consistent with what was actually deployed.
+ *
+ * Sized by the share count, like creating a position and like adding to one.
+ * It used to take the amount and divide it back out, which meant simply opening
+ * the panel and saving it unchanged could leave a different share count than it
+ * showed — the amount is rounded to the cent for display, and dividing that by
+ * the entry price does not give back the shares that produced it.
  */
 export function updatePosition(id, fields) {
   const p = findPosition(id);
   if (!p) return null;
   const previousCash = openingCash(p.dir, costOf(p));
+  const amount = fields.qty * fields.entry;
 
   p.ticker = fields.ticker;
   p.cls = fields.cls;
   p.dir = fields.dir;
   p.open = fields.open;
   p.entry = fields.entry;
-  p.qty = fields.amount / fields.entry;
-  p.amount = fields.amount;
+  p.qty = fields.qty;
+  p.amount = amount;
   p.reason = fields.reason || null;
   if (fields.exit != null) p.cur = fields.exit;
   if (fields.close) p.close = fields.close;
@@ -118,7 +125,7 @@ export function updatePosition(id, fields) {
   // amount past the cash on hand would otherwise leave the extra paid for by
   // nothing and the account total overstated by the difference.
   // Direction-aware, so turning a long into a short undoes the purchase and books the sale.
-  const cashChange = openingCash(p.dir, fields.amount) - previousCash;
+  const cashChange = openingCash(p.dir, amount) - previousCash;
   const cashDelta = -cashChange;
   if (cashChange !== 0) {
     state.cash += cashChange;

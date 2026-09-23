@@ -95,17 +95,17 @@ describe('adding to and editing a short', () => {
     assert.equal(p.qty, 14);
   });
 
-  test('editing the amount moves cash by the same rule', () => {
+  test('editing the size moves cash by the same rule', () => {
     fresh();
     const p = shortTsla();
-    updatePosition(p.id, { ticker: 'TSLA', cls: 'Stocks', dir: 'Short', open: '2026-09-15', entry: 100, amount: 1500 });
+    updatePosition(p.id, { ticker: 'TSLA', cls: 'Stocks', dir: 'Short', open: '2026-09-15', entry: 100, qty: 15 });
     assert.equal(state.cash, 11_500);
   });
 
   test('turning a long into a short undoes the purchase and books the sale', () => {
     fresh();
     const p = addPosition({ ticker: 'TSLA', cls: 'Stocks', dir: 'Long', open: '2026-09-15', entry: 100, amount: 1000, qty: 10 });
-    updatePosition(p.id, { ticker: 'TSLA', cls: 'Stocks', dir: 'Short', open: '2026-09-15', entry: 100, amount: 1000 });
+    updatePosition(p.id, { ticker: 'TSLA', cls: 'Stocks', dir: 'Short', open: '2026-09-15', entry: 100, qty: 10 });
     assert.equal(state.cash, 11_000);
     assert.equal(account(), 10_000);
   });

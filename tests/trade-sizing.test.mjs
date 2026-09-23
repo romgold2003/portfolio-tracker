@@ -136,3 +136,45 @@ describe('adding to a position', () => {
     assert.equal(p.qty, 19, 'ten plus three plus three plus three');
   });
 });
+
+/**
+ * Editing a position is sized the same way.
+ *
+ * The panel took the amount and divided it back out, and the amount is shown
+ * rounded to the cent — so opening the Edit panel and saving it untouched could
+ * leave a different share count than the one it was showing. On a fractional
+ * crypto holding that is the whole precision of the position.
+ */
+describe('editing a position', () => {
+  test('saving it untouched changes nothing', async () => {
+    const { updatePosition } = await import('../src/core/positions.js');
+    // 0.00398 BTC at $79,772 costs $317.49256 — $317.49 once shown to the cent.
+    const p = addPosition({
+      ticker: 'BTC', cls: 'Crypto', dir: 'Long', open: '2026-09-04',
+      entry: 79772, amount: 317.49256, qty: 0.00398,
+    });
+    updatePosition(p.id, {
+      ticker: 'BTC', cls: 'Crypto', dir: 'Long', open: '2026-09-04',
+      entry: 79772, qty: 0.00398, reason: null,
+    });
+    assert.equal(p.qty, 0.00398);
+    // The rounded amount would have given back 0.003979967… instead.
+    assert.ok(Math.abs(317.49 / 79772 - 0.00398) > 1e-9, 'the old route really did lose it');
+  });
+
+  test('changing the share count moves cash by what the change cost', async () => {
+    const { updatePosition } = await import('../src/core/positions.js');
+    const p = addPosition({
+      ticker: 'AAA', cls: 'Stocks', dir: 'Long', open: '2026-09-04',
+      entry: 100, amount: 1000, qty: 10,
+    });
+    const before = state.cash;
+    updatePosition(p.id, {
+      ticker: 'AAA', cls: 'Stocks', dir: 'Long', open: '2026-09-04',
+      entry: 100, qty: 12, reason: null,
+    });
+    assert.equal(p.qty, 12);
+    assert.equal(p.amount, 1200);
+    assert.ok(Math.abs((before - state.cash) - 200) < 1e-9, `moved ${before - state.cash}`);
+  });
+});

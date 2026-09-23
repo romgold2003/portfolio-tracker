@@ -134,7 +134,7 @@ function editFields(p, { includeExit }) {
     ${includeExit ? `<div class="dca-field"><label>Date closed</label><input type="date" id="ed-close-${p.id}" value="${escapeHtml(p.close || '')}"></div>` : ''}
     <div class="dca-field"><label>Entry price ($)</label><input type="number" step="any" id="ed-entry-${p.id}" value="${p.entry}"></div>
     ${includeExit ? `<div class="dca-field"><label>Exit price ($)</label><input type="number" step="any" id="ed-exit-${p.id}" value="${p.cur}"></div>` : ''}
-    <div class="dca-field"><label>Amount invested ($)</label><input type="number" step="any" id="ed-amount-${p.id}" value="${costOf(p).toFixed(2)}"></div>
+    <div class="dca-field"><label>Shares / units</label><input type="number" step="any" id="ed-qty-${p.id}" value="${Number(Math.abs(p.qty).toFixed(8))}"></div>
     <div class="dca-field" style="grid-column:1/-1"><label>Reason for entry</label>
       <textarea id="ed-reason-${p.id}" style="min-height:60px;resize:vertical;font-size:13px;padding:8px 10px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);font-family:inherit;width:100%;outline:none">${escapeHtml(p.reason || '')}</textarea>
     </div>
