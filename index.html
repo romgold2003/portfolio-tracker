@@ -544,7 +544,12 @@
     <div class="modal-field danger-zone">
       <label>Delete this account</label>
       <p id="deleteBlurb" style="margin-bottom:10px">Removes the account and everything in it. This cannot be undone.</p>
-      <button class="btn btn-danger" id="deleteAccountBtn" onclick="beginDeleteAccount()">Delete account</button>
+      <!-- Erase keeps the account and empties it; delete removes the account itself. -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-danger" id="deleteAccountBtn" onclick="beginDeleteAccount()">Delete account</button>
+        <button class="btn btn-warn" id="eraseJournalBtn" onclick="eraseJournal()">Erase journal</button>
+      </div>
+      <p style="margin-top:8px;color:var(--text3)"><strong>Erase journal</strong> empties this account instead: every position, trade, deposit and imported file goes, and the account, its password and your settings stay.</p>
 
       <div id="deleteConfirm" style="display:none;margin-top:12px">
         <p style="margin-bottom:10px"><strong>Export a backup first if you might want this journal again.</strong> Nobody can restore it afterwards — the journal is encrypted with a key derived from your password, and no readable copy exists anywhere.</p>

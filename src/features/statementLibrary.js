@@ -540,11 +540,13 @@ export function importPlan(existing = [], incoming = [], { replace = false } = {
  *
  * The API key is the only thing kept: it is a setting, not part of any account.
  */
-export function journalWithoutYear(current, year) {
-  const records = withoutStatement(current?.statements ?? [], year);
-  if (records.length) {
-    return journalFromStatements(records, { snapshots: current.snapshots, apiKey: current.apiKey });
-  }
+/**
+ * A journal with nothing in it.
+ *
+ * The API key is the only thing carried over: it is a setting that belongs to
+ * the person, not a record that belongs to the account.
+ */
+export function emptyJournal(current = {}) {
   return {
     positions: [],
     cash: 0,
@@ -557,6 +559,14 @@ export function journalWithoutYear(current, year) {
     apiKey: current?.apiKey ?? '',
     cashModel: 2,
   };
+}
+
+export function journalWithoutYear(current, year) {
+  const records = withoutStatement(current?.statements ?? [], year);
+  if (records.length) {
+    return journalFromStatements(records, { snapshots: current.snapshots, apiKey: current.apiKey });
+  }
+  return emptyJournal(current);
 }
 
 /**

@@ -48,7 +48,7 @@ import {
   readWorkbook, isZip, isOldExcel, readZipEntries,
 } from '../features/xlsx.js';
 import { isRiskbookExport } from '../features/genericCsv.js';
-import { importPlan, journalWithoutYear, historyGaps } from '../features/statementLibrary.js';
+import { importPlan, journalWithoutYear, historyGaps, emptyJournal } from '../features/statementLibrary.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
@@ -743,6 +743,7 @@ export function installActions(extra = {}) {
   const writes = {
     addPos, saveEdit, updatePrice, editCash, del, reopen, applyDca, confirmClose,
     confirmImport, openYearsPanel, chooseYearFile, chooseWholeHistory, readIbkrFile, confirmIbkrImport, removeStatementYear,
+    eraseJournal,
   };
   for (const [name, fn] of Object.entries(writes)) writes[name] = oneAccountOnly(fn);
   Object.assign(window, {
@@ -1324,6 +1325,55 @@ export function cancelIbkrImport() {
  * hands today's positions to the year before it, and any other takes its trades
  * and deposits with it.
  */
+/**
+ * Empty the journal, and keep the account.
+ *
+ * Everything the account has recorded goes — positions, closed trades, cash,
+ * deposits, daily values, imported files — and the account itself, its
+ * password, its name and the settings around it stay exactly as they are. It is
+ * the "start this account again from nothing" that deleting and re-registering
+ * used to be the only way to get.
+ *
+ * What is about to go is counted and said out loud first, because a journal
+ * with two hundred trades in it and one with none look the same in a dialog
+ * that only says "are you sure".
+ */
+export async function eraseJournal() {
+  const open = state.positions.filter((p) => p.status === 'Open').length;
+  const closed = state.positions.filter((p) => p.status === 'Closed').length;
+  const held = [
+    open ? `${open} open position${open === 1 ? '' : 's'}` : null,
+    closed ? `${closed} closed trade${closed === 1 ? '' : 's'}` : null,
+    state.cash ? `${$u(state.cash)} in cash` : null,
+    state.cashFlows?.length ? `${state.cashFlows.length} deposit${state.cashFlows.length === 1 ? '' : 's'} or withdrawal${state.cashFlows.length === 1 ? '' : 's'}` : null,
+    state.statements?.length ? `${state.statements.length} imported file${state.statements.length === 1 ? '' : 's'}` : null,
+  ].filter(Boolean);
+
+  if (!held.length) {
+    showToast('This journal is already empty', 'heard', 2500);
+    return;
+  }
+
+  const message = `Erase everything in ${activeAccountName()}?\n\n`
+    + `${held.join('\n')}\n\n`
+    + 'All of it goes and the account stays: same password, same name, same settings. '
+    + 'Export a backup first if you might want any of it again — nothing can restore it afterwards.';
+  if (!confirm(message)) return;
+
+  try {
+    loadState(emptyJournal(state));
+    await flushNow();
+  } catch (err) {
+    console.error('Erasing the journal failed.', err);
+    showToast('The journal could not be erased — nothing was changed', 'error', 4000);
+    return;
+  }
+  cancelIbkrImport();
+  renderAll();
+  renderStatementYears();
+  showToast('Journal erased — the account is empty and ready', 'heard', 3500);
+}
+
 export async function removeStatementYear(year) {
   const records = withoutStatement(state.statements, year);
   const newest = state.statements[state.statements.length - 1]?.year;
