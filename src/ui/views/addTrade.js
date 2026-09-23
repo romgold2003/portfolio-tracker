@@ -17,68 +17,49 @@ export function setDirection(direction) {
 /* ── sizing the position ───────────────────────────────────────────────── */
 
 /**
- * A position can be described either way round.
+ * A position is sized by what was bought, not by what was spent.
  *
- * "I put $1,000 in" and "I bought 3 shares" are the same trade said from
- * different ends, and which one someone remembers depends on how they bought
- * it — a fractional crypto buy is an amount, a stock order is usually a share
- * count. Only one is asked for; the other is arithmetic, and is shown under the
- * field so it can be checked before saving.
+ * Both were offered once, with a toggle between them and the amount as the
+ * default. It is the wrong end to hold a position by. The share count is what
+ * the broker actually filled and what every later figure is computed from, so
+ * deriving it by dividing an amount by the entry price put a rounding error
+ * into the book at the moment the trade was created, and everything downstream
+ * inherited it.
+ *
+ * Fractions are allowed throughout: a fractional-share order and any crypto buy
+ * are both ordinary, and refusing them would be refusing the common case.
  */
-const SIZE_MODES = {
-  amount: { label: 'Amount invested ($)', placeholder: '1000' },
-  qty: { label: 'Shares / units', placeholder: '10' },
-};
 
-export function setSizeMode(mode) {
-  ui.formSizeMode = SIZE_MODES[mode] ? mode : 'amount';
-  const def = SIZE_MODES[ui.formSizeMode];
-
-  const label = field('f-sizeLabel');
-  if (label) label.textContent = def.label;
-  const input = field('f-amount');
-  if (input) input.placeholder = def.placeholder;
-
-  for (const button of field('f-sizeToggle')?.querySelectorAll('[data-size]') ?? []) {
-    button.classList.toggle('active', button.dataset.size === ui.formSizeMode);
-  }
-  updateSizeHint();
-}
-
-/** The two numbers the form implies, whichever of them was typed. */
-export function sizeFrom(entry, typed, mode = ui.formSizeMode) {
-  if (!(entry > 0) || !(typed > 0)) return { amount: NaN, qty: NaN };
-  return mode === 'qty'
-    ? { qty: typed, amount: typed * entry }
-    : { amount: typed, qty: typed / entry };
+/** The two numbers the form implies, from the share count that was typed. */
+export function sizeFrom(entry, qty) {
+  if (!(entry > 0) || !(qty > 0)) return { amount: NaN, qty: NaN };
+  return { qty, amount: qty * entry };
 }
 
 /**
- * Say what the other number works out to, live.
+ * Say what the shares cost, live.
  *
- * Sizing by shares is where a slip is expensive and invisible — ten shares of
- * something at $600 is $6,000, and nothing else on the form would have said so
- * before it was saved and the cash was spent.
+ * This is where a slip is expensive and invisible — ten shares of something at
+ * $600 is $6,000, and nothing else on the form would say so before it is saved
+ * and the cash is spent.
  */
 export function updateSizeHint() {
   const hint = field('f-sizeHint');
   if (!hint) return;
 
   const entry = parseFloat(field('f-entry')?.value);
-  const typed = parseFloat(field('f-amount')?.value);
-  const { amount, qty } = sizeFrom(entry, typed);
+  const { amount } = sizeFrom(entry, parseFloat(field('f-qty')?.value));
 
-  if (!Number.isFinite(amount)) { hint.textContent = ''; return; }
-  hint.textContent = ui.formSizeMode === 'qty'
-    ? `= $${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} invested`
-    : `= ${Number(qty.toFixed(8))} ${qty === 1 ? 'share' : 'shares'} at $${fmtPrice(entry)}`;
+  hint.textContent = Number.isFinite(amount)
+    ? `= $${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} invested at $${fmtPrice(entry)}`
+    : '';
 }
 
 /** Everything the form currently holds, unvalidated. */
 export function readTradeForm() {
   const alreadyClosed = !!field('f-closed')?.checked;
   const entry = parseFloat(field('f-entry').value);
-  const { amount, qty } = sizeFrom(entry, parseFloat(field('f-amount').value));
+  const { amount, qty } = sizeFrom(entry, parseFloat(field('f-qty').value));
 
   return {
     ticker: field('f-ticker').value,
@@ -129,16 +110,14 @@ export function toggleClosedTrade() {
 }
 
 export function clearTradeForm() {
-  ['f-ticker', 'f-entry', 'f-amount', 'f-reason', 'f-pnl', 'f-pct'].forEach((id) => {
+  ['f-ticker', 'f-entry', 'f-qty', 'f-reason', 'f-pnl', 'f-pct'].forEach((id) => {
     const el = field(id);
     if (el) el.value = '';
   });
   setTickerStatus('', 'muted');
   if (field('f-date')) field('f-date').value = todayStr();
   if (field('f-sector')) field('f-sector').value = '';
-  // The mode is deliberately kept: someone entering several trades is buying
-  // them the same way, and resetting it every time would be tedious.
-  setSizeMode(ui.formSizeMode);
+  updateSizeHint();
   // Deliberately left ticked if it was: someone entering a backlog of finished
   // trades is entering several, and re-ticking it every time would be tedious.
   const closeDate = field('f-close');

@@ -89,7 +89,8 @@ describe('adding to and editing a short', () => {
   test('adding to a short brings in that sale too', () => {
     fresh();
     const p = shortTsla();
-    applyDca(p.id, 500, 125);
+    // Four more shares sold short at $125: $500 of proceeds.
+    applyDca(p.id, 4, 125);
     assert.equal(state.cash, 11_500);
     assert.equal(p.qty, 14);
   });

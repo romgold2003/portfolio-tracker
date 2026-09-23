@@ -184,7 +184,7 @@ function dcaPanel(p) {
   return `<div class="dca-panel" id="dca-${p.id}" style="display:none">
     <div class="dca-head">DCA — add to this position</div>
     <div class="dca-inputs">
-      <div class="dca-field"><label>Add amount ($)</label><input type="number" step="any" id="dcaAmt-${p.id}" placeholder="1000" oninput="calcDca(${p.id})"></div>
+      <div class="dca-field"><label>Add shares</label><input type="number" step="any" id="dcaShares-${p.id}" placeholder="10" oninput="calcDca(${p.id})"></div>
       <div class="dca-field"><label>At price ($)</label><input type="number" step="any" id="dcaPrice-${p.id}" placeholder="${fmtPrice(p.cur)}" oninput="calcDca(${p.id})"></div>
       <button class="dca-btn" onclick="event.stopPropagation();applyDca(${p.id})">Apply</button>
     </div>
@@ -192,6 +192,7 @@ function dcaPanel(p) {
       <div class="dca-res-grid">
         <div><div class="drr-k">New avg entry</div><div class="drr-v" id="dcaAvg-${p.id}">—</div></div>
         <div><div class="drr-k">New quantity</div><div class="drr-v" id="dcaQty-${p.id}">—</div></div>
+        <div><div class="drr-k">This costs</div><div class="drr-v" id="dcaSpend-${p.id}">—</div></div>
         <div><div class="drr-k">New total cost</div><div class="drr-v" id="dcaCost-${p.id}">—</div></div>
       </div>
     </div>

@@ -128,22 +128,28 @@ export function updatePosition(id, fields) {
   return { position: p, cashDelta };
 }
 
-/** What a DCA would produce, without committing to it. */
-export function previewDca(p, amount, price) {
-  const addQty = amount / price;
+/**
+ * What a DCA would produce, without committing to it.
+ *
+ * Sized by the shares added, as a new trade is: that is the number the broker
+ * filled, and dividing an amount by the price to recover it left the share
+ * count fractionally wrong on every top-up. What the shares cost follows.
+ */
+export function previewDca(p, addQty, price) {
+  const spend = addQty * price;
   const qty = p.qty + addQty;
-  const cost = costOf(p) + amount;
-  return { addQty, qty, cost, avgEntry: cost / qty };
+  const cost = costOf(p) + spend;
+  return { addQty, spend, qty, cost, avgEntry: cost / qty };
 }
 
-export function applyDca(id, amount, price) {
+export function applyDca(id, addQty, price) {
   const p = findPosition(id);
   if (!p) return null;
-  const next = previewDca(p, amount, price);
+  const next = previewDca(p, addQty, price);
   p.entry = next.avgEntry;
   p.qty = next.qty;
   p.amount = next.cost;
-  moveOpeningCash(p.dir, amount);
+  moveOpeningCash(p.dir, next.spend);
   savePositions();
   return { position: p, ...next };
 }

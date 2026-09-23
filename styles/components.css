@@ -696,15 +696,6 @@ body.light{--wave-strength:0.34}
   font-variant-numeric:tabular-nums}
 .cw-hash:hover{color:var(--blue);text-decoration:underline}
 
-/* New-trade form: size the position by cash or by share count. */
-.fg-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.size-toggle{display:flex;gap:2px;background:var(--input);border:0.5px solid var(--border2);
-  border-radius:5px;padding:2px}
-.size-opt{background:transparent;border:0;border-radius:3px;padding:3px 9px;font-size:10px;
-  color:var(--text3);cursor:pointer;font-family:inherit}
-.size-opt:hover{color:var(--text)}
-.size-opt.active{background:var(--blue-bg);color:var(--blue)}
-
 /* Fed panel: what each market says, under the blended bars. */
 .fed-sources{display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin-top:14px;
   padding-top:12px;border-top:0.5px solid var(--input);font-size:11px}

@@ -54,7 +54,7 @@ import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
   setDirection, readTradeForm, clearTradeForm, setTickerStatus, applyTickerLookup,
-  setSizeMode as applySizeMode, updateSizeHint as refreshSizeHint,
+  updateSizeHint as refreshSizeHint,
   toggleClosedTrade,
 } from '../ui/views/addTrade.js';
 import { show } from '../ui/router.js';
@@ -186,12 +186,8 @@ export function addPos() {
     return;
   }
 
-  // Both are derived from whichever was typed, so either being absent means the
-  // same thing — but the message has to name the field actually on screen.
-  if (!form.entry || !form.amount) {
-    alert(ui.formSizeMode === 'qty'
-      ? 'Entry price and number of shares are required.'
-      : 'Entry price and amount invested are required.');
+  if (!form.entry || !form.qty) {
+    alert('Entry price and number of shares are required.');
     return;
   }
 
@@ -415,25 +411,28 @@ export function withdrawMoney() {
 export function calcDca(id) {
   const p = findPosition(id);
   if (!p) return;
-  const amount = numberIn(`dcaAmt-${id}`);
+  const shares = numberIn(`dcaShares-${id}`);
   const price = numberIn(`dcaPrice-${id}`);
-  if (!amount || !price) return;
+  if (!shares || !price) return;
 
-  const next = previewDca(p, amount, price);
+  const next = previewDca(p, shares, price);
   el(`dcaRes-${id}`)?.classList.add('show');
   el(`dcaAvg-${id}`).textContent = '$' + fmtPrice(next.avgEntry);
   el(`dcaQty-${id}`).textContent = next.qty.toFixed(next.qty < 1 ? 4 : 2);
+  // What the shares cost, said before the cash goes: the one number the form
+  // no longer asks for, and the one a slip in the share count shows up in.
+  el(`dcaSpend-${id}`).textContent = $u(next.spend);
   el(`dcaCost-${id}`).textContent = $u(next.cost);
 }
 
 export function applyDca(id) {
-  const amount = numberIn(`dcaAmt-${id}`);
+  const shares = numberIn(`dcaShares-${id}`);
   const price = numberIn(`dcaPrice-${id}`);
-  if (!amount || !price) {
-    alert('Enter DCA amount and price');
+  if (!shares || !price) {
+    alert('Enter how many shares you added, and the price you paid.');
     return;
   }
-  const result = applyDcaToPosition(id, amount, price);
+  const result = applyDcaToPosition(id, shares, price);
   if (!result) return;
   closePanels(id);
   renderAll();
@@ -656,7 +655,6 @@ export function setTimeframe(tf) {
 
 export function setDir(direction) { setDirection(direction); }
 export function clearForm() { clearTradeForm(); }
-export function setSizeMode(mode) { applySizeMode(mode); }
 export function updateSizeHint() { refreshSizeHint(); }
 
 // ─── Voice helpers ───────────────────────────────────────────────
@@ -809,7 +807,7 @@ export function installActions(extra = {}) {
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
     // trades
-    addPos, clearForm, setDir, setSizeMode, updateSizeHint,
+    addPos, clearForm, setDir, updateSizeHint,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
     // panels
     toggleExpand, toggleEdit, toggleDca, toggleClose,
