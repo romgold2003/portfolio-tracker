@@ -177,7 +177,7 @@ export function sessionBounds(date) {
 }
 
 /** The New York date and minutes past midnight for an instant, the market's own clock. */
-function newYorkNow(now) {
+export function newYorkNow(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York',
     year: 'numeric',

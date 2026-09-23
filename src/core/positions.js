@@ -7,7 +7,7 @@
  * and re-render live in the action layer where the user's intent is known.
  */
 import { state, savePositions, saveCash, findPosition } from './store.js';
-import { closeMath, costOf, baseQtyOf, bookedPnl, todayStr } from './portfolio.js';
+import { closeMath, costOf, baseQtyOf, bookedPnl, todayStr, prevCloseOf } from './portfolio.js';
 
 /**
  * Strictly increasing id, so two trades on the same ticker created in the same
@@ -274,11 +274,19 @@ export function closePosition(id, price, requestedQty) {
   const isFinal = remaining <= 1e-9;
   const slicePct = base > 0 ? (qty / base) * 100 : 0;
 
-  // Capture what the asset closed at YESTERDAY, so this exit still counts
-  // toward today's portfolio move even after the shares are gone.
-  const prevClose = p.dailyChg != null && Number.isFinite(p.dailyChg) && 1 + p.dailyChg / 100 > 0
-    ? p.cur / (1 + p.dailyChg / 100)
-    : null;
+  /**
+   * What the asset closed at YESTERDAY, kept so this exit still counts toward
+   * today's portfolio move after the shares are gone.
+   *
+   * Read from the quote, not rebuilt from the day's percentage. The two are the
+   * same number only while the price beside them is the one the percentage was
+   * computed against, and they arrive on different refreshes: a sale taken
+   * after a price update but before the next percentage landed was measured
+   * from 104.76 instead of 100, and credited the day with $524 of a $1,000
+   * move. Rebuilding is still the fallback, for a position quoted before that
+   * field existed — which is exactly what `prevCloseOf` does.
+   */
+  const prevClose = prevCloseOf(p);
 
   p.exits.push({
     d: today,

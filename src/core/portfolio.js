@@ -5,11 +5,26 @@
  */
 import { BETA } from '../config/constants.js';
 import { sectorOf, sectorColour, CASH_COLOUR } from '../config/sectors.js';
-import { tradingDay } from '../config/marketCalendar.js';
+import { tradingDay, newYorkNow } from '../config/marketCalendar.js';
 
-/** Today as YYYY-MM-DD, the key format used throughout the app. */
+/**
+ * Today as YYYY-MM-DD, in New York, which is the key format used throughout.
+ *
+ * It read UTC once. Every other date in the app is a New York market date — the
+ * day a move belongs to, the day a statement covers, the day a price closed —
+ * and the two agree for most of the day and part company every weekday evening
+ * once New York passes eight o'clock. Which is exactly when someone sits down
+ * to write up their day.
+ *
+ * What that cost, for anyone several hours behind the machine this was built
+ * on. A withdrawal entered at nine in the evening in New York was stamped
+ * tomorrow, so the day's move never found it, and $200 made on a $10,000
+ * account read +2.86% instead of +2.00%. A trade opened through the form took
+ * tomorrow's date too, so it was no longer "bought today" and was measured from
+ * yesterday's close rather than from the price paid: $50 of a $100 move.
+ */
 export function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  return newYorkNow().date;
 }
 
 /**

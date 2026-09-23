@@ -956,10 +956,27 @@ function renderIbkrPreview() {
     summary.append(div);
   };
 
+  const heldFor = (year) => (state.statements ?? []).find((r) => r.year === year);
   for (const staged of [...stagedStatements].sort((a, b) => a.record.year - b.record.year)) {
     const { record } = staged;
     const replaces = imported.has(record.year) ? ' (replaces the one imported before)' : '';
     line(`${record.year}${replaces} — ${staged.generic ? describeTransactions(staged) : describeStatement(staged.parsed)}`);
+
+    /**
+     * A replacement that covers less than what it replaces.
+     *
+     * The file just imported wins, deliberately — it is how a corrected export
+     * is applied. But a year-to-date file dropped on top of a full year throws
+     * the months in between away, and every figure that reads them changes with
+     * no visible cause. It is an easy thing to do by accident: the export
+     * Interactive Brokers offers by default is the year to date.
+     */
+    const held = heldFor(record.year);
+    if (held?.to && record.to && record.to < held.to) {
+      line(`${record.year}: this file stops at ${record.to}, and the one it replaces ran to ${held.to}. `
+        + `Everything between those dates — trades, deposits and daily values — is dropped, so the year's `
+        + 'return will change. Import the longer file instead if that is not what you meant.', 'var(--amber)');
+    }
   }
 
   const years = records.map((r) => r.year);
