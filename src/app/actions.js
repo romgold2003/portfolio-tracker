@@ -349,6 +349,8 @@ export function editCash() {
         date: todayStr(),
         amount: delta,
         description: delta > 0 ? 'Deposit' : 'Withdrawal',
+        // Moved by hand, not read from a statement: every percentage discounts it.
+        manual: true,
       }].sort((a, b) => a.date.localeCompare(b.date));
       saveCashFlows();
     }
@@ -398,6 +400,8 @@ export function withdrawMoney() {
     date: todayStr(),
     amount: -amount,
     description: 'Withdrawal',
+    // Moved by hand, not read from a statement: every percentage discounts it.
+    manual: true,
   }].sort((a, b) => a.date.localeCompare(b.date));
   state.cash -= amount;
   saveCashFlows();

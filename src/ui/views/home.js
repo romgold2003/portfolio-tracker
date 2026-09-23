@@ -26,7 +26,9 @@ import { allSplits, historyGaps, gapInWindow } from '../../features/statementLib
 import { onJournalLoaded, combinedJournals } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
-import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
+import {
+  buildPortfolioHistory, periodReturnFromHistory, combineHistories, withManualFlows, manualFlowsBetween,
+} from '../../core/portfolioHistory.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -151,9 +153,19 @@ function miniRow(p) {
   </div>`;
 }
 
+/** The active journal's ledger events plus the money it moved by hand. */
+function eventsWithManualFlows(journal = state) {
+  return withManualFlows(journal?.ledger?.events, journal?.cashFlows);
+}
+
+/** Money moved by hand between a day and today, for the row that ends the walk. */
+function manualFlowsAfter(journal, after, upTo) {
+  return manualFlowsBetween(journal?.cashFlows, after, upTo);
+}
+
 function renderDailyMove(totals) {
   // The ledger prices the shares bought and sold on the day, as the broker does.
-  const move = dailyPortfolioMove(state.positions, totals.account, undefined, state.ledger?.events ?? []);
+  const move = dailyPortfolioMove(state.positions, totals.account, undefined, eventsWithManualFlows());
   const pctEl = document.getElementById('portfolioDailyPct');
   const amtEl = document.getElementById('portfolioDailyAmt');
   if (!pctEl || !amtEl) return;
@@ -435,7 +447,7 @@ async function loadBackfill() {
         opening: {
           date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings,
         },
-        events: ledger.events ?? [],
+        events: eventsWithManualFlows(state),
         priceOn: pastPrice,
         lastKnown: datedMarks(ledger),
         from: earliest,
@@ -461,7 +473,15 @@ async function loadBackfill() {
         row.cashValue = round2(state.cash);
         row.positionsValue = round2(live - state.cash);
         if (last.date === today) forward[forward.length - 1] = row;
-        else forward.push({ ...row, externalCashFlow: 0, deposit: 0, withdrawal: 0 });
+        else {
+          const moved = round2(manualFlowsAfter(state, last.date, today));
+          forward.push({
+            ...row,
+            externalCashFlow: moved,
+            deposit: Math.max(moved, 0),
+            withdrawal: Math.min(moved, 0),
+          });
+        }
       }
       setBackfill(forward, { authoritative: true });
     } else {
@@ -507,7 +527,13 @@ function journalHistory(journal, earliest) {
   const today = todayStr();
   const last = rows[rows.length - 1];
   if (last?.date === today) rows[rows.length - 1] = { ...last, totalAccountValue: round2(live) };
-  else if (live !== 0 || last) rows.push({ date: today, totalAccountValue: round2(live), externalCashFlow: 0 });
+  else if (live !== 0 || last) {
+    rows.push({
+      date: today,
+      totalAccountValue: round2(live),
+      externalCashFlow: round2(manualFlowsAfter(journal, last?.date ?? '', today)),
+    });
+  }
   return rows;
 }
 
@@ -516,7 +542,7 @@ function journalDays(journal, earliest) {
   if (ledger?.openingCash != null && ledger.from) {
     return buildPortfolioHistory({
       opening: { date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings },
-      events: ledger.events ?? [],
+      events: eventsWithManualFlows(journal),
       priceOn: pastPrice,
       lastKnown: datedMarks(ledger),
       from: earliest,

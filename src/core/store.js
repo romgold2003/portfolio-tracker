@@ -88,7 +88,7 @@ export function setFavoriteDesigns(list) {
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A dated amount. Anything unparseable is dropped rather than stored as zero. */
-function sanitizeFlows(list) {
+export function sanitizeFlows(list) {
   if (!Array.isArray(list)) return [];
   return list
     .map((f) => {
@@ -99,6 +99,13 @@ function sanitizeFlows(list) {
         date,
         amount,
         description: typeof f.description === 'string' ? f.description.slice(0, 120) : '',
+        /**
+         * Moved by hand rather than read from a file, and kept because the rest
+         * of the app has to tell the two apart: a flow from a statement is
+         * already an event in the ledger, and one taken here is not. Counting
+         * either twice cancels profit that was never made.
+         */
+        ...(f.manual ? { manual: true } : {}),
       };
     })
     .filter(Boolean)

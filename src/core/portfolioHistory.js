@@ -303,8 +303,14 @@ export function asTradedClose(close, day, splits = [], applied = []) {
 /**
  * All time: what the account is worth now against everything paid into it.
  *
- *   profit = account value − (deposits − withdrawals)
- *   return = profit ÷ (deposits − withdrawals)
+ *   profit = (account value + withdrawals) − deposits
+ *   return = profit ÷ deposits
+ *
+ * Money taken out is value the account earned and handed back, not money never
+ * put in, so it is added to what the account is worth rather than subtracted
+ * from what was paid in. Netted off the deposits instead, taking $1,175 out of
+ * a $21,694 account lifted all time from +13.92% to +14.79% on the spot, with
+ * nothing earned: a trader moving money to their bank was paid a return for it.
  *
  * The plain question "how much has the money I put in grown", asked for in
  * those words. On a real IBKR account: $30,508.51 paid in, $45,648.87 today,
@@ -316,10 +322,17 @@ export function asTradedClose(close, day, splits = [], applied = []) {
  * with no file for this year yet has no book, and −100% would be a lie.
  */
 export function allTimeFromDeposits(flows, account) {
-  const paidIn = (flows ?? []).reduce((sum, f) => (Number.isFinite(f?.amount) ? sum + f.amount : sum), 0);
-  if (!(paidIn > 0) || !(account > 0)) return null;
-  const pnl = account - paidIn;
-  return { pnl, returnPct: (pnl / paidIn) * 100, paidIn, endValue: account, method: 'deposits' };
+  let paidIn = 0;
+  let takenOut = 0;
+  for (const f of flows ?? []) {
+    if (!Number.isFinite(f?.amount)) continue;
+    if (f.amount >= 0) paidIn += f.amount; else takenOut -= f.amount;
+  }
+  if (!(paidIn > 0) || !(account + takenOut > 0)) return null;
+  const pnl = account + takenOut - paidIn;
+  return {
+    pnl, returnPct: (pnl / paidIn) * 100, paidIn, takenOut, endValue: account, method: 'deposits',
+  };
 }
 
 /**
@@ -361,4 +374,44 @@ export function combineHistories(histories) {
     for (const f of [...fields, 'externalCashFlow', 'deposit', 'withdrawal']) row[f] = round(row[f]);
     return row;
   });
+}
+
+/**
+ * Money moved by hand, as the ledger would have recorded it.
+ *
+ * Every daily figure — the day's move, the year, any window — is built from the
+ * ledger, which holds what the broker's files said. Money a trader takes out to
+ * their bank today is in no file: left out, the account simply falls with
+ * nothing on record to explain it, and the fall is read as a loss in the day's
+ * percentage, in the year's, and in everything drawn from them.
+ *
+ * Only flows marked as moved by hand. A deposit read from a statement is
+ * already an event in the ledger, and adding it a second time would cancel out
+ * real profit.
+ */
+export function manualFlowEvents(cashFlows) {
+  return (cashFlows ?? [])
+    .filter((f) => f?.manual && f.date && Number.isFinite(f.amount))
+    .map((f) => ({ date: f.date, at: f.date + ' 00:00:00', kind: 'flow', cash: f.amount }));
+}
+
+/** A ledger's own events plus the ones moved by hand, in order. */
+export function withManualFlows(events, cashFlows) {
+  const manual = manualFlowEvents(cashFlows);
+  if (!manual.length) return events ?? [];
+  return [...(events ?? []), ...manual].sort((a, b) => (a.at ?? a.date).localeCompare(b.at ?? b.date));
+}
+
+/**
+ * Money moved by hand after a walk's last day, for the row that ends it.
+ *
+ * A history built from statements stops at the newest one, and today is added
+ * to it at the account's live value. Money withdrawn since that day is already
+ * out of that live value, so a today-row saying nothing came or went makes the
+ * fall read as a loss.
+ */
+export function manualFlowsBetween(cashFlows, after, upTo) {
+  return manualFlowEvents(cashFlows)
+    .filter((e) => e.date > after && e.date <= upTo)
+    .reduce((sum, e) => sum + e.cash, 0);
 }
