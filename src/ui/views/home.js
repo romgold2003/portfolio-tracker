@@ -79,7 +79,7 @@ const HEAD = 'font-size:10px;color:var(--text3);text-transform:uppercase;letter-
 const LIST_HEADER = `<div class="mini-grid" style="margin-bottom:6px;padding:0 2px">
   <div style="${HEAD}">Asset</div>
   <div style="${HEAD};text-align:center">D%</div>
-  <div class="mini-7d" style="${HEAD};text-align:center">W%</div>
+  <div class="mini-ytd" style="${HEAD};text-align:center">YTD %</div>
   <div style="${HEAD};text-align:right">P&L</div>
 </div>`;
 
@@ -95,11 +95,29 @@ function extBadge(p) {
   return `<span class="ext-badge" title="Traded outside regular hours">${label}</span>`;
 }
 
+/**
+ * How far a holding has moved this year.
+ *
+ * From last year's close for something held since before January, and from what
+ * was paid for anything bought since — a position opened in March has no
+ * January price, and its whole move is this year's.
+ *
+ * The price move is what is shown, coloured for the position, so a short whose
+ * price fell reads as the gain it is. Null when the history has not loaded yet,
+ * which shows as a dash rather than a wrong number.
+ */
+function ytdPct(p) {
+  const year = new Date().getFullYear();
+  const start = p.open && p.open >= `${year}-01-01` ? p.entry : pastPrice(p.ticker, `${year - 1}-12-31`);
+  if (!(start > 0) || !(p.cur > 0)) return null;
+  return ((p.cur - start) / start) * 100;
+}
+
 function miniRow(p) {
   const pnl = unreal(p);
   const retPct = pctD(pnl, costOf(p));
   const daily = p.dailyChg ?? null;
-  const weekly = p.weeklyChg ?? null;
+  const ytd = ytdPct(p);
   const dailyMoney = dailyDollar(p) == null && dailyDollarExits(p) === 0
     ? null
     : dailyDollarTotal(p);
@@ -110,8 +128,9 @@ function miniRow(p) {
   const dailyText = daily != null
     ? `<span style="color:${clr(dailySign)}">${fp(daily)}</span>`
     : '<span style="color:var(--text4)">—</span>';
-  const weeklyText = weekly != null
-    ? `<span style="color:${clr(weekly)}">${fp(weekly)}</span>`
+  const ytdSign = ytd == null ? 0 : (p.dir === 'Long' ? ytd : -ytd);
+  const ytdText = ytd != null
+    ? `<span style="color:${clr(ytdSign)}">${fp(ytd)}</span>`
     : '<span style="color:var(--text4)">—</span>';
 
   return `<div class="mini-row mini-grid">
@@ -124,7 +143,7 @@ function miniRow(p) {
       ${dailyText}
       ${dailyMoney != null ? `<div style="font-size:10px;color:${clr(dailyMoney)};margin-top:2px">${$s(+dailyMoney.toFixed(2))}</div>` : ''}
     </div>
-    <div class="mini-col mini-7d">${weeklyText}</div>
+    <div class="mini-col mini-ytd">${ytdText}</div>
     <div class="mini-pnl">
       <div class="mini-tk" style="color:${clr(pnl)}">${$s(pnl)}</div>
       <div style="font-size:10px;color:${clr(retPct)}">${fp(retPct)}</div>

@@ -52,7 +52,7 @@
 .mini-asset .ext-badge{margin-left:0}
 .mini-col{text-align:center;font-size:12px;padding:0 6px}
 .mini-pnl{text-align:right}
-@media (max-width:640px){.mini-7d{display:none}}
+@media (max-width:640px){.mini-ytd{display:none}}
 .mini-tk{font-size:13px;font-weight:600;color:var(--text)}
 .mini-cl{font-size:10px;color:var(--text4);margin-left:5px}
 .mini-dir{font-size:10px;padding:2px 6px;border-radius:3px;flex:none}
