@@ -74,8 +74,24 @@ function readJson(key, fallback) {
   }
 }
 
+/**
+ * Storage can refuse, and what it throws says nothing a person can act on.
+ *
+ * Safari in a private window, or with "block all cookies" set, throws on the
+ * write itself — and this is the write that saves the account and the vault, so
+ * failing it quietly means signing in appears to work and nothing is ever kept.
+ * The message names the cause, and the reporter on the page shows it.
+ */
 function writeJson(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    const full = err?.name === 'QuotaExceededError' || err?.code === 22;
+    throw new Error(full
+      ? 'This browser has no room left to save. Free some space and try again.'
+      : 'This browser is not letting the app save. A private window, or blocked '
+        + 'cookies and site data, will do that — the journal cannot be kept without it.');
+  }
 }
 
 /**
