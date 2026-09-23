@@ -960,7 +960,12 @@ body.light{--wave-strength:0.34}
 .year-tile{position:relative;background:var(--input);border:0.5px solid var(--border2);border-radius:7px;color:var(--text2);min-height:48px}
 .year-tile:hover{background:var(--hover2);color:var(--text)}
 .year-pick{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:100%;min-height:48px;padding:10px 0 8px;background:none;border:0;color:inherit;font-family:inherit;font-size:12px;cursor:pointer}
-.year-remove{position:absolute;top:2px;right:3px;width:16px;height:16px;padding:0;border:0;border-radius:50%;background:none;color:var(--text3);font-size:13px;line-height:16px;cursor:pointer;font-family:inherit}
+.year-remove{position:absolute;top:2px;right:3px;width:16px;height:16px;padding:0;border:0;border-radius:50%;background:none;color:var(--text3);font-size:13px;line-height:16px;cursor:pointer;font-family:inherit;z-index:2;touch-action:manipulation}
+/* The × stays small, its target does not: a miss landed on the tile, which has
+   no handler, so the button looked dead. This reaches 6px past it on every
+   side — 28px square rather than 16 — while leaving most of the tile to the
+   year itself, which is what opens the file picker. */
+.year-remove::after{content:'';position:absolute;inset:-6px;border-radius:50%}
 .year-remove:hover{background:var(--red-bg);color:var(--red)}
 .year-tile .year-tag{font-size:9px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em}
 .year-tile.is-current{border-color:var(--border-blue)}
