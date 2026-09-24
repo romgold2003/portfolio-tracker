@@ -5,8 +5,8 @@ import {
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
   sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
-import { regularSessionOpen, extendedPricingAvailable, tradingDayOver } from '../../services/extendedHours.js';
-import { lastClosedSession } from '../../config/marketCalendar.js';
+import { regularSessionOpen, extendedPricingAvailable } from '../../services/extendedHours.js';
+import { dayStillRunning, inPlay } from '../dayReset.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
@@ -119,11 +119,17 @@ function ytdPct(p) {
 function miniRow(p) {
   const pnl = unreal(p);
   const retPct = pctD(pnl, costOf(p));
-  const daily = p.dailyChg ?? null;
   const ytd = ytdPct(p);
-  const dailyMoney = dailyDollar(p) == null && dailyDollarExits(p) === 0
-    ? null
-    : dailyDollarTotal(p);
+  /**
+   * The day's column resets with the portfolio figure above it, or the two
+   * disagree: a row reading +2.41% under a total reading 0.00% is worse than
+   * either of them alone.
+   */
+  const running = dayStillRunning(p);
+  const daily = running ? (p.dailyChg ?? null) : 0;
+  const dailyMoney = !running
+    ? 0
+    : (dailyDollar(p) == null && dailyDollarExits(p) === 0 ? null : dailyDollarTotal(p));
 
   // Colour the % by what it means for THIS position: a short gains when the
   // price falls, so the raw percentage and its colour can disagree.
@@ -164,43 +170,26 @@ function manualFlowsAfter(journal, after, upTo) {
   return manualFlowsBetween(journal?.cashFlows, after, upTo);
 }
 
-/**
- * Which day the figure beneath this heading is actually describing.
- *
- * The American session ends at eight in the evening in New York — three in the
- * morning in Israel — and nothing trades again until pre-market at four, which
- * is eleven in the morning there. Through those eight hours the figures are
- * deliberately held where the day left them, because nothing has happened to
- * move them.
- *
- * What was wrong was the word above them. At ten in the morning the box said
- * "Today" over Wednesday's move, and there was no way to tell from the screen
- * that the number was a finished day rather than a quiet one. So the heading
- * names the session instead, and goes back to saying "Today" when pre-market
- * opens and the figure starts meaning today again.
- *
- * Crypto never stops, so a book holding only crypto is always looking at today
- * and is left alone.
- */
-export function dailyHeading() {
-  const holdsStocks = state.positions.some((p) => p.status === 'Open' && p.cls !== 'Crypto');
-  if (!holdsStocks || !tradingDayOver()) return 'Today';
-  const [y, m, d] = lastClosedSession().split('-').map(Number);
-  const when = new Date(Date.UTC(y, m - 1, d));
-  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][when.getUTCDay()];
-  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
-  return `Last session · ${day} ${d} ${month}`;
-}
-
 function renderDailyMove(totals) {
+  /**
+   * Only the holdings whose day is still running.
+   *
+   * Once the American session has finished — eight in the evening in New York,
+   * three in the morning in Israel — the day is over and the next one has not
+   * traded, so those holdings contribute nothing and the figure reads zero
+   * until the market opens again. Crypto never stops and keeps counting, so a
+   * book holding it still shows real movement overnight.
+   */
+  const running = inPlay(state.positions);
+  const reset = running.length < state.positions.length;
   // The ledger prices the shares bought and sold on the day, as the broker does.
-  const move = dailyPortfolioMove(state.positions, totals.account, undefined, eventsWithManualFlows());
+  const move = dailyPortfolioMove(running, totals.account, undefined, eventsWithManualFlows());
   const pctEl = document.getElementById('portfolioDailyPct');
   const amtEl = document.getElementById('portfolioDailyAmt');
-  setText('dailyLabel', dailyHeading());
   if (!pctEl || !amtEl) return;
 
-  if (!move.hasData) {
+  // A figure deliberately reset to zero is an answer, not a missing one.
+  if (!move.hasData && !reset) {
     pctEl.textContent = '—';
     pctEl.style.color = 'var(--text3)';
     amtEl.textContent = 'loading…';

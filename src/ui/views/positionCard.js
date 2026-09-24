@@ -12,6 +12,7 @@ import {
   dayOf, baseQtyOf, bookedPnl, hasDailyFigure, realisedSoFar,
 } from '../../core/portfolio.js';
 import { priceIsLive } from '../../services/prices.js';
+import { dayStillRunning } from '../dayReset.js';
 import { ui } from '../uiState.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
@@ -102,9 +103,15 @@ function detailGrid(p, pnl, positions = null) {
     figure(held ? 'Current value' : 'Value at exit', $u(marketValueOf(p)), { color: clr(pnl), right: true }),
   );
 
+  // Reset with the figures on the overview once the session is over: this box
+  // and the total above it must not describe different days.
+  const running = dayStillRunning(p);
+  const dayPct = running ? (p.dailyChg ?? null) : 0;
+  const dayMoney = running ? dailyDollarTotal(p) : 0;
+
   const moves = pairBox(
-    p.dailyChg != null ? figure('Today D%', fp(p.dailyChg), { color: clr(p.dailyChg) }) : '',
-    p.weeklyChg != null ? figure('This week W%', fp(p.weeklyChg), { color: clr(p.weeklyChg), right: p.dailyChg != null }) : '',
+    dayPct != null ? figure('Today D%', fp(dayPct), { color: clr(dayPct) }) : '',
+    p.weeklyChg != null ? figure('This week W%', fp(p.weeklyChg), { color: clr(p.weeklyChg), right: dayPct != null }) : '',
   );
 
   return `<div class="dg">
@@ -112,7 +119,7 @@ function detailGrid(p, pnl, positions = null) {
     ${values}
     ${positions ? pnlSplit(p, pnl, positions) : ''}
     ${moves}
-    ${hasDailyFigure(p, today) ? `<div class="dgi"><div class="dgi-k">Today P&L</div><div class="dgi-v" style="color:${clr(dailyDollarTotal(p))}">${$s(+dailyDollarTotal(p).toFixed(2))}</div>${soldToday !== 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:3px">incl. ${$s(+soldToday.toFixed(2))} sold today</div>` : ''}</div>` : ''}
+    ${hasDailyFigure(p, today) || !running ? `<div class="dgi"><div class="dgi-k">Today P&L</div><div class="dgi-v" style="color:${clr(dayMoney)}">${$s(+dayMoney.toFixed(2))}</div>${running && soldToday !== 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:3px">incl. ${$s(+soldToday.toFixed(2))} sold today</div>` : ''}</div>` : ''}
   </div>`;
 }
 
