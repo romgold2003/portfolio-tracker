@@ -151,10 +151,6 @@ export function logout() {
   return request('/auth/logout', { method: 'POST' });
 }
 
-export function fetchVault() {
-  return request('/vault');
-}
-
 /**
  * Save the journal.
  *

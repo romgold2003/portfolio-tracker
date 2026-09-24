@@ -20,11 +20,6 @@ const ETF_CACHE_MS = 30 * 60 * 1000;
 const optionsCache = new Map();
 let etfCache = { at: 0, data: null };
 
-export function resetMarketCaches() {
-  optionsCache.clear();
-  etfCache = { at: 0, data: null };
-}
-
 /** The strike profile for one market. Null if it cannot be had; never throws. */
 export async function optionsProfile(market) {
   if (!cloudEnabled()) return null;

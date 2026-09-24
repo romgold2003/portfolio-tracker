@@ -10,10 +10,6 @@ import { cloudEnabled } from './cloud.js';
 
 let cache = { monday: null, key: '', closes: new Map() };
 
-export function resetWeekStart() {
-  cache = { monday: null, key: '', closes: new Map() };
-}
-
 /** The Monday of the current week, in New York, as an ISO day. */
 export function mondayOfWeek(now = new Date()) {
   const nyDay = new Intl.DateTimeFormat('en-CA', {

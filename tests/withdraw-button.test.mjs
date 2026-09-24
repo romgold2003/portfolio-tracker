@@ -15,19 +15,19 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  withManualFlows, manualFlowEvents, manualFlowsBetween,
-  buildPortfolioHistory, periodReturnFromHistory, allTimeFromDeposits,
-} from '../src/core/portfolioHistory.js';
+import { buildPortfolioHistory, periodReturnFromHistory, allTimeFromDeposits } from '../src/core/portfolioHistory.js';
 import { dailyPortfolioMove } from '../src/core/portfolio.js';
-import { sanitizeFlows } from '../src/core/store.js';
+import { sanitizeFlows, handEnteredFlows } from '../src/core/store.js';
+import { statementRecord, journalFromStatements } from '../src/features/statementLibrary.js';
 
 /** What the Withdraw button writes: a flow marked as moved by hand. */
 const withdrawal = (date, amount) => ({ date, amount: -amount, description: 'Withdrawal', manual: true });
 /** What an import writes: the same shape, from a file, with no marker. */
 const imported = (date, amount) => ({ date, amount, description: 'Deposit' });
+/** A flow as the ledger keeps it, which is where every daily figure reads it. */
+const asEvent = (f) => ({ date: f.date, kind: 'flow', cash: f.amount });
 
-describe('a withdrawal made in the app reaches the daily walk', () => {
+describe('a withdrawal made in the app reaches the ledger', () => {
   test('the marker survives being saved and loaded again', () => {
     const [saved] = sanitizeFlows([withdrawal('2026-09-23', 3000)]);
     assert.equal(saved.manual, true);
@@ -36,23 +36,61 @@ describe('a withdrawal made in the app reaches the daily walk', () => {
     assert.equal(sanitizeFlows([imported('2026-03-01', 5000)])[0].manual, undefined);
   });
 
-  test("it becomes a dated flow event, in order among the ledger's own", () => {
-    const events = [
-      { date: '2026-01-05', at: '2026-01-05 10:00:00', kind: 'buy', ticker: 'VOO', qty: 10, cash: -5000 },
-      { date: '2026-11-02', at: '2026-11-02 10:00:00', kind: 'sell', ticker: 'VOO', qty: -10, cash: 6000 },
-    ];
-    const joined = withManualFlows(events, [withdrawal('2026-06-01', 3000), imported('2026-01-02', 5000)]);
-    assert.deepEqual(joined.map((e) => e.date), ['2026-01-05', '2026-06-01', '2026-11-02']);
-    // Only the hand-moved one: the imported deposit is already in the ledger.
-    assert.equal(joined.filter((e) => e.kind === 'flow').length, 1);
-    assert.equal(joined[1].cash, -3000);
+  test('and only the hand-moved ones are picked out', () => {
+    const flows = [withdrawal('2026-06-01', 3000), imported('2026-01-02', 5000)];
+    assert.deepEqual(handEnteredFlows({ cashFlows: flows }).map((f) => f.amount), [-3000]);
+    assert.deepEqual(handEnteredFlows({ cashFlows: [] }), []);
+    assert.deepEqual(handEnteredFlows(undefined), []);
   });
 
-  test('no hand-moved money leaves the ledger exactly as it was', () => {
-    const events = [{ date: '2026-01-05', at: '2026-01-05 10:00:00', kind: 'buy', ticker: 'VOO', qty: 1, cash: -500 }];
-    assert.equal(withManualFlows(events, [imported('2026-01-02', 500)]), events);
-    assert.deepEqual(manualFlowEvents([]), []);
-    assert.deepEqual(manualFlowEvents(undefined), []);
+  /**
+   * The failure this replaced. Rebuilding the journal from the statements
+   * erased it: importing next month's file put the cash back and the
+   * withdrawal vanished, with nothing said.
+   */
+  describe('and survives the journal being rebuilt from the files', () => {
+    const statement = [
+      'Statement,Header,Field Name,Field Value',
+      'Statement,Data,BrokerName,Interactive Brokers LLC',
+      'Statement,Data,Title,Activity Statement',
+      'Statement,Data,Period,"January 01, 2026 - September 21, 2026"',
+      'Account Information,Header,Field Name,Field Value',
+      'Account Information,Data,Base Currency,USD',
+      'Trades,Header,DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,C. Price,Proceeds,Comm/Fee,Basis,Realized P/L,Realized P/L %,MTM P/L,Code',
+      'Trades,Data,Order,Stocks,USD,VOO,"2026-02-02, 10:00:00",2,600,,-1200,0,1200,0.0,,0,O',
+      'Deposits & Withdrawals,Header,Currency,Settle Date,Description,Amount',
+      'Deposits & Withdrawals,Data,USD,2026-02-02,Deposit,1200',
+      'Open Positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult,Cost Price,Cost Basis,Close Price,Value,Unrealized P/L,Code',
+      'Open Positions,Data,Summary,Stocks,USD,VOO,2,1,600,1200,700,1400,200,',
+    ].join('\n');
+
+    const rebuild = async (existing) => {
+      const { parseIbkrStatement } = await import('../src/features/ibkr.js');
+      return journalFromStatements([statementRecord(parseIbkrStatement(statement))], existing);
+    };
+
+    test('the flow is still there, and the file\'s own deposits with it', async () => {
+      const first = await rebuild({});
+      const took = { ...first, cashFlows: [...first.cashFlows, withdrawal('2026-09-24', 3000)] };
+      const again = await rebuild(took);
+      assert.equal(again.cashFlows.filter((f) => f.manual).length, 1, 'the withdrawal was erased');
+      assert.deepEqual(again.cashFlows.filter((f) => !f.manual).map((f) => f.amount), [1200]);
+    });
+
+    test('it is folded into the ledger, where every daily figure reads it', async () => {
+      const first = await rebuild({});
+      const again = await rebuild({ ...first, cashFlows: [...first.cashFlows, withdrawal('2026-09-24', 3000)] });
+      const flows = again.ledger.events.filter((e) => e.kind === 'flow');
+      assert.deepEqual(flows.map((e) => e.cash), [1200, -3000], 'in date order, beside the statement\'s own');
+    });
+
+    test('and is not duplicated by rebuilding a second time', async () => {
+      const first = await rebuild({});
+      const took = { ...first, cashFlows: [...first.cashFlows, withdrawal('2026-09-24', 3000)] };
+      const twice = await rebuild(await rebuild(took));
+      assert.equal(twice.cashFlows.filter((f) => f.manual).length, 1);
+      assert.equal(twice.ledger.events.filter((e) => e.kind === 'flow' && e.cash === -3000).length, 1);
+    });
   });
 });
 
@@ -60,7 +98,7 @@ describe('the year and the day do not move when money is taken out', () => {
   // A flat account: $10,000 of cash, opened on 1 January, nothing traded.
   const history = (flows) => buildPortfolioHistory({
     opening: { date: '2026-01-01', cash: 10_000, holdings: {} },
-    events: withManualFlows([], flows),
+    events: flows.map(asEvent),
     priceOn: () => 0,
     lastKnown: {},
     from: '2026-01-01',
@@ -84,7 +122,7 @@ describe('the year and the day do not move when money is taken out', () => {
 
   test("the day's move ignores the money that left today", () => {
     // $11,000 yesterday, $3,000 taken out today, nothing else: 0.00%, not −27%.
-    const events = withManualFlows([], [withdrawal('2026-09-23', 3000)]);
+    const events = [asEvent(withdrawal('2026-09-23', 3000))];
     const move = dailyPortfolioMove([], 8000, '2026-09-23', events);
     assert.ok(Math.abs(move.percent) < 1e-9, `${move.percent}%`);
     assert.ok(Math.abs(move.dollars) < 1e-9, `${move.dollars}`);
@@ -93,19 +131,19 @@ describe('the year and the day do not move when money is taken out', () => {
   test('a real gain still shows on the day money also left', () => {
     // Yesterday $10,000, up $500 today, $3,000 out: +5% on $10,000.
     const positions = [{ ticker: 'VOO', status: 'Open', dir: 'Long', qty: 10, entry: 600, cur: 650, prevClose: 600, open: '2026-01-05' }];
-    const events = withManualFlows([], [withdrawal('2026-09-23', 3000)]);
+    const events = [asEvent(withdrawal('2026-09-23', 3000))];
     const move = dailyPortfolioMove(positions, 7500, '2026-09-23', events);
     assert.ok(Math.abs(move.dollars - 500) < 1e-6, `${move.dollars}`);
     assert.ok(Math.abs(move.percent - 5) < 1e-6, `${move.percent}%`);
   });
 
-  test('money moved after the walk ends is carried by the row that closes it', () => {
-    // A statement history stopping in June, with $1,000 taken out in August.
-    const flows = [withdrawal('2026-08-04', 1000), imported('2026-02-01', 5000)];
-    assert.equal(manualFlowsBetween(flows, '2026-06-30', '2026-09-23'), -1000);
-    // Nothing outside the window.
-    assert.equal(manualFlowsBetween(flows, '2026-08-04', '2026-09-23'), 0);
-    assert.equal(manualFlowsBetween(flows, '2026-01-01', '2026-06-30'), 0);
+  test('a withdrawal inside the walk lands on its own day, not the last one', () => {
+    const rows = history([withdrawal('2026-08-04', 1000)]);
+    const day = rows.find((r) => r.date === '2026-08-04');
+    assert.equal(day.externalCashFlow, -1000);
+    assert.equal(day.withdrawal, -1000);
+    // And nowhere else.
+    assert.equal(rows.filter((r) => r.externalCashFlow !== 0).length, 1);
   });
 });
 
@@ -150,7 +188,7 @@ describe('taking $3,000 out of a $10,000 account', () => {
   const priceOn = (_ticker, day) => (day < '2026-06-02' ? 700 : 770);
   const history = (flows) => buildPortfolioHistory({
     opening: { date: '2026-01-01', cash: 3000, holdings: { VOO: 10 } },
-    events: withManualFlows([], flows),
+    events: flows.map(asEvent),
     priceOn,
     lastKnown: {},
     from: '2026-01-01',

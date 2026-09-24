@@ -23,10 +23,6 @@ const CACHE_MS = 60 * 1000;
 
 let cache = { at: 0, decision: null };
 
-export function resetFedCache() {
-  cache = { at: 0, decision: null };
-}
-
 /**
  * The next decision, or null if it cannot be had.
  *

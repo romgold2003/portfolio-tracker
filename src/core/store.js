@@ -113,6 +113,20 @@ export function sanitizeFlows(list) {
 }
 
 /**
+ * The flows the trader moved by hand, which no statement will ever mention.
+ *
+ * A withdrawal taken through the app is in no file, so rebuilding the journal
+ * from the files erased it: importing next month's statement put the cash back
+ * and the withdrawal vanished, silently. Every rebuild carries these through
+ * and folds them into the ledger as the dated events they are, so that
+ * everything downstream — the day's move, the year, the daily walk — reads
+ * them from the one place it reads everything else from.
+ */
+export function handEnteredFlows(journal) {
+  return (journal?.cashFlows ?? []).filter((f) => f?.manual && f.date && Number.isFinite(f.amount));
+}
+
+/**
  * The ledger, rebuilt field by field so nothing unexamined reaches the rebuild.
  *
  * A bad row is dropped rather than the whole ledger: a statement with one

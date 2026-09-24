@@ -122,10 +122,6 @@ export function profileExists(email) {
   return listProfiles().some((p) => p.email === wanted);
 }
 
-export function anyProfiles() {
-  return listProfiles().length > 0;
-}
-
 function saveProfiles(list) {
   writeJson(PROFILES_KEY, list);
 }

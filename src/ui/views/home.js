@@ -27,9 +27,7 @@ import { allSplits, historyGaps, gapInWindow } from '../../features/statementLib
 import { onJournalLoaded, combinedJournals } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
-import {
-  buildPortfolioHistory, periodReturnFromHistory, combineHistories, withManualFlows, manualFlowsBetween,
-} from '../../core/portfolioHistory.js';
+import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, escapeHtml,
@@ -40,6 +38,21 @@ const setColor = (id, color) => { const el = document.getElementById(id); if (el
 
 /** Currency rounding, matching what the history dataset stores. */
 const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * Money that moved between a walk's last day and today.
+ *
+ * A history built from statements stops at the newest one, and today is added
+ * to it at the account's live value. Anything withdrawn since is already out of
+ * that value, so a closing row saying nothing came or went reads the fall as a
+ * loss.
+ */
+function flowsAfter(journal, after, upTo) {
+  return (journal?.ledger?.events ?? []).reduce(
+    (sum, e) => (e?.kind === 'flow' && e.date > after && e.date <= upTo ? sum + (Number(e.cash) || 0) : sum),
+    0,
+  );
+}
 
 /**
  * Hiding the figures, for when someone can see the screen.
@@ -160,16 +173,6 @@ function miniRow(p) {
   </div>`;
 }
 
-/** The active journal's ledger events plus the money it moved by hand. */
-function eventsWithManualFlows(journal = state) {
-  return withManualFlows(journal?.ledger?.events, journal?.cashFlows);
-}
-
-/** Money moved by hand between a day and today, for the row that ends the walk. */
-function manualFlowsAfter(journal, after, upTo) {
-  return manualFlowsBetween(journal?.cashFlows, after, upTo);
-}
-
 function renderDailyMove(totals) {
   /**
    * Only the holdings whose day is still running.
@@ -183,7 +186,7 @@ function renderDailyMove(totals) {
   const running = inPlay(state.positions);
   const reset = running.length < state.positions.length;
   // The ledger prices the shares bought and sold on the day, as the broker does.
-  const move = dailyPortfolioMove(running, totals.account, undefined, eventsWithManualFlows());
+  const move = dailyPortfolioMove(running, totals.account, undefined, state.ledger?.events ?? []);
   const pctEl = document.getElementById('portfolioDailyPct');
   const amtEl = document.getElementById('portfolioDailyAmt');
   if (!pctEl || !amtEl) return;
@@ -466,7 +469,7 @@ async function loadBackfill() {
         opening: {
           date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings,
         },
-        events: eventsWithManualFlows(state),
+        events: ledger.events ?? [],
         priceOn: pastPrice,
         lastKnown: datedMarks(ledger),
         from: earliest,
@@ -493,7 +496,7 @@ async function loadBackfill() {
         row.positionsValue = round2(live - state.cash);
         if (last.date === today) forward[forward.length - 1] = row;
         else {
-          const moved = round2(manualFlowsAfter(state, last.date, today));
+          const moved = round2(flowsAfter(state, last.date, today));
           forward.push({
             ...row,
             externalCashFlow: moved,
@@ -550,7 +553,7 @@ function journalHistory(journal, earliest) {
     rows.push({
       date: today,
       totalAccountValue: round2(live),
-      externalCashFlow: round2(manualFlowsAfter(journal, last?.date ?? '', today)),
+      externalCashFlow: round2(flowsAfter(journal, last?.date ?? '', today)),
     });
   }
   return rows;
@@ -561,7 +564,7 @@ function journalDays(journal, earliest) {
   if (ledger?.openingCash != null && ledger.from) {
     return buildPortfolioHistory({
       opening: { date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings },
-      events: eventsWithManualFlows(journal),
+      events: ledger.events ?? [],
       priceOn: pastPrice,
       lastKnown: datedMarks(ledger),
       from: earliest,

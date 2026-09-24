@@ -22,10 +22,6 @@ const CACHE_MS = 2 * 60 * 1000;
 
 let cache = { at: 0, week: null };
 
-export function resetEconCache() {
-  cache = { at: 0, week: null };
-}
-
 /**
  * This week's watched releases, as `{ week, releases }`, or null if they cannot
  * be had. Never throws.

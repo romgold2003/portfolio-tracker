@@ -23,6 +23,7 @@
  * held before it (a trade-only export starts from zero and can run negative).
  */
 import { CG_IDS } from '../config/constants.js';
+import { handEnteredFlows } from '../core/store.js';
 
 const EMPTY = 1e-9;
 
@@ -321,7 +322,8 @@ export function journalFromTransactions(records, existing = {}, opening = null) 
     // Built with shorts' proceeds in cash (store.js SHORT_CASH_MODEL), so nothing is corrected on load.
     cashModel: 2,
     snapshots: existing.snapshots ?? [],
-    cashFlows: book.flows,
+    // Money moved by hand survives a rebuild; see handEnteredFlows.
+    cashFlows: [...book.flows, ...handEnteredFlows(existing)].sort((x, y) => x.date.localeCompare(y.date)),
     income: book.income,
     openingNav: null,
     ledger: {
@@ -331,7 +333,9 @@ export function journalFromTransactions(records, existing = {}, opening = null) 
       openingCash: Number(opening?.cash) || 0,
       openingHoldings: Object.fromEntries((opening?.holdings ?? []).filter((h) => h.qty > EMPTY).map((h) => [h.ticker, h.qty])),
       openingMarks: Object.fromEntries((opening?.holdings ?? []).filter((h) => h.price > 0).map((h) => [h.ticker, h.price])),
-      events: book.events.map(({ at, ...rest }) => rest),
+      events: [...book.events, ...handEnteredFlows(existing).map((f) => ({ date: f.date, at: `${f.date} 00:00:00`, kind: 'flow', cash: f.amount }))]
+        .sort((x, y) => (x.at ?? x.date).localeCompare(y.at ?? y.date))
+        .map(({ at, ...rest }) => rest),
       holdings: Object.fromEntries(open.map((p) => [p.ticker, p.qty])),
     },
     apiKey: existing.apiKey ?? '',

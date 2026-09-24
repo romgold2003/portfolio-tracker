@@ -11,10 +11,6 @@ const CACHE_MS = 30 * 60 * 1000;
 
 let cache = { at: 0, data: null };
 
-export function resetSentimentCache() {
-  cache = { at: 0, data: null };
-}
-
 /** Both readings, or null if they cannot be had. Never throws. */
 export async function marketSentiment() {
   if (!cloudEnabled()) return null;

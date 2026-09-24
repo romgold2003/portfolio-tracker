@@ -32,6 +32,7 @@
  * legs are not movements at all and are left out.
  */
 import { statementToJournal } from './ibkr.js';
+import { handEnteredFlows } from '../core/store.js';
 import { journalFromTransactions } from './transactionBook.js';
 
 /**
@@ -307,6 +308,9 @@ function runOn(starts, ticker, day) {
   return undefined;
 }
 
+/** A hand-entered flow, in the shape the ledger keeps its own events in. */
+const asEvent = (f) => ({ date: f.date, at: `${f.date} 00:00:00`, kind: 'flow', cash: f.amount });
+
 /** A journal rebuilt from every imported year. */
 export function journalFromStatements(records, existing = {}) {
   if (!records?.length) throw new Error('There are no statements to build from.');
@@ -377,7 +381,7 @@ function journalAcrossBrokers(segments, sorted, existing) {
   return {
     ...last,
     positions: [...closed, ...open].map((p, i) => ({ ...p, id: stamp + i + 1 })),
-    cashFlows: journals.flatMap((j) => j.cashFlows ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+    cashFlows: [...new Set(journals.flatMap((j) => j.cashFlows ?? []))].sort((a, b) => a.date.localeCompare(b.date)),
     income,
     snapshots: existing.snapshots ?? [],
     apiKey: existing.apiKey ?? '',
@@ -397,12 +401,16 @@ function journalFromIbkr(sorted, existing) {
   while (first > 0 && links[first - 1].ok) first -= 1;
   const run = sorted.slice(first);
 
-  const events = run.flatMap((r) => [
-    ...(r.ledger ?? []).map((t) => adjustEvent({ ...t, kind: 'trade' }, splits)),
-    ...(r.transfers ?? []).map((t) => adjustEvent(t, splits)),
-    ...(r.flows ?? []).map((f) => ({ date: f.date, kind: 'flow', cash: f.amount })),
-    ...(r.dated ?? []),
-  ]).sort((a, b) => momentOf(a).localeCompare(momentOf(b)));
+  const byHand = handEnteredFlows(existing);
+  const events = [
+    ...run.flatMap((r) => [
+      ...(r.ledger ?? []).map((t) => adjustEvent({ ...t, kind: 'trade' }, splits)),
+      ...(r.transfers ?? []).map((t) => adjustEvent(t, splits)),
+      ...(r.flows ?? []).map((f) => ({ date: f.date, kind: 'flow', cash: f.amount })),
+      ...(r.dated ?? []),
+    ]),
+    ...byHand.map(asEvent),
+  ].sort((a, b) => momentOf(a).localeCompare(momentOf(b)));
 
   const openingHoldings = adjustQuantities(run[0].openingHoldings, splits, `${run[0].from} 00:00:00`);
   const starts = holdingStarts(openingHoldings, events);
@@ -442,7 +450,7 @@ function journalFromIbkr(sorted, existing) {
   return {
     ...base,
     positions,
-    cashFlows: sorted.flatMap((r) => r.flows ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+    cashFlows: [...sorted.flatMap((r) => r.flows ?? []), ...byHand].sort((a, b) => a.date.localeCompare(b.date)),
     ledger: {
       from: run[0].from,
       to: latest.to,

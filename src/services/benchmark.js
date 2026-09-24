@@ -27,7 +27,6 @@ import { betaFromReturns } from '../core/portfolio.js';
 // is usually already on screen — anyone benchmarking against the index tends to
 // hold it — and a price already fetched costs nothing to reuse.
 export const BENCHMARK_SYMBOL = 'VOO';
-export const BENCHMARK_NAME = 'S&P 500';
 
 
 /** A trading day's worth of staleness is fine for a daily close. */
@@ -216,31 +215,6 @@ function writeStartPrices(map) {
   } catch { /* it will simply be fetched again */ }
 }
 
-export async function yearStartPrices(tickers) {
-  const known = readStartPrices();
-  const missing = [...new Set(tickers)].filter((t) => t && !known.has(t));
-  if (!missing.length || !cloudEnabled()) return known;
-
-  const janFirst = `${new Date().getFullYear()}-01-01`;
-  for (const ticker of missing) {
-    try {
-      const res = await fetch(`/api/history?symbol=${encodeURIComponent(ticker)}&years=2`, {
-        credentials: 'same-origin',
-      });
-      if (!res.ok) continue;
-      const json = await res.json();
-      const close = closeOnOrBefore(json?.rows ?? [], janFirst);
-      if (close > 0) known.set(ticker, close);
-    } catch {
-      // A symbol the history service does not carry. The caller counts it as
-      // carried-in and leaves it out rather than guessing.
-    }
-  }
-
-  writeStartPrices(known);
-  return known;
-}
-
 export async function benchmarkSeries() {
   if (series) return series;
 
@@ -309,21 +283,6 @@ export function closeOnOrBefore(rows, date) {
     found = row;
   }
   return found ? found.close : null;
-}
-
-/**
- * The index's return between two dates, as a percentage.
- * Null when the window falls outside the data.
- */
-export function benchmarkReturn(rows, fromDate, toDate, endOverride = null) {
-  if (!rows?.length) return null;
-  const start = closeOnOrBefore(rows, fromDate);
-  // A live price beats the last close whenever the window runs to today —
-  // otherwise an account that has moved all morning is being measured against
-  // an index frozen at last night's close.
-  const end = endOverride ?? closeOnOrBefore(rows, toDate);
-  if (!start || !end) return null;
-  return ((end - start) / start) * 100;
 }
 
 /**

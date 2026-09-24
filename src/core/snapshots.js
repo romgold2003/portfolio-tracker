@@ -144,8 +144,6 @@ export function setBackfill(rows, { authoritative = false } = {}) {
   backfill = history.map((r) => ({ date: r.date, value: r.totalAccountValue ?? r.value }));
 }
 
-export function backfillRows() { return backfill; }
-
 /**
  * The daily history walked forward from a broker's statements, or empty.
  *

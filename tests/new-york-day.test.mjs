@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 
 import { todayStr, dailyDollar, dailyPortfolioMove, accountTotals } from '../src/core/portfolio.js';
 import { tradingDay } from '../src/config/marketCalendar.js';
-import { withManualFlows } from '../src/core/portfolioHistory.js';
+
 
 const RealDate = Date;
 /** Hold the clock at one instant, so a test can stand in another timezone. */
@@ -61,7 +61,7 @@ describe('what the mismatch cost', () => {
     // $10,000 that made $200 today, then $3,000 taken out.
     const up = { status: 'Open', dir: 'Long', cls: 'Stocks', ticker: 'A', qty: 100, entry: 98, cur: 102, prevClose: 100 };
     const account = accountTotals([up], 0).account - 3000;
-    const events = withManualFlows([], [{ date: todayStr(), amount: -3000, manual: true }]);
+    const events = [{ date: todayStr(), kind: 'flow', cash: -3000 }];
     const move = dailyPortfolioMove([up], account, undefined, events);
     // On the $10,000 the account held at the open, not on the $7,000 left after.
     assert.ok(Math.abs(move.percent - 2) < 1e-9, `${move.percent}% — it read 2.857% when the stamp was UTC`);
