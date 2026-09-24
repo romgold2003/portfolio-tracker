@@ -5,7 +5,8 @@ import {
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
   sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
-import { regularSessionOpen, extendedPricingAvailable } from '../../services/extendedHours.js';
+import { regularSessionOpen, extendedPricingAvailable, tradingDayOver } from '../../services/extendedHours.js';
+import { lastClosedSession } from '../../config/marketCalendar.js';
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
@@ -163,11 +164,40 @@ function manualFlowsAfter(journal, after, upTo) {
   return manualFlowsBetween(journal?.cashFlows, after, upTo);
 }
 
+/**
+ * Which day the figure beneath this heading is actually describing.
+ *
+ * The American session ends at eight in the evening in New York — three in the
+ * morning in Israel — and nothing trades again until pre-market at four, which
+ * is eleven in the morning there. Through those eight hours the figures are
+ * deliberately held where the day left them, because nothing has happened to
+ * move them.
+ *
+ * What was wrong was the word above them. At ten in the morning the box said
+ * "Today" over Wednesday's move, and there was no way to tell from the screen
+ * that the number was a finished day rather than a quiet one. So the heading
+ * names the session instead, and goes back to saying "Today" when pre-market
+ * opens and the figure starts meaning today again.
+ *
+ * Crypto never stops, so a book holding only crypto is always looking at today
+ * and is left alone.
+ */
+export function dailyHeading() {
+  const holdsStocks = state.positions.some((p) => p.status === 'Open' && p.cls !== 'Crypto');
+  if (!holdsStocks || !tradingDayOver()) return 'Today';
+  const [y, m, d] = lastClosedSession().split('-').map(Number);
+  const when = new Date(Date.UTC(y, m - 1, d));
+  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][when.getUTCDay()];
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+  return `Last session · ${day} ${d} ${month}`;
+}
+
 function renderDailyMove(totals) {
   // The ledger prices the shares bought and sold on the day, as the broker does.
   const move = dailyPortfolioMove(state.positions, totals.account, undefined, eventsWithManualFlows());
   const pctEl = document.getElementById('portfolioDailyPct');
   const amtEl = document.getElementById('portfolioDailyAmt');
+  setText('dailyLabel', dailyHeading());
   if (!pctEl || !amtEl) return;
 
   if (!move.hasData) {
