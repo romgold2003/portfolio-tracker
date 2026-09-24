@@ -261,5 +261,80 @@ export async function whaleTrades({ signal } = {}) {
     if (answer.status !== 'fulfilled') continue;
     for (const t of answer.value) merged.set(fillKey(t), t);
   }
-  return merged.size ? [...merged.values()] : null;
+  if (!merged.size) return null;
+
+  const rows = [...merged.values()];
+  return dropSettled(rows, { signal });
+}
+
+/* ── markets that have already been decided ───────────────────────────── */
+
+const MARKETS = 'https://gamma-api.polymarket.com/markets';
+
+/**
+ * A trade row says nothing about whether its market is still running, so a bet
+ * on "Will Bitcoin be above $84,000 on September 23?" sat in the panel on the
+ * 24th, when the answer was already known and nobody could act on it.
+ *
+ * The market list is asked, in batches, and anything already decided is
+ * dropped.
+ *
+ * Only the settled verdict is remembered, because only it can never change: a
+ * market that has paid out stays paid out, while one that is running now may
+ * settle in an hour. Remembering that it was running would leave it on screen
+ * for the rest of the session, which is the very thing this is here to fix — so
+ * the running ones are simply asked about again.
+ */
+const settled = new Set();
+
+/** Markets are asked for in batches, because the ids go in the query string. */
+const BATCH = 40;
+
+async function dropSettled(rows, { signal } = {}) {
+  const unknown = [...new Set(rows.map((t) => t?.conditionId).filter(Boolean))]
+    .filter((id) => !settled.has(id));
+
+  for (let i = 0; i < unknown.length; i += BATCH) {
+    const ids = unknown.slice(i, i + BATCH);
+    try {
+      const query = ids.map((id) => `condition_ids=${encodeURIComponent(id)}`).join('&');
+      const res = await fetch(`${MARKETS}?${query}&limit=${BATCH}`, { signal });
+      if (!res.ok) continue;
+      const markets = await res.json();
+      if (!Array.isArray(markets)) continue;
+      for (const m of markets) {
+        if (m?.conditionId && isOver(m)) settled.add(m.conditionId);
+      }
+    } catch {
+      /**
+       * Deliberately silent, and deliberately not fatal. This is a second
+       * opinion about rows that are already in hand: a lookup that fails must
+       * leave the trades on screen, never blank the panel. An id that stayed
+       * unknown is treated as still running, which is the safer of the two.
+       */
+    }
+  }
+
+  // An id nothing could be learned about is treated as still running, which is
+  // the safer of the two: a lookup that failed must not hide a real trade.
+  return rows.filter((t) => !settled.has(t?.conditionId));
+}
+
+/**
+ * Whether a market is done with.
+ *
+ * `closed` is the broker's own word for it and is trusted first. An end date
+ * already past counts too, because a market is sometimes still open for a
+ * short while after the event it describes — which is exactly the window this
+ * exists to hide.
+ */
+function isOver(m) {
+  if (m?.closed === true || m?.archived === true) return true;
+  const ends = Date.parse(m?.endDate ?? m?.endDateIso ?? '');
+  return Number.isFinite(ends) && ends < Date.now();
+}
+
+/** Forget what is known about which markets have settled. For the tests. */
+export function resetSettledMarkets() {
+  settled.clear();
 }
