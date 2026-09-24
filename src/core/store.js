@@ -338,6 +338,22 @@ function sanitizePosition(raw) {
   // Optional fields are only carried over when they hold a usable value, so a
   // missing one stays absent rather than becoming a misleading zero.
   if (exits && exits.length) clean.exits = exits;
+
+  /**
+   * Shares added on a given day, with what they cost. Survives a reload for the
+   * same reason `exits` does: without it the day's move would measure shares
+   * bought this morning from yesterday's close, which is a gain they were not
+   * there for. Only the current day's are ever read; the rest are kept because
+   * a handful of numbers per top-up is cheaper than deciding when to forget.
+   */
+  const adds = Array.isArray(raw.adds)
+    ? raw.adds
+      .map((a) => ({ d: date(a?.d), qty: num(a?.qty), price: num(a?.price) }))
+      // A zero-share or unpriced top-up describes nothing, and `num` reads a
+      // missing field as zero, so both are rejected rather than stored.
+      .filter((a) => a.d && a.qty && a.price > 0)
+    : [];
+  if (adds.length) clean.adds = adds;
   const origQty = num(raw.origQty);
   if (origQty != null) clean.origQty = origQty;
   const dailyChg = num(raw.dailyChg);

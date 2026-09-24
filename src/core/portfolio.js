@@ -87,6 +87,30 @@ export function marketValueOf(p) {
 export function posValue(p) { return marketValueOf(p); }
 
 /**
+ * Shares bought today, and what they cost.
+ *
+ * The mirror of `exits`: a sale today is measured from yesterday's close to the
+ * price it went at, and a purchase today from the price it was paid for to the
+ * price now.
+ *
+ * Without this, adding to a holding measured the whole of it from yesterday's
+ * close, so shares bought this morning were credited with a move they were not
+ * there for. Adding 50 at 101 to 10 held from a close of 100, with the price at
+ * 102, read $120 where the day had made $70. The account value was right
+ * throughout — only the percentage was wrong.
+ */
+export function addedOn(p, today) {
+  let qty = 0;
+  let cost = 0;
+  for (const a of p?.adds ?? []) {
+    if (a?.d !== today || !Number.isFinite(a.qty) || !Number.isFinite(a.price)) continue;
+    qty += a.qty;
+    cost += a.qty * a.price;
+  }
+  return { qty, cost };
+}
+
+/**
  * Today's P&L in dollars for one position.
  *
  * The day starts at whichever price you actually owned the shares from:
@@ -94,20 +118,13 @@ export function posValue(p) { return marketValueOf(p); }
  *   held since before today  ->  yesterday's close
  *   bought today             ->  the price you paid
  *
- * Yesterday's close is not stored, so it is recovered from the quoted change:
- *   dailyChg% = (cur - prevClose) / prevClose  =>  prevClose = cur / (1 + chg/100)
- *
  * Returns null when the starting price cannot be established, which for a
  * position held from before today means no quote has arrived yet.
  */
 export function dailyDollar(p, today = dayOf(p)) {
-  // Shares bought today were not owned at yesterday's close, so their day
-  // starts at the price paid, not at the previous close. Counting the whole
-  // day's move for them credits the portfolio with a gain it never had, and the
-  // daily figure then fails to reconcile with the account value.
-  //
-  // This case needs no quote at all: the entry price and the current price are
-  // both already known.
+  // Opened today: every share started at the price paid, so this needs no quote
+  // at all — the entry price and the current price are both already known, and
+  // the entry price already averages in anything added since.
   if (p.open === today) {
     const move = (p.cur - p.entry) * p.qty;
     return p.dir === 'Long' ? move : -move;
@@ -128,16 +145,14 @@ export function dailyDollar(p, today = dayOf(p)) {
    * The percentage remains the fallback, because a position quoted before this
    * field existed still has one.
    */
-  if (Number.isFinite(p.prevClose) && p.prevClose > 0) {
-    const move = (p.cur - p.prevClose) * p.qty;
-    return p.dir === 'Long' ? move : -move;
-  }
+  const prevClose = prevCloseOf(p);
+  if (!(prevClose > 0)) return null;
 
-  if (p.dailyChg == null || !Number.isFinite(p.dailyChg)) return null;
-  const factor = 1 + p.dailyChg / 100;
-  if (factor <= 0) return null;
-  const prevClose = p.cur / factor;
-  const move = (p.cur - prevClose) * p.qty;
+  // Shares carried in moved from yesterday's close; shares bought today moved
+  // from the price paid for them.
+  const added = addedOn(p, today);
+  const carried = p.qty - added.qty;
+  const move = carried * (p.cur - prevClose) + (added.qty * p.cur - added.cost);
   return p.dir === 'Long' ? move : -move;
 }
 

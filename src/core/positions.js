@@ -156,6 +156,20 @@ export function applyDca(id, addQty, price) {
   p.entry = next.avgEntry;
   p.qty = next.qty;
   p.amount = next.cost;
+
+  /**
+   * What was bought, and when, so the day's move can start these shares at the
+   * price paid for them.
+   *
+   * Without it the whole holding was measured from yesterday's close, and
+   * shares bought this morning were credited with a move they were not there
+   * for: adding 50 shares at 101 to 10 held from a close of 100, with the price
+   * at 102, read $120 where the day had made $70. The account value was right
+   * throughout — only the percentage was wrong, which is exactly how it was
+   * reported, and it is the mirror of what `exits` already does for a sale.
+   */
+  (p.adds ??= []).push({ d: todayStr(), qty: addQty, price });
+
   moveOpeningCash(p.dir, next.spend);
   savePositions();
   return { position: p, ...next };
