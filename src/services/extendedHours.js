@@ -213,7 +213,40 @@ export async function extendedQuotes(tickers) {
  *
  * Returns true when anything changed, so the caller knows whether to redraw.
  */
+/**
+ * Pre-market, before the regular session has opened.
+ *
+ * The window where the regular feed cannot be trusted for the day's move. A
+ * quote gives the last trade and the previous close, and before anything has
+ * traded today those are yesterday's close and the day before it — so the
+ * percentage it implies is *yesterday's move*, served as though it were
+ * today's. Only a symbol that has actually printed in pre-market has a real
+ * figure, and everything else has moved nothing at all.
+ */
+function beforeTodaysSession(now) {
+  const { date, minutes } = newYorkClock(now);
+  if (marketHoliday(date)) return false;
+  return minutes >= PRE_MARKET_OPEN && minutes < REGULAR_OPEN;
+}
+
+/**
+ * A holding that has not traded yet today has moved nothing today.
+ *
+ * Not "no figure": zero. The shares are still worth what they closed at, so
+ * their whole value belongs in the balance the day is measured against — which
+ * is how the broker reports it, and the difference between the two on a real
+ * book was the portfolio reading −1.04% where Interactive Brokers read −0.60%.
+ */
+function markUnmoved(p) {
+  if (p.cls === 'Crypto' || !(p.cur > 0) || p.dailyChg === 0) return false;
+  p.dailyChg = 0;
+  p.prevClose = p.cur;
+  return true;
+}
+
 export function applyExtendedQuotes(positions, bySymbol, now = new Date()) {
+  const preSession = beforeTodaysSession(now);
+
   if (!bySymbol.size) {
     // Nothing is printing because the day is over, not because the session
     // reopened. Hold the figures where it left them; see tradingDayOver.
@@ -222,6 +255,7 @@ export function applyExtendedQuotes(positions, bySymbol, now = new Date()) {
     let cleared = false;
     for (const p of positions) {
       if (p.extPhase) { delete p.extPhase; cleared = true; }
+      if (preSession && p.status === 'Open' && markUnmoved(p)) cleared = true;
     }
     return cleared;
   }
@@ -232,6 +266,7 @@ export function applyExtendedQuotes(positions, bySymbol, now = new Date()) {
     const quote = bySymbol.get((p.ticker || '').toUpperCase());
     if (!quote) {
       if (p.extPhase) { delete p.extPhase; changed = true; }
+      if (preSession && markUnmoved(p)) changed = true;
       continue;
     }
 
