@@ -57,13 +57,20 @@ export const BANDS = [
 export const bandDef = (id) => BANDS.find((b) => b.id === id) ?? BANDS[0];
 
 /**
- * What counts as macro.
+ * What counts as a subject worth showing.
  *
- * Polymarket's volume is mostly sport and five-minute price markets, which
- * would bury the handful of trades this panel exists for. So this is an
- * allowlist of subjects rather than a blocklist of noise: a market is shown
- * because it is recognisably about rates, geopolitics, policy or the economy,
- * not because it failed to look like a football match.
+ * Polymarket's volume is mostly sport, which would bury the handful of trades
+ * this panel exists for. So this is an allowlist of subjects rather than a
+ * blocklist of noise: a market is shown because it is recognisably about rates,
+ * geopolitics, policy, the economy, or where a coin's price lands — not because
+ * it failed to look like a football match.
+ *
+ * The coin markets were left out at first, on the grounds that the short-dated
+ * ones are numerous enough to swamp a Fed trade. They are here now because they
+ * were asked for, and the same floor and the same bands hold them back: a
+ * fifteen-minute market has to carry a quarter of a million dollars in one fill
+ * to appear at all. Each subject keeps its own tab, so a busy day for Bitcoin
+ * never hides the rest.
  *
  * Word boundaries matter here. Bare "war" would take "Warriors" and bare "sec"
  * would take "second", so both are anchored.
@@ -99,12 +106,42 @@ export const TOPICS = [
     label: 'Politics',
     match: /\b(election|president|congress|senate|supreme court|impeach|cabinet|nominee|resign)\b/i,
   },
+  /**
+   * Where a coin's price lands, which is a different question from crypto
+   * policy above and sits below it deliberately: "strategic bitcoin reserve"
+   * is about what a government does, not about what Bitcoin is worth, and the
+   * first topic to match a title wins.
+   *
+   * Both halves are required — a coin, and something about where its price
+   * goes. Bitcoin alone would take every ETF approval and every regulatory
+   * market; a price word alone would take equities and gold. Together they
+   * take "Bitcoin Up or Down — 3PM ET", "Will Bitcoin be above $113,000 on
+   * September 30?" and "Ethereum all-time high before July?", which is what
+   * was asked for.
+   */
+  {
+    id: 'coin',
+    label: 'Crypto prices',
+    match: (text) => COIN.test(text) && MOVE.test(text),
+  },
 ];
+
+/** The coins worth a row. Tickers only where the word is unambiguous. */
+const COIN = /\b(bitcoin|btc|ethereum|ether|eth|solana|sol|xrp|ripple|dogecoin|doge|bnb|cardano|avalanche|avax|litecoin|crypto)\b/i;
+
+/**
+ * Something about where a price goes, rather than about what a coin is.
+ *
+ * `$` followed by a figure catches the strike markets, which often name no
+ * direction at all — "Bitcoin above $150,000?" carries it in the dollar sign.
+ */
+const MOVE = /\b(up or down|higher|lower|above|below|hits?|reach(es)?|touch(es)?|dips?|closes?|price|market cap|all[- ]time high)\b|\$\s?[\d,]/i;
 
 /** The subject a market is about, or null when it is not one of ours. */
 export function topicOf(title) {
   const text = String(title ?? '');
-  return TOPICS.find((t) => t.match.test(text)) ?? null;
+  const hit = TOPICS.find((t) => (typeof t.match === 'function' ? t.match(text) : t.match.test(text)));
+  return hit ?? null;
 }
 
 /** The subject buttons, with everything first because most bands are thin. */

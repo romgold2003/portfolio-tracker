@@ -39,16 +39,21 @@ describe('what counts as macro', () => {
     assert.equal(topicOf('Clarity Act (H.R.3633) signed into law in 2026?').id, 'policy');
   });
 
-  test('sport and five-minute price markets are not macro', () => {
+  test('sport and entertainment are still not shown', () => {
     for (const title of [
       'LoL: KT Rolster vs Dplus KIA - Game 1 Winner',
       'US Open ATP: Yibing Wu vs Carlos Alcaraz',
       'Atlanta Braves vs. Washington Nationals',
-      'Bitcoin Up or Down - September 4, 8:40AM-8:45AM ET',
       'Will Taylor Swift release an album in 2026?',
     ]) {
       assert.equal(topicOf(title), null, `"${title}" leaked into the panel`);
     }
+  });
+
+  test('but the short-dated coin markets are, now that they were asked for', () => {
+    // They were excluded here on the grounds that they would swamp a Fed trade.
+    // The floor and the bands hold them back instead; see gamble-coin.test.mjs.
+    assert.equal(topicOf('Bitcoin Up or Down - September 4, 8:40AM-8:45AM ET').id, 'coin');
   });
 
   test('a word inside another word is not a match', () => {
