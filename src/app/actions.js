@@ -50,6 +50,7 @@ import {
 import { isRiskbookExport } from '../features/genericCsv.js';
 import { importPlan, journalWithoutYear, historyGaps, emptyJournal } from '../features/statementLibrary.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
+import { reconcileStatement, reconciliationLines } from '../features/reconcile.js';
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
@@ -939,6 +940,38 @@ function importBlockedBy(records) {
     + `so add your ${known} statement in the same import — otherwise the book would go back to the end of ${newest}.`;
 }
 
+/**
+ * One staged file checked against the totals it states about itself.
+ *
+ * A file that reconciles says so in one line rather than six, because the
+ * reassuring case should be small. A file that does not gets a line per
+ * discrepancy, naming both figures, because that is the one worth reading.
+ *
+ * A history from another broker states no totals to check, and says that
+ * instead of implying it passed.
+ */
+function reconciliationNotes(staged) {
+  if (staged.generic || !staged.parsed) return [];
+  let report = null;
+  try {
+    report = reconcileStatement(staged.parsed, journalFromStatements([staged.record], {}));
+  } catch {
+    // A file too incomplete to build a journal from is already reported on by
+    // the lines above; a failed cross-check must not take the preview with it.
+    return [];
+  }
+  if (!report) return [];
+  if (report.ok) {
+    return [{
+      text: `${staged.record.year}: cash, holdings and account value all match the statement.`,
+      colour: 'var(--green)',
+    }];
+  }
+  return reconciliationLines(report)
+    .filter((l) => l.includes('not rounding'))
+    .map((text) => ({ text: `${staged.record.year}: ${text}`, colour: 'var(--amber)' }));
+}
+
 function renderIbkrPreview() {
   const plan = importPlan(state.statements ?? [], stagedStatements.map((s) => s.record));
   const { records } = plan;
@@ -977,6 +1010,16 @@ function renderIbkrPreview() {
         + `Everything between those dates — trades, deposits and daily values — is dropped, so the year's `
         + 'return will change. Import the longer file instead if that is not what you meant.', 'var(--amber)');
     }
+
+    /**
+     * What the file says the account came to, against what reading it produces.
+     *
+     * Said before the import is confirmed, because this is the moment it can
+     * still be refused. A file read wrongly does not throw and does not look
+     * wrong — it just quietly produces an account a few thousand light, and
+     * that is discovered weeks later with no way to tell when it started.
+     */
+    for (const note of reconciliationNotes(staged)) line(note.text, note.colour);
   }
 
   const years = records.map((r) => r.year);

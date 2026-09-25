@@ -561,6 +561,47 @@ function readNavCash(group) {
   return sumNavCash(group, iCurrent);
 }
 
+const NAV_CASH = /^(cash|trésorerie)$/i;
+const NAV_ACCRUAL = /accrual|cumul(é|e)?s?\b/i;
+const NAV_TOTAL = /^(total|net asset value)$/i;
+
+/**
+ * What the broker says the account is made of, in its own words.
+ *
+ * Every line of the net asset value block, added across accounts and sorted
+ * into the three things it can be: cash, money accrued but not settled, and
+ * everything else, which is holdings. The broker's own Total is read too rather
+ * than derived, so it can be checked against the sum of the parts.
+ *
+ * These are the numbers an import is reconciled against. They are stated by the
+ * broker and owe nothing to this app's arithmetic, which is exactly what makes
+ * them worth checking against — the whole point being to notice when the two
+ * disagree instead of quietly showing the wrong one.
+ */
+export function readNavBreakdown(group) {
+  if (!group?.header) return null;
+  const iCurrent = columnIndex(group.header, 'Current Total', 'Total actuel');
+  if (iCurrent < 0) return null;
+
+  const out = { cash: 0, accruals: 0, positions: 0, total: null };
+  let sawTotal = false;
+  for (const rows of group.blocks ?? [group.rows]) {
+    for (const r of rows) {
+      const label = clean(r[0] ?? '');
+      const value = num(r[iCurrent]);
+      if (!Number.isFinite(value)) continue;
+      if (NAV_TOTAL.test(label)) { out.total = (out.total ?? 0) + value; sawTotal = true; continue; }
+      if (NAV_CASH.test(label)) { out.cash += value; continue; }
+      if (NAV_ACCRUAL.test(label)) { out.accruals += value; continue; }
+      // A line with no label this recognises is a holding of some kind:
+      // stocks, options, futures, funds. Named or not, it is not cash.
+      if (label) out.positions += value;
+    }
+  }
+  if (!sawTotal) out.total = out.cash + out.accruals + out.positions;
+  return out;
+}
+
 /**
  * Dividends declared but not yet paid.
  *
@@ -594,8 +635,17 @@ function readNavAccruals(group) {
   if (!group?.header) return null;
   const iCurrent = columnIndex(group.header, 'Current Total', 'Total actuel');
   if (iCurrent < 0) return null;
-  // Summed across accounts, for the same reason the cash above is.
-  const rows = group.rows.filter((r) => /dividend accrual|cumul.*dividende/i.test(clean(r[0])));
+  /**
+   * Interest as well as dividends, and summed across accounts.
+   *
+   * Both are money the account is owed or owes but has not settled yet, and the
+   * broker carries them as their own lines in net asset value. Only dividends
+   * were read, which left accrued interest — one dollar and seven cents on this
+   * book — as the last unexplained difference between the app's account value
+   * and the broker's. Small, but a difference nobody can name is the one that
+   * makes every other figure hard to trust.
+   */
+  const rows = group.rows.filter((r) => /accrual|cumul(é|e)?s?\b/i.test(clean(r[0])));
   if (!rows.length) return null;
   return rows.reduce((sum, r) => sum + (num(r[iCurrent]) || 0), 0);
 }
@@ -882,6 +932,8 @@ export function parseIbkrStatement(text) {
   const cash = readNavCash(groups.get('nav'));
   const accruals = readNavAccruals(groups.get('nav'));
   const accounts = readAccounts(groups.get('account'));
+  // What the broker states the account is made of, for reconciling against.
+  const navReported = readNavBreakdown(groups.get('nav'));
   const openingCash = readOpeningCash(groups.get('nav'));
   const { holdings: openingHoldings, marks: openingMarks } = readOpeningHoldings(groups.get('mtm'));
   const transfers = readTransfers(groups.get('transfers'));
@@ -924,6 +976,7 @@ export function parseIbkrStatement(text) {
     cash: cash ?? null,
     /** Dividends declared and not yet paid; part of the broker's NAV. */
     accruals: accruals ?? 0,
+    navReported,
     /** Every account this export covers; more than one means it is consolidated. */
     accounts,
     flows,

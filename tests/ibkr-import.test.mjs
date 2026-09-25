@@ -33,6 +33,8 @@ const IB = {
   unrealised: 5694.091632,
   realised: 8033.35145251,
   cash: 8359.631138846,
+  /** "Dividendes cumulés": owed to the account, carried with cash. */
+  accruals: 5.07,
   deposits: 8497,
   dividends: 64.06,
   commissions: -192.77227115,
@@ -127,10 +129,17 @@ describe('the journal it builds', () => {
     assert.equal(t.open.length, IB.openPositions);
     assert.ok(near(t.unrealised, IB.unrealised), 'unrealised');
     assert.ok(near(t.realised, IB.realised), 'realised');
-    assert.ok(near(state.cash, IB.cash), 'cash');
-    // The remaining difference from IBKR's NAV is its accrued-dividend line,
-    // which is money not yet paid and not a position.
-    assert.ok(near(t.account, IB.endNav, 6), `account ${t.account}`);
+    /**
+     * Cash carries the accrued dividends with it, as the broker's own net
+     * asset value does: it is money owed to the account, not a holding.
+     *
+     * That line is written "Dividendes cumulés" in French and was being looked
+     * for as "cumul… dividende" — the words the other way round — so it was
+     * silently dropped, and the account sat $5.07 under the broker with nothing
+     * to say why. The tolerance here used to be six dollars to cover it.
+     */
+    assert.ok(near(state.cash, IB.cash + IB.accruals), `cash ${state.cash}`);
+    assert.ok(near(t.account, IB.endNav), `account ${t.account} vs ${IB.endNav}`);
   }));
 
   test('records the opening balance the statement states', withFile(() => {
