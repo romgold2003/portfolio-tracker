@@ -952,24 +952,45 @@ function importBlockedBy(records) {
  */
 function reconciliationNotes(staged) {
   if (staged.generic || !staged.parsed) return [];
+
+  /**
+   * More than one currency in the file.
+   *
+   * This app values holdings at prices fetched in US dollars and adds them to
+   * a cash balance without converting anything. That is right for an account
+   * held in one currency and wrong for one that is not, and the wrongness
+   * would show up as a total that is the sum of two different kinds of money.
+   * Said plainly, before the import, rather than left to be discovered.
+   */
+  const notes = [];
+  const { currencies = [], baseCurrency } = staged.parsed;
+  if (currencies.length > 1) {
+    notes.push({
+      text: `${staged.record.year}: this statement holds ${currencies.join(', ')}. `
+        + `The app works in ${baseCurrency ?? 'one currency'} and converts nothing, so any holding in `
+        + 'another currency will be added at its face value. Check the totals below before importing.',
+      colour: 'var(--amber)',
+    });
+  }
+
   let report = null;
   try {
     report = reconcileStatement(staged.parsed, journalFromStatements([staged.record], {}));
   } catch {
     // A file too incomplete to build a journal from is already reported on by
     // the lines above; a failed cross-check must not take the preview with it.
-    return [];
+    return notes;
   }
-  if (!report) return [];
+  if (!report) return notes;
   if (report.ok) {
-    return [{
+    return [...notes, {
       text: `${staged.record.year}: cash, holdings and account value all match the statement.`,
       colour: 'var(--green)',
     }];
   }
-  return reconciliationLines(report)
+  return [...notes, ...reconciliationLines(report)
     .filter((l) => l.includes('not rounding'))
-    .map((text) => ({ text: `${staged.record.year}: ${text}`, colour: 'var(--amber)' }));
+    .map((text) => ({ text: `${staged.record.year}: ${text}`, colour: 'var(--amber)' }))];
 }
 
 function renderIbkrPreview() {

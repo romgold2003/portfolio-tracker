@@ -631,6 +631,42 @@ function readAccounts(group) {
   return String(row[1] ?? '').split(/[,;]/).map((x) => clean(x)).filter(Boolean);
 }
 
+/**
+ * The currency the account is kept in, and every currency the file mentions.
+ *
+ * This app works in one currency. It values holdings at prices fetched in US
+ * dollars and adds them to a cash balance without converting anything, which is
+ * right for an account held in dollars and wrong for one that is not.
+ *
+ * So the file is asked, and the answer is carried through to the import rather
+ * than assumed. A statement in a single currency needs nothing said about it; a
+ * statement mixing them cannot be added up here, and the honest thing is to say
+ * so before the import rather than to produce a total that is the sum of two
+ * different kinds of money.
+ *
+ * The reconciliation would catch it anyway — a mixed sum will not match the net
+ * asset value the broker states — but it is better to name the cause than to
+ * report a difference nobody can explain.
+ */
+function readCurrencies(accountGroup, positionsGroup) {
+  const base = accountGroup?.rows
+    ?.find((r) => /^(base currency|devise de base)$/i.test(clean(r[0])))?.[1];
+
+  const seen = new Set();
+  const header = positionsGroup?.header;
+  const iCurrency = header ? columnIndex(header, 'Currency', 'Devise') : -1;
+  if (iCurrency >= 0) {
+    for (const r of positionsGroup.rows ?? []) {
+      const code = clean(r[iCurrency] ?? '').toUpperCase();
+      // The column also carries subtotal labels like "Total" on summary rows.
+      if (/^[A-Z]{3}$/.test(code)) seen.add(code);
+    }
+  }
+  const baseCode = clean(base ?? '').toUpperCase() || null;
+  if (baseCode) seen.add(baseCode);
+  return { baseCurrency: baseCode, currencies: [...seen].sort() };
+}
+
 function readNavAccruals(group) {
   if (!group?.header) return null;
   const iCurrent = columnIndex(group.header, 'Current Total', 'Total actuel');
@@ -934,6 +970,7 @@ export function parseIbkrStatement(text) {
   const accounts = readAccounts(groups.get('account'));
   // What the broker states the account is made of, for reconciling against.
   const navReported = readNavBreakdown(groups.get('nav'));
+  const { baseCurrency, currencies } = readCurrencies(groups.get('account'), groups.get('positions'));
   const openingCash = readOpeningCash(groups.get('nav'));
   const { holdings: openingHoldings, marks: openingMarks } = readOpeningHoldings(groups.get('mtm'));
   const transfers = readTransfers(groups.get('transfers'));
@@ -977,6 +1014,8 @@ export function parseIbkrStatement(text) {
     /** Dividends declared and not yet paid; part of the broker's NAV. */
     accruals: accruals ?? 0,
     navReported,
+    baseCurrency,
+    currencies,
     /** Every account this export covers; more than one means it is consolidated. */
     accounts,
     flows,
