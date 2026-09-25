@@ -113,13 +113,19 @@ function groupSections(text) {
     const fields = parseLine(line);
     const name = clean(fields[0] ?? '');
     if (!name) continue;
-    if (!raw.has(name)) raw.set(name, { header: null, rows: [] });
+    if (!raw.has(name)) raw.set(name, { header: null, rows: [], blocks: [[]] });
     const section = raw.get(name);
     const kind = clean(fields[1] ?? '').toLowerCase();
     if (kind === 'header') {
       if (!section.header) section.header = fields.slice(2);
+      // A header met again starts another block. IBKR repeats one for subtotals,
+      // and a consolidated export repeats the whole section once per account —
+      // which is the only way to tell one account's rows from the next.
+      else if (section.blocks[section.blocks.length - 1].length) section.blocks.push([]);
     } else if (kind === 'data') {
-      section.rows.push(fields.slice(2));
+      const row = fields.slice(2);
+      section.rows.push(row);
+      section.blocks[section.blocks.length - 1].push(row);
     }
   }
 
@@ -130,11 +136,16 @@ function groupSections(text) {
     const key = sectionOf(name);
     if (!key) continue;
     named.add(name);
-    if (!groups.has(key)) groups.set(key, { header: section.header, rows: [...section.rows] });
-    else {
+    if (!groups.has(key)) {
+      // `blocks` keeps the sections apart as well as together. A consolidated
+      // export repeats a whole section once per account, and some figures are
+      // read per account before being added up; see sumNavCash.
+      groups.set(key, { header: section.header, rows: [...section.rows], blocks: [...section.blocks] });
+    } else {
       const group = groups.get(key);
       if (!group.header) group.header = section.header;
       group.rows.push(...section.rows);
+      group.blocks.push(...section.blocks);
     }
   }
 
@@ -144,7 +155,7 @@ function groupSections(text) {
     const key = shapeOf(section);
     if (!key || groups.has(key)) continue;
     const english = CANONICAL[key]?.[section.header?.length];
-    groups.set(key, { header: english ?? section.header, rows: section.rows });
+    groups.set(key, { header: english ?? section.header, rows: section.rows, blocks: section.blocks ?? [section.rows] });
   }
   return groups;
 }
@@ -517,25 +528,37 @@ function readTrades(group) {
  * down, and it is the figure their own app shows.
  */
 function readTimeWeightedReturn(group) {
+  const found = [];
   for (const row of group?.rows ?? []) {
     const fields = row.map(clean).filter(Boolean);
     if (fields.length !== 1) continue;
     const match = /^(-?[\d.,]+)\s*%$/.exec(fields[0]);
-    if (match) {
-      const value = num(match[1]);
-      if (Number.isFinite(value)) return value;
-    }
+    if (!match) continue;
+    const value = num(match[1]);
+    if (Number.isFinite(value)) found.push(value);
   }
-  return null;
+
+  /**
+   * One figure, or none.
+   *
+   * A consolidated export written per account prints this once per account,
+   * and the two cannot be combined here: a time-weighted return needs each
+   * account valued on every day money moved, and averaging them — or, as this
+   * did, taking whichever came first — describes neither the pair nor either
+   * one. Two accounts at 38.5% and 31.2% is not a book at 38.5%.
+   *
+   * Saying nothing is the honest answer, and it is not a loss: without the
+   * broker's figure the app measures the year from the daily walk instead,
+   * which is how every non-IBKR history is already measured.
+   */
+  return found.length === 1 ? found[0] : null;
 }
 
 function readNavCash(group) {
   if (!group?.header) return null;
-  const iClass = 0;
   const iCurrent = columnIndex(group.header, 'Current Total', 'Total actuel');
   if (iCurrent < 0) return null;
-  const row = navCashRow(group, iClass);
-  return row ? num(row[iCurrent]) : null;
+  return sumNavCash(group, iCurrent);
 }
 
 /**
@@ -571,8 +594,10 @@ function readNavAccruals(group) {
   if (!group?.header) return null;
   const iCurrent = columnIndex(group.header, 'Current Total', 'Total actuel');
   if (iCurrent < 0) return null;
-  const row = group.rows.find((r) => /dividend accrual|cumul.*dividende/i.test(clean(r[0])));
-  return row ? num(row[iCurrent]) : null;
+  // Summed across accounts, for the same reason the cash above is.
+  const rows = group.rows.filter((r) => /dividend accrual|cumul.*dividende/i.test(clean(r[0])));
+  if (!rows.length) return null;
+  return rows.reduce((sum, r) => sum + (num(r[iCurrent]) || 0), 0);
 }
 
 /**
@@ -586,17 +611,52 @@ function readOpeningCash(group) {
   if (!group?.header) return null;
   const iPrior = columnIndex(group.header, 'Prior Total', 'Total précédent');
   if (iPrior < 0) return null;
-  const row = navCashRow(group, 0);
-  return row ? num(row[iPrior]) : null;
+  return sumNavCash(group, iPrior);
 }
 
 /**
  * The cash line of net asset value: by name where the language is known, and
  * otherwise the first line of figures, since IBKR always lists cash first.
  */
-function navCashRow(group, iClass) {
-  return group.rows.find((r) => /^(cash|trésorerie)$/i.test(clean(r[iClass] ?? '')))
-    ?? group.rows.find((r) => r.length >= 6 && [1, 2, 3, 4, 5].every((i) => isNumber(r[i])));
+/**
+ * The cash line of each account's net asset value block.
+ *
+ * By name where the language is known, and otherwise the first line of figures
+ * in that block, since IBKR always lists cash first. Per block, not across
+ * them: with the blocks run together, "the first line of figures" would find
+ * one account's cash and "every line of figures" would add the stock and total
+ * lines to it.
+ */
+function navCashRows(group) {
+  const blocks = group.blocks ?? [group.rows];
+  const out = [];
+  for (const rows of blocks) {
+    const named = rows.find((r) => /^(cash|trésorerie)$/i.test(clean(r[0] ?? '')));
+    const row = named ?? rows.find((r) => r.length >= 6 && [1, 2, 3, 4, 5].every((i) => isNumber(r[i])));
+    if (row) out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Cash across every account the file covers, in one column.
+ *
+ * A consolidated export written per account repeats the whole net asset value
+ * block once for each account, and this took the first block it found. The
+ * positions below are read from every block, so a two-account statement came
+ * out with one account's cash set against both accounts' holdings: $42,802
+ * where the broker said $47,702, and nothing in the file to say which half had
+ * gone missing.
+ */
+function sumNavCash(group, column) {
+  const rows = navCashRows(group);
+  if (!rows.length) return null;
+  let total = 0;
+  for (const r of rows) {
+    const value = num(r[column]);
+    if (Number.isFinite(value)) total += value;
+  }
+  return total;
 }
 
 /** The "Change in NAV" block is a list of named values rather than a table. */
@@ -613,10 +673,19 @@ function readNavChange(group) {
     tax: [/withholding tax/i, /retenue fiscale/i],
     mtm: [/mark-to-market/i, /évalué au prix du marché/i],
   };
+  /**
+   * Added up rather than overwritten.
+   *
+   * A consolidated export repeats this block once per account, so assigning
+   * each label as it was met left the last account's figures standing for the
+   * whole file — one account's starting value, one account's deposits.
+   */
   for (const r of group.rows) {
     const label = clean(r[0]);
     for (const [key, patterns] of Object.entries(names)) {
-      if (patterns.some((p) => p.test(label))) out[key] = num(r[1]);
+      if (!patterns.some((p) => p.test(label))) continue;
+      const value = num(r[1]);
+      if (Number.isFinite(value)) out[key] = (out[key] ?? 0) + value;
     }
   }
   // In a language not named above: IBKR opens the list with the starting value and closes it with the ending one.
