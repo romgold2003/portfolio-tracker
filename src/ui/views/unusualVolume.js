@@ -46,9 +46,29 @@ function money(n) {
  */
 const times = (rvol) => (rvol >= 10 ? `${Math.round(rvol)}×` : `${rvol.toFixed(2)}×`);
 
+/**
+ * Which side crossed the spread, as a phrase rather than a number.
+ *
+ * Every trade has a buyer and a seller, so there is no such thing as buying
+ * volume. What this says is who was in a hurry: a market order lifting an offer
+ * is aggressive buying, one hitting a bid is aggressive selling.
+ *
+ * It sits close to even most of the time, even under a large price move — QNT
+ * rose 59% on 52% buyers — so the wording only commits past a few points either
+ * side, and says "even" in between rather than dressing up 51% as a verdict.
+ */
+export function pushedBy(share) {
+  if (share == null) return { text: '—', tone: 'var(--text4)' };
+  const pct = Math.round(share * 100);
+  if (share >= 0.54) return { text: `${pct}% buyers`, tone: 'var(--green)' };
+  if (share <= 0.46) return { text: `${100 - pct}% sellers`, tone: 'var(--red)' };
+  return { text: 'even', tone: 'var(--text3)' };
+}
+
 function row(r) {
   const t = tierOf(r.z);
   const arrow = r.direction > 0 ? '▲' : r.direction < 0 ? '▼' : '–';
+  const push = pushedBy(r.buyShare);
   return `<div class="uv-row">
     <div class="uv-tk">${escapeHtml(r.ticker)}</div>
     <div class="uv-mult" title="${escapeHtml(times(r.rvol))} a normal day for ${escapeHtml(r.ticker)}, measured over ${r.days} days">
@@ -56,6 +76,8 @@ function row(r) {
     </div>
     <div class="uv-tier uv-${t.id}" title="${escapeHtml(t.note)}">${escapeHtml(t.label)}</div>
     <div class="uv-move" style="color:${clr(r.change ?? 0)}">${arrow} ${fp(r.change ?? 0)}</div>
+    <div class="uv-push" style="color:${push.tone}"
+      title="Which side crossed the spread over the same 24 hours">${escapeHtml(push.text)}</div>
     <div class="uv-vol">${money(r.volume)}</div>
   </div>`;
 }
@@ -114,7 +136,7 @@ function draw() {
    */
   host.innerHTML = shown.length
     ? `<div class="uv-row uv-head">
-         <div>Coin</div><div>vs normal</div><div></div><div>24h</div><div>Turnover</div>
+         <div>Coin</div><div>vs normal</div><div></div><div>24h</div><div>Pushed by</div><div>Turnover</div>
        </div>${shown.map(row).join('')}`
     : `<div class="empty">Nothing is trading ${escapeHtml(filterDef(tier).label.toLowerCase())} today, out of ${rows.length} coins.</div>`;
 }

@@ -19,8 +19,9 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  baselineFor, unusualness, tierOf, isWeekend, median, TIERS, LOOKBACK, UNIVERSE,
+  baselineFor, unusualness, tierOf, isWeekend, median, TIERS, LOOKBACK, rankByTurnover, UNIVERSE_SIZE,
 } from '../src/services/unusualVolume.js';
+import { pushedBy } from '../src/ui/views/unusualVolume.js';
 
 /** A run of days ending on a Friday, so weekdays and weekends are both present. */
 const bars = (volumes, from = Date.UTC(2026, 0, 5)) => volumes.map((volume, i) => ({
@@ -142,19 +143,96 @@ describe('the tiers', () => {
   });
 });
 
-describe('the universe it watches', () => {
-  test("is the app's own coin list, as the exchange names the pairs", () => {
-    assert.ok(UNIVERSE.length > 50, `${UNIVERSE.length} coins`);
-    const btc = UNIVERSE.find((u) => u.ticker === 'BTC');
-    assert.equal(btc.symbol, 'BTCUSDT');
-    assert.ok(UNIVERSE.every((u) => u.symbol.endsWith('USDT')));
-  });
-});
-
 describe('the median itself', () => {
   test('is the middle of an odd list and the average of the middle two of an even one', () => {
     assert.equal(median([3, 1, 2]), 2);
     assert.equal(median([4, 1, 3, 2]), 2.5);
     assert.equal(median([]), null);
+  });
+});
+
+/**
+ * The coins it watches, which are chosen by the exchange rather than listed.
+ *
+ * This began as the app's own hardcoded ticker list and that was wrong the way
+ * a hardcoded list is always wrong. Of its seventy-five names, forty-three were
+ * not in the live top sixty and ten no longer traded at all. Worse for a panel
+ * whose job is to notice the unexpected: twenty-eight of the live top sixty had
+ * never been on the list, and one of them was up 58% that afternoon on ninety
+ * million of turnover.
+ */
+describe('the coins it watches', () => {
+  const t = (symbol, quoteVolume, count = 1000) => ({ symbol, quoteVolume: String(quoteVolume), count });
+
+  test('are ranked by turnover, biggest first', () => {
+    const ranked = rankByTurnover([t('AAAUSDT', 5e6), t('BBBUSDT', 9e9), t('CCCUSDT', 3e7)]);
+    assert.deepEqual(ranked.map((r) => r.ticker), ['BBB', 'CCC', 'AAA']);
+    assert.equal(ranked[0].symbol, 'BBBUSDT');
+  });
+
+  test('exclude stablecoins, because dollars against dollars is not conviction', () => {
+    const ranked = rankByTurnover([t('USDCUSDT', 9e9), t('FDUSDUSDT', 8e9), t('RLUSDUSDT', 7e9), t('BTCUSDT', 1e7)]);
+    assert.deepEqual(ranked.map((r) => r.ticker), ['BTC']);
+  });
+
+  test('exclude leveraged tokens, whose volume is an echo of the coin', () => {
+    const ranked = rankByTurnover([t('BTCUPUSDT', 9e9), t('ETHDOWNUSDT', 8e9), t('ETHBULLUSDT', 8e9), t('SOLUSDT', 1e7)]);
+    assert.deepEqual(ranked.map((r) => r.ticker), ['SOL']);
+  });
+
+  test('exclude anything too thin for its own median to mean much', () => {
+    const ranked = rankByTurnover([t('THINUSDT', 1e5), t('REALUSDT', 5e7)]);
+    assert.deepEqual(ranked.map((r) => r.ticker), ['REAL']);
+  });
+
+  test('and anything not quoted in dollars, or not trading at all', () => {
+    const ranked = rankByTurnover([t('ETHBTC', 9e9), t('DEADUSDT', 9e9, 0), t('LIVEUSDT', 1e7)]);
+    assert.deepEqual(ranked.map((r) => r.ticker), ['LIVE']);
+  });
+
+  test('are capped, so the panel is a shortlist rather than a board', () => {
+    const board = Array.from({ length: 200 }, (_, i) => t(`C${i}USDT`, 1e9 - i));
+    assert.equal(rankByTurnover(board).length, UNIVERSE_SIZE);
+    assert.equal(rankByTurnover(board, 5).length, 5);
+  });
+
+  test('an empty or broken board is an empty list, not a crash', () => {
+    assert.deepEqual(rankByTurnover([]), []);
+    assert.deepEqual(rankByTurnover(null), []);
+    assert.deepEqual(rankByTurnover([{ nonsense: true }, null]), []);
+  });
+});
+
+/**
+ * Who crossed the spread.
+ *
+ * Every trade has a buyer and a seller, so "buying volume" is not a thing that
+ * exists; what can be measured is which side was in a hurry. It sits close to
+ * even most of the time even under a large move — QNT rose 59% on 52% buyers —
+ * so the wording refuses to call anything near half a verdict.
+ */
+describe('which side was pushing', () => {
+  test('commits only past a few points either side of even', () => {
+    assert.equal(pushedBy(0.60).text, '60% buyers');
+    assert.equal(pushedBy(0.54).text, '54% buyers');
+    assert.equal(pushedBy(0.40).text, '60% sellers');
+    assert.equal(pushedBy(0.46).text, '54% sellers');
+  });
+
+  test('and says so plainly when there is nothing in it', () => {
+    for (const share of [0.47, 0.5, 0.52, 0.53]) {
+      assert.equal(pushedBy(share).text, 'even', `${share}`);
+    }
+  });
+
+  test('a coin it could not measure shows a dash, not a balanced market', () => {
+    assert.equal(pushedBy(null).text, '—');
+    assert.equal(pushedBy(undefined).text, '—');
+  });
+
+  test('buyers read green and sellers red, and even reads as neither', () => {
+    assert.match(pushedBy(0.7).tone, /green/);
+    assert.match(pushedBy(0.3).tone, /red/);
+    assert.match(pushedBy(0.5).tone, /text3/);
   });
 });

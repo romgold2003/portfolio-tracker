@@ -49,7 +49,6 @@
  * far fewer independent observations than the count suggests.
  */
 
-import { CG_IDS } from '../config/constants.js';
 
 const KLINES = 'https://api.binance.com/api/v3/klines';
 const TICKER = 'https://api.binance.com/api/v3/ticker/24hr';
@@ -143,8 +142,41 @@ export const TIERS = [
 /** A coin with no spread to measure against cannot be graded; it reads normal. */
 export const tierOf = (z) => TIERS.find((t) => (z ?? 0) >= t.min) ?? TIERS[TIERS.length - 1];
 
-/** The coins to watch: the app's own list, as Binance names them. */
-export const UNIVERSE = Object.keys(CG_IDS).map((ticker) => ({ ticker, symbol: `${ticker}USDT` }));
+/**
+ * The coins to watch: whatever is actually trading, ranked by turnover.
+ *
+ * This began as the app's own hardcoded ticker list, and that was wrong in the
+ * way a hardcoded list is always wrong. Of its seventy-five names, forty-three
+ * were not in the live top sixty and ten no longer traded at all — renamed,
+ * merged or delisted. Worse for a panel whose whole job is to notice the
+ * unexpected: twenty-eight of the live top sixty had never been on the list,
+ * and one of them was up 58% that afternoon on ninety million of turnover. A
+ * scanner that can only see a fixed old list will miss precisely the coins it
+ * exists to find.
+ *
+ * So the exchange is asked. Ranked by turnover rather than market value,
+ * because a panel about where the trading is should be built from where the
+ * trading is — a large coin with a thin book is not what anyone is looking for.
+ */
+export const UNIVERSE_SIZE = 60;
+/** Below this a day's volume is too thin for its own median to mean much. */
+const MIN_TURNOVER = 3e6;
+
+/** Dollars against dollars is foreign exchange, not conviction. */
+const STABLE = /^(USDC|FDUSD|TUSD|BUSD|DAI|USDP|USD1|RLUSD|XUSD|AEUR|EUR|GBP|TRY|BRL|ARS|JPY|PLN|RON|ZAR|COP|MXN|CZK|UAH)USDT$/;
+/** Leveraged tokens track a coin without being one; their volume is its echo. */
+const LEVERED = /(UP|DOWN|BULL|BEAR)USDT$/;
+
+/** The tradeable board, ranked, from one answer. */
+export function rankByTurnover(tickers, size = UNIVERSE_SIZE) {
+  return (tickers ?? [])
+    .filter((t) => typeof t?.symbol === 'string' && t.symbol.endsWith('USDT'))
+    .filter((t) => !STABLE.test(t.symbol) && !LEVERED.test(t.symbol))
+    .filter((t) => Number(t.quoteVolume) >= MIN_TURNOVER && Number(t.count) > 0)
+    .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
+    .slice(0, size)
+    .map((t) => ({ ticker: t.symbol.slice(0, -4), symbol: t.symbol }));
+}
 
 /* ── fetching ─────────────────────────────────────────────────────────── */
 
@@ -157,10 +189,19 @@ export const UNIVERSE = Object.keys(CG_IDS).map((ticker) => ({ ticker, symbol: `
  */
 const history = new Map();
 let historyDay = null;
+let universe = [];
+let universeDay = null;
+/** Who was pushing, held briefly: it costs a request per coin. */
+const pressure = new Map();
+const PRESSURE_TTL = 5 * 60 * 1000;
+const PRESSURE_LIMIT = 20;
 
 export function resetVolumeHistory() {
   history.clear();
   historyDay = null;
+  universe = [];
+  universeDay = null;
+  pressure.clear();
 }
 
 async function barsFor(symbol, { signal } = {}) {
@@ -184,28 +225,68 @@ async function inBatches(items, size, fn) {
 }
 
 /**
- * History for every coin the exchange actually lists, built once a day.
+ * The board, ranked, once a day.
  *
- * This is also how the listed set is discovered, and it is discovered rather
- * than written down because the written-down version rots: of the app's
- * seventy-five tickers Binance trades sixty-five, the other ten having been
- * renamed, merged or delisted — MATIC became POL, OCEAN and AGIX became FET.
- * A coin that answers with nothing is simply left out, and will come back by
- * itself if it is ever listed again.
- *
- * Asking the exchange for the list instead would cost seventeen megabytes.
+ * One large answer — about two megabytes, every symbol the exchange lists —
+ * which replaces rather than adds to the work: the same response carries the
+ * turnover that decides the ranking. Afterwards only the chosen sixty are
+ * asked about, which is thirty kilobytes.
  */
-async function ensureHistory({ signal, day }) {
-  if (historyDay !== day) { history.clear(); historyDay = day; }
-  const missing = UNIVERSE.filter((u) => !history.has(u.symbol));
+async function ensureUniverse({ signal, day }) {
+  if (universeDay === day && universe.length) return universe;
+  const res = await fetch(TICKER, { signal });
+  if (!res.ok) throw new Error(`Binance answered ${res.status}`);
+  const board = await res.json();
+  if (!Array.isArray(board)) throw new Error('Binance sent something else');
+  universe = rankByTurnover(board);
+  universeDay = day;
+  return universe;
+}
+
+/** Daily history for the chosen coins, kept for the day it was fetched. */
+async function ensureHistory({ signal, coins }) {
+  const missing = coins.filter((u) => !history.has(u.symbol));
   await inBatches(missing, 6, async ({ symbol }) => {
     try {
       history.set(symbol, await barsFor(symbol, { signal }));
     } catch {
+      // One request that failed is not worth taking the panel down for.
       history.set(symbol, null);
     }
   });
-  return UNIVERSE.filter((u) => history.get(u.symbol)?.length);
+  return coins.filter((u) => history.get(u.symbol)?.length);
+}
+
+/**
+ * Which side was the aggressor, over the same rolling day.
+ *
+ * Every trade has a buyer and a seller, so "buying volume" is not a thing that
+ * exists — what can be measured is which side crossed the spread. A market buy
+ * lifting an offer is counted as aggressive buying; a market sell hitting a bid
+ * is not. Above a half means buyers were the ones in a hurry.
+ *
+ * Read from hourly bars rather than the day's, so the window matches the volume
+ * figure beside it exactly: twenty-four hours back from now, not back to
+ * midnight. Only for the coins actually on screen, and held for a few minutes,
+ * because it is one request per coin.
+ */
+async function aggressorShare(symbol, { signal } = {}) {
+  const held = pressure.get(symbol);
+  if (held && Date.now() - held.at < PRESSURE_TTL) return held.share;
+  try {
+    const res = await fetch(`${KLINES}?symbol=${symbol}&interval=1h&limit=24`, { signal });
+    if (!res.ok) return null;
+    const bars = await res.json();
+    if (!Array.isArray(bars) || !bars.length) return null;
+    let total = 0;
+    let buys = 0;
+    for (const b of bars) { total += Number(b[7]) || 0; buys += Number(b[10]) || 0; }
+    const share = total > 0 ? buys / total : null;
+    pressure.set(symbol, { at: Date.now(), share });
+    return share;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -218,12 +299,13 @@ async function ensureHistory({ signal, day }) {
 export async function unusualVolume({ signal, today = new Date() } = {}) {
   const kind = isWeekend(today);
   const day = today.toISOString().slice(0, 10);
+  if (historyDay !== day) { history.clear(); historyDay = day; }
 
-  const tradeable = await ensureHistory({ signal, day });
+  const coins = await ensureUniverse({ signal, day });
+  const tradeable = await ensureHistory({ signal, coins });
   if (!tradeable.length) throw new Error('No daily history could be fetched.');
 
-  // Only the symbols known to be listed: the batched quote is refused outright
-  // if it is handed one that is not, and asking for the whole board costs two
+  // Only the chosen symbols: asking for the whole board again would cost two
   // megabytes where this costs thirty kilobytes.
   const symbols = tradeable.map((u) => u.symbol);
   const res = await fetch(`${TICKER}?symbols=${encodeURIComponent(JSON.stringify(symbols))}`, { signal });
@@ -254,9 +336,21 @@ export async function unusualVolume({ signal, today = new Date() } = {}) {
       change: Number.isFinite(change) ? change : null,
       /** Up, down, or flat — the half of the story volume cannot tell. */
       direction: Number.isFinite(change) ? Math.sign(change) : 0,
+      /** Filled in below, for the rows anyone will actually read. */
+      buyShare: null,
     });
   }
 
   rows.sort((a, b) => (b.z ?? -Infinity) - (a.z ?? -Infinity));
+
+  /**
+   * The aggressor split, for the top of the list only.
+   *
+   * It costs a request per coin, and nobody scrolls to the fortieth quietest
+   * coin to see who was pushing. The ones above "busy" are the ones on screen.
+   */
+  const worth = rows.filter((r) => (r.z ?? 0) >= 1.5).slice(0, PRESSURE_LIMIT);
+  await inBatches(worth, 6, async (r) => { r.buyShare = await aggressorShare(r.symbol, { signal }); });
+
   return rows;
 }

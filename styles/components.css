@@ -1067,7 +1067,7 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
 @media (max-width:640px){.wt-moves{padding-left:44px}.wt-move{grid-template-columns:52px minmax(0,1fr) 76px}.wt-move-size span{display:none}}
 
 /* Unusual volume: coin, how far above a normal day, and which way price went. */
-.uv-row{display:grid;grid-template-columns:minmax(52px,0.8fr) 70px 82px 84px minmax(70px,0.8fr);
+.uv-row{display:grid;grid-template-columns:minmax(52px,0.8fr) 70px 82px 84px 90px minmax(64px,0.7fr);
   gap:8px;align-items:center;padding:7px 2px;border-bottom:0.5px solid var(--input);font-size:12px}
 .uv-row:last-child{border-bottom:0}
 .uv-head{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;
@@ -1077,6 +1077,7 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
 .uv-mult{font-variant-numeric:tabular-nums;color:var(--text);font-weight:600}
 .uv-move{font-variant-numeric:tabular-nums;text-align:right}
 .uv-vol{font-variant-numeric:tabular-nums;color:var(--text3);text-align:right}
+.uv-push{font-size:11px;text-align:right;white-space:nowrap}
 .uv-tier{font-size:10px;text-transform:uppercase;letter-spacing:0.04em;border-radius:4px;
   padding:2px 6px;text-align:center;white-space:nowrap}
 /* Graded by how rare it is, not by whether it is good news — it is neither. */
@@ -1087,6 +1088,6 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
 
 @media (max-width:560px){
   /* Turnover is the first thing to go: the multiple beside it says more. */
-  .uv-row{grid-template-columns:minmax(46px,1fr) 62px 74px 74px}
+  .uv-row{grid-template-columns:minmax(44px,1fr) 58px 70px 70px 76px}
   .uv-vol{display:none}
 }
