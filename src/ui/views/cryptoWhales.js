@@ -556,8 +556,14 @@ export function installGambleTabs({ onMacro } = {}) {
   });
 }
 
-/** Refreshed every minute while on screen; the cards above keep their own clocks. */
-const EVERY_MS = 60_000;
+/**
+ * Refreshed every two minutes while on screen; the cards above keep their own clocks.
+ *
+ * A whale moving eight figures is not a thing that happens between one minute
+ * and the next, and the rows carry their own timestamps, so a bet that landed
+ * during the gap still arrives saying when it did.
+ */
+const EVERY_MS = 2 * 60_000;
 let timer = null;
 
 export function startCryptoWhales() {

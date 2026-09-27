@@ -294,7 +294,15 @@ let liveTimer = null;
  * Like the exposure panel, a page that is off screen or in a background tab
  * skips the fetch and keeps the timer, so it resumes on its own.
  */
-const FED_EVERY_MS = 60 * 1000;
+/**
+ * Five minutes.
+ *
+ * It was one, which is a rate that suits a decision day and no other. The
+ * committee meets eight times a year and the odds it prices move in hours, not
+ * in seconds, so asking sixty times an hour was buying nothing and spending
+ * server time the free allowance had run out of.
+ */
+const FED_EVERY_MS = 5 * 60 * 1000;
 let fedTimer = null;
 
 function startFedRefresh() {
