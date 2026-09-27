@@ -13,7 +13,7 @@
  *   5. first render, then background refresh loops
  */
 import {
-  loadState, clearState, setPersistHandler, flushNow,
+  state, loadState, clearState, setPersistHandler, flushNow,
   readLegacyJournal, clearLegacyJournal,
 } from './core/store.js';
 import {
@@ -24,6 +24,7 @@ import { runMigrations } from './core/migrations.js';
 import { recordDailySnapshot } from './core/snapshots.js';
 import { loadPriceLog } from './services/priceLog.js';
 import { TIMERS } from './config/constants.js';
+import { tradingDayOver } from './services/extendedHours.js';
 import { initTheme, setThemeChangeHandler } from './ui/theme.js';
 import { setPageEnterHandler, show } from './ui/router.js';
 import { renderAll, renderOnPageEnter, renderOnThemeChange } from './ui/render.js';
@@ -105,10 +106,40 @@ async function startSession() {
 
   refreshPrices();
   timers = [
-    setInterval(refreshPrices, TIMERS.priceRefreshMs),
+    setInterval(pollPrices, TIMERS.priceRefreshMs),
     setInterval(recordDailySnapshot, TIMERS.snapshotMs),
   ];
+  document.addEventListener('visibilitychange', onVisible);
   return true;
+}
+
+/** Back on screen: re-quote at once rather than waiting out the interval. */
+function onVisible() {
+  if (document.visibilityState === 'visible') pollPrices();
+}
+
+/**
+ * Re-quote only when a new price could exist and somebody could see it.
+ *
+ * The timer used to fire every thirty seconds for as long as the app was open,
+ * whatever else was true — a tab left on a second monitor overnight asked for
+ * fresh prices two thousand eight hundred times before morning, for a market
+ * that had been shut the whole time. The hosting bills the server time that
+ * costs, and the free allowance is four CPU-hours a month; this was most of it,
+ * spent on answers nobody read and that could not have changed.
+ *
+ * Two conditions, both cheap to check. A hidden tab is nobody looking. A
+ * finished trading day is nothing to find — unless the book holds crypto, which
+ * never stops, so those keep their refresh at every hour.
+ *
+ * Coming back is handled below: the tab going visible re-quotes at once rather
+ * than waiting out the rest of an interval.
+ */
+function pollPrices() {
+  if (document.visibilityState !== 'visible') return;
+  const holdsCrypto = state.positions.some((p) => p.status === 'Open' && p.cls === 'Crypto');
+  if (tradingDayOver() && !holdsCrypto) return;
+  refreshPrices();
 }
 
 async function boot() {
