@@ -300,7 +300,7 @@ export function positionCard(p, isOpen, positions = []) {
   const dailyPct = p.dailyChg ?? null;
   const dailySign = dailyPct == null ? 0 : (p.dir === 'Long' ? dailyPct : -dailyPct);
   const priceColor = !isOpen || dailyPct == null ? 'var(--text3)' : clr(dailySign);
-  const liveMark = live ? '▲ live' : (isOpen ? 'manual' : 'closed');
+  const liveMark = live ? "▲ live" : (isOpen ? "close" : "closed");
 
   const body = expanded
     ? `<div class="pos-body"><div class="detail-rows">

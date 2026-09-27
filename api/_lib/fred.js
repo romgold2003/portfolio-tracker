@@ -34,7 +34,9 @@ export const SERIES = {
   unemployment: { id: 'UNRATE', transform: '', unit: 'percent', freq: 'month' },
   // Real GDP, annualised percent change — the number the calendar quotes for
   // every one of the advance, second and third estimates.
-  gdp: { id: 'A191RL1Q225SBEA', transform: '', unit: 'percent', freq: 'quarter' },
+  // The three estimates of a quarter all read this one observation, revised in
+  // place, so a value cannot say which of them produced it. See actualFor.
+  gdp: { id: 'A191RL1Q225SBEA', transform: '', unit: 'percent', freq: 'quarter', shared: true },
 };
 
 const BASE = 'https://fred.stlouisfed.org/graph/fredgraph.csv';
@@ -132,13 +134,37 @@ function plausible(before, previousText, unit) {
 /**
  * The figure a release printed — but only when it can be shown to be that one.
  *
- * Two things have to hold: FRED's newest observation must be recent enough to
- * belong to this release rather than the last one, and it must be quoted on the
- * same scale as the calendar. Neither alone is enough, and when either fails
- * nothing is returned — a blank is honest and a wrong number is not.
+ * Three things have to hold. The release must have happened; FRED's newest
+ * observation must be recent enough to belong to this release rather than the
+ * last one; and it must be quoted on the same scale as the calendar. None
+ * alone is enough, and when any fails nothing is returned — a blank is honest
+ * and a wrong number is not.
+ *
+ * ── Why the first test had to be added ───────────────────────────────────
+ *
+ * It was not there, and it is the one that matters most, because the other two
+ * can both pass for a release that has not happened.
+ *
+ * GDP is published three times for the same quarter — advance, second, final —
+ * and FRED keeps one observation per quarter, revised in place. So on the day
+ * the second estimate lands, FRED's Q2 figure becomes 1.5%; the final estimate
+ * is still weeks away, but its row already has a plausible-looking number
+ * sitting in the series. Coverage passed, scale passed, and the panel printed
+ * the second estimate's figure as the final's actual: 1.5% under a release
+ * dated three days in the future. Reported as data appearing before it was
+ * published, which is exactly what it looked like.
+ *
+ * A series whose estimates share one observation cannot be told apart by value
+ * at all, so those are held back until the release date is properly past. For
+ * everything else the release day itself is allowed, because a series that has
+ * not published yet simply has no newer observation to offer.
  */
-export function actualFor(rows, release, unit, freq) {
+export function actualFor(rows, release, unit, freq, { now = new Date(), shared = false } = {}) {
   if (!Array.isArray(rows) || rows.length < 2 || !release?.previous || !release?.date) return null;
+
+  const today = now.toISOString().slice(0, 10);
+  if (shared ? release.date >= today : release.date > today) return null;
+
   const latest = rows[rows.length - 1];
   const before = rows[rows.length - 2];
 
@@ -201,10 +227,12 @@ export async function fetchActuals(releases, { fetchImpl = fetch, now = new Date
 }
 
 /** Put the printed figure on each release the check clears. */
-export function attachActuals(releases, bySeries) {
+export function attachActuals(releases, bySeries, { now = new Date() } = {}) {
   return releases.map((r) => {
     const found = bySeries.get(String(r.id).split(':')[0]);
-    const hit = found ? actualFor(found.rows, r, found.unit, found.freq) : null;
+    const hit = found
+      ? actualFor(found.rows, r, found.unit, found.freq, { now, shared: found.shared === true })
+      : null;
     return { ...r, actual: hit?.actual ?? null, observed: hit?.observed ?? null };
   });
 }

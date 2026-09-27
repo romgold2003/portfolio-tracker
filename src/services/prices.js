@@ -11,7 +11,7 @@
 import { CG_IDS, API } from '../config/constants.js';
 import { state, currentApiKey } from '../core/store.js';
 import { logPrice, seedPrevClose, getWeekChg } from './priceLog.js';
-import { extendedQuotes, applyExtendedQuotes, tradingDayOver } from './extendedHours.js';
+import { extendedQuotes, applyExtendedQuotes, tradingDayOver, regularSessionOpen } from './extendedHours.js';
 import { weekStartCloses } from './weekStart.js';
 
 /** CoinGecko's full symbol list, fetched at most once per session. */
@@ -209,5 +209,15 @@ async function applyWeekToDate(open) {
 export function priceIsLive(p) {
   if (p.status !== 'Open') return false;
   if (p.cls === 'Crypto') return true;
-  return !!state.apiKey;
+  if (!state.apiKey) return false;
+  /**
+   * A key means the app CAN fetch a price; it does not mean this one is moving.
+   *
+   * The word beside the figure used to be "live" whenever a key was set, so a
+   * stock read "▲ live" all weekend next to Friday's close. The session pill
+   * elsewhere said the market was shut, which made the two disagree on the same
+   * screen. Live now means a session is actually running, or the holding has an
+   * extended-hours print of its own.
+   */
+  return regularSessionOpen() || !!p.extPhase;
 }

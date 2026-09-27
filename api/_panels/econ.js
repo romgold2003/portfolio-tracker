@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       fetchActuals(scheduled),
       fetchBls(scheduled),
     ]);
-    releases = attachActuals(scheduled, new Map([...fred, ...bls]));
+    releases = attachActuals(scheduled, new Map([...fred, ...bls]), { now: new Date() });
   } catch (err) {
     console.error('Release figures unavailable:', err);
   }
@@ -81,8 +81,21 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify({
-    week: weekOf(new Date().toISOString().slice(0, 10)),
-    releases,
-  }));
+  /**
+   * The window is taken from the rows, not from today's date.
+   *
+   * ForexFactory rolls its "this week" feed over on its own clock, so by Sunday
+   * it is already answering about the week ahead while this was still computing
+   * the Monday-to-Sunday that today falls in. The panel then read
+   * "21 Sep – 27 Sep" above four rows dated the 30th, the 1st and the 2nd —
+   * a heading describing a different week from the one underneath it.
+   *
+   * Whatever the feed actually returned is the week the panel is about.
+   */
+  const dates = releases.map((r) => r.date).filter(Boolean).sort();
+  const week = dates.length
+    ? { from: dates[0], to: dates[dates.length - 1] }
+    : weekOf(new Date().toISOString().slice(0, 10));
+
+  res.end(JSON.stringify({ week, releases }));
 }

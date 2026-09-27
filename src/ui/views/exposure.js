@@ -876,6 +876,25 @@ export function rollUp(flows, id) {
   }));
 }
 
+/**
+ * Which day the newest flow figure is for.
+ *
+ * Funds report a day late and not at all at weekends, so the newest number is
+ * routinely two or three days old — it read latest beside a figure from the
+ * Friday before, which invites it to be taken as today's. Naming the day costs
+ * nothing and is the difference between a stale number and a dated one.
+ */
+function flowDay(date) {
+  if (!date) return 'latest';
+  const today = new Date().toISOString().slice(0, 10);
+  if (date === today) return 'today';
+  const days = Math.round((Date.parse(today) - Date.parse(date)) / 86400000);
+  if (days === 1) return 'yesterday';
+  const [y, m, d] = date.split('-').map(Number);
+  const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
+  return Number.isFinite(days) && days > 1 ? `${d} ${month}` : date;
+}
+
 function drawFlows() {
   const body = el('etfBody');
   if (!body || !lastFlows) return;
@@ -890,7 +909,7 @@ function drawFlows() {
         <span class="etf-name">${escapeHtml(set.label)}</span>
         <span class="etf-sum">
           <span class="${s.latest >= 0 ? 'is-up' : 'is-down'}">${s.latest >= 0 ? '+' : ''}${s.latest.toFixed(1)}M</span>
-          <span class="etf-sub">latest · week ${s.week >= 0 ? '+' : ''}${s.week.toFixed(0)}M
+          <span class="etf-sub">${escapeHtml(flowDay(s.latestDate))} · week ${s.week >= 0 ? '+' : ''}${s.week.toFixed(0)}M
             · month ${s.month >= 0 ? '+' : ''}${s.month.toFixed(0)}M</span>
         </span>
       </div>
