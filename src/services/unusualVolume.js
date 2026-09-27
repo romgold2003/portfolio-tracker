@@ -50,6 +50,8 @@
  */
 
 
+import { fundingBoard, positioningFor, readPositioning } from './positioning.js';
+
 const KLINES = 'https://api.binance.com/api/v3/klines';
 const TICKER = 'https://api.binance.com/api/v3/ticker/24hr';
 
@@ -344,6 +346,8 @@ export async function unusualVolume({ signal, today = new Date() } = {}) {
       buyShare: null,
       buyVolume: null,
       sellVolume: null,
+      /** Filled in below where a futures market exists; see positioning.js. */
+      positioning: null,
     });
   }
 
@@ -356,12 +360,25 @@ export async function unusualVolume({ signal, today = new Date() } = {}) {
    * coin to see who was pushing. The ones above "busy" are the ones on screen.
    */
   const worth = rows.filter((r) => (r.z ?? 0) >= 1.5).slice(0, PRESSURE_LIMIT);
+
+  /**
+   * Funding comes for every perpetual in one answer; the rest is per coin, so
+   * it is asked only about the rows anyone will read. A coin with no futures
+   * market answers nothing, which is reported as nothing rather than as a
+   * verdict built from a third of the evidence.
+   */
+  const funding = await fundingBoard({ signal }).catch(() => new Map());
   await inBatches(worth, 6, async (r) => {
-    const split = await aggressorShare(r.symbol, { signal });
-    if (!split) return;
-    r.buyShare = split.share;
-    r.buyVolume = split.buys;
-    r.sellVolume = split.sells;
+    const [split, pos] = await Promise.all([
+      aggressorShare(r.symbol, { signal }),
+      positioningFor(r.symbol, { signal, funding: funding.get(r.symbol) ?? null }).catch(() => null),
+    ]);
+    if (split) {
+      r.buyShare = split.share;
+      r.buyVolume = split.buys;
+      r.sellVolume = split.sells;
+    }
+    if (pos) r.positioning = readPositioning({ ...pos, priceChange: r.change });
   });
 
   return rows;

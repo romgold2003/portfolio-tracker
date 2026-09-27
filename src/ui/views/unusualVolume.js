@@ -81,10 +81,37 @@ export function splitTitle(r) {
     + '— the same 24 hours, split by which side was in a hurry';
 }
 
+/**
+ * The positioning verdict, and the reasons behind it on the hover.
+ *
+ * Deliberately quieter than the volume tier beside it. The volume figures were
+ * calibrated on 16,700 coin-days and cross-validated on coins they had never
+ * seen; this could not be, because the exchange keeps thirty-one days of
+ * positioning data and no more. It is a reading of what the derivatives market
+ * looks like, not a tested edge, and it should not wear the same colours as
+ * something that is.
+ */
+export function verdictCell(positioning) {
+  if (!positioning || positioning.id === 'unknown') {
+    return { text: 'no futures', tone: 'var(--text4)', why: 'This coin trades spot only, so there is no positioning to read.' };
+  }
+  const tone = positioning.score >= 2 ? 'var(--green)'
+    : positioning.score <= -2 ? 'var(--red)'
+    : positioning.score > 0 ? 'var(--text2)'
+    : positioning.score < 0 ? 'var(--text2)'
+    : 'var(--text3)';
+  return {
+    text: positioning.label,
+    tone,
+    why: positioning.parts.map((p) => `• ${p.text}`).join('\n'),
+  };
+}
+
 function row(r) {
   const t = tierOf(r.z);
   const arrow = r.direction > 0 ? '▲' : r.direction < 0 ? '▼' : '–';
   const push = pushedBy(r.buyShare);
+  const verdict = verdictCell(r.positioning);
   return `<div class="uv-row">
     <div class="uv-tk">${escapeHtml(r.ticker)}</div>
     <div class="uv-mult" title="${escapeHtml(times(r.rvol))} a normal day for ${escapeHtml(r.ticker)}, measured over ${r.days} days">
@@ -94,6 +121,7 @@ function row(r) {
     <div class="uv-move" style="color:${clr(r.change ?? 0)}">${arrow} ${fp(r.change ?? 0)}</div>
     <div class="uv-push" style="color:${push.tone}"
       title="${escapeHtml(splitTitle(r))}">${escapeHtml(push.text)}</div>
+    <div class="uv-verdict" style="color:${verdict.tone}" title="${escapeHtml(verdict.why)}">${escapeHtml(verdict.text)}</div>
     <div class="uv-vol">${money(r.volume)}</div>
   </div>`;
 }
@@ -152,7 +180,7 @@ function draw() {
    */
   host.innerHTML = shown.length
     ? `<div class="uv-row uv-head">
-         <div>Coin</div><div>vs normal</div><div></div><div>24h</div><div>Pushed by</div><div>Turnover</div>
+         <div>Coin</div><div>vs normal</div><div></div><div>24h</div><div>Pushed by</div><div>Positioning</div><div>Turnover</div>
        </div>${shown.map(row).join('')}`
     : `<div class="empty">Nothing is trading ${escapeHtml(filterDef(tier).label.toLowerCase())} today, out of ${rows.length} coins.</div>`;
 }
