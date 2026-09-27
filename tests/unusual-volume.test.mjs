@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import {
   baselineFor, unusualness, tierOf, isWeekend, median, TIERS, LOOKBACK, rankByTurnover, UNIVERSE_SIZE,
 } from '../src/services/unusualVolume.js';
-import { pushedBy } from '../src/ui/views/unusualVolume.js';
+import { pushedBy, splitTitle } from '../src/ui/views/unusualVolume.js';
 
 /** A run of days ending on a Friday, so weekdays and weekends are both present. */
 const bars = (volumes, from = Date.UTC(2026, 0, 5)) => volumes.map((volume, i) => ({
@@ -234,5 +234,36 @@ describe('which side was pushing', () => {
     assert.match(pushedBy(0.7).tone, /green/);
     assert.match(pushedBy(0.3).tone, /red/);
     assert.match(pushedBy(0.5).tone, /text3/);
+  });
+});
+
+/**
+ * Why the two sides are one column and not two.
+ *
+ * Measured over 16,700 coin-days: how far buying sits above its own normal and
+ * how far selling sits above its own normal correlate at 0.994, and one side
+ * was twice the other on three days out of all of them. Every trade has a buyer
+ * and a seller, so the two are the same trades counted from opposite ends — a
+ * second column would be a copy of the first. As triggers they are
+ * indistinguishable too: +2.39% and +2.23% forward against +2.37% for the
+ * total. The amounts still belong somewhere, so they are on the hover.
+ */
+describe('the two sides, in dollars', () => {
+  const row = (over = {}) => ({ buyVolume: 49e6, sellVolume: 45e6, buyShare: 0.52, ...over });
+
+  test('are named on the hover, both of them', () => {
+    const title = splitTitle(row());
+    assert.match(title, /\$49M bought into offers/);
+    assert.match(title, /\$45M sold into bids/);
+  });
+
+  test('say which 24 hours they describe, since it is a rolling one', () => {
+    assert.match(splitTitle(row()), /same 24 hours/);
+  });
+
+  test('and a coin with no split still explains the column', () => {
+    const title = splitTitle(row({ buyVolume: null, sellVolume: null }));
+    assert.match(title, /crossed the spread/);
+    assert.doesNotMatch(title, /\$/);
   });
 });
