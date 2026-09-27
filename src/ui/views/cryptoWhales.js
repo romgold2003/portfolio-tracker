@@ -14,6 +14,7 @@
  *
  * The coin strip chooses the coin for the holder card and both sections.
  */
+import { renderUnusualVolume } from './unusualVolume.js';
 import {
   BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
   hyperliquidAction, filterLeveraged, buildPositions, positionSummary, positionMoves,
@@ -547,8 +548,10 @@ export function installGambleTabs({ onMacro } = {}) {
     }
     el('gambleMacro').hidden = wanted !== 'macro';
     el('gambleCrypto').hidden = wanted !== 'crypto';
+    if (el('gambleVolume')) el('gambleVolume').hidden = wanted !== 'volume';
 
     if (wanted === 'crypto') renderCryptoWhales();
+    else if (wanted === 'volume') renderUnusualVolume();
     else if (typeof onMacro === 'function') onMacro();
   });
 }

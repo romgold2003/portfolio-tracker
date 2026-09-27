@@ -445,11 +445,12 @@
            in: what is moving, and who is betting how much on it. -->
       <div id="newsGamble" hidden>
 
-        <!-- Two trackers, same question at two scales: who is betting big on
-             macro, and who is moving big money on-chain. -->
+        <!-- Three trackers, same question at three scales: who is betting big on
+             macro, who is moving big money on-chain, and where the turnover is. -->
         <div class="opt-picker gam-subtabs" id="gambleTabs">
           <button class="opt-tab active" data-gtab="macro">Macro</button>
           <button class="opt-tab" data-gtab="crypto">Crypto</button>
+          <button class="opt-tab" data-gtab="volume">Volume</button>
         </div>
 
         <div id="gambleMacro">
@@ -515,6 +516,21 @@
               <p class="gam-src" id="levSrc"></p>
             </section>
             </div>
+          </div>
+        </div>
+
+        <!-- Where the turnover is today. Volume has to move before a price can,
+             so a coin trading several times its usual is a coin something is
+             happening to — which is a different question from who is buying. -->
+        <div id="gambleVolume" hidden>
+          <div class="card gam-card" id="volumeCard">
+            <div class="card-lbl">
+              <span>Unusual volume — <span id="uvCount">loading</span></span>
+              <div class="opt-picker" id="uvTier"></div>
+            </div>
+            <p class="wt-explain">Each coin's last 24 hours of turnover against a normal day for it — the median of its last 20 days, weekdays measured against weekdays and weekends against weekends, because Monday trades about twice a Saturday. Ranked by how surprising the figure is for that coin rather than by the multiple, since a fourfold day means less on a coin whose volume always swings. The price move is beside it because volume has no direction of its own: it says something happened, not what.</p>
+            <div id="uvRows"></div>
+            <p class="gam-src" id="uvSrc"></p>
           </div>
         </div>
       </div>
