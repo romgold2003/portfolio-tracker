@@ -40,6 +40,10 @@ export const SERIES = {
   // The three estimates of a quarter all read this one observation, revised in
   // place, so a value cannot say which of them produced it. See actualFor.
   gdp: { id: 'A191RL1Q225SBEA', transform: '', unit: 'percent', freq: 'quarter', shared: true },
+  // The deflator, which the calendar lists as "GDP Price Index" and which is a
+  // different number entirely — 6.1% for a quarter real GDP grew 1.5%. It rode
+  // in on the GDP pattern and would have been given real GDP's figure.
+  'gdp-price': { id: 'A191RI1Q225SBEA', transform: '', unit: 'percent', freq: 'quarter', shared: true },
 };
 
 const BASE = 'https://fred.stlouisfed.org/graph/fredgraph.csv';

@@ -66,6 +66,32 @@ describe('choosing what to keep', () => {
     assert.equal(new Set(rows.map((r) => r.id)).size, 3);
   });
 
+  test('keeps the GDP price index apart from GDP itself', () => {
+    // Both contain the word GDP and they are different numbers: for the same
+    // quarter, real growth 1.5% and the deflator 6.4%. The price index rode in
+    // on the GDP pattern, so it read real GDP's series and would have printed
+    // 1.5% against a row whose figure was 6.4%.
+    const rows = selectReleases([
+      event({ title: 'Final GDP q/q' }),
+      event({ title: 'Final GDP Price Index q/q' }),
+    ]);
+    assert.equal(rows.length, 2, 'one of them was swallowed or duplicated');
+    const byLabel = new Map(rows.map((r) => [r.label, r.id.split(':')[0]]));
+    assert.equal(byLabel.get('Final GDP q/q'), 'gdp');
+    assert.equal(byLabel.get('Final GDP Price Index q/q'), 'gdp-price');
+  });
+
+  test('and every flavour of the price index is kept, as GDP is', () => {
+    const rows = selectReleases([
+      event({ title: 'Advance GDP Price Index q/q' }),
+      event({ title: 'Prelim GDP Price Index q/q' }),
+      event({ title: 'Final GDP Price Index q/q' }),
+    ]);
+    assert.equal(rows.length, 3);
+    assert.equal(new Set(rows.map((r) => r.id)).size, 3, 'they would overwrite each other');
+    assert.ok(rows.every((r) => r.id.startsWith('gdp-price:')));
+  });
+
   test('takes Core PCE under the name the calendar gives it', () => {
     // The Fed's preferred inflation gauge. ForexFactory titles it exactly this,
     // and the row is worthless if the pattern does not match that title.

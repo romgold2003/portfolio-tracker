@@ -37,7 +37,13 @@ export const WATCHLIST = [
   { id: 'core-retail-m', label: 'Core Retail Sales m/m', match: /^Core Retail Sales m\/m$/i },
   { id: 'claims', label: 'Unemployment Claims', match: /^Unemployment Claims$/i },
   { id: 'unemployment', label: 'Unemployment Rate', match: /^Unemployment Rate$/i },
-  { id: 'gdp', label: 'GDP', match: /\bGDP\b/i, keepTitle: true },
+  // Both quarterly, both arriving three times under three names, and both kept
+  // under the calendar's own title. The growth pattern has to refuse the price
+  // index explicitly: "Final GDP Price Index q/q" contains the word GDP, so it
+  // matched here too and was handed real GDP's figure — 1.5% printed against a
+  // row whose number was 6.4%.
+  { id: 'gdp', label: 'GDP', match: /^(?!.*\bPrice Index\b).*\bGDP\b/i, keepTitle: true },
+  { id: 'gdp-price', label: 'GDP Price Index', match: /\bGDP Price Index\b/i, keepTitle: true },
 ];
 
 /** The feed says USD for the United States. */
