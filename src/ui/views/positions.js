@@ -1,8 +1,9 @@
 /** The Positions page: summary tiles, then open and closed position cards. */
 import { state } from '../../core/store.js';
 import {
-  unreal, costOf, portfolioBeta, sortPositions, realized, accountTotals,
+  unreal, costOf, portfolioBeta, sortPositions, realized, accountTotals, dailyPercent,
 } from '../../core/portfolio.js';
+import { dayStillRunning } from '../dayReset.js';
 import { measuredBetas } from '../../services/benchmark.js';
 import { ui } from '../uiState.js';
 import { positionCard } from './positionCard.js';
@@ -10,6 +11,15 @@ import { money as $u, signedMoney as $s, pnlColor as clr } from '../format.js';
 import { MONTHS_LONG } from '../../config/constants.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+/**
+ * The day's move as the rows are currently showing it.
+ *
+ * Once the trading day is over every daily figure on the page resets to zero
+ * for the next one, so ranking by the move that has just finished would order
+ * the list by numbers no longer on screen. Crypto never closes and keeps its.
+ */
+const dayPctOnScreen = (p) => (dayStillRunning(p) ? dailyPercent(p) : 0);
 
 /**
  * Betas measured from real returns, refreshed in the background.
@@ -65,7 +75,7 @@ export function renderPositions() {
   if (openEl) {
     keepOpenPanels(openEl, () => {
       openEl.innerHTML = open.length
-        ? sortPositions(open, ui.posSort).map((p) => positionCard(p, true, state.positions)).join('')
+        ? sortPositions(open, ui.posSort, dayPctOnScreen).map((p) => positionCard(p, true, state.positions)).join('')
         : '<div class="empty">No open positions. Add one from New trade.</div>';
     });
   }

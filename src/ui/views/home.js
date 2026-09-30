@@ -2,11 +2,20 @@
 import { state } from '../../core/store.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
-  dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr,
+  dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr, dailyPercent,
   sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
 import { regularSessionOpen, extendedPricingAvailable } from '../../services/extendedHours.js';
 import { dayStillRunning, inPlay } from '../dayReset.js';
+
+/**
+ * The day's move as this page is currently showing it — the key the "D% ↑ Best"
+ * and "D% ↓ Worst" buttons sort on. Both used to rank by the day's move in
+ * money while promising percent, so a small holding down six per cent sorted
+ * below a large one down one. Once the day is over the figures reset to zero,
+ * and the order resets with them; crypto never closes and keeps its.
+ */
+const dayPctOnScreen = (p) => (dayStillRunning(p) ? dailyPercent(p) : 0);
 import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
@@ -936,7 +945,7 @@ export function renderHome() {
   const list = document.getElementById('homePositions');
   if (list) {
     list.innerHTML = totals.open.length
-      ? LIST_HEADER + sortPositions(totals.open, ui.homeSort).map(miniRow).join('')
+      ? LIST_HEADER + sortPositions(totals.open, ui.homeSort, dayPctOnScreen).map(miniRow).join('')
       : '<div class="empty">No open positions</div>';
   }
 

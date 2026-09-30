@@ -595,19 +595,42 @@ export function monthlyAccountReturns(positions, account, flows = [], today = to
 }
 
 /**
- * Sorting for the open-positions lists. Returns a new array.
- * The daily sorts are direction-aware by construction: dailyDollar() already
- * flips the sign for shorts, so a short whose stock fell ranks as a winner.
+ * The day's move on a position as a percentage, signed for the direction.
+ *
+ * The same number the row prints beside the price, with the sign it means
+ * rather than the sign the instrument moved: a short whose stock rose is down
+ * on the day. Null when the position has no daily figure yet, which is not the
+ * same as flat and must not sort as though it were.
  */
-export function sortPositions(list, sortKey) {
+export function dailyPercent(p) {
+  const chg = p?.dailyChg;
+  if (chg == null || !Number.isFinite(chg)) return null;
+  return p.dir === 'Long' ? chg : -chg;
+}
+
+/**
+ * Sorting for the open-positions lists. Returns a new array.
+ *
+ * The two daily sorts are labelled "D% ↑ Best" and "D% ↓ Worst" and used to
+ * rank by dailyDollar() — the day's move in *money*. A small holding down six
+ * per cent therefore sorted above a large one down one, because the large one
+ * had lost more dollars, and the button had promised percent. Ranking now uses
+ * the percentage the rows are showing.
+ *
+ * `dayPct` is a seam for the caller. The daily figures reset when the trading
+ * day ends, and knowing whether it has is a question for the layer that also
+ * knows about sessions; core cannot reach it. The view passes a version that
+ * checks, so the order always agrees with the figures printed next to it.
+ */
+export function sortPositions(list, sortKey, dayPct = dailyPercent) {
   const arr = [...list];
   switch (sortKey) {
     case 'size':
       return arr.sort((a, b) => Math.abs(curValOf(b)) - Math.abs(curValOf(a)));
     case 'dUp':
-      return arr.sort((a, b) => (dailyDollar(b) ?? -Infinity) - (dailyDollar(a) ?? -Infinity));
+      return arr.sort((a, b) => (dayPct(b) ?? -Infinity) - (dayPct(a) ?? -Infinity));
     case 'dDown':
-      return arr.sort((a, b) => (dailyDollar(a) ?? Infinity) - (dailyDollar(b) ?? Infinity));
+      return arr.sort((a, b) => (dayPct(a) ?? Infinity) - (dayPct(b) ?? Infinity));
     case 'pnl':
     default:
       return arr.sort((a, b) => unreal(b) - unreal(a));
