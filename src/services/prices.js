@@ -128,8 +128,24 @@ async function fetchStockPrice(ticker, position) {
  * only check one of those.
  */
 export async function refreshOpenPositions(now = new Date()) {
-  let changed = false;
   const open = state.positions.filter((p) => p.status === 'Open');
+
+  /**
+   * What the book looked like before any of this, so the answer at the end can
+   * be "did it actually end up anywhere different".
+   *
+   * Reporting that by hand, a flag at a time, gave the wrong answer here. In
+   * the pre-market the regular feed quotes yesterday's close, the extended
+   * quote then puts the pre-market price back over it, and both steps honestly
+   * report a change — so every refresh claimed the book had moved when it had
+   * landed exactly where it started. The caller saves on that answer, and a
+   * save is a write to the cloud vault, so a book sitting perfectly still was
+   * writing to the database every thirty seconds and never letting it sleep.
+   *
+   * Comparing the before and after sidesteps the whole question. It also means
+   * a step added later cannot forget to report itself.
+   */
+  const before = JSON.stringify(open);
 
   /**
    * Between eight in the evening and four the next morning in New York, a stock
@@ -145,7 +161,7 @@ export async function refreshOpenPositions(now = new Date()) {
   for (const p of open) {
     if (dayOver && p.cls !== 'Crypto' && p.extPhase) continue;
     const price = await fetchPrice(p.ticker, p.cls, p);
-    if (price) { p.cur = price; changed = true; }
+    if (price) p.cur = price;
   }
 
   // Crypto is deliberately excluded: it trades around the clock, so its price
@@ -167,14 +183,14 @@ export async function refreshOpenPositions(now = new Date()) {
      */
     try {
       const extended = await extendedQuotes(tradable);
-      if (applyExtendedQuotes(state.positions, extended, now)) changed = true;
+      applyExtendedQuotes(state.positions, extended, now);
     } catch (err) {
       console.error('Extended-hours quotes failed; keeping regular prices.', err);
     }
   }
 
   await applyWeekToDate(open);
-  return changed;
+  return JSON.stringify(open) !== before;
 }
 
 /**

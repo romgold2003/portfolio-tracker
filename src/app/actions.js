@@ -101,12 +101,20 @@ export async function refreshPrices() {
      * the app re-rendering after every refresh, and because the prices on
      * screen were merely stale rather than absent, nothing looked broken.
      */
+    /**
+     * Whether anything actually moved. A save is encrypted and sent to the
+     * cloud vault, and this runs every thirty seconds for as long as the app
+     * is open, so saving regardless was a database write every thirty seconds
+     * — overnight, at weekends, with prices that had not budged. The database
+     * sleeps after five minutes of quiet and so never got the chance.
+     */
+    let moved = false;
     try {
-      await refreshOpenPositions();
+      moved = await refreshOpenPositions();
     } catch (err) {
       console.error('Price refresh failed; showing the last known prices.', err);
     }
-    savePositions();
+    if (moved) savePositions();
     renderAll();
     updateLivePill();
   } finally {
