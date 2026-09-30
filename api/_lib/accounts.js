@@ -190,18 +190,71 @@ export async function startSession(userId) {
 }
 
 /** The user behind a session token, or null if it is unknown or expired. */
+/**
+ * Who a session belongs to, held for a few seconds.
+ *
+ * Every endpoint asks this before it does anything, and it costs two queries —
+ * the session, then the user. Opening the News page fires five panels at once,
+ * so one page view was ten round trips to the database.
+ *
+ * That matters more than it sounds. The database is billed by how long it stays
+ * awake and suspends itself when nothing touches it, so a steady trickle of
+ * queries is worse than an occasional burst: it is the trickle that keeps it
+ * from ever going to sleep. Collapsing a page's simultaneous panels into one
+ * lookup is most of the trickle gone.
+ *
+ * ── What this costs, stated plainly ──────────────────────────────────────
+ *
+ * A session revoked elsewhere stays usable on an already-warm server for up to
+ * the window below. Signing out everywhere — which is what a password change
+ * does — is therefore not quite instant.
+ *
+ * Fifteen seconds is chosen against that: long enough to swallow the burst a
+ * page load makes and any reasonable refresh on top of it, short enough that
+ * "signed out everywhere" stays true in any sense a person would mean it. The
+ * cache is dropped outright when a session ends, so a sign-out on this server
+ * is immediate; the window only applies to other servers that happen to be warm.
+ *
+ * Entries carry the driver generation, so pointing at a different database
+ * cannot answer with a user who only ever existed in the previous one.
+ */
+const SESSION_TTL_MS = 15_000;
+const sessionCache = new Map();
+
+/** Forget what is known about a token. Called whenever one is torn down. */
+export function forgetSession(token) {
+  if (token) sessionCache.delete(hashToken(token));
+}
+
+/** Forget everything. Used when sessions are revoked in bulk. */
+export function forgetAllSessions() {
+  sessionCache.clear();
+}
+
 export async function userForToken(token) {
   if (!token) return null;
-  const row = await one('SELECT * FROM sessions WHERE token_hash = $1', [hashToken(token)]);
-  if (!row) return null;
+  const key = hashToken(token);
+
+  const held = sessionCache.get(key);
+  const gen = driverGeneration();
+  if (held && held.gen === gen && held.at > Date.now() - SESSION_TTL_MS) return held.user;
+
+  const row = await one('SELECT * FROM sessions WHERE token_hash = $1', [key]);
+  if (!row) {
+    sessionCache.set(key, { at: Date.now(), gen, user: null });
+    return null;
+  }
   if (new Date(row.expires_at).getTime() <= Date.now()) {
     await endSession(token);
     return null;
   }
-  return findUserById(row.user_id);
+  const user = await findUserById(row.user_id);
+  sessionCache.set(key, { at: Date.now(), gen, user });
+  return user;
 }
 
 export async function endSession(token) {
+  forgetSession(token);
   if (token) await query('DELETE FROM sessions WHERE token_hash = $1', [hashToken(token)]);
 }
 
@@ -211,6 +264,10 @@ export async function endSession(token) {
  * they already hold would sail straight past that.
  */
 export function endAllSessions(userId) {
+  // Which tokens belonged to this user is not known here, so everything held is
+  // dropped. It is a handful of entries and the alternative is a session that
+  // outlives the password change it was meant to be locked out by.
+  forgetAllSessions();
   return query('DELETE FROM sessions WHERE user_id = $1', [userId]);
 }
 
@@ -226,6 +283,7 @@ export function endAllSessions(userId) {
  * `deleted = true` is still the row.
  */
 export async function deleteUser(userId) {
+  forgetAllSessions();
   await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   await query('DELETE FROM resets WHERE user_id = $1', [userId]);
   await query('DELETE FROM escrow WHERE user_id = $1', [userId]);
