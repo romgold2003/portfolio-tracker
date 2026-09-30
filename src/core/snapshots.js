@@ -8,14 +8,38 @@ import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
 import { lastClosedSession } from '../config/marketCalendar.js';
 
-/** Record (or overwrite) today's account value. Idempotent within a day. */
+/**
+ * Record (or overwrite) today's account value. Idempotent within a day.
+ *
+ * This runs on a five-minute timer for as long as the app is open, and a save
+ * reaches the cloud vault, so an unconditional write here was a write to the
+ * database every five minutes — through the night, through the weekend, with
+ * the tab hidden and the figure unchanged. The database suspends itself after
+ * five minutes of quiet, which that schedule never allowed: it stayed awake
+ * around the clock and billed for it, and the month's allowance ran out.
+ *
+ * So a value that has not moved is not written. Overnight and at weekends
+ * prices are not being refreshed, the total comes out identical, and nothing
+ * is saved — which is what lets the database go to sleep. While someone is
+ * actually watching, prices move and the snapshot is written as before.
+ *
+ * The comparison is to the nearest cent because the total is a sum of floats:
+ * re-adding the same numbers can land a fraction of a penny apart, which is
+ * not a change anyone is owed a database write for.
+ */
+const A_CENT = 0.005;
+
 export function recordDailySnapshot() {
   const open = state.positions.filter((p) => p.status === 'Open');
   const account = open.reduce((sum, p) => sum + posValue(p), 0) + state.cash;
   const today = todayStr();
   const existing = state.snapshots.find((s) => s.date === today);
-  if (existing) existing.value = account;
-  else state.snapshots.push({ date: today, value: account });
+  if (existing) {
+    if (Math.abs(existing.value - account) < A_CENT) return;
+    existing.value = account;
+  } else {
+    state.snapshots.push({ date: today, value: account });
+  }
   saveSnapshots();
 }
 
