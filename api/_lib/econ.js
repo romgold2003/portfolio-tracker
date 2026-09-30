@@ -30,6 +30,7 @@ export const WATCHLIST = [
   { id: 'cpi-y', label: 'CPI y/y', match: /^CPI y\/y$/i },
   { id: 'core-cpi-m', label: 'Core CPI m/m', match: /^Core CPI m\/m$/i },
   { id: 'core-cpi-y', label: 'Core CPI y/y', match: /^Core CPI y\/y$/i },
+  { id: 'core-pce-m', label: 'Core PCE Price Index m/m', match: /^Core PCE Price Index m\/m$/i },
   { id: 'ppi-m', label: 'PPI m/m', match: /^PPI m\/m$/i },
   { id: 'core-ppi-m', label: 'Core PPI m/m', match: /^Core PPI m\/m$/i },
   { id: 'retail-m', label: 'Retail Sales m/m', match: /^Retail Sales m\/m$/i },

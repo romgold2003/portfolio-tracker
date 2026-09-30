@@ -26,6 +26,9 @@ export const SERIES = {
   'cpi-y': { id: 'CPIAUCSL', transform: 'pc1', unit: 'percent', freq: 'month' },
   'core-cpi-m': { id: 'CPILFESL', transform: 'pch', unit: 'percent', freq: 'month' },
   'core-cpi-y': { id: 'CPILFESL', transform: 'pc1', unit: 'percent', freq: 'month' },
+  // The Fed's preferred inflation gauge. BEA rather than BLS, so FRED is the
+  // only source for it here.
+  'core-pce-m': { id: 'PCEPILFE', transform: 'pch', unit: 'percent', freq: 'month' },
   'ppi-m': { id: 'PPIFIS', transform: 'pch', unit: 'percent', freq: 'month' },
   'core-ppi-m': { id: 'WPSFD4131', transform: 'pch', unit: 'percent', freq: 'month' },
   'retail-m': { id: 'RSAFS', transform: 'pch', unit: 'percent', freq: 'month' },
@@ -221,7 +224,15 @@ export async function fetchActuals(releases, { fetchImpl = fetch, now = new Date
   const out = new Map();
   for (const [key, series] of wanted) {
     const rows = fetched.get(seriesUrl(series, now));
-    if (rows?.length) out.set(key, { rows, unit: series.unit, freq: series.freq });
+    // `shared` travels with the series. Leaving it behind here is what let the
+    // GDP guard in actualFor go quiet: it read `found.shared`, this never set
+    // it, so every series looked unshared and a release dated today was allowed
+    // to show the figure its previous estimate had left in the observation.
+    if (rows?.length) {
+      out.set(key, {
+        rows, unit: series.unit, freq: series.freq, shared: series.shared === true,
+      });
+    }
   }
   return out;
 }

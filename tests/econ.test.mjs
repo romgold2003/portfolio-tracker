@@ -66,6 +66,19 @@ describe('choosing what to keep', () => {
     assert.equal(new Set(rows.map((r) => r.id)).size, 3);
   });
 
+  test('takes Core PCE under the name the calendar gives it', () => {
+    // The Fed's preferred inflation gauge. ForexFactory titles it exactly this,
+    // and the row is worthless if the pattern does not match that title.
+    const [row] = selectReleases([event({ title: 'Core PCE Price Index m/m' })]);
+    assert.ok(row, 'Core PCE is not being picked up at all');
+    assert.equal(row.id, 'core-pce-m');
+    assert.equal(row.label, 'Core PCE Price Index m/m');
+  });
+
+  test('does not mistake the headline PCE for the core one', () => {
+    assert.equal(selectReleases([event({ title: 'PCE Price Index m/m' })]).length, 0);
+  });
+
   test('survives a feed full of junk', () => {
     assert.deepEqual(selectReleases([null, undefined, {}, { title: 5 }, 'x']), []);
     assert.deepEqual(selectReleases(null), []);
