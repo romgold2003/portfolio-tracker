@@ -296,10 +296,18 @@ export function positionCard(p, isOpen, positions = []) {
    * beside it already says. Coloured by the day's move it carries information
    * instead: whether the thing is up or down since the last close. Signed for
    * the position, so a short whose price fell reads as the gain it is.
+   *
+   * The figure itself is printed beside the price, and both are held to the
+   * same session the rest of the app's daily figures are held to: once the
+   * trading day is over they reset to nothing for the new one. Reading the
+   * move straight off the position instead left the price glowing green all
+   * night on yesterday's rise, while the card underneath it — which does check
+   * — said the day was flat. Crypto has no closed session, so its day keeps
+   * running.
    */
-  const dailyPct = p.dailyChg ?? null;
+  const dailyPct = isOpen ? (dayStillRunning(p) ? (p.dailyChg ?? null) : 0) : null;
   const dailySign = dailyPct == null ? 0 : (p.dir === 'Long' ? dailyPct : -dailyPct);
-  const priceColor = !isOpen || dailyPct == null ? 'var(--text3)' : clr(dailySign);
+  const priceColor = dailyPct == null ? 'var(--text3)' : clr(dailySign);
   const liveMark = live ? "▲ live" : (isOpen ? "close" : "closed");
 
   const body = expanded
@@ -320,7 +328,7 @@ export function positionCard(p, isOpen, positions = []) {
     // stored in its place is the whole stake. Printing that where a price goes
     // would read as one.
     ? `<span class="pos-liveprice" style="color:var(--text3)">${$u(costOf(p))} in</span>`
-    : `<span class="pos-liveprice" style="color:${priceColor}">$${fmtPrice(p.cur)} <span style="font-size:10px">${liveMark}</span></span>${p.extPhase ? `<span class="ext-badge" title="Traded outside regular hours">${p.extPhase === 'pre' ? 'PRE' : 'AFTER'}</span>` : ''}`}
+    : `<span class="pos-liveprice" style="color:${priceColor}">$${fmtPrice(p.cur)}${dailyPct == null ? '' : ` <span style="font-size:11px">${fp(dailyPct)}</span>`} <span style="font-size:10px">${liveMark}</span></span>${p.extPhase ? `<span class="ext-badge" title="Traded outside regular hours">${p.extPhase === 'pre' ? 'PRE' : 'AFTER'}</span>` : ''}`}
       </div>
       <div><div class="pos-pnl" style="color:${clr(pnl)}">${$s(pnl)}</div><div class="pos-pct" style="color:${clr(retPct)}">${fp(retPct)}</div></div>
     </div>${body}
