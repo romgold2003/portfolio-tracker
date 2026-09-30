@@ -342,13 +342,7 @@ export function editCash() {
       + 'Cancel — you are correcting a wrong balance.\n'
       + 'It is treated as value the account already had.');
     if (asFlow) {
-      state.cashFlows = [...(state.cashFlows ?? []), {
-        date: todayStr(),
-        amount: delta,
-        description: delta > 0 ? 'Deposit' : 'Withdrawal',
-        // Moved by hand, not read from a statement: every percentage discounts it.
-        manual: true,
-      }].sort((a, b) => a.date.localeCompare(b.date));
+      recordManualFlow(delta, delta > 0 ? 'Deposit' : 'Withdrawal');
       saveCashFlows();
     }
   }
@@ -356,6 +350,42 @@ export function editCash() {
   state.cash = amount;
   saveCash();
   renderAll();
+}
+
+/**
+ * Money moved by hand, written everywhere that has to know about it.
+ *
+ * Two places, and the second is the one that was missed. `cashFlows` is the
+ * record — what was moved, when, and that a person moved it. `ledger.events`
+ * is what every figure on the page is actually computed from: the day's move,
+ * the daily walk, the year.
+ *
+ * Those two used to be joined as each figure was drawn. That was moved to the
+ * moment the journal is built, which is tidier and survives a rebuild — and
+ * which quietly broke this, because a journal is only built when a statement
+ * is imported. The button changes the account now, so a withdrawal sat in
+ * `cashFlows` where nothing daily reads, the balance fell with nothing on
+ * record to explain it, and the fall was booked as a loss all over again. On a
+ * held position it moved the day from 1.33% to 1.67%.
+ *
+ * So it is written to both here, at the moment it happens. The rebuild still
+ * folds it in from `cashFlows` afterwards, which is what makes it survive an
+ * import; this is what makes it true in between.
+ *
+ * A journal with no ledger at all — a book kept by hand, never imported — is
+ * left without one. Its figures are computed from `cashFlows` directly, and
+ * inventing a ledger for it would switch it onto a path built for statements.
+ */
+function recordManualFlow(amount, description) {
+  const date = todayStr();
+  state.cashFlows = [...(state.cashFlows ?? []), {
+    date, amount, description, manual: true,
+  }].sort((a, b) => a.date.localeCompare(b.date));
+
+  const events = state.ledger?.events;
+  if (!Array.isArray(events)) return;
+  events.push({ date, kind: 'flow', cash: amount });
+  events.sort((a, b) => String(a.at ?? a.date).localeCompare(String(b.at ?? b.date)));
 }
 
 /**
@@ -393,13 +423,7 @@ export function withdrawMoney() {
   if (!confirm(`Take ${$u(amount)} out of ${account}?${short}\n\n`
     + 'The account value falls by this much. It is not a loss, so your returns do not change.')) return;
 
-  state.cashFlows = [...(state.cashFlows ?? []), {
-    date: todayStr(),
-    amount: -amount,
-    description: 'Withdrawal',
-    // Moved by hand, not read from a statement: every percentage discounts it.
-    manual: true,
-  }].sort((a, b) => a.date.localeCompare(b.date));
+  recordManualFlow(-amount, 'Withdrawal');
   state.cash -= amount;
   saveCashFlows();
   saveCash();

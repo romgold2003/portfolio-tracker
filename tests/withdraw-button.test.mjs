@@ -233,3 +233,88 @@ describe('taking $3,000 out of a $10,000 account', () => {
     assert.ok(Math.abs(year.pnl - 700) < 1e-9, `${year.pnl}`);
   });
 });
+
+/**
+ * The button has to change the figures NOW, not at the next import.
+ *
+ * This is the regression that keeps coming back, and it came back because of a
+ * tidy-up. Money moved by hand used to be joined to the ledger as each figure
+ * was drawn. That was moved to the moment the journal is built — tidier, and it
+ * survives a rebuild — and it quietly broke this, because a journal is only
+ * built when a statement is imported. The button changes the account today, so
+ * a withdrawal sat in `cashFlows`, which nothing daily reads, while the balance
+ * fell with nothing on record to explain it. The day read 1.33% before and
+ * 1.67% after, on a day nothing had been bought or sold.
+ *
+ * So the test is not "does the arithmetic work" — that was never the broken
+ * part. It is "does what the button writes reach what the page reads", which is
+ * the seam the bug lives in.
+ */
+describe('what the button writes reaches what the page reads', () => {
+  const held = () => ({ status: 'Open', dir: 'Long', cls: 'Stocks', ticker: 'A', qty: 100, entry: 98, cur: 102, prevClose: 100 });
+
+  /** Exactly what recordManualFlow does, against a book shaped like a real one. */
+  const press = (book, amount, date) => {
+    book.cashFlows = [...book.cashFlows, { date, amount, description: 'Withdrawal', manual: true }];
+    if (Array.isArray(book.ledger?.events)) book.ledger.events.push({ date, kind: 'flow', cash: amount });
+    book.cash += amount;
+  };
+
+  /** What the day's move is handed: the ledger when there is one, the flows when not. */
+  const events = (book) => (book.ledger?.events?.length
+    ? book.ledger.events
+    : book.cashFlows.filter((f) => f.manual).map((f) => ({ date: f.date, kind: 'flow', cash: f.amount })));
+
+  const dayOf = (book) => dailyPortfolioMove(
+    book.positions, book.positions.reduce((s, p) => s + p.qty * p.cur, 0) + book.cash, TODAY, events(book),
+  ).percent;
+
+  const TODAY = '2026-09-30';
+
+  test('an imported book: the day does not move when money is taken out', () => {
+    const book = {
+      positions: [held()], cash: 5000,
+      cashFlows: [{ date: '2026-02-01', amount: 5000 }],
+      ledger: { from: '2026-01-01', openingCash: 0, events: [{ date: '2026-02-01', kind: 'flow', cash: 5000 }] },
+    };
+    const before = dayOf(book);
+    press(book, -3000, TODAY);
+    assert.ok(Math.abs(dayOf(book) - before) < 1e-9, `moved from ${before}% to ${dayOf(book)}%`);
+  });
+
+  test('and the withdrawal is in the ledger straight away, not after the next import', () => {
+    const book = {
+      positions: [held()], cash: 5000,
+      cashFlows: [], ledger: { from: '2026-01-01', openingCash: 0, events: [{ date: '2026-02-01', kind: 'flow', cash: 5000 }] },
+    };
+    press(book, -3000, TODAY);
+    const flows = book.ledger.events.filter((e) => e.kind === 'flow');
+    assert.equal(flows.length, 2, 'the ledger never saw it, which is the whole bug');
+    assert.equal(flows[flows.length - 1].cash, -3000);
+  });
+
+  test('a book kept by hand, with no ledger at all, holds steady too', () => {
+    const book = { positions: [held()], cash: 5000, cashFlows: [], ledger: null };
+    const before = dayOf(book);
+    press(book, -3000, TODAY);
+    assert.ok(Math.abs(dayOf(book) - before) < 1e-9, 'no ledger means the flows are all there is');
+  });
+
+  test('and no ledger is invented for it, which would switch it onto the wrong path', () => {
+    const book = { positions: [held()], cash: 5000, cashFlows: [], ledger: null };
+    press(book, -3000, TODAY);
+    assert.equal(book.ledger, null);
+  });
+
+  test('a real gain on the same day still shows in full', () => {
+    const book = {
+      positions: [held()], cash: 5000,
+      cashFlows: [], ledger: { from: '2026-01-01', openingCash: 0, events: [] },
+    };
+    press(book, -3000, TODAY);
+    // 100 shares from yesterday's close of 100 to 102 is $200, measured on the
+    // $15,000 the account held when the day opened — not on the $12,200 left
+    // after the withdrawal, which is what made the figure drift before.
+    assert.ok(Math.abs(dayOf(book) - (200 / 15_000) * 100) < 1e-9, `${dayOf(book)}%`);
+  });
+});

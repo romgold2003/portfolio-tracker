@@ -24,7 +24,7 @@ import {
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
 import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
-import { onJournalLoaded, combinedJournals } from '../../core/store.js';
+import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
@@ -173,6 +173,21 @@ function miniRow(p) {
   </div>`;
 }
 
+/**
+ * What happened today, for the day's move.
+ *
+ * The ledger when there is one: money moved by hand is written into it as it
+ * happens, so it is already complete. A book kept entirely by hand has no
+ * ledger, and its flows are all there is — without this, a withdrawal from
+ * such a book would leave the balance lower with nothing to explain it, and
+ * the day would read the fall as a loss.
+ */
+function dayEvents() {
+  const events = state.ledger?.events;
+  if (events?.length) return events;
+  return handEnteredFlows(state).map((f) => ({ date: f.date, kind: 'flow', cash: f.amount }));
+}
+
 function renderDailyMove(totals) {
   /**
    * Only the holdings whose day is still running.
@@ -186,7 +201,7 @@ function renderDailyMove(totals) {
   const running = inPlay(state.positions);
   const reset = running.length < state.positions.length;
   // The ledger prices the shares bought and sold on the day, as the broker does.
-  const move = dailyPortfolioMove(running, totals.account, undefined, state.ledger?.events ?? []);
+  const move = dailyPortfolioMove(running, totals.account, undefined, dayEvents());
   const pctEl = document.getElementById('portfolioDailyPct');
   const amtEl = document.getElementById('portfolioDailyAmt');
   if (!pctEl || !amtEl) return;
