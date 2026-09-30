@@ -58,15 +58,36 @@
     bar.appendChild(text); bar.appendChild(copy); bar.appendChild(close);
     (document.body || document.documentElement).appendChild(bar);
   }
+  /**
+   * Somebody else's script, running in this page because a browser extension
+   * put it there.
+   *
+   * Extensions inject into every page they are allowed to see, and when their
+   * own code throws, the page it happens to be standing in is the one that gets
+   * the error. A wallet extension failing to reach its wallet reported
+   * "Failed to connect to MetaMask" against this app, and the person reading
+   * the bar had every reason to think the app had broken. It had not, and there
+   * is nothing here that could fix it.
+   *
+   * So anything coming out of an extension is left alone. It is not ours, the
+   * reader cannot act on it, and the bar exists to say when a button will not
+   * work — a claim that has to stay true to be worth anything.
+   */
+  function fromExtension(text) {
+    return /(^|[\s(])(chrome|moz|safari|ms-browser|webkit)-extension:\/\//i.test(String(text || ''));
+  }
   window.addEventListener('error', function (e) {
     // A cross-origin script reports only "Script error." with nothing else. It
     // says nothing anyone can act on, and the CDN chart library is the usual
     // source, so it is not worth alarming someone over.
     if (!e.filename && /^script error/i.test(e.message || '')) return;
+    if (fromExtension(e.filename) || fromExtension(e.message)) return;
+    if (e.error && fromExtension(e.error.stack)) return;
     report(e.message || 'Script error', e.filename ? e.filename + ':' + e.lineno : '');
   });
   window.addEventListener('unhandledrejection', function (e) {
     var r = e.reason;
+    if (r && (fromExtension(r.stack) || fromExtension(r.message) || fromExtension(r))) return;
     report((r && (r.message || r)) || 'A background task failed', r && r.stack ? String(r.stack).split('\n')[1] : '');
   });
 })();
