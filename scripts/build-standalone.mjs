@@ -131,10 +131,17 @@ async function build() {
    * Falls back to the date alone outside a git checkout, so a build never
    * fails for want of it.
    */
-  let commit = '';
-  try {
-    commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
-  } catch { /* not a checkout, or no git; the date alone still identifies it */ }
+  /**
+   * Vercel builds from a copy with no git in it, so the live site's stamp said
+   * only the date — and "is the fix live yet?" could not be answered from it on
+   * the one host that matters. Vercel hands every build its commit instead.
+   */
+  let commit = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
+  if (!commit) {
+    try {
+      commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+    } catch { /* not a checkout, or no git; the date alone still identifies it */ }
+  }
   const stamp = [commit, new Date().toISOString().slice(0, 10)].filter(Boolean).join(' · ');
   out = out.replace('<span id="buildStamp">—</span>', `<span id="buildStamp">${stamp}</span>`);
 
