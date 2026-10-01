@@ -1,13 +1,18 @@
 /**
- * Options exposure by strike, and daily ETF flows.
+ * The options exposure panel's shell — market picker and source line — and
+ * the daily ETF flows.
  *
- * Both are SVG drawn by hand. Each is one series against one axis with a zero
- * line through it, which is a path and a handful of ticks; a charting library
- * would bring a canvas, a resize observer and a theme hook to draw the same
- * thing, and this app already carries one it would rather not use twice.
+ * The GEX and DEX themselves are drawn in one format by two modules: as they
+ * stand now in exposureNow.js, and through time in exposureHistory.js.
+ *
+ * Everything is SVG drawn by hand. A chart here is one series against one axis,
+ * which is a path and a handful of ticks; a charting library would bring a
+ * canvas, a resize observer and a theme hook to draw the same thing, and this
+ * app already carries one it would rather not use twice.
  */
 import { escapeHtml } from '../format.js';
-import { renderExposureHistory, DEX_COLOUR, GEX_COLOUR } from './exposureHistory.js';
+import { renderExposureHistory } from './exposureHistory.js';
+import { renderExposureNow } from './exposureNow.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -15,18 +20,6 @@ const el = (id) => document.getElementById(id);
 let market = 'BTC';
 export function currentMarket() { return market; }
 export function setMarket(next) { market = String(next || 'BTC').toUpperCase(); }
-
-/** Billions, millions, thousands — whichever keeps it to three or four glyphs. */
-function short(n) {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(0)}M`;
-  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
-  return `${sign}$${Math.round(abs)}`;
-}
-
-const strikeLabel = (v) => (v >= 10000 ? `${Math.round(v / 1000)}k` : String(Math.round(v)));
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const dayLabel = (iso) => {
@@ -172,56 +165,6 @@ function gridFor(s, format, levels = 1, plot = PLOT) {
 }
 
 /**
- * One line chart: stroke, dots and a grid, with no fill under the curve.
- *
- * Points are joined straight rather than smoothed: a spline through option
- * strikes invents gamma at prices where no contract trades, and the kinks are
- * real — they are where the open interest sits.
- */
-function lineChart({ points, colour, markIndex, title, note }) {
-  if (!points.length) return '';
-  const plot = PLOT;
-  const box = H;
-  const s = scaleFor(points.map((p) => p.value), plot);
-  const n = points.length;
-
-  const coords = points.map((p, i) => ({ x: xAt(i, n, plot), y: s.y(p.value) }));
-  const line = coords.map((c, i) => `${i ? 'L' : 'M'} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ');
-  const zeroY = s.y(0);
-  const area = `${line} L ${coords[n - 1].x.toFixed(1)} ${zeroY.toFixed(1)}`
-    + ` L ${coords[0].x.toFixed(1)} ${zeroY.toFixed(1)} Z`;
-
-  const mark = markIndex >= 0 ? `
-    <line x1="${xAt(markIndex, n, plot).toFixed(1)}" y1="${plot.y0}"
-          x2="${xAt(markIndex, n, plot).toFixed(1)}" y2="${plot.y1}" class="cv-mark" />
-    <text x="${xAt(markIndex, n, plot).toFixed(1)}" y="${plot.y0 - 3}" class="cv-marklbl"
-          text-anchor="middle">spot</text>` : '';
-
-  const dots = coords.map((c) =>
-    `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.4" fill="${colour}" />`).join('');
-
-  // A filled area answers "how much", which is the question the strike profile
-  // asks: the slab under the curve is the wall.
-  const axisNote = s.zeroOffAxis
-    ? '<span class="cv-warn" title="This series never comes near zero, so the axis is scaled to the range it actually moves through. Judge the change, not the height.">axis not from zero</span>'
-    : '';
-
-  return `<div class="cv-title">${escapeHtml(title)}${
-  note ? `<span class="cv-note">${escapeHtml(note)}</span>` : ''}${axisNote}</div>
-    <svg class="cv" viewBox="0 0 ${W} ${box}" preserveAspectRatio="none" role="img"
-         aria-label="${escapeHtml(title)}">
-      ${gridFor(s, short, 1, plot)}${mark}
-      <path d="${area}" fill="${colour}" opacity="0.14" />
-      <path d="${line}" fill="none" stroke="${colour}" stroke-width="2"
-            stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
-      ${dots}
-      ${axisLabels(points, (i) => xAt(i, n, plot), box)}
-      <line class="cv-hair" y1="${plot.y0}" y2="${plot.y1}" x1="0" x2="0" hidden />
-      <circle class="cv-hot" r="5" fill="${colour}" hidden />
-    </svg>`;
-}
-
-/**
  * One column chart: time along the bottom, value up or down from zero.
  *
  * Money in is green above the line and money out red below it, which is the
@@ -351,63 +294,8 @@ function attachHover({ host, charts, count, tip, describe }) {
   }
 }
 
-/** Remember each point's y so the hover dot can sit on the curve. */
-function stampYs(container, points) {
-  const svg = container?.querySelector('svg');
-  if (!svg) return;
-  // The same scale the chart was drawn with, recomputed rather than handed in.
-  const s = scaleFor(points.map((p) => p.value), PLOT);
-  svg.dataset.values = JSON.stringify(points.map((p) => +s.y(p.value).toFixed(1)));
-}
-
 /* ── the exposure panel ────────────────────────────────────────────────── */
 
-
-/** The index of the strike nearest spot, so the curve can be marked at price. */
-function spotIndex(strikes, spot) {
-  let best = -1;
-  let gap = Infinity;
-  strikes.forEach((r, i) => {
-    const d = Math.abs(r.strike - spot);
-    if (d < gap) { gap = d; best = i; }
-  });
-  return best;
-}
-
-/**
- * The strike profile: gamma and delta across prices, right now.
- */
-function drawByStrike(profile, gex, dex) {
-  const at = spotIndex(profile.strikes, profile.spot);
-  const points = (key) => profile.strikes.map((r) => ({
-    label: strikeLabel(r.strike), value: r[key],
-  }));
-  const gexPoints = points('gex');
-  const dexPoints = points('dex');
-
-  gex.innerHTML = lineChart({
-    points: gexPoints, colour: GEX_COLOUR, markIndex: at, title: 'GEX · Gamma exposure ($)',
-  });
-  dex.innerHTML = lineChart({
-    points: dexPoints, colour: DEX_COLOUR, markIndex: at, title: 'DEX · Delta exposure ($)',
-  });
-  stampYs(gex, gexPoints);
-  stampYs(dex, dexPoints);
-
-  attachHover({
-    host: el('optCharts'),
-    charts: [gex, dex],
-    count: profile.strikes.length,
-    tip: el('optTip'),
-    describe: (i) => {
-      const row = profile.strikes[i];
-      return `<div class="tip-head">Strike ${strikeLabel(row.strike)}</div>
-        <div class="tip-row"><span>GEX</span><strong class="${row.gex >= 0 ? 'is-up' : 'is-down'}">${short(row.gex)}</strong></div>
-        <div class="tip-row"><span>DEX</span><strong class="${row.dex >= 0 ? 'is-up' : 'is-down'}">${short(row.dex)}</strong></div>
-        <div class="tip-row"><span>OI</span><strong>${row.oi.toLocaleString()}</strong></div>`;
-    },
-  });
-}
 
 export function renderExposure(profile, onPick) {
   const card = el('optionsCard');
@@ -445,55 +333,6 @@ export function renderExposure(profile, onPick) {
   }
 
   /**
-   * The headline, which is the first thing read and used to be a small cell in
-   * a row of four.
-   *
-   * A GEX figure is only useful with its sign attached to a sentence: positive
-   * means dealers are long gamma and their hedging leans against a move, which
-   * is the difference between a market that grinds and one that runs. The
-   * reference dashboards all print that sentence and they are right to.
-   */
-  const headline = el('optHeadline');
-  if (headline) {
-    const positive = profile.netGex >= 0;
-    const pain = profile.maxPain;
-    const painGap = pain && profile.spot
-      ? ` (${((pain / profile.spot - 1) * 100).toFixed(1)}% from spot)` : '';
-    const band = profile.band
-      ? `Chart shows strikes within ±${profile.band.pct}% of spot · the totals above are the whole chain`
-      : '';
-
-    headline.innerHTML = `
-      <div class="opt-hl-top">
-        <span class="opt-hl-lbl">GEX · Gamma exposure</span>
-        <strong class="opt-hl-val ${positive ? 'is-up' : 'is-down'}">${
-  profile.netGex >= 0 ? '+' : '−'}${short(Math.abs(profile.netGex))}</strong>
-        <span class="opt-hl-badge ${positive ? 'is-up' : 'is-down'}">${
-  positive ? 'Long gamma' : 'Short gamma'}</span>
-      </div>
-      <div class="opt-hl-say">${positive
-    ? 'Dealer hedging leans against moves here — rallies and dips both meet resistance.'
-    : 'Dealer hedging amplifies moves here — a push in either direction tends to extend.'}${
-  pain ? ` Max pain ${strikeLabel(pain)}${painGap}.` : ''}</div>
-      <div class="opt-hl-fine">Max pain is the strike where the options outstanding are worth
-        least at expiry. It is not a target.${band ? ` · ${escapeHtml(band)}` : ''}</div>`;
-  }
-
-  const stats = el('optStats');
-  if (stats) {
-    // The flip is absent when cumulative gamma never crosses zero inside the
-    // strikes drawn, and saying so beats printing a strike that crossed nothing.
-    stats.innerHTML = `
-      <div class="opt-stat"><span>Spot</span><strong>${strikeLabel(profile.spot)}</strong></div>
-      <div class="opt-stat"><span>Net GEX</span><strong class="${profile.netGex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netGex)}</strong></div>
-      <div class="opt-stat"><span>Net DEX</span><strong class="${profile.netDex >= 0 ? 'is-up' : 'is-down'}">${short(profile.netDex)}</strong></div>
-      <div class="opt-stat"><span>Gamma flip</span><strong>${
-  profile.gammaFlip ? strikeLabel(profile.gammaFlip) : '—'}</strong></div>
-      <div class="opt-stat"><span>Max pain</span><strong>${
-  profile.maxPain ? strikeLabel(profile.maxPain) : '—'}</strong></div>`;
-  }
-
-  /**
    * Where the numbers came from and how old they are.
    *
    * The reference dashboard prints a publication time on every screen, and that
@@ -511,11 +350,9 @@ export function renderExposure(profile, onPick) {
     ? ` · chain struck ${escapeHtml(struck.toLocaleString())}` : ''}${escapeHtml(modelled)}`;
   }
 
-  const gex = el('optGex');
-  const dex = el('optDex');
-  if (gex && dex) drawByStrike(profile, gex, dex);
-
-  // Through time, in its own block under the strike profile. See exposureHistory.js.
+  // Now, then through time — one format for both. See exposureNow.js and
+  // exposureHistory.js.
+  renderExposureNow(profile);
   renderExposureHistory(profile);
 }
 

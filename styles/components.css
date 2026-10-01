@@ -99,44 +99,18 @@
 .opt-tab:hover{background:var(--hover2);color:var(--text)}
 .opt-tab.active{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
 
-/* The headline: the reference dashboards lead with the number and a sentence,
-   and that is the right order — a signed billion means nothing on its own. */
-.opt-headline{margin:12px 0 10px;padding:12px 14px;border-radius:8px;
-  background:var(--input);border:0.5px solid var(--border2)}
-.opt-hl-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.opt-hl-lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text4)}
-.opt-hl-val{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
-.opt-hl-badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:99px;
-  background:var(--panel2);border:0.5px solid var(--border2)}
-.opt-hl-say{margin-top:7px;font-size:12px;color:var(--text2);line-height:1.5}
-.opt-hl-fine{margin-top:5px;font-size:10px;color:var(--text4);line-height:1.5}
 /* The group label in the market picker — crypto and an index are not the same
    kind of number and the picker should not imply they are. */
 .opt-group{font-size:9px;text-transform:uppercase;letter-spacing:0.06em;
   color:var(--text4);padding:0 6px 0 2px;align-self:center}
 .opt-source{margin:8px 0 2px;font-size:10px;color:var(--text4);line-height:1.5}
 
-.opt-stats{display:flex;gap:26px;flex-wrap:wrap;margin:2px 0 16px}
-.opt-stat{display:flex;flex-direction:column;gap:2px}
-.opt-stat span{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
-.opt-stat strong{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
-
-.opt-chart{margin-bottom:20px}
-.opt-chart:last-child{margin-bottom:0}
-
 /* The curves. preserveAspectRatio is none, so the plot stretches to the card
    while strokes are held at width by vector-effect and text by its own size. */
 .cv{width:100%;height:190px;display:block;overflow:visible}
-/* The history charts scale uniformly instead, so their dots stay round — a
-   stretched viewBox turns every marker into an ellipse. Height follows width. */
-.cv-hist{height:auto;aspect-ratio:900/300}
 .cv-title{font-size:10px;color:var(--text3);text-transform:uppercase;
   letter-spacing:0.05em;margin-bottom:6px}
 .cv-note{color:var(--text4);margin-left:8px;text-transform:none;letter-spacing:0}
-/* Said out loud whenever the axis is scaled to the data instead of to zero,
-   because a baseline that is not zero will otherwise be misread as one. */
-.cv-warn{color:var(--amber);margin-left:8px;text-transform:none;letter-spacing:0;
-  font-size:9px;cursor:help}
 /* Stands in for a curve while the recorded history is too short to draw one. */
 .cv-empty{color:var(--text3);font-size:12px;line-height:1.6;padding:26px 0;text-align:center}
 /* Dashed, so the grid sits behind the curve instead of competing with it. */
@@ -144,12 +118,6 @@
   vector-effect:non-scaling-stroke;opacity:0.55}
 .cv-grid.is-zero{stroke:var(--text4);stroke-dasharray:none;opacity:0.7}
 .cv-ytick,.cv-xtick{fill:var(--text4);font-size:9px;font-variant-numeric:tabular-nums}
-/* The history plot is drawn larger, so its labels are too — they were sized for
-   a chart two thirds the height and came out unreadable on a phone. */
-.cv-hist .cv-ytick,.cv-hist .cv-xtick{font-size:11px}
-/* Where price actually is, which is the line the eye needs first. */
-.cv-mark{stroke:var(--text3);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
-.cv-marklbl{fill:var(--text3);font-size:8px;text-transform:uppercase;letter-spacing:0.06em}
 .cv-bar-up{fill:var(--green)}
 .cv-bar-down{fill:var(--red)}
 
@@ -170,6 +138,31 @@
   font-size:12px;line-height:1.7}
 .tip-row span{color:var(--text3)}
 .tip-row strong{font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+
+/* GEX and DEX now — the price, then each figure with its badges and a line
+   of meaning, GEX bars by strike, and the DEX hedging-flow bar. Same format
+   as the history block below it. See src/ui/views/exposureNow.js. */
+.xn-spot{display:flex;align-items:baseline;gap:10px;margin:18px 0 14px}
+.xn-sym{font-size:18px;font-weight:700;color:var(--text)}
+.xn-price{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+.xn{padding:18px 0 20px;border-top:0.5px solid var(--border2)}
+.xn-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;margin-bottom:10px}
+.xn-title{font-size:14px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text2)}
+.xn-val{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:24px;font-weight:700;
+  font-variant-numeric:tabular-nums;color:var(--text)}
+.xn-badge{font-size:11px;font-weight:600;padding:4px 9px;border-radius:6px;text-transform:uppercase;letter-spacing:0.04em}
+.xn-badge.is-gold{color:#e6a33e;background:rgba(230,163,62,0.14)}
+.xn-badge.is-red{color:#e05561;background:rgba(224,85,97,0.14)}
+.xn-say{font-size:13px;line-height:1.55;color:var(--text2)}
+.xn-say strong{color:var(--text)}
+.xn-fine{font-size:11px;color:var(--text3);margin:6px 0 10px}
+.xn-bar{transition:opacity 0.12s}
+.xn-bar.is-dim{opacity:0.35}
+.xn-flow-lbl{font-size:14px;font-weight:600;color:var(--text);margin:14px 0 12px}
+.xn-flow{position:relative;height:10px;border-radius:99px;background:var(--input)}
+.xn-flow-fill{position:absolute;top:0;bottom:0;border-radius:99px}
+.xn-flow-fill.is-buy{left:50%;right:0;background:#e6a33e}
+.xn-flow-fill.is-sell{left:0;right:50%;background:#e05561}
 
 /* DEX & GEX history — its own block under the strike profile, laid out after
    the reference Romy picked: a spaced uppercase title with the 7D/30D/90D

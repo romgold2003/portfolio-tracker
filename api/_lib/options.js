@@ -223,7 +223,7 @@ export function parseDeribitName(name) {
  * line alone is $118B of delta. Banding threw away 39% of the real figure and
  * reported the remainder as the total.
  */
-export function aggregate(contracts, spot, { multiplier = 1, band = 0.2, buckets = 24 } = {}) {
+export function aggregate(contracts, spot, { multiplier = 1, band = 0.2, buckets = 40 } = {}) {
   if (!(spot > 0)) return null;
   const low = spot * (1 - band);
   const high = spot * (1 + band);
@@ -235,6 +235,10 @@ export function aggregate(contracts, spot, { multiplier = 1, band = 0.2, buckets
    * this range — a chart nobody can read, showing structure that is really one
    * wall split twenty ways. The step is rounded to something a person would say
    * out loud, so the axis reads 7,600 and 7,700 rather than 7,637.
+   *
+   * About forty across the band, which is the density the reference draws its
+   * GEX bars at: Bitcoin in $1,000 steps, the S&P in 100-point ones. Twenty-four
+   * put Bitcoin in $2,000 steps — seventeen bars, each merging two walls.
    */
   const step = niceStep((high - low) / buckets);
   const bucketOf = (strike) => Math.round(strike / step) * step;

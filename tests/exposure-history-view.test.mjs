@@ -126,8 +126,9 @@ describe('where it sits', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const card = html.slice(html.indexOf('id="optionsCard"'), html.indexOf('</div><!-- /newsMarket -->'));
 
-  test('inside the options card, under the strike charts', () => {
-    assert.ok(card.indexOf('id="optCharts"') < card.indexOf('id="optHistory"'), 'history should follow the strike profile');
+  test('inside the options card, under GEX and DEX as they stand now', () => {
+    assert.ok(card.indexOf('id="optDexNow"') < card.indexOf('id="optHistory"'), 'history should follow the current figures');
+    assert.ok(card.indexOf('id="optGexNow"') < card.indexOf('id="optDexNow"'), 'GEX first, then DEX, as in the reference');
     assert.ok(card.indexOf('id="xhDex"') < card.indexOf('id="xhGex"'), 'delta above gamma, as in the reference');
   });
 

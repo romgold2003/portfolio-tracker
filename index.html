@@ -432,17 +432,13 @@
             <div class="opt-picker" id="optPicker"></div>
           </div>
         </div>
-        <!-- The number, its sign in words, and max pain. Read before anything else. -->
-        <div class="opt-headline" id="optHeadline"></div>
-        <div class="opt-stats" id="optStats"></div>
         <!-- Where the quotes came from and how old they are. Never omitted. -->
         <div class="opt-source" id="optSource"></div>
-        <!-- One readout for both curves: they are the same axis read twice. -->
-        <div class="cv-host" id="optCharts">
-          <div class="opt-chart" id="optGex"></div>
-          <div class="opt-chart" id="optDex"></div>
-          <div class="cv-tip" id="optTip" hidden></div>
-        </div>
+        <!-- The price, then GEX and DEX as they stand now, in the same format as
+             the history under them. See src/ui/views/exposureNow.js. -->
+        <div class="xn-spot" id="optSpot"></div>
+        <section class="xn" id="optGexNow"></section>
+        <section class="xn" id="optDexNow"></section>
 
         <!-- Net DEX and GEX through time, one point a day. Its own block with
              its own 7D / 30D / 90D switch; see src/ui/views/exposureHistory.js. -->
