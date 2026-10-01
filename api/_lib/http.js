@@ -144,3 +144,24 @@ export function clientIp(req) {
   if (typeof forwarded === 'string' && forwarded) return forwarded.split(',')[0].trim();
   return req.socket?.remoteAddress || 'unknown';
 }
+
+/**
+ * Compared in constant time, because a secret checked with === leaks its
+ * length and its prefix to anyone willing to time the answers.
+ */
+export function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * True when a request carries the scheduled collector's key (CRON_SECRET).
+ * False whenever no secret is configured, so an unset variable never opens a
+ * door.
+ */
+export function collectorKeyMatches(given) {
+  const expected = process.env.CRON_SECRET || '';
+  return Boolean(expected) && timingSafeEqual(String(given ?? ''), expected);
+}

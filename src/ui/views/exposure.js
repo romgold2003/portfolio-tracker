@@ -7,6 +7,7 @@
  * thing, and this app already carries one it would rather not use twice.
  */
 import { escapeHtml } from '../format.js';
+import { renderExposureHistory, DEX_COLOUR, GEX_COLOUR } from './exposureHistory.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -44,48 +45,6 @@ const GRAINS = [
 
 const grainDef = (id) => GRAINS.find((g) => g.id === id) ?? GRAINS[0];
 
-const HOUR = 3600e3;
-const DAY = 24 * HOUR;
-
-/**
- * The timeframes, as one list.
- *
- * Each is a whole view rather than half of one: `ms` is how wide a bar is and
- * `days` is how far back to look. An earlier version split those into two rows
- * of buttons, which is what a trading terminal does and was more machinery than
- * this panel needs — five named views answer the same questions without asking
- * anyone to combine two controls in their head.
- *
- * Every one is a window with a bar size: seven, thirty and ninety days of
- * daily points, which is the structure the reference dashboards settled on and
- * the one that answers "has this been building" without asking anyone to
- * combine two controls in their head. 1H is the intraday view on top of that —
- * two days of hourly points, which is as far back as an hourly bar is worth
- * reading.
- *
- * Windows rather than "everything recorded" on purpose: this panel can only
- * record forward, so an open-ended view silently meant "since the database was
- * attached" and looked identical to a full year.
- */
-const FRAMES = [
-  { id: '1h', label: '1H', ms: HOUR, days: 2 },
-  { id: '7d', label: '7D', ms: DAY, days: 7 },
-  { id: '30d', label: '30D', ms: DAY, days: 30 },
-  { id: '90d', label: '90D', ms: DAY, days: 90 },
-];
-
-const frameDef = (id) => FRAMES.find((f) => f.id === id) ?? FRAMES[0];
-
-/**
- * The most points worth drawing across 900 units of viewBox.
- *
- * Past this they are closer together than the stroke is wide, so the curve
- * stops gaining detail and starts costing legibility. It only ever binds on the
- * open-ended views — a year of hourly bars would be nine thousand points — and
- * there it keeps the most recent, which is the end anyone reads first.
- */
-const MAX_BARS = 400;
-
 /** The Monday of a day's week, which is what a weekly bucket is stacked on. */
 function mondayOf(iso) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -119,98 +78,12 @@ function bucket(rows, id, dateOf) {
     .map(([key, list]) => ({ key, label: bucketLabel(key, id), rows: list }));
 }
 
-/**
- * The start of the bar a moment falls in, in UTC.
- *
- * Hours, four-hours and days divide the epoch exactly, so those are one modulo.
- * Weeks are the exception: 1 January 1970 was a Thursday, so a plain division
- * would start every week on one. The shift shunts the origin back to the Monday
- * before it, which is where the flows panel already starts its weeks.
- */
-const MONDAY_EPOCH_SHIFT = 3 * 86400e3;
-
-export function frameStart(ms, size) {
-  if (size >= 7 * 24 * 3600e3) {
-    return Math.floor((ms + MONDAY_EPOCH_SHIFT) / size) * size - MONDAY_EPOCH_SHIFT;
-  }
-  return Math.floor(ms / size) * size;
-}
-
-const pad = (n) => String(n).padStart(2, '0');
-const dayOf = (ms) => {
-  const d = new Date(ms);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-};
-
-/** True for a view whose bars are shorter than a day, so the hour matters. */
-const isIntraday = (id) => frameDef(id).ms < DAY;
-
-/**
- * Intraday bars carry the day too, once the chart covers more than one.
- *
- * Without that the axis is unreadable across a long stretch: labels land at a
- * stride, and a stride that happens to be a whole number of days puts every
- * label on the same hour — "16:00, 16:00, 16:00" across a fortnight. Marking
- * only the bars that open a day does not fix it either, because the stride
- * steps straight over them. Naming the day on every intraday label is the one
- * version that cannot come out ambiguous, and it still fits the tick.
- */
-function frameLabel(ms, id, multiDay) {
-  if (!isIntraday(id)) return dayOf(ms);
-  const hour = `${pad(new Date(ms).getUTCHours())}:00`;
-  return multiDay ? `${dayOf(ms)} ${hour}` : hour;
-}
-
-/** The same moment written out in full, for the readout. */
-function stampLabel(ms, id) {
-  return isIntraday(id)
-    ? `${dayOf(ms)} ${pad(new Date(ms).getUTCHours())}:00 UTC`
-    : dayOf(ms);
-}
-
-/** Group minute-stamped readings into bars of one size, oldest first. */
-function barsOf(rows, id) {
-  const { ms: size } = frameDef(id);
-  const buckets = new Map();
-  for (const row of rows) {
-    const t = Date.parse(row.at);
-    if (!Number.isFinite(t)) continue;
-    const key = frameStart(t, size);
-    const list = buckets.get(key);
-    if (list) list.push(row); else buckets.set(key, [row]);
-  }
-  const sorted = [...buckets.entries()].sort((a, b) => a[0] - b[0]);
-  const multiDay = sorted.length > 1 && dayOf(sorted[0][0]) !== dayOf(sorted[sorted.length - 1][0]);
-  return sorted.map(([key, list]) => ({
-    start: key, label: frameLabel(key, id, multiDay), rows: list,
-  }));
-}
-
 /* ── the plot area, shared by both charts ──────────────────────────────── */
 
 const W = 900;
 const H = 190;
 const PAD = { left: 60, right: 12, top: 14, bottom: 24 };
 const PLOT = { x0: PAD.left, x1: W - PAD.right, y0: PAD.top, y1: H - PAD.bottom };
-
-/**
- * The history charts get their own, taller box.
- *
- * The strike profile is stretched to the card by preserveAspectRatio="none", so
- * its viewBox height is arbitrary and 190 is as good as any number. The history
- * scales uniformly — it has to, or its dots become ellipses — which means the
- * viewBox aspect *is* the shape on screen. At 900×190 a history renders about
- * 150 pixels tall on a normal card, and a curve that sits near zero and then
- * jumps is squeezed into a band a few pixels deep. The shape is the entire
- * reason to draw a history rather than print a number.
- *
- * Wider left padding with it, because the labels on this one are bigger.
- */
-const HIST_H = 300;
-const HIST_PAD = { left: 78, right: 18, top: 20, bottom: 34 };
-const HIST_PLOT = {
-  x0: HIST_PAD.left, x1: W - HIST_PAD.right, y0: HIST_PAD.top, y1: HIST_H - HIST_PAD.bottom,
-};
 
 /**
  * The y scale.
@@ -305,11 +178,11 @@ function gridFor(s, format, levels = 1, plot = PLOT) {
  * strikes invents gamma at prices where no contract trades, and the kinks are
  * real — they are where the open interest sits.
  */
-function lineChart({ points, colour, markIndex, title, note, history = false }) {
+function lineChart({ points, colour, markIndex, title, note }) {
   if (!points.length) return '';
-  const plot = history ? HIST_PLOT : PLOT;
-  const box = history ? HIST_H : H;
-  const s = scaleFor(points.map((p) => p.value), plot, { anchorZero: !history });
+  const plot = PLOT;
+  const box = H;
+  const s = scaleFor(points.map((p) => p.value), plot);
   const n = points.length;
 
   const coords = points.map((p, i) => ({ x: xAt(i, n, plot), y: s.y(p.value) }));
@@ -324,39 +197,23 @@ function lineChart({ points, colour, markIndex, title, note, history = false }) 
     <text x="${xAt(markIndex, n, plot).toFixed(1)}" y="${plot.y0 - 3}" class="cv-marklbl"
           text-anchor="middle">spot</text>` : '';
 
-  // Large enough to be a target for the eye on a sparse series, small enough
-  // not to merge into a band on a dense one.
-  const r = n > 120 ? 1.8 : n > 60 ? 2.6 : 3.4;
   const dots = coords.map((c) =>
-    `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${history ? r : 2.4}"
-      fill="${colour}" />`).join('');
+    `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.4" fill="${colour}" />`).join('');
 
-  /**
-   * The history drops the wash under the line; the strike view keeps it.
-   *
-   * A filled area answers "how much", which is exactly the question the strike
-   * profile is asking — the slab under the curve is the wall. A history is
-   * asking about shape instead, and a translucent fill under a line that
-   * crosses zero reads as two disconnected blobs and fights the grid behind it.
-   *
-   * The history also leaves preserveAspectRatio at its default so the plot
-   * scales uniformly: stretching it with "none" turns every dot into an
-   * ellipse, and the markers are what make a sparse series readable.
-   */
+  // A filled area answers "how much", which is the question the strike profile
+  // asks: the slab under the curve is the wall.
   const axisNote = s.zeroOffAxis
     ? '<span class="cv-warn" title="This series never comes near zero, so the axis is scaled to the range it actually moves through. Judge the change, not the height.">axis not from zero</span>'
     : '';
 
   return `<div class="cv-title">${escapeHtml(title)}${
   note ? `<span class="cv-note">${escapeHtml(note)}</span>` : ''}${axisNote}</div>
-    <svg class="cv${history ? ' cv-hist' : ''}" viewBox="0 0 ${W} ${box}"
-         ${history ? '' : 'preserveAspectRatio="none"'} role="img"
+    <svg class="cv" viewBox="0 0 ${W} ${box}" preserveAspectRatio="none" role="img"
          aria-label="${escapeHtml(title)}">
-      ${gridFor(s, short, history ? 4 : 1, plot)}${mark}
-      ${history ? '' : `<path d="${area}" fill="${colour}" opacity="0.14" />`}
-      <path d="${line}" fill="none" stroke="${colour}" stroke-width="${history ? 2.2 : 2}"
-            stroke-linejoin="round" stroke-linecap="round"
-            ${history ? '' : 'vector-effect="non-scaling-stroke"'} />
+      ${gridFor(s, short, 1, plot)}${mark}
+      <path d="${area}" fill="${colour}" opacity="0.14" />
+      <path d="${line}" fill="none" stroke="${colour}" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
       ${dots}
       ${axisLabels(points, (i) => xAt(i, n, plot), box)}
       <line class="cv-hair" y1="${plot.y0}" y2="${plot.y1}" x1="0" x2="0" hidden />
@@ -495,43 +352,16 @@ function attachHover({ host, charts, count, tip, describe }) {
 }
 
 /** Remember each point's y so the hover dot can sit on the curve. */
-function stampYs(container, points, history = false) {
+function stampYs(container, points) {
   const svg = container?.querySelector('svg');
   if (!svg) return;
-  /**
-   * The same box and the same anchoring the chart was drawn with.
-   *
-   * This recomputes the scale rather than being handed it, so any argument
-   * lineChart was given has to be given here too — with the history charts on
-   * their own taller box and their own free axis, defaulting to the strike
-   * geometry put the hover marker tens of units away from its own curve.
-   */
-  const s = scaleFor(
-    points.map((p) => p.value),
-    history ? HIST_PLOT : PLOT,
-    { anchorZero: !history },
-  );
+  // The same scale the chart was drawn with, recomputed rather than handed in.
+  const s = scaleFor(points.map((p) => p.value), PLOT);
   svg.dataset.values = JSON.stringify(points.map((p) => +s.y(p.value).toFixed(1)));
 }
 
 /* ── the exposure panel ────────────────────────────────────────────────── */
 
-const GEX_COLOUR = '#e0a13c';
-const DEX_COLOUR = '#4a9ae8';
-
-/**
- * Which way the panel is read: across strikes, or through time.
- *
- * Both answer a real question and neither replaces the other. The strike view
- * is where the pressure sits at this moment — the wall, the flip. The time
- * views are whether that pressure has been building or draining. Survives a
- * re-render, like the market does.
- */
-let view = 'strike';
-let lastProfile = null;
-let lastPick = null;
-
-const VIEWS = [{ id: 'strike', label: 'By strike' }, ...FRAMES];
 
 /** The index of the strike nearest spot, so the curve can be marked at price. */
 function spotIndex(strikes, spot) {
@@ -542,48 +372,6 @@ function spotIndex(strikes, spot) {
     if (d < gap) { gap = d; best = i; }
   });
   return best;
-}
-
-const mean = (nums) => nums.reduce((s, n) => s + n, 0) / nums.length;
-
-/**
- * Roll minute-stamped readings into bars of one timeframe.
- *
- * Averaged, not summed — the opposite of the flows panel, and for a reason
- * worth stating. An ETF flow is money that moved, so a week's worth adds up. An
- * exposure is a standing position, the size of the book as it sits; adding a
- * day of readings would report a wall a hundred times taller than any that ever
- * existed. The average is the level that stood over the bar.
- *
- * Each bar carries the readings behind it and when it opened and closed,
- * because a bar made of one observation is not the same claim as one made of
- * twelve — and while a bar is still forming it is made of very few.
- */
-export function rollUpExposure(rows, id) {
-  return barsOf(rows, id).map((b) => ({
-    start: b.start,
-    label: b.label,
-    from: b.rows[0].at,
-    to: b.rows[b.rows.length - 1].at,
-    reads: b.rows.length,
-    gex: Math.round(mean(b.rows.map((r) => r.netGex))),
-    dex: Math.round(mean(b.rows.map((r) => r.netDex))),
-    spot: mean(b.rows.map((r) => r.spot)),
-  }));
-}
-
-/**
- * Read as "Net GEX · daily average", so nobody reads an average as a total.
- *
- * Named for the bar rather than the view. 7D, 30D and 90D are all drawn in
- * daily bars and differ only in how far back they reach, so calling one a "90D
- * average" would describe a bar three months wide that does not exist. How far
- * back it reaches is the note's job.
- */
-function timeTitle(name, id) {
-  const { ms } = frameDef(id);
-  const bar = ms >= 7 * DAY ? 'weekly' : ms >= DAY ? 'daily' : 'hourly';
-  return `${name} · ${bar} average`;
 }
 
 /**
@@ -621,117 +409,11 @@ function drawByStrike(profile, gex, dex) {
   });
 }
 
-/** "in 3 h", "in 12 min" — how much longer the last bar has to run. */
-function remaining(bar, id) {
-  const left = bar.start + frameDef(id).ms - Date.now();
-  if (left <= 0) return null;
-  const mins = Math.round(left / 60000);
-  return mins >= 90 ? `${Math.round(mins / 60)} h` : `${mins} min`;
-}
-
-/**
- * The same two numbers through time, from the recorded history.
- *
- * A curve needs two bars, and this record only begins the first time the panel
- * was opened — so a young one says so plainly rather than drawing a single dot
- * and letting it read as a flat market.
- */
-function drawOverTime(profile, gex, dex, id) {
-  const all = profile.history ?? [];
-  const frame = frameDef(id);
-
-  // A windowed view is held to its days; an open-ended one takes everything.
-  const history = frame.days == null
-    ? all
-    : all.filter((r) => Date.parse(r.at) >= Date.now() - frame.days * DAY);
-
-  const rolled = rollUpExposure(history, id).slice(-MAX_BARS);
-
-  if (rolled.length < 2) {
-    const windowed = frame.days != null && history.length !== all.length;
-    gex.innerHTML = `<div class="cv-empty">${
-  all.length
-    ? `Only ${all.length === 1 ? 'one reading' : `${all.length} readings`} recorded, and
-       ${windowed ? 'the ones inside this window do not' : 'they do not'} yet span two
-       ${escapeHtml(frame.label)} bars. A curve needs two — try a shorter timeframe, or
-       leave this open.`
-    : 'Nothing recorded yet. Exposure through time is kept from the first time this is opened.'
-}</div>`;
-    dex.innerHTML = '';
-    return;
-  }
-
-  const last = rolled[rolled.length - 1];
-  const left = remaining(last, id);
-
-  /**
-   * The dates the chosen timeframe actually covers, stated rather than implied.
-   *
-   * "90D" names a window, not a period the record necessarily reaches across,
-   * and those differ whenever the recording is younger than the window — which,
-   * for a panel that can only record forward, is most of the time. The buttons
-   * used to say "364D" over eleven days of data with nothing to distinguish
-   * that from a full year.
-   */
-  const span = (() => {
-    const from = new Date(rolled[0].start);
-    const to = new Date(last.start + frame.ms);
-    const sameYear = from.getFullYear() === to.getFullYear();
-    const show = (d, withYear) => `${d.getDate()} ${MONTHS[d.getMonth()]}${
-      withYear ? ` ${d.getFullYear()}` : ''}`;
-    if (isIntraday(id)) {
-      const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      const sameDay = from.toDateString() === to.toDateString();
-      return sameDay
-        ? `${show(from, false)} ${hhmm(from)} – ${hhmm(to)}`
-        : `${show(from, false)} ${hhmm(from)} – ${show(to, false)} ${hhmm(to)}`;
-    }
-    return `${show(from, !sameYear)} – ${show(to, true)}`;
-  })();
-
-  const note = [
-    span,
-    `${rolled.length} bars`,
-    left ? `last one closes in ${left}` : null,
-  ].filter(Boolean).join(' · ');
-  const gexPoints = rolled.map((r) => ({ label: r.label, value: r.gex }));
-  const dexPoints = rolled.map((r) => ({ label: r.label, value: r.dex }));
-
-  gex.innerHTML = lineChart({
-    points: gexPoints, colour: GEX_COLOUR, markIndex: -1, history: true,
-    title: timeTitle('GEX · Gamma exposure ($)', id), note,
-  });
-  dex.innerHTML = lineChart({
-    points: dexPoints, colour: DEX_COLOUR, markIndex: -1, history: true,
-    title: timeTitle('DEX · Delta exposure ($)', id),
-  });
-  stampYs(gex, gexPoints, true);
-  stampYs(dex, dexPoints, true);
-
-  attachHover({
-    host: el('optCharts'),
-    charts: [gex, dex],
-    count: rolled.length,
-    tip: el('optTip'),
-    describe: (i) => {
-      const row = rolled[i];
-      const forming = i === rolled.length - 1 && remaining(row, id);
-      return `<div class="tip-head">${escapeHtml(stampLabel(row.start, id))}${
-  forming ? ' · forming' : ''}</div>
-        <div class="tip-row"><span>Net GEX</span><strong class="${row.gex >= 0 ? 'is-up' : 'is-down'}">${short(row.gex)}</strong></div>
-        <div class="tip-row"><span>Net DEX</span><strong class="${row.dex >= 0 ? 'is-up' : 'is-down'}">${short(row.dex)}</strong></div>
-        <div class="tip-row"><span>Spot</span><strong>${strikeLabel(row.spot)}</strong></div>
-        <div class="tip-row"><span>Readings</span><strong>${row.reads}</strong></div>`;
-    },
-  });
-}
-
 export function renderExposure(profile, onPick) {
   const card = el('optionsCard');
   if (!card) return;
   card.style.display = profile ? '' : 'none';
   if (!profile) return;
-  lastProfile = profile;
   if (onPick) lastPick = onPick;
 
   const name = el('optMarketName');
@@ -759,26 +441,6 @@ export function renderExposure(profile, onPick) {
     picker.onclick = (e) => {
       const id = e.target?.dataset?.market;
       if (id) lastPick?.(id);
-    };
-  }
-
-  /**
-   * The time views are only offered where there is a history to draw. Without a
-   * database attached nothing is ever recorded, and a tab that could only ever
-   * say "no readings" is worse than no tab.
-   */
-  const grainPicker = el('optGrain');
-  if (grainPicker) {
-    const offered = profile.history ? VIEWS : VIEWS.slice(0, 1);
-    if (!offered.some((v) => v.id === view)) view = 'strike';
-    grainPicker.innerHTML = offered.length > 1 ? offered.map((v) =>
-      `<button class="opt-tab${v.id === view ? ' active' : ''}"
-        data-view="${v.id}">${escapeHtml(v.label)}</button>`).join('') : '';
-    grainPicker.onclick = (e) => {
-      const id = e.target?.dataset?.view;
-      if (!id || id === view) return;
-      view = id;
-      renderExposure(lastProfile, lastPick);
     };
   }
 
@@ -851,9 +513,10 @@ export function renderExposure(profile, onPick) {
 
   const gex = el('optGex');
   const dex = el('optDex');
-  if (!gex || !dex) return;
-  if (view === 'strike') drawByStrike(profile, gex, dex);
-  else drawOverTime(profile, gex, dex, view);
+  if (gex && dex) drawByStrike(profile, gex, dex);
+
+  // Through time, in its own block under the strike profile. See exposureHistory.js.
+  renderExposureHistory(profile);
 }
 
 /* ── the flows panel ───────────────────────────────────────────────────── */

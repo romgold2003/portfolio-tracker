@@ -1,129 +1,82 @@
 /**
- * Rolling readings up into bars.
+ * Rolling readings up into points.
  *
  * The two panels share nothing but the idea. ETF flow arrives as whole days and
  * a week of it adds up, because it is money that moved. Exposure arrives every
- * few minutes and a bar of it averages, because it is a standing position —
+ * few minutes and a day of it averages, because it is a standing position —
  * summing a day of five-minute readings would report a gamma wall a hundred
  * times taller than any that ever stood.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { rollUp, rollUpExposure, frameStart } from '../src/ui/views/exposure.js';
+import { rollUp } from '../src/ui/views/exposure.js';
+import { dailyPoints } from '../src/ui/views/exposureHistory.js';
 
-const HOUR = 3600e3;
+const NOW = Date.parse('2026-09-03T18:00:00Z');
+const reading = (at, gex, dex = gex) => ({ at, netGex: gex, netDex: dex });
 
-/** Readings every fifteen minutes from a starting moment. */
-const every15 = (from, values) => values.map((netGex, i) => ({
-  at: new Date(Date.parse(from) + i * 15 * 60e3).toISOString().replace('.000', ''),
-  netGex, netDex: -netGex, spot: 60000 + i * 10,
-}));
-
-describe('where a bar starts', () => {
-  const iso = (t) => new Date(t).toISOString();
-
-  test('hours, four-hours and days divide the clock', () => {
-    const t = Date.parse('2026-09-03T14:37:12Z');
-    assert.equal(iso(frameStart(t, HOUR)), '2026-09-03T14:00:00.000Z');
-    assert.equal(iso(frameStart(t, 4 * HOUR)), '2026-09-03T12:00:00.000Z');
-    assert.equal(iso(frameStart(t, 24 * HOUR)), '2026-09-03T00:00:00.000Z');
+describe('exposure is a level, so a day averages', () => {
+  test('a day of readings becomes their mean, not their total', () => {
+    const [day] = dailyPoints([
+      reading('2026-09-03T09:00:00Z', 100, 10),
+      reading('2026-09-03T12:00:00Z', 200, 20),
+      reading('2026-09-03T15:00:00Z', 300, 30),
+    ], 7, NOW);
+    assert.equal(day.gex, 200);
+    assert.equal(day.dex, 20);
+    assert.equal(day.reads, 3);
+    assert.equal(day.day, '2026-09-03');
   });
 
-  test('a week starts on Monday, not on the epoch', () => {
-    // 1 January 1970 was a Thursday, so a plain division would open every week
-    // on one. Everything from Monday to Sunday must land on the same Monday.
-    const week = 7 * 24 * HOUR;
-    for (const day of ['2026-08-31T00:00:00Z', '2026-09-03T14:37:12Z', '2026-09-06T23:59:59Z']) {
-      assert.equal(iso(frameStart(Date.parse(day), week)), '2026-08-31T00:00:00.000Z');
-    }
-    // And the Monday after opens the next one.
-    assert.equal(iso(frameStart(Date.parse('2026-09-07T00:00:00Z'), week)), '2026-09-07T00:00:00.000Z');
-  });
-});
-
-describe('exposure is a level, so it averages', () => {
-  test('an hour of readings becomes their mean, not their total', () => {
-    const rows = every15('2026-09-03T14:00:00Z', [100, 200, 300, 400]);
-    const [bar] = rollUpExposure(rows, '1h');
-
-    assert.equal(bar.gex, 250, 'four readings averaging 250 must not sum to 1000');
-    assert.equal(bar.dex, -250);
-    assert.equal(bar.reads, 4);
+  test('readings are cut at UTC midnight', () => {
+    const days = dailyPoints([
+      reading('2026-09-02T23:59:00Z', 100),
+      reading('2026-09-03T00:01:00Z', 300),
+    ], 7, NOW);
+    assert.deepEqual(days.map((d) => [d.day, d.gex]), [['2026-09-02', 100], ['2026-09-03', 300]]);
   });
 
-  test('readings are cut at the hour, not bundled by count', () => {
-    // Six readings spanning 14:00 to 15:15 are two bars, four and two.
-    const rows = every15('2026-09-03T14:00:00Z', [1, 1, 1, 1, 9, 9]);
-    const bars = rollUpExposure(rows, '1h');
-
-    assert.equal(bars.length, 2);
-    assert.deepEqual(bars.map((b) => b.reads), [4, 2]);
-    assert.deepEqual(bars.map((b) => b.gex), [1, 9]);
-    assert.deepEqual(bars.map((b) => b.label), ['14:00', '15:00']);
+  test('points come back oldest first whatever order they arrived in', () => {
+    const days = dailyPoints([
+      reading('2026-09-03T10:00:00Z', 3),
+      reading('2026-09-01T10:00:00Z', 1),
+      reading('2026-09-02T10:00:00Z', 2),
+    ], 7, NOW);
+    assert.deepEqual(days.map((d) => d.gex), [1, 2, 3]);
   });
 
-  test('a daily bar gathers the hours inside it', () => {
-    const rows = every15('2026-09-03T12:00:00Z', Array.from({ length: 16 }, () => 100));
-    const bars = rollUpExposure(rows, '7d');
-    assert.equal(bars.length, 1, '12:00 to 15:45 is all one day');
-    assert.equal(bars[0].label, '3 Sep');
-    assert.equal(bars[0].reads, 16);
+  test('a day nobody recorded is missing, not drawn at zero', () => {
+    const days = dailyPoints([
+      reading('2026-09-01T10:00:00Z', 5),
+      reading('2026-09-03T10:00:00Z', 7),
+    ], 7, NOW);
+    assert.deepEqual(days.map((d) => d.day), ['2026-09-01', '2026-09-03']);
   });
 
-  test('every daily window buckets identically', () => {
-    // 7D, 30D and 90D differ only in how far back they reach, which is the
-    // caller's business; the bars themselves must be identical.
-    const rows = every15('2026-09-03T12:00:00Z', [1, 2, 3, 4]);
-    for (const id of ['30d', '90d']) {
-      assert.deepEqual(rollUpExposure(rows, id), rollUpExposure(rows, '7d'));
-    }
+  test('a reading with an unreadable stamp or value is dropped, not charted at zero', () => {
+    const days = dailyPoints([
+      reading('not a date', 999),
+      { at: '2026-09-03T10:00:00Z', netGex: 'x', netDex: 1 },
+      reading('2026-09-03T11:00:00Z', 4),
+    ], 7, NOW);
+    assert.equal(days.length, 1);
+    assert.equal(days[0].gex, 4);
   });
 
-  test('daily bars are labelled by their day', () => {
-    const rows = every15('2026-09-03T14:00:00Z', [10, 20]);
-    for (const id of ['7d', '30d', '90d']) {
-      assert.equal(rollUpExposure(rows, id)[0].label, '3 Sep');
-    }
-  });
-
-  test('a bar carries when it opened and closed', () => {
-    const rows = every15('2026-09-03T14:00:00Z', [1, 2, 3, 4]);
-    const [bar] = rollUpExposure(rows, '1h');
-    assert.equal(bar.from, '2026-09-03T14:00:00Z');
-    assert.equal(bar.to, '2026-09-03T14:45:00Z');
-    assert.equal(bar.start, Date.parse('2026-09-03T14:00:00Z'));
-  });
-
-  test('bars come back oldest first whatever order they arrived in', () => {
+  test('the window counts today and the days before it, and nothing earlier', () => {
     const rows = [
-      { at: '2026-09-03T16:00:00Z', netGex: 3, netDex: 0, spot: 1 },
-      { at: '2026-09-03T14:00:00Z', netGex: 1, netDex: 0, spot: 1 },
-      { at: '2026-09-03T15:00:00Z', netGex: 2, netDex: 0, spot: 1 },
+      reading('2026-08-27T10:00:00Z', 1), // eight days before: outside 7D
+      reading('2026-08-28T10:00:00Z', 2), // the first of the seven
+      reading('2026-09-03T10:00:00Z', 3), // today
     ];
-    assert.deepEqual(rollUpExposure(rows, '1h').map((b) => b.gex), [1, 2, 3]);
-  });
-
-  test('a bar still forming says how few readings are behind it', () => {
-    // One reading into an hour is not the same claim as twelve, and the readout
-    // prints this so a fresh bar cannot be mistaken for a settled one.
-    const [bar] = rollUpExposure(every15('2026-09-03T14:00:00Z', [500]), '1h');
-    assert.equal(bar.reads, 1);
-    assert.equal(bar.gex, 500);
-  });
-
-  test('a reading with an unreadable stamp is dropped, not charted at zero', () => {
-    const rows = [
-      { at: 'not a time', netGex: 999, netDex: 0, spot: 1 },
-      { at: '2026-09-03T14:00:00Z', netGex: 10, netDex: 0, spot: 1 },
-    ];
-    const bars = rollUpExposure(rows, '1h');
-    assert.equal(bars.length, 1);
-    assert.equal(bars[0].gex, 10);
+    assert.deepEqual(dailyPoints(rows, 7, NOW).map((d) => d.gex), [2, 3]);
+    assert.deepEqual(dailyPoints(rows, 30, NOW).map((d) => d.gex), [1, 2, 3]);
   });
 
   test('nothing recorded rolls up to nothing', () => {
-    assert.deepEqual(rollUpExposure([], '1h'), []);
+    assert.deepEqual(dailyPoints([], 90, NOW), []);
+    assert.deepEqual(dailyPoints(null, 90, NOW), []);
   });
 });
 

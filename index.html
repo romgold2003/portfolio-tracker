@@ -385,10 +385,12 @@
         <div class="gauges" id="sentimentGauges" style="display:none"></div>
       </div>
 
-      <!-- Two halves of the page, and only one is ever on screen. Markets is
-           what the app has always shown; Gamble is other people's money. -->
+      <!-- Three parts of the page, and only one is ever on screen. Markets is
+           rates, data and options; Crypto is on-chain money, volume and the
+           spot ETFs; Gamble is other people's bets on macro. -->
       <div class="subtabs" id="newsTabs">
         <button class="subtab active" data-tab="market">Markets</button>
+        <button class="subtab" data-tab="crypto">Crypto</button>
         <button class="subtab" data-tab="gamble">Gamble</button>
       </div>
 
@@ -421,14 +423,13 @@
         <div id="econRows"></div>
       </div>
 
-      <!-- Gamma and delta exposure for whichever market is picked, read either
-           across strikes or through the recorded daily history. -->
+      <!-- Gamma and delta exposure for whichever market is picked: across
+           strikes right now, and below that through the recorded history. -->
       <div class="card opt-card" id="optionsCard" style="display:none">
         <div class="card-lbl">
           <span>Options exposure — <span id="optMarketName"></span></span>
           <div class="opt-pickers">
             <div class="opt-picker" id="optPicker"></div>
-            <div class="opt-picker" id="optGrain"></div>
           </div>
         </div>
         <!-- The number, its sign in words, and max pain. Read before anything else. -->
@@ -442,15 +443,17 @@
           <div class="opt-chart" id="optDex"></div>
           <div class="cv-tip" id="optTip" hidden></div>
         </div>
-      </div>
 
-      <!-- Net flows into the spot ETFs, by day, week or month. -->
-      <div class="card etf-card" id="etfCard" style="display:none">
-        <div class="card-lbl">
-          <span>Spot ETF flows</span>
-          <div class="opt-picker" id="etfGrain"></div>
+        <!-- Net DEX and GEX through time, one point a day. Its own block with
+             its own 7D / 30D / 90D switch; see src/ui/views/exposureHistory.js. -->
+        <div class="xh" id="optHistory" hidden>
+          <div class="xh-head">
+            <span class="xh-title">DEX &amp; GEX history — <span id="xhMarket"></span></span>
+            <div class="xh-frames" id="xhFrames"></div>
+          </div>
+          <div class="xh-block" id="xhDex"></div>
+          <div class="xh-block" id="xhGex"></div>
         </div>
-        <div id="etfBody"></div>
       </div>
 
       <!-- Shown only while there is nothing to show, so the page is never bare. -->
@@ -460,36 +463,20 @@
 
       </div><!-- /newsMarket -->
 
-      <!-- Large bets on macro events: who placed them and for how much. Public
-           on-chain Polymarket trades, read straight from the browser.
-           Subject first, then size — which is the order the question is asked
-           in: what is moving, and who is betting how much on it. -->
-      <div id="newsGamble" hidden>
+      <div id="newsCrypto" hidden>
 
-        <!-- Three trackers, same question at three scales: who is betting big on
-             macro, who is moving big money on-chain, and where the turnover is. -->
-        <div class="opt-picker gam-subtabs" id="gambleTabs">
-          <button class="opt-tab active" data-gtab="macro">Macro</button>
-          <button class="opt-tab" data-gtab="crypto">Crypto</button>
-          <button class="opt-tab" data-gtab="volume">Volume</button>
-        </div>
-
-        <div id="gambleMacro">
-          <div class="card gam-card" id="gambleCard">
-            <div class="card-lbl">
-              <span>Whale bets — <span id="gamTopicName">all macro</span></span>
-              <div class="opt-picker" id="gamBand"></div>
-            </div>
-            <div class="opt-picker gam-topics" id="gamTopics"></div>
-            <div id="gamRows"></div>
-            <p class="gam-src">Polymarket · on-chain, refreshed every 30s</p>
-          </div>
+        <!-- Three views of crypto money: the whales moving it on-chain, where
+             the turnover is today, and what the spot ETFs took in or paid out. -->
+        <div class="opt-picker gam-subtabs" id="cryptoTabs">
+          <button class="opt-tab active" data-ctab="whales">Whales</button>
+          <button class="opt-tab" data-ctab="volume">Volume</button>
+          <button class="opt-tab" data-ctab="etf">ETF flows</button>
         </div>
 
         <!-- Very large real transfers, from the chains a provider can actually
              see. The coin list is CoinGecko's top fifty; which of those can be
              watched is a separate question and the picker answers it. -->
-        <div id="gambleCrypto" hidden>
+        <div id="cryptoWhales">
           <div class="card gam-card" id="cryptoWhaleCard">
             <div class="card-lbl">
               <span>Crypto whales — <span id="cwName">all coins</span></span>
@@ -543,7 +530,7 @@
         <!-- Where the turnover is today. Volume has to move before a price can,
              so a coin trading several times its usual is a coin something is
              happening to — which is a different question from who is buying. -->
-        <div id="gambleVolume" hidden>
+        <div id="cryptoVolume" hidden>
           <div class="card gam-card" id="volumeCard">
             <div class="card-lbl">
               <span>Unusual volume — <span id="uvCount">loading</span></span>
@@ -554,6 +541,38 @@
             <p class="gam-src" id="uvSrc"></p>
           </div>
         </div>
+
+        <div id="cryptoEtf" hidden>
+          <!-- Net flows into the spot ETFs, by day, week or month. -->
+          <div class="card etf-card" id="etfCard" style="display:none">
+            <div class="card-lbl">
+              <span>Spot ETF flows</span>
+              <div class="opt-picker" id="etfGrain"></div>
+            </div>
+            <div id="etfBody"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Large bets on macro events: who placed them and for how much. Public
+           on-chain Polymarket trades, read straight from the browser.
+           Subject first, then size — which is the order the question is asked
+           in: what is moving, and who is betting how much on it. -->
+      <div id="newsGamble" hidden>
+
+        <div id="gambleMacro">
+          <div class="card gam-card" id="gambleCard">
+            <div class="card-lbl">
+              <span>Whale bets — <span id="gamTopicName">all macro</span></span>
+              <div class="opt-picker" id="gamBand"></div>
+            </div>
+            <div class="opt-picker gam-topics" id="gamTopics"></div>
+            <div id="gamRows"></div>
+            <p class="gam-src">Polymarket · on-chain, refreshed every 30s</p>
+          </div>
+        </div>
+
+
       </div>
     </div>
 

@@ -171,6 +171,45 @@
 .tip-row span{color:var(--text3)}
 .tip-row strong{font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
 
+/* DEX & GEX history — its own block under the strike profile, laid out after
+   the reference Romy picked: a spaced uppercase title with the 7D/30D/90D
+   switch at the right, two charts stacked, dashed levels, a dot every day, and
+   a readout card with a dashed drop line. See src/ui/views/exposureHistory.js. */
+.xh{margin-top:24px;padding-top:22px;border-top:0.5px solid var(--border2)}
+.xh-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.xh-title{font-size:14px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text2)}
+.xh-frames{display:flex;gap:6px;flex-shrink:0}
+.xh-frame{background:none;border:1px solid transparent;border-radius:6px;padding:6px 11px;
+  font-size:12px;color:var(--text2);cursor:pointer;font-variant-numeric:tabular-nums}
+.xh-frame:hover{color:var(--text)}
+.xh-frame.active{color:#e6a33e;background:rgba(230,163,62,0.12);border-color:rgba(230,163,62,0.35)}
+.xh-chart-title{font-size:13px;font-weight:500;color:var(--text2);margin:2px 0 6px}
+.xh-plot{position:relative}
+.xh-svg{display:block;width:100%;height:auto;aspect-ratio:900/260;overflow:visible}
+.xh-grid{stroke:var(--border2);stroke-width:1;stroke-dasharray:4 6;opacity:0.8}
+.xh-ytick,.xh-xtick{fill:var(--text2);font-size:13px;font-variant-numeric:tabular-nums}
+.xh-hair{stroke:var(--text2);stroke-width:1.2;stroke-dasharray:4 4;pointer-events:none}
+.xh-hot{pointer-events:none}
+.xh-hair[hidden],.xh-hot[hidden]{display:none}
+.xh-tip{position:absolute;z-index:5;pointer-events:none;min-width:200px;
+  background:var(--panel2);border:1px solid var(--border2);border-radius:9px;
+  padding:11px 14px;box-shadow:0 8px 28px var(--shadow)}
+.xh-tip-title{font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:7px}
+.xh-tip-row{display:flex;justify-content:space-between;gap:28px;font-size:12px;line-height:1.85}
+.xh-tip-row span{color:var(--text2)}
+.xh-tip-row strong{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--text)}
+.xh-values{margin:8px 0 22px}
+.xh-values summary{font-size:11px;color:var(--text2);cursor:pointer;width:max-content}
+.xh-values table{width:100%;max-width:340px;margin-top:8px;border-collapse:collapse;
+  font-size:11.5px;font-variant-numeric:tabular-nums}
+.xh-values th{text-align:left;color:var(--text3);font-weight:500;padding:3px 8px 3px 0}
+.xh-values td{color:var(--text2);padding:3px 8px 3px 0;border-top:0.5px solid var(--border2)}
+@media (max-width:600px){
+  .xh-title{font-size:12px;letter-spacing:0.05em}
+  .xh-ytick,.xh-xtick{font-size:22px}
+}
+
 .etf-block{margin-bottom:22px}
 .etf-block:last-child{margin-bottom:0}
 .etf-head{display:flex;align-items:baseline;justify-content:space-between;

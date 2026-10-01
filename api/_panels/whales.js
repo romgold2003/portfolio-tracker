@@ -14,7 +14,7 @@
  * Signed-in only. The data is public but the key behind it is not, and an open
  * proxy on someone else's rate limit is not a thing to leave lying around.
  */
-import { fail, methodIs, readCookies, readJson, send } from '../_lib/http.js';
+import { fail, methodIs, readCookies, readJson, send, timingSafeEqual } from '../_lib/http.js';
 import { userForToken } from '../_lib/accounts.js';
 import { topCoins, priceMap, watchContracts } from '../_lib/topcoins.js';
 import { fetchTransfers, feedConfigured } from '../_lib/whalealert.js';
@@ -112,27 +112,6 @@ async function refresh(now) {
 }
 
 /**
- * Top the store up, at most once a minute, and never at the cost of the answer.
- *
- * The keyless chain readers always run. Whale Alert is asked *as well* when a
- * key is set — it sees chains this app has no reader for and labels addresses
- * better than any of them — but it is an upgrade rather than a dependency.
- * The first version had it as the only source, which meant a deployment with
- * no key showed an empty panel forever. That is not a tracker.
- *
- * Everything is settled rather than raced: a source that is down costs its own
- * chain and nothing else, and what is already stored stays perfectly readable.
- * The failures are returned so the panel can name them.
- */
-/** Length-independent comparison, so timing reveals nothing about the secret. */
-function timingSafeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-/**
  * Where the current sweep has got to, stage by stage, with how long each took.
  *
  * The sweep runs past the scheduled poll's budget on every run, and until this
@@ -154,6 +133,19 @@ function topUpProgress() {
   return [...sweep.done, `now in ${sweep.current}${running}`].join(', ');
 }
 
+/**
+ * Top the store up, at most once a minute, and never at the cost of the answer.
+ *
+ * The keyless chain readers always run. Whale Alert is asked *as well* when a
+ * key is set — it sees chains this app has no reader for and labels addresses
+ * better than any of them — but it is an upgrade rather than a dependency.
+ * The first version had it as the only source, which meant a deployment with
+ * no key showed an empty panel forever. That is not a tracker.
+ *
+ * Everything is settled rather than raced: a source that is down costs its own
+ * chain and nothing else, and what is already stored stays perfectly readable.
+ * The failures are returned so the panel can name them.
+ */
 async function topUp(now, { force = false } = {}) {
   // The scheduled collector is the point of being called; it does not wait out
   // a throttle that exists to stop many open tabs polling at once.

@@ -5,7 +5,7 @@
  * because the payloads are large — the S&P chain is twelve megabytes — and
  * because neither source sends a CORS header a browser would accept.
  */
-import { fail, methodIs, readCookies } from '../_lib/http.js';
+import { fail, methodIs, readCookies, collectorKeyMatches } from '../_lib/http.js';
 import { userForToken } from '../_lib/accounts.js';
 import { fromCboe, fromDeribit } from '../_lib/options.js';
 import { trackExposure } from '../_lib/exposureHistory.js';
@@ -37,10 +37,22 @@ export const MARKET_LIST = Object.entries(MARKETS)
 export default async function handler(req, res) {
   if (!methodIs(req, res, 'GET')) return;
 
-  const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
-  if (!user) return fail(res, 401, 'Not signed in.');
-
   const url = new URL(req.url, 'http://localhost');
+
+  /**
+   * The scheduled collector may ask too, with its key instead of a session.
+   *
+   * The history chart draws one point a day, and a point exists only for a day
+   * on which the chain was read — which used to mean a day on which somebody
+   * happened to open this panel. The collector reads every market on each run
+   * so every day has a reading, whoever looked.
+   */
+  const collector = collectorKeyMatches(url.searchParams.get('key'));
+  if (!collector) {
+    const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
+    if (!user) return fail(res, 401, 'Not signed in.');
+  }
+
   const id = String(url.searchParams.get('market') || 'BTC').toUpperCase();
   const market = MARKETS[id];
   if (!market) return fail(res, 400, 'Unknown market.');
@@ -89,8 +101,11 @@ export default async function handler(req, res) {
    * browser the same interval, so it comes back when there is something new
    * rather than on a timer of its own choosing.
    */
-  res.setHeader('Cache-Control',
-    `public, s-maxage=${market.fresh}, stale-while-revalidate=${market.fresh * 2}`);
+  // The collector's call must reach the function every time, or nothing is
+  // recorded; a cached answer would satisfy it without writing a reading.
+  res.setHeader('Cache-Control', collector
+    ? 'no-store'
+    : `public, s-maxage=${market.fresh}, stale-while-revalidate=${market.fresh * 2}`);
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify({

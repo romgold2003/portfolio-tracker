@@ -35,9 +35,9 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     # The spot step reads about one pool every ten seconds — GeckoTerminal's
-    # real allowance, measured — and stops at eighteen minutes; the poll takes
-    # about one. Free on a public repository.
-    timeout-minutes: 22
+    # real allowance, measured — and stops at eighteen minutes; the poll and the
+    # four options reads take about two more. Free on a public repository.
+    timeout-minutes: 26
     steps:
       - uses: actions/checkout@v5
 
@@ -99,3 +99,27 @@ jobs:
         run: |
           if [ -z "$KEY" ]; then exit 0; fi
           node scripts/collect-spot.mjs "$BASE" "$KEY"
+
+      # Options exposure for the DEX & GEX history chart, which draws one point
+      # a day. A point only exists for a day on which the chain was read, and
+      # that used to mean a day somebody opened the panel. Reading every market
+      # here gives each day its reading whoever looked. One request per market,
+      # each its own function call with its own sixty seconds — the S&P chain
+      # alone is thirteen megabytes.
+      - name: Record options exposure for the history
+        if: always()
+        env:
+          BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
+          KEY: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$KEY" ]; then exit 0; fi
+          for market in BTC ETH SPX NDX; do
+            code=$(curl -s -S --max-time 90 -o exposure.json -w '%{http_code}' \
+              "$BASE/api/options?market=$market&key=$KEY")
+            echo "$market: HTTP $code"
+            # One market's feed being down is that market's bad afternoon, not
+            # an outage: a warning, and the others still record.
+            if [ "$code" != "200" ]; then
+              echo "::warning::options $market answered $code: $(head -c 200 exposure.json | tr -d '\r\n')"
+            fi
+          done

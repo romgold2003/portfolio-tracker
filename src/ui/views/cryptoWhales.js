@@ -535,31 +535,37 @@ export async function renderCryptoWhales() {
 }
 
 /**
- * The two trackers inside the Gamble tab.
+ * The three views inside the News page's Crypto tab: whales, volume, ETF flows.
  *
- * Bound once, on the strip rather than on each button, so redrawing either
- * panel cannot leave a stale handler behind.
+ * They lived under Gamble until October 2026, beside the Polymarket bets; they
+ * are about crypto money rather than about wagers, so they moved to a tab of
+ * their own. Bound once, on the strip rather than on each button, so redrawing
+ * a panel cannot leave a stale handler behind.
  */
-export function installGambleTabs({ onMacro } = {}) {
-  const strip = el('gambleTabs');
+const CRYPTO_VIEWS = { whales: 'cryptoWhales', volume: 'cryptoVolume', etf: 'cryptoEtf' };
+let cryptoView = 'whales';
+
+/** Draw whichever Crypto view is open — on arrival at the tab, or on a switch. */
+export function showCryptoView(wanted = cryptoView) {
+  cryptoView = CRYPTO_VIEWS[wanted] ? wanted : 'whales';
+  for (const [id, pane] of Object.entries(CRYPTO_VIEWS)) {
+    if (el(pane)) el(pane).hidden = id !== cryptoView;
+  }
+  for (const b of el('cryptoTabs')?.querySelectorAll('[data-ctab]') ?? []) {
+    b.classList.toggle('active', b.dataset.ctab === cryptoView);
+  }
+  if (cryptoView === 'whales') renderCryptoWhales();
+  else if (cryptoView === 'volume') renderUnusualVolume();
+  // ETF flows are drawn with the rest of the News page and need nothing here.
+}
+
+export function installCryptoTabs() {
+  const strip = el('cryptoTabs');
   if (!strip || strip.dataset.bound === '1') return;
   strip.dataset.bound = '1';
-
   strip.addEventListener('click', (e) => {
-    const button = e.target.closest('[data-gtab]');
-    if (!button) return;
-    const wanted = button.dataset.gtab;
-
-    for (const b of strip.querySelectorAll('[data-gtab]')) {
-      b.classList.toggle('active', b.dataset.gtab === wanted);
-    }
-    el('gambleMacro').hidden = wanted !== 'macro';
-    el('gambleCrypto').hidden = wanted !== 'crypto';
-    if (el('gambleVolume')) el('gambleVolume').hidden = wanted !== 'volume';
-
-    if (wanted === 'crypto') renderCryptoWhales();
-    else if (wanted === 'volume') renderUnusualVolume();
-    else if (typeof onMacro === 'function') onMacro();
+    const button = e.target.closest('[data-ctab]');
+    if (button) showCryptoView(button.dataset.ctab);
   });
 }
 
