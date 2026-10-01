@@ -88,10 +88,17 @@ async function server(resource, init = {}) {
   return JSON.parse(body);
 }
 
-/** Stop with a readable warning rather than a stack trace nobody can see. */
+/**
+ * The server could not be reached or could not store: stop, in red.
+ *
+ * A failed run is what makes GitHub email the owner. GeckoTerminal refusing a
+ * few calls is a bad afternoon and stays a warning; the server failing means
+ * nothing is being collected at all, which is how the card went empty for four
+ * days in September without anyone being told.
+ */
 function giveUp(what, err) {
-  console.log(`::warning::spot: could not ${what}: ${err.message}`);
-  process.exit(0);
+  console.log(`::error::spot: could not ${what}: ${err.message}`);
+  process.exit(1);
 }
 
 let plan;
@@ -166,6 +173,8 @@ for (let i = 0; i === 0 || i < trades.length; i += POST_BATCH) {
   const body = {
     found: i === 0 ? found : [],
     none: i === 0 ? none : [],
+    // How the run went, recorded by the server for the card's freshness line.
+    report: i === 0 ? { read, pools: pools.length, failed: failures.length } : undefined,
     trades: trades.slice(i, i + POST_BATCH),
   };
   let stored;

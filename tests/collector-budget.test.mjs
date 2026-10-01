@@ -177,8 +177,9 @@ describe('the poll itself', () => {
   const poll = src.slice(src.indexOf("if (resource === 'poll')"), src.indexOf('const user = await userForToken'));
 
   test('holds each of its three jobs to a budget', () => {
-    const budgeted = poll.match(/withBudget\(/g) ?? [];
-    assert.equal(budgeted.length, 3, 'a job awaited outright can run the function into the 504');
+    for (const job of [/withBudget\(topUp\(/, /withBudget\(enrichNextCoin\(/, /withBudget\(gmxlev\.collectGmx\(/]) {
+      assert.match(poll, job, 'a job awaited outright can run the function into the 504');
+    }
   });
 
   test('and no longer reads spot trades itself', () => {
@@ -198,8 +199,8 @@ describe('the poll itself', () => {
 describe('the workflow', () => {
   const yml = readFileSync(new URL('../.github/workflows/collect-whales.yml', import.meta.url), 'utf8');
 
-  test('puts the server\'s reply in the warning, not just the status', () => {
-    assert.match(yml, /::warning::the collector answered \$code: \$\{said/);
+  test('puts the server\'s reply in the annotation, not just the status', () => {
+    assert.match(yml, /::error::the collector answered \$code: \$\{said/);
   });
 
   test('and flags a 200 whose jobs failed', () => {

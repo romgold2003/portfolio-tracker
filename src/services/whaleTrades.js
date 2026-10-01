@@ -410,3 +410,31 @@ export function positionMoves(position) {
     symbol: e.symbol,
   }));
 }
+
+/**
+ * What a source line may honestly say about when its data was collected.
+ *
+ * The Spot line used to end "updated 1 minute ago", which was when the browser
+ * had fetched the list — not when anything had been collected. It said so all
+ * through four days in September when nothing was collected at all. GMX's line
+ * promised "every 10 minutes" while the schedule actually ran every four hours.
+ *
+ * This reads the server's record of each collector instead. `collectors` is the
+ * `collectors` object the spot endpoint returns; `job` one of its keys.
+ *
+ * @returns {{ text: string, stale: boolean } | null} null when there is no
+ *   record to go on, so the line says nothing about time rather than guess.
+ */
+export function collectedText(job, collectors, nowS = Math.floor(Date.now() / 1000)) {
+  const h = collectors?.[job];
+  if (!h) return null;
+  const since = (at) => {
+    const s = Math.max(0, nowS - at);
+    if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m ago`;
+    if (s < 86_400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86_400)}d ago`;
+  };
+  if (!h.stale) return { text: `collected ${since(h.okAt)}`, stale: false };
+  if (h.okAt) return { text: `⚠ last collected ${since(h.okAt)} — collection is failing`, stale: true };
+  return { text: '⚠ not collected yet', stale: true };
+}

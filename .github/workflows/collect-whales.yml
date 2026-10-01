@@ -66,17 +66,21 @@ jobs:
           cat response.json
           echo
 
-          # A failed poll is worth surfacing, but it is not worth failing loudly
-          # every ten minutes over a provider having a bad afternoon.
-          #
-          # The warning carries the server's own words. It used to say only the
-          # status code, and the reply explaining it sat in a log that needs a
-          # sign-in to read — so four days of "504" told nobody anything.
+          # The annotation carries the server's own words. It used to say only
+          # the status code, and the reply explaining it sat in a log that needs
+          # a sign-in to read — so four days of "504" told nobody anything.
           # Annotations are public on a public repository; the reason belongs
           # there.
           said=$(head -c 400 response.json | tr -d '\r\n')
+          # Anything but a 200 means nothing was collected — the server was
+          # down, timed out, or could not reach the database — so the run fails
+          # in red, which is what makes GitHub email the owner. It used to be a
+          # warning on a green run, and that is how four days of 504s went
+          # unnoticed. A job failing inside a 200 is a bad afternoon for one
+          # source, and stays a warning.
           if [ "$code" != "200" ]; then
-            echo "::warning::the collector answered $code: ${said:-no body}"
+            echo "::error::the collector answered $code: ${said:-no body}"
+            exit 1
           # Any job's "failed" that is a non-empty string or a non-empty list.
           elif grep -Eq '"failed":("[^"]|\[")' response.json; then
             echo "::warning::the collector answered 200 but a job failed: $said"

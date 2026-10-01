@@ -18,7 +18,7 @@ import { renderUnusualVolume } from './unusualVolume.js';
 import {
   BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
   hyperliquidAction, filterLeveraged, buildPositions, positionSummary, positionMoves,
-  summarisePositions, leverageText, positionStory, walletLink, shortAddress,
+  summarisePositions, leverageText, positionStory, walletLink, shortAddress, collectedText,
 } from '../../services/whaleTrades.js';
 import {
   renderOverview, tickOverview, setCoinListener, overviewCoins,
@@ -49,6 +49,8 @@ let hlRows = readHyperliquid();
 /** What each opening is worth now, kept apart from the rows so a refresh cannot wipe it. */
 const live = new Map();
 let loadedAt = 0;
+/** The server's record of when each collector last worked. See collectedText. */
+let collectors = null;
 let loadError = '';
 const hl = { socket: null, markets: new Map(), status: 'idle', open: new Map(), sweep: null };
 
@@ -212,7 +214,10 @@ function drawSection(key) {
     ? HEAD + shown.map(lev ? leveragedRow : spotRow).join('')
     : `<div class="empty">${escapeHtml(emptyText(key))}</div>`;
 
-  el(`${key}Src`).textContent = lev ? leveragedSource() : spotSource();
+  const src = el(`${key}Src`);
+  src.textContent = lev ? leveragedSource() : spotSource();
+  // Amber when the data underneath has stopped arriving.
+  src.classList.toggle('amber', Boolean(collectedText(lev ? 'gmx' : 'spot', collectors)?.stale));
 }
 
 function emptyText(key) {
@@ -233,13 +238,14 @@ function leveragedSource() {
     closed: 'Hyperliquid reconnecting…',
     idle: 'Hyperliquid',
   }[hl.status] ?? 'Hyperliquid';
-  return `${live} · GMX on Arbitrum and Avalanche, every 10 minutes · P&L is the profit or loss realised by a close`;
+  const gmx = collectedText('gmx', collectors);
+  return `${live} · GMX on Arbitrum and Avalanche${gmx ? `, ${gmx.text}` : ''} · P&L is the profit or loss realised by a close`;
 }
 
 function spotSource() {
-  return loadedAt
-    ? `Uniswap, PancakeSwap, Raydium and other on-chain exchanges via GeckoTerminal · trading bots removed · updated ${ago(Math.floor(loadedAt / 1000))}`
-    : 'Loading…';
+  if (!loadedAt) return 'Loading…';
+  const spot = collectedText('spot', collectors);
+  return `Uniswap, PancakeSwap, Raydium and other on-chain exchanges via GeckoTerminal · trading bots removed${spot ? ` · ${spot.text}` : ''}`;
 }
 
 function draw() {
@@ -260,6 +266,7 @@ async function loadServer() {
     const json = await spot.json();
     if (Array.isArray(json.coins) && json.coins.length) coins = json.coins;
     spotRows = Array.isArray(json.rows) ? json.rows : [];
+    collectors = json.collectors ?? null;
     if (lev.ok) gmxRows = (await lev.json())?.rows ?? gmxRows;
     loadedAt = Date.now();
     loadError = '';

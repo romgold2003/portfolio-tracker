@@ -26,6 +26,7 @@ import * as netflowCard from '../_lib/netflowcard.js';
 import { rankHolders, exitEvents } from '../_lib/topholders.js';
 import { classifyActivity, linkSwaps } from '../_lib/activity.js';
 import { withBudget } from '../_lib/budget.js';
+import * as health from '../_lib/collectorHealth.js';
 import * as cexflow from '../_lib/cexflow.js';
 import * as stablecoins from '../_lib/stablecoins.js';
 import * as holderhistory from '../_lib/holderhistory.js';
@@ -91,6 +92,8 @@ const REFRESH_BUDGET_MS = 6_000;
  * stuck — always gets out.
  */
 const POLL_BUDGET_MS = 45_000;
+/** Writing down how the jobs went. Inside the sixty along with the budget above. */
+const HEALTH_BUDGET_MS = 8_000;
 
 /** The rolling day is one small fetch; it should never hold the card up. */
 const LIVE_DAY_BUDGET_MS = 3_000;
@@ -129,16 +132,41 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
+/**
+ * Where the current sweep has got to, stage by stage, with how long each took.
+ *
+ * The sweep runs past the scheduled poll's budget on every run, and until this
+ * the only thing that could be said about it was "still running after 45s".
+ * Read when the budget runs out, this says which stage it was in and what the
+ * finished ones cost — so the slow part is named rather than guessed at.
+ */
+const sweep = { current: 'not started', started: 0, done: [] };
+
+function stage(name) {
+  const t = Date.now();
+  if (sweep.started) sweep.done.push(`${sweep.current} ${((t - sweep.started) / 1000).toFixed(1)}s`);
+  sweep.current = name;
+  sweep.started = t;
+}
+
+function topUpProgress() {
+  const running = sweep.started ? ` for ${((Date.now() - sweep.started) / 1000).toFixed(1)}s` : '';
+  return [...sweep.done, `now in ${sweep.current}${running}`].join(', ');
+}
+
 async function topUp(now, { force = false } = {}) {
   // The scheduled collector is the point of being called; it does not wait out
   // a throttle that exists to stop many open tabs polling at once.
   if (!force && now - lastPollAt < POLL_MS) return lastPoll;
   lastPollAt = now;
+  sweep.done = [];
+  sweep.started = 0;
 
   const failed = [];
   let written = 0;
 
   let prices = null;
+  stage('prices');
   try {
     prices = await priceMap();
   } catch (err) {
@@ -162,8 +190,10 @@ async function topUp(now, { force = false } = {}) {
         watchContracts().catch(() => ({})),
         new Promise((resolve) => { setTimeout(() => resolve({}), 2500); }),
       ]);
+      stage('chain fetch');
       const { rows, failed: chainFailures } = await collect({ prices, contracts });
       failed.push(...chainFailures);
+      stage(`storing ${rows.length} transfers`);
       written += await store.record(rows);
     } catch (err) {
       failed.push({ chain: 'chains', error: err.message });
@@ -171,6 +201,7 @@ async function topUp(now, { force = false } = {}) {
   }
 
   if (feedConfigured()) {
+    stage('whale-alert');
     try {
       const newest = await store.latestAt();
       const floor = Math.floor(now / 1000) - MAX_LOOKBACK_S;
@@ -190,6 +221,7 @@ async function topUp(now, { force = false } = {}) {
    * balance whenever you ask.
    */
   if (prices) {
+    stage('holder snapshot');
     try {
       written += await snapshotHolders({ prices, now });
     } catch (err) {
@@ -204,6 +236,7 @@ async function topUp(now, { force = false } = {}) {
    * out the day it just left. The rollup is what makes the six month and one
    * year rows answerable without walking every raw transfer on a refresh.
    */
+  stage('netflow rollup');
   try {
     const byAddress = await loadExchanges();
     const recent = await store.read({ minUsd: 0, limit: 50_000 });
@@ -211,9 +244,11 @@ async function topUp(now, { force = false } = {}) {
     await netflowCard.prune({ now });
   } catch { /* the card falls back to the raw rows */ }
 
+  stage('pruning');
   try { await store.prune({ now }); } catch { /* pruning is housekeeping */ }
   try { await holders.prune({ now }); } catch { /* pruning is housekeeping */ }
 
+  stage('done');
   lastPoll = { failed, written, at: now };
   return lastPoll;
 }
@@ -537,13 +572,28 @@ export default async function handler(req, res) {
       let body;
       try { body = await readJson(req); } catch { return fail(res, 400, 'That is not JSON.'); }
       const list = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);
+      const now = Date.now();
       const stored = await dexspot.storeSpot({
         found: list(body?.found, 500),
         none: list(body?.none, 100).filter((s) => typeof s === 'string'),
         trades: list(body?.trades, 5_000),
         listed: new Set(coins.map((c) => c.symbol)),
-        now: Date.now(),
+        now,
       });
+
+      // The runner's own account of the run comes with its first batch. A run
+      // that reached GeckoTerminal for nothing at all did not collect.
+      const report = body?.report;
+      if (report && typeof report === 'object') {
+        const read = Number(report.read) || 0;
+        const pools = Number(report.pools) || 0;
+        const failed = Number(report.failed) || 0;
+        await health.noteRun('spot', {
+          ok: read > 0 || pools === 0,
+          detail: `read ${read}/${pools} pools, ${failed} calls failed, wrote ${stored.written}`,
+          now,
+        });
+      }
       return send(res, 200, stored);
     } catch (err) {
       return fail(res, 500, `Could not ${resource === 'spotplan' ? 'plan' : 'store'} the spot trades (${err.message}).`);
@@ -679,16 +729,44 @@ export default async function handler(req, res) {
      * whether anyone hears back.
      */
     const ranOut = (job) => ({ failed: `${job}: still running after ${POLL_BUDGET_MS / 1000}s` });
+    const TIMED_OUT = Symbol('timed out');
     // Spot trades are not here: GeckoTerminal refuses the platform's shared
     // addresses, so the runner reads them itself and posts them to
     // ?resource=spot. See dexspot.js.
-    const [poll, holders, leveraged] = await Promise.all([
-      withBudget(topUp(now, { force: true }), POLL_BUDGET_MS,
-        { written: 0, failed: [ranOut('transfers').failed], at: null }),
+    const [swept, holders, leveraged] = await Promise.all([
+      withBudget(topUp(now, { force: true }), POLL_BUDGET_MS, TIMED_OUT),
       // One coin's holder movements, rotating by the clock across polls.
       withBudget(enrichNextCoin(now).catch((err) => ({ failed: err.message })), POLL_BUDGET_MS, ranOut('holders')),
       withBudget(gmxlev.collectGmx({ now }).catch((err) => ({ failed: err.message })), POLL_BUDGET_MS, ranOut('gmx')),
     ]);
+    // Where the sweep had got to, so an overrun names the slow stage instead
+    // of only saying that something was.
+    const poll = swept === TIMED_OUT
+      ? { written: 0, failed: [`${ranOut('transfers').failed} (${topUpProgress()})`], at: null }
+      : swept;
+
+    /**
+     * Each job's outcome, for the card to read back — and the canary for the
+     * database itself. If this cannot be written, the database is down or
+     * paused, the jobs above wrote nothing either, and the honest answer is a
+     * failure the scheduled job will show in red, not a 200 with a shrug.
+     */
+    const failures = (r) => (Array.isArray(r?.failed) ? r.failed.length : r?.failed ? 1 : 0);
+    const noted = await withBudget((async () => {
+      await health.noteRun('transfers', {
+        ok: swept !== TIMED_OUT && (poll.written > 0 || failures(poll) === 0),
+        detail: failures(poll) ? JSON.stringify(poll.failed).slice(0, 300) : `wrote ${poll.written}`,
+        now,
+      });
+      await health.noteRun('holders', { ok: !failures(holders), detail: holders?.failed ?? '', now });
+      await health.noteRun('gmx', {
+        ok: !failures(leveraged) || leveraged.written > 0,
+        detail: failures(leveraged) ? JSON.stringify(leveraged.failed).slice(0, 300) : `wrote ${leveraged.written}`,
+        now,
+      });
+      return true;
+    })().catch((err) => err), HEALTH_BUDGET_MS, new Error(`no answer within ${HEALTH_BUDGET_MS / 1000}s`));
+    if (noted !== true) return fail(res, 503, `The database did not take the collector's record: ${noted.message}`);
 
     res.setHeader('Cache-Control', 'no-store');
     return send(res, 200, {
@@ -733,10 +811,15 @@ export default async function handler(req, res) {
       const dex = dexspot.withoutBots(await dexspot.readSpot({ since }))
         .filter((r) => listed.has(r.symbol));
 
+      // When each collector last worked, for the card to say so. A failure to
+      // read it costs the freshness line and nothing else.
+      const collectors = await health.readHealth({ now }).catch(() => null);
+
       res.setHeader('Cache-Control', 'private, max-age=30');
       return send(res, 200, {
         coins: coins.map((c) => ({ symbol: c.symbol, name: c.name, rank: c.rank, logo: c.logo, price: c.price })),
         rows: dex,
+        collectors,
       });
     } catch (err) {
       return fail(res, 502, `Could not read the spot trades (${err.message}).`);
