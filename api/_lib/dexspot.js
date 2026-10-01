@@ -200,6 +200,7 @@ export async function collectSpot({
   await ensureTables();
   const started = Date.now();
   const inTime = () => Date.now() - started < budgetMs;
+  const errors = [];
   const slot = Math.floor(now / (10 * 60 * 1000));
   let used = 0;
 
@@ -242,7 +243,7 @@ export async function collectSpot({
               [coin.symbol, network, token, p.pool, p.dex, stamp]);
           }
         }
-      } catch { /* the next rotation tries again */ }
+      } catch (err) { errors.push(err.message); /* the next rotation tries again */ }
     }
     if (!found && !looked.has(coin.symbol)) {
       await query('INSERT INTO spot_pools (symbol, network, token, pool, dex, checked) VALUES ($1, $2, $3, $4, $5, $6)',
@@ -257,6 +258,7 @@ export async function collectSpot({
   const left = Math.max(0, calls - used);
   let trades = 0;
   let written = 0;
+  let read = 0;
   for (let i = 0; i < Math.min(left, pools.length) && inTime(); i++) {
     const p = pools[(slot * left + i) % pools.length];
     try {
@@ -267,11 +269,20 @@ export async function collectSpot({
       const found = tradesOf(json, { symbol: p.symbol, token: p.token, network: p.network, dex: p.dex });
       trades += found.length;
       written += await record(found);
-    } catch { /* rate limited or down: next poll */ }
+      read += 1;
+    } catch (err) { errors.push(err.message); /* rate limited or down: next poll */ }
   }
 
   await query('DELETE FROM spot_trades WHERE at < $1', [Math.floor((now - RETAIN_MS) / 1000)]);
-  return { pools: pools.length, trades, written };
+  /**
+   * `read` is how many pools were actually asked, and `failed` is there only
+   * when calls went wrong. Both were missing: every error was swallowed, so a
+   * run that was rate limited on every call reported "0 trades" exactly as a
+   * quiet market does, and the two could not be told apart from outside.
+   */
+  const out = { pools: pools.length, read, trades, written };
+  if (errors.length) out.failed = `${errors.length} call${errors.length === 1 ? '' : 's'} failed, first: ${errors[0]}`;
+  return out;
 }
 
 export async function record(trades) {

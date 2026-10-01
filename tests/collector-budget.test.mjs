@@ -78,6 +78,27 @@ describe('every upstream call can be cut short', () => {
   });
 });
 
+describe('the spot collector says when its calls fail', () => {
+  // The first manual run after the fix reported "81 pools, 0 trades" — which a
+  // quiet market and a rate limit on every call both produced identically,
+  // because every error was caught and dropped.
+  const coins = [{ id: 'weth', symbol: 'WETH', rank: 1 }];
+  const platformsOf = () => ({ ethereum: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' });
+
+  test('a rate-limited run reports the failure, not a quiet market', async () => {
+    const limited = async () => ({ ok: false, status: 429, json: async () => ({}) });
+    const out = await collectSpot({ coins, platformsOf, now: Date.UTC(2026, 9, 1, 1), fetcher: limited });
+    assert.match(out.failed ?? '', /failed, first: GeckoTerminal answered 429/);
+  });
+
+  test('and a clean run carries no failure at all', async () => {
+    const { fetcher } = recordingFetcher(() => ({ data: [] }));
+    const out = await collectSpot({ coins, platformsOf, now: Date.UTC(2026, 9, 1, 2), fetcher });
+    assert.equal(out.failed, undefined, 'a quiet market is not a failure');
+    assert.equal(typeof out.read, 'number');
+  });
+});
+
 describe('the poll itself', () => {
   const src = readFileSync(new URL('../api/_panels/whales.js', import.meta.url), 'utf8');
   const poll = src.slice(src.indexOf("if (resource === 'poll')"), src.indexOf('const user = await userForToken'));
