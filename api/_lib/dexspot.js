@@ -7,12 +7,12 @@
  * is what the Spot panel is for, and the reason it reads DEX trades rather than
  * transfers — a transfer never says buy or sell.
  *
- * Source: GeckoTerminal's public API. No key, about thirty calls a minute. The
- * scheduled collector (every ten minutes) spends a small budget of calls each
- * time: refreshing which pools each coin trades in, a coin or two at a time,
- * and reading the large trades of a slice of those pools, in rotation. The
- * trades endpoint returns the last day, so a pool read once an hour misses
- * nothing.
+ * Source: GeckoTerminal's public API. No key, about thirty calls a minute per
+ * address. The GitHub runner (scripts/collect-spot.mjs) does the reading: it
+ * refreshes which pools each coin trades in, a few stale coins at a time, and
+ * reads the large trades of every known pool, then posts them to the server.
+ * The trades endpoint returns about the last day, so a pool read every few
+ * hours misses little.
  *
  * Coins that trade almost only on centralised exchanges (XRP, ADA, DOGE…) have
  * no meaningful pool, and the panel says so rather than showing them empty.
@@ -186,103 +186,143 @@ export function tradesOf(json, { symbol, token, network, dex }) {
   return out;
 }
 
-/* ── the collector's share of each poll ──────────────────────────────── */
+/* ── collecting: the runner fetches, the server plans and stores ────── */
 
 /**
- * Spend a few calls: refresh the pool list of the coin whose turn it is, then
- * read the large trades of the next slice of pools. The turn is taken from the
- * clock, so the rotation keeps moving across cold starts.
+ * Why this is split in two.
+ *
+ * It used to run inside the server's scheduled poll, and GeckoTerminal refused
+ * it: 13 of 17 calls in one run came back 429. Its limit is counted per IP, and
+ * a serverless function shares its outgoing addresses with every other site on
+ * the platform, so the allowance was largely spent before this app asked. The
+ * poll also had sixty seconds for everything, which bought about fourteen of
+ * eighty-odd pools a run — fine every ten minutes, hopeless when the scheduler
+ * actually ran every four hours.
+ *
+ * So the fetching moved to the GitHub runner (scripts/collect-spot.mjs), which
+ * has an address of its own, no sixty-second ceiling, and can pace itself and
+ * read every pool every run. The server keeps the two things only it can do:
+ * say which pools exist, and write what comes back — after checking it.
  */
-export async function collectSpot({
-  coins, platformsOf, now = Date.now(), fetcher = fetch, calls = 18, budgetMs = 20_000,
-}) {
-  if (!databaseAvailable() || !coins?.length) return { pools: 0, trades: 0, written: 0 };
-  await ensureTables();
-  const started = Date.now();
-  const inTime = () => Date.now() - started < budgetMs;
-  const errors = [];
-  const slot = Math.floor(now / (10 * 60 * 1000));
-  let used = 0;
 
-  /**
-   * Which coins' pools to look up this time.
-   *
-   * Coins never looked up come first, so a new coin in the top fifty — or the
-   * very first run — is filled in straight away rather than one coin per poll.
-   * After that, the coin whose turn it is by the clock, so every coin's pools
-   * are refreshed within a few hours. A coin with no pool worth reading is
-   * remembered as such (pool '-') and not searched for again until its turn.
-   */
-  const held = (await query('SELECT symbol, pool FROM spot_pools', [])).rows;
-  const looked = new Set(held.map((r) => r.symbol));
-  // Once each: a coin both new and due this turn was listed twice, and its
-  // second "no pools" row hit the unique key and threw the whole spot job.
-  const due = [...new Map([
-    ...coins.filter((c) => !looked.has(c.symbol)),
-    coins[slot % coins.length],
-  ].map((c) => [c.symbol, c])).values()];
-  const discoveryCalls = coins.some((c) => !looked.has(c.symbol)) ? Math.floor(calls * 0.7) : Math.floor(calls / 4);
+/** A pool's large trades, read live. No database; the runner calls this. */
+export async function readTrades(pool, { fetcher = fetch } = {}) {
+  const json = await get(
+    `/networks/${pool.network}/pools/${encodeURIComponent(pool.pool)}/trades?trade_volume_in_usd_greater_than=${FLOOR_USD}`,
+    fetcher,
+  );
+  return tradesOf(json, { symbol: pool.symbol, token: pool.token, network: pool.network, dex: pool.dex });
+}
+
+/**
+ * What the runner should do this time: each top coin with the tokens its pools
+ * are found under and when they were last looked for, and the pools known now.
+ */
+export async function spotPlan({ coins, platformsOf }) {
+  await ensureTables();
+  const held = (await query('SELECT symbol, network, token, pool, dex, checked FROM spot_pools', [])).rows;
+  const wanted = new Set(coins.map((c) => c.symbol));
+  const checkedOf = new Map();
+  for (const r of held) checkedOf.set(r.symbol, Math.max(checkedOf.get(r.symbol) ?? 0, Number(r.checked) || 0));
+  return {
+    coins: coins.map((c) => ({
+      symbol: c.symbol,
+      tokens: tokensFor(c, platformsOf(c)),
+      checked: checkedOf.get(c.symbol) ?? null,
+    })),
+    pools: held
+      .filter((r) => wanted.has(r.symbol) && r.pool !== '-')
+      .map(({ symbol, network, token, pool, dex }) => ({ symbol, network, token, pool, dex })),
+  };
+}
+
+/** Every network a pool or trade may legitimately be on. */
+const NETWORK_IDS = new Set([
+  ...Object.values(NETWORKS),
+  ...Object.values(NATIVE).flat().map(([network]) => network),
+]);
+const text = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max;
+
+/** A posted pool, rebuilt field by field, or null. */
+export function cleanPool(p, listed) {
+  if (!p || !listed.has(p.symbol) || !NETWORK_IDS.has(p.network)) return null;
+  if (!text(p.token, 120) || !text(p.pool, 120) || p.pool === '-') return null;
+  if (p.dex != null && !text(p.dex, 80)) return null;
+  return { symbol: p.symbol, network: p.network, token: p.token, pool: p.pool, dex: p.dex ?? null };
+}
+
+/**
+ * A posted trade, rebuilt field by field, or null.
+ *
+ * The id is rebuilt here rather than taken from the body, so a trade cannot be
+ * filed under someone else's id; and a time outside the kept window, or in the
+ * future, is not a trade this panel could have been sent honestly.
+ */
+export function cleanTrade(t, listed, now = Date.now()) {
+  if (!t || !listed.has(t.symbol) || (t.side !== 'buy' && t.side !== 'sell')) return null;
+  if (!NETWORK_IDS.has(t.network) || !text(t.hash, 120) || !text(t.address, 120)) return null;
+  if (t.dex != null && !text(t.dex, 80)) return null;
+  const usd = Number(t.usd);
+  const amount = Number(t.amount);
+  const at = Number(t.at);
+  if (!Number.isFinite(usd) || !(usd >= FLOOR_USD) || !Number.isFinite(amount) || !(amount > 0)) return null;
+  const nowS = Math.floor(now / 1000);
+  if (!Number.isInteger(at) || at > nowS + 300 || at < nowS - RETAIN_MS / 1000) return null;
+  return {
+    id: `${t.network}:${t.hash}:${t.side}:${t.symbol}`,
+    at,
+    symbol: t.symbol,
+    side: t.side,
+    amount,
+    usd,
+    address: t.address,
+    network: t.network,
+    dex: t.dex ?? null,
+    hash: t.hash,
+  };
+}
+
+/**
+ * Store what the runner found: pools it discovered, coins it searched and found
+ * no pool for, and trades. Everything is checked against the top fifty first.
+ */
+export async function storeSpot({ found = [], none = [], trades = [], listed, now = Date.now() }) {
+  await ensureTables();
   const stamp = Math.floor(now / 1000);
 
-  for (const coin of due) {
-    if (used >= discoveryCalls || !inTime()) break;
-    let found = 0;
-    for (const [network, token] of tokensFor(coin, platformsOf(coin))) {
-      if (used >= discoveryCalls || !inTime()) break;
-      used += 1;
-      try {
-        for (const p of await discoverPools(network, token, { fetcher })) {
-          found += 1;
-          const key = [network, p.pool, token];
-          const same = await query('SELECT pool FROM spot_pools WHERE network = $1 AND pool = $2 AND token = $3', key);
-          if (same.rows.length) {
-            await query('UPDATE spot_pools SET checked = $4, symbol = $5, dex = $6 WHERE network = $1 AND pool = $2 AND token = $3',
-              [...key, stamp, coin.symbol, p.dex]);
-          } else {
-            await query('INSERT INTO spot_pools (symbol, network, token, pool, dex, checked) VALUES ($1, $2, $3, $4, $5, $6)',
-              [coin.symbol, network, token, p.pool, p.dex, stamp]);
-          }
-        }
-      } catch (err) { errors.push(err.message); /* the next rotation tries again */ }
-    }
-    if (!found && !looked.has(coin.symbol)) {
+  let pools = 0;
+  for (const raw of found) {
+    const p = cleanPool(raw, listed);
+    if (!p) continue;
+    const key = [p.network, p.pool, p.token];
+    const same = await query('SELECT pool FROM spot_pools WHERE network = $1 AND pool = $2 AND token = $3', key);
+    if (same.rows.length) {
+      await query('UPDATE spot_pools SET checked = $4, symbol = $5, dex = $6 WHERE network = $1 AND pool = $2 AND token = $3',
+        [...key, stamp, p.symbol, p.dex]);
+    } else {
       await query('INSERT INTO spot_pools (symbol, network, token, pool, dex, checked) VALUES ($1, $2, $3, $4, $5, $6)',
-        [coin.symbol, '-', coin.symbol, '-', null, stamp]);
+        [p.symbol, p.network, p.token, p.pool, p.dex, stamp]);
+    }
+    pools += 1;
+  }
+
+  // A coin with no pool worth reading is remembered as such (pool '-'), so it
+  // is not searched for again until it goes stale.
+  for (const symbol of new Set(none)) {
+    if (!listed.has(symbol)) continue;
+    const held = await query('SELECT pool FROM spot_pools WHERE symbol = $1', [symbol]);
+    if (!held.rows.length) {
+      await query('INSERT INTO spot_pools (symbol, network, token, pool, dex, checked) VALUES ($1, $2, $3, $4, $5, $6)',
+        [symbol, '-', symbol, '-', null, stamp]);
+    } else {
+      await query("UPDATE spot_pools SET checked = $2 WHERE symbol = $1 AND pool = '-'", [symbol, stamp]);
     }
   }
 
-  // Only pools of coins still in the top fifty are read.
-  const wanted = new Set(coins.map((c) => c.symbol));
-  const { rows } = await query('SELECT * FROM spot_pools ORDER BY network, pool', []);
-  const pools = rows.filter((r) => wanted.has(r.symbol) && r.pool !== '-');
-  const left = Math.max(0, calls - used);
-  let trades = 0;
-  let written = 0;
-  let read = 0;
-  for (let i = 0; i < Math.min(left, pools.length) && inTime(); i++) {
-    const p = pools[(slot * left + i) % pools.length];
-    try {
-      const json = await get(
-        `/networks/${p.network}/pools/${encodeURIComponent(p.pool)}/trades?trade_volume_in_usd_greater_than=${FLOOR_USD}`,
-        fetcher,
-      );
-      const found = tradesOf(json, { symbol: p.symbol, token: p.token, network: p.network, dex: p.dex });
-      trades += found.length;
-      written += await record(found);
-      read += 1;
-    } catch (err) { errors.push(err.message); /* rate limited or down: next poll */ }
-  }
-
+  const clean = trades.map((t) => cleanTrade(t, listed, now)).filter(Boolean);
+  const written = await record(clean);
   await query('DELETE FROM spot_trades WHERE at < $1', [Math.floor((now - RETAIN_MS) / 1000)]);
-  /**
-   * `read` is how many pools were actually asked, and `failed` is there only
-   * when calls went wrong. Both were missing: every error was swallowed, so a
-   * run that was rate limited on every call reported "0 trades" exactly as a
-   * quiet market does, and the two could not be told apart from outside.
-   */
-  const out = { pools: pools.length, read, trades, written };
-  if (errors.length) out.failed = `${errors.length} call${errors.length === 1 ? '' : 's'} failed, first: ${errors[0]}`;
-  return out;
+  return { pools, trades: clean.length, written, skipped: trades.length - clean.length };
 }
 
 export async function record(trades) {

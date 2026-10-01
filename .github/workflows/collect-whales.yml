@@ -34,8 +34,17 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # The spot step reads about one pool every ten seconds — GeckoTerminal's
+    # real allowance, measured — and stops at eighteen minutes; the poll takes
+    # about one. Free on a public repository.
+    timeout-minutes: 22
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Ask the deployment to poll the chains
         env:
           BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
@@ -72,3 +81,17 @@ jobs:
           elif grep -Eq '"failed":("[^"]|\[")' response.json; then
             echo "::warning::the collector answered 200 but a job failed: $said"
           fi
+
+      # Spot trades are read here, on the runner, not by the poll above.
+      # GeckoTerminal limits by IP and refused the deployment's shared
+      # addresses: 13 of 17 calls in one run came back 429. This runner has
+      # an address of its own and no sixty-second ceiling, so it reads every
+      # known pool each run and posts the trades back. See scripts/collect-spot.mjs.
+      - name: Read spot whale trades and post them
+        if: always()
+        env:
+          BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
+          KEY: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$KEY" ]; then exit 0; fi
+          node scripts/collect-spot.mjs "$BASE" "$KEY"

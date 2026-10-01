@@ -508,6 +508,49 @@ export default async function handler(req, res) {
   const resource = url.searchParams.get('resource') || 'feed';
 
   /**
+   * Spot whale trades, collected by the runner rather than by the poll.
+   *
+   * GeckoTerminal limits by IP and refused this platform's shared addresses:
+   * 13 of 17 calls in one run were 429s. The runner has its own address and no
+   * sixty-second ceiling, so it reads every pool and posts the trades here.
+   *
+   *   GET  ?resource=spotplan&key=…  which coins and pools to read this time
+   *   POST ?resource=spot&key=…      { found, none, trades } — what it read
+   *
+   * Same shared secret as the poll. Everything posted is rebuilt field by field
+   * and checked against the current top fifty before it is written.
+   */
+  if (resource === 'spotplan' || (resource === 'spot' && req.method === 'POST')) {
+    const expected = process.env.CRON_SECRET || '';
+    const given = url.searchParams.get('key') || '';
+    if (!expected) return fail(res, 503, 'No collector secret is configured.');
+    if (!timingSafeEqual(given, expected)) return fail(res, 401, 'Wrong key.');
+    res.setHeader('Cache-Control', 'no-store');
+
+    try {
+      const { coins } = await topCoins();
+      if (resource === 'spotplan') {
+        const platforms = await platformMap();
+        return send(res, 200, await dexspot.spotPlan({ coins, platformsOf: (c) => platforms?.get(c.id) ?? {} }));
+      }
+
+      let body;
+      try { body = await readJson(req); } catch { return fail(res, 400, 'That is not JSON.'); }
+      const list = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);
+      const stored = await dexspot.storeSpot({
+        found: list(body?.found, 500),
+        none: list(body?.none, 100).filter((s) => typeof s === 'string'),
+        trades: list(body?.trades, 5_000),
+        listed: new Set(coins.map((c) => c.symbol)),
+        now: Date.now(),
+      });
+      return send(res, 200, stored);
+    } catch (err) {
+      return fail(res, 500, `Could not ${resource === 'spotplan' ? 'plan' : 'store'} the spot trades (${err.message}).`);
+    }
+  }
+
+  /**
    * The one path that is written to rather than read from.
    *
    * The exchange balance history is forty megabytes per exchange — every token,
@@ -619,9 +662,8 @@ export default async function handler(req, res) {
 
     const now = Date.now();
     /**
-     * Four jobs, side by side: the transfers behind the netflow and holder
-     * cards, one coin's holder movements, the spot trades on decentralised
-     * exchanges, and the leveraged trades on GMX.
+     * Three jobs, side by side: the transfers behind the netflow and holder
+     * cards, one coin's holder movements, and the leveraged trades on GMX.
      */
     /**
      * Each job gets until POLL_BUDGET_MS and no longer, and the answer goes out
@@ -637,26 +679,20 @@ export default async function handler(req, res) {
      * whether anyone hears back.
      */
     const ranOut = (job) => ({ failed: `${job}: still running after ${POLL_BUDGET_MS / 1000}s` });
-    const [poll, holders, spot, leveraged] = await Promise.all([
+    // Spot trades are not here: GeckoTerminal refuses the platform's shared
+    // addresses, so the runner reads them itself and posts them to
+    // ?resource=spot. See dexspot.js.
+    const [poll, holders, leveraged] = await Promise.all([
       withBudget(topUp(now, { force: true }), POLL_BUDGET_MS,
         { written: 0, failed: [ranOut('transfers').failed], at: null }),
       // One coin's holder movements, rotating by the clock across polls.
       withBudget(enrichNextCoin(now).catch((err) => ({ failed: err.message })), POLL_BUDGET_MS, ranOut('holders')),
-      withBudget((async () => {
-        try {
-          const { coins } = await topCoins();
-          const platforms = await platformMap();
-          return await dexspot.collectSpot({ coins, platformsOf: (c) => platforms?.get(c.id) ?? {}, now });
-        } catch (err) {
-          return { failed: err.message };
-        }
-      })(), POLL_BUDGET_MS, ranOut('spot')),
       withBudget(gmxlev.collectGmx({ now }).catch((err) => ({ failed: err.message })), POLL_BUDGET_MS, ranOut('gmx')),
     ]);
 
     res.setHeader('Cache-Control', 'no-store');
     return send(res, 200, {
-      written: poll.written, failed: poll.failed, at: poll.at, holders, spot, leveraged,
+      written: poll.written, failed: poll.failed, at: poll.at, holders, leveraged,
     });
   }
 
