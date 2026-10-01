@@ -211,28 +211,70 @@ export async function fetchCreator({ host, token, signal, fetcher = fetch }) {
 export function resetCreatorCache() { creators.clear(); }
 
 /** Write one day's snapshot. A second write in the same day replaces the first. */
+/**
+ * Rows per statement. Ten columns each, so 500 parameters — inside the oldest
+ * SQLite limit of 999 as well as Postgres's.
+ */
+const BATCH = 50;
+
+/**
+ * Today's balance for each holder, replacing any earlier reading of the day.
+ *
+ * One delete and one insert per token, not two queries per holder. The
+ * row-at-a-time version made about 1,600 round trips a snapshot — 2 chains,
+ * 8 tokens, 50 holders, twice each — and every one crossed from the
+ * function's region to the database's at about 80 ms. Measured on 1 October
+ * 2026 it was still going after 36 seconds, ran the scheduled poll out of
+ * its budget on every run, and so the netflow rollup after it never ran at
+ * all.
+ *
+ * A holder listed twice keeps its last reading, as before; the table's
+ * primary key would refuse both in one insert.
+ */
 export async function record(rows, { now = Date.now() } = {}) {
   if (!databaseAvailable() || !rows?.length) return 0;
   await ensureTable();
 
   const day = dayOf(now);
   const at = Math.floor(now / 1000);
-  let written = 0;
 
+  const byToken = new Map();
   for (const r of rows) {
-    await query(
-      `DELETE FROM holder_balances
-        WHERE chain = $1 AND token = $2 AND holder = $3 AND day = $4`,
-      [r.chain, r.token, r.holder, day],
-    );
-    await query(
-      `INSERT INTO holder_balances
-         (chain, token, holder, day, symbol, name, kind, units, usd, at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [r.chain, r.token, r.holder, day, r.symbol, r.name ?? null, r.kind,
-        String(r.units), String(r.usd), at],
-    );
-    written += 1;
+    const key = `${r.chain}|${r.token}`;
+    if (!byToken.has(key)) byToken.set(key, new Map());
+    byToken.get(key).set(r.holder, r);
+  }
+
+  let written = 0;
+  for (const holdersOf of byToken.values()) {
+    const unique = [...holdersOf.values()];
+    for (let i = 0; i < unique.length; i += BATCH) {
+      const batch = unique.slice(i, i + BATCH);
+      const { chain, token } = batch[0];
+
+      const listed = batch.map((_, j) => `$${j + 4}`).join(', ');
+      await query(
+        `DELETE FROM holder_balances
+          WHERE chain = $1 AND token = $2 AND day = $3 AND holder IN (${listed})`,
+        [chain, token, day, ...batch.map((r) => r.holder)],
+      );
+
+      const values = [];
+      const params = [];
+      batch.forEach((r, j) => {
+        const b = j * 10;
+        values.push(`($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10})`);
+        params.push(r.chain, r.token, r.holder, day, r.symbol, r.name ?? null, r.kind,
+          String(r.units), String(r.usd), at);
+      });
+      await query(
+        `INSERT INTO holder_balances
+           (chain, token, holder, day, symbol, name, kind, units, usd, at)
+         VALUES ${values.join(', ')}`,
+        params,
+      );
+      written += batch.length;
+    }
   }
   return written;
 }
