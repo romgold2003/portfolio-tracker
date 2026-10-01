@@ -120,8 +120,8 @@ async function marketsOf(chain, fetcher) {
   const held = marketCache.get(chain.id);
   if (held && Date.now() - held.at < 24 * 60 * 60 * 1000) return held.map;
   const [markets, tokens] = await Promise.all([
-    fetcher(`${chain.api}/markets`).then((r) => r.json()),
-    fetcher(`${chain.api}/tokens`).then((r) => r.json()),
+    fetcher(`${chain.api}/markets`, { signal: timeout() }).then((r) => r.json()),
+    fetcher(`${chain.api}/tokens`, { signal: timeout() }).then((r) => r.json()),
   ]);
   const byAddress = new Map((tokens?.tokens ?? []).map((t) => [String(t.address).toLowerCase(), t]));
   const map = new Map();
@@ -221,6 +221,12 @@ const QUERY = `query($since: Int!, $floor: BigInt!) {
 }`;
 
 /** The collector's share: every GMX order of $500k and more since the last one held. */
+/**
+ * Ten seconds a call, for the same reason as the spot reader: a request that
+ * never answers would otherwise hold the whole poll until the platform cut it.
+ */
+const timeout = () => AbortSignal.timeout(10_000);
+
 export async function collectGmx({ now = Date.now(), fetcher = fetch } = {}) {
   if (!databaseAvailable()) return { written: 0 };
   await ensureTables();
@@ -237,6 +243,7 @@ export async function collectGmx({ now = Date.now(), fetcher = fetch } = {}) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: QUERY, variables: { since, floor } }),
+        signal: timeout(),
       });
       const json = await res.json();
       if (json?.errors?.length) throw new Error(json.errors[0].message);
@@ -250,6 +257,7 @@ export async function collectGmx({ now = Date.now(), fetcher = fetch } = {}) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: POSITIONS_QUERY, variables: { accounts } }),
+            signal: timeout(),
           }).then((r) => r.json());
           const positions = positionsOf(held?.data?.positions);
           for (const r of rows) {
@@ -292,6 +300,7 @@ async function backfill({ now, fetcher }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: QUERY, variables: { since, floor } }),
+        signal: timeout(),
       }).then((r) => r.json());
       for (const r of rowsOf(json?.data?.tradeActions, markets, chain.id)) {
         if (!wanted.has(r.id) || r.leverage == null) continue;

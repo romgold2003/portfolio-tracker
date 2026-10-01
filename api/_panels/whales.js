@@ -85,6 +85,13 @@ let lastPoll = { failed: [], written: 0, at: 0 };
  */
 const REFRESH_BUDGET_MS = 6_000;
 
+/**
+ * How long the scheduled collector waits on any one of its jobs. Well inside
+ * the platform's sixty, so the answer — and what it says about which job is
+ * stuck — always gets out.
+ */
+const POLL_BUDGET_MS = 45_000;
+
 /** The rolling day is one small fetch; it should never hold the card up. */
 const LIVE_DAY_BUDGET_MS = 3_000;
 /** Writing down the rolling reading. Nothing waits on it; it is fire and forget. */
@@ -616,11 +623,26 @@ export default async function handler(req, res) {
      * cards, one coin's holder movements, the spot trades on decentralised
      * exchanges, and the leveraged trades on GMX.
      */
+    /**
+     * Each job gets until POLL_BUDGET_MS and no longer, and the answer goes out
+     * either way, naming whatever ran out of time.
+     *
+     * It used to await all four outright. When any one of them stalled — an
+     * upstream that never answered, or the database refusing to wake — the
+     * function ran into the platform's sixty-second cut and returned a bare
+     * 504. The collector ran like that for four days in September and every
+     * run said only "504": nothing about which job, nothing about why, and the
+     * three panels it feeds went quietly empty. A job that overruns still
+     * keeps running and keeps whatever it wrote; it simply no longer decides
+     * whether anyone hears back.
+     */
+    const ranOut = (job) => ({ failed: `${job}: still running after ${POLL_BUDGET_MS / 1000}s` });
     const [poll, holders, spot, leveraged] = await Promise.all([
-      topUp(now, { force: true }),
+      withBudget(topUp(now, { force: true }), POLL_BUDGET_MS,
+        { written: 0, failed: [ranOut('transfers').failed], at: null }),
       // One coin's holder movements, rotating by the clock across polls.
-      enrichNextCoin(now).catch((err) => ({ failed: err.message })),
-      (async () => {
+      withBudget(enrichNextCoin(now).catch((err) => ({ failed: err.message })), POLL_BUDGET_MS, ranOut('holders')),
+      withBudget((async () => {
         try {
           const { coins } = await topCoins();
           const platforms = await platformMap();
@@ -628,8 +650,8 @@ export default async function handler(req, res) {
         } catch (err) {
           return { failed: err.message };
         }
-      })(),
-      gmxlev.collectGmx({ now }).catch((err) => ({ failed: err.message })),
+      })(), POLL_BUDGET_MS, ranOut('spot')),
+      withBudget(gmxlev.collectGmx({ now }).catch((err) => ({ failed: err.message })), POLL_BUDGET_MS, ranOut('gmx')),
     ]);
 
     res.setHeader('Cache-Control', 'no-store');

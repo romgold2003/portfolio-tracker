@@ -116,8 +116,18 @@ async function ensureTables() {
 
 /* ── reading GeckoTerminal ───────────────────────────────────────────── */
 
+/**
+ * Ten seconds a call. The collector's budget is only checked between calls, so
+ * without this a single request that never answered held the whole poll until
+ * the platform cut it at sixty — and a cut function reports nothing at all.
+ */
+const CALL_TIMEOUT_MS = 10_000;
+
 async function get(path, fetcher) {
-  const res = await fetcher(`${API}${path}`, { headers: { Accept: 'application/json' } });
+  const res = await fetcher(`${API}${path}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`GeckoTerminal answered ${res.status}`);
   return res.json();
 }
@@ -204,10 +214,12 @@ export async function collectSpot({
    */
   const held = (await query('SELECT symbol, pool FROM spot_pools', [])).rows;
   const looked = new Set(held.map((r) => r.symbol));
-  const due = [
+  // Once each: a coin both new and due this turn was listed twice, and its
+  // second "no pools" row hit the unique key and threw the whole spot job.
+  const due = [...new Map([
     ...coins.filter((c) => !looked.has(c.symbol)),
     coins[slot % coins.length],
-  ];
+  ].map((c) => [c.symbol, c])).values()];
   const discoveryCalls = coins.some((c) => !looked.has(c.symbol)) ? Math.floor(calls * 0.7) : Math.floor(calls / 4);
   const stamp = Math.floor(now / 1000);
 
