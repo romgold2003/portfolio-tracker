@@ -11,6 +11,7 @@ import { renderPositions } from './views/positions.js';
 import { renderMonthly, renderMonthDetail } from './views/monthly.js';
 import { renderNews } from './views/news.js';
 import { renderCrypto } from './views/crypto.js';
+import { showGauges } from './views/sentimentGauges.js';
 import { renderAccountSwitcher } from './views/accounts.js';
 
 export { updateLivePill };
@@ -35,6 +36,8 @@ export function renderOnPageEnter(page) {
   if (page === 'monthly') setTimeout(renderMonthly, 50);
   if (page === 'news') renderNews();
   if (page === 'crypto') renderCrypto();
+  // Fear and greed on every page but New trade; see sentimentGauges.js.
+  if (page !== 'add') showGauges();
 }
 
 /** After a theme change every chart must be rebuilt with the new palette. */

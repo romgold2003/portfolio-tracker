@@ -11,7 +11,7 @@ import { MONTHS_LONG } from '../../config/constants.js';
 import { fedDecision } from '../../services/fed.js';
 import { econReleases } from '../../services/econ.js';
 import { marketSentiment } from '../../services/sentiment.js';
-import { gaugeSvg } from './gauge.js';
+import { drawGauges } from './sentimentGauges.js';
 import { optionsProfile } from '../../services/options.js';
 import { renderExposure, currentMarket, setMarket } from './exposure.js';
 import { renderGamble, startGamble, installNewsTabs } from './gamble.js';
@@ -239,25 +239,6 @@ export function renderEconPanel(data) {
   }
 }
 
-/** The two dials in the corner of the page. */
-function renderGauges(sentiment) {
-  const host = el('sentimentGauges');
-  if (!host) return;
-
-  const dials = [
-    ['stocks', 'Stocks'],
-    ['crypto', 'Crypto'],
-  ]
-    .map(([key, title]) => {
-      const r = sentiment?.[key];
-      return r ? gaugeSvg({ value: r.value, label: r.label, title }) : '';
-    })
-    .filter(Boolean);
-
-  host.style.display = dials.length ? '' : 'none';
-  host.innerHTML = dials.join('');
-}
-
 /** Switching market redraws only the exposure panel, not the whole page. */
 async function pickMarket(id) {
   setMarket(id);
@@ -356,7 +337,7 @@ export async function renderNews() {
 
   renderFedPanel(value(fed));
   renderEconPanel(value(econ));
-  renderGauges(value(mood));
+  drawGauges(value(mood));
   renderExposure(value(opts), pickMarket);
   scheduleLive(value(opts));
 

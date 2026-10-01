@@ -193,6 +193,9 @@
           <div class="bench-note" id="benchNote">Add a market data key to compare</div>
         </div>
         <div class="topbar-right">
+          <!-- Fear and greed, stocks and crypto, on every page but New trade.
+               Filled by src/ui/views/sentimentGauges.js; hidden until it has a value. -->
+          <div class="gauges" data-gauges style="display:none"></div>
           <div class="live-pill" id="livePill"><span class="live-dot"></span><span id="livePillTxt">Live prices on</span></div>
           <!-- Money out of the broker: lowers the account, never the returns. -->
           <button class="topbar-btn topbar-btn-warn" onclick="withdrawMoney()" title="Record money taken out of your broker">↓ Withdraw</button>
@@ -260,6 +263,7 @@
       <div class="topbar">
         <div class="greeting">Positions</div>
         <div class="topbar-right">
+          <div class="gauges" data-gauges style="display:none"></div>
           <div class="live-pill" id="livePill2"><span class="live-dot"></span><span id="livePill2Txt">Live</span></div>
           <button class="topbar-btn" onclick="refreshPrices()">↻ Refresh</button>
         </div>
@@ -344,7 +348,7 @@
     </div>
 
     <div id="monthly" class="page">
-      <div class="topbar"><div class="greeting">Monthly P&L</div></div>
+      <div class="topbar"><div class="greeting">Monthly P&L</div><div class="gauges" data-gauges style="display:none"></div></div>
 
       <!-- Chart card with year selector -->
       <div class="card chart-card">
@@ -382,8 +386,7 @@
     <div id="news" class="page">
       <div class="topbar">
         <div class="greeting">News</div>
-        <!-- Fear and greed, stocks and crypto. Hidden until they have a value. -->
-        <div class="gauges" id="sentimentGauges" style="display:none"></div>
+        <div class="gauges" data-gauges style="display:none"></div>
       </div>
 
       <!-- Two halves of the page, and only one is ever on screen. Markets is
@@ -483,7 +486,7 @@
          today, and what the spot ETFs took in or paid out. Its own page since
          October 2026; it began as a tab inside News. -->
     <div id="crypto" class="page">
-      <div class="topbar"><div class="greeting">Crypto</div></div>
+      <div class="topbar"><div class="greeting">Crypto</div><div class="gauges" data-gauges style="display:none"></div></div>
 
       <div class="opt-picker gam-subtabs" id="cryptoTabs">
         <button class="opt-tab active" data-ctab="whales">Whales</button>

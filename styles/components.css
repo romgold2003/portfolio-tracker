@@ -77,7 +77,7 @@
 .fed-bar-fill{width:100%;border-radius:4px 4px 0 0;transition:height 0.5s cubic-bezier(0.16,1,0.3,1)}
 .fed-bar-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
 
-/* Fear and greed dials, in the corner of the News page. */
+/* Fear and greed dials, at the top of every page but New trade. */
 .gauges{display:flex;align-items:flex-start;gap:8px;flex:none}
 .gauge{width:132px;height:84px;overflow:visible}
 .gauge-num{font-size:30px;font-weight:700;fill:var(--text);
