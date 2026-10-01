@@ -169,6 +169,7 @@
       <button class="nl" onclick="show('add')"><span class="nl-icon">＋</span> New trade</button>
       <button class="nl" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
       <button class="nl" onclick="show('news')"><span class="nl-icon">◎</span> News</button>
+      <button class="nl" onclick="show('crypto')"><span class="nl-icon">₿</span> Crypto</button>
     </nav>
     <div class="sidebar-bot">
       <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" style="margin-bottom:0"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
@@ -385,12 +386,11 @@
         <div class="gauges" id="sentimentGauges" style="display:none"></div>
       </div>
 
-      <!-- Three parts of the page, and only one is ever on screen. Markets is
-           rates, data and options; Crypto is on-chain money, volume and the
-           spot ETFs; Gamble is other people's bets on macro. -->
+      <!-- Two halves of the page, and only one is ever on screen. Markets is
+           rates, data and options; Gamble is other people's bets on macro.
+           Crypto money has a page of its own, under News in the menu. -->
       <div class="subtabs" id="newsTabs">
         <button class="subtab active" data-tab="market">Markets</button>
-        <button class="subtab" data-tab="crypto">Crypto</button>
         <button class="subtab" data-tab="gamble">Gamble</button>
       </div>
 
@@ -463,97 +463,6 @@
 
       </div><!-- /newsMarket -->
 
-      <div id="newsCrypto" hidden>
-
-        <!-- Three views of crypto money: the whales moving it on-chain, where
-             the turnover is today, and what the spot ETFs took in or paid out. -->
-        <div class="opt-picker gam-subtabs" id="cryptoTabs">
-          <button class="opt-tab active" data-ctab="whales">Whales</button>
-          <button class="opt-tab" data-ctab="volume">Volume</button>
-          <button class="opt-tab" data-ctab="etf">ETF flows</button>
-        </div>
-
-        <!-- Very large real transfers, from the chains a provider can actually
-             see. The coin list is CoinGecko's top fifty; which of those can be
-             watched is a separate question and the picker answers it. -->
-        <div id="cryptoWhales">
-          <div class="card gam-card" id="cryptoWhaleCard">
-            <div class="card-lbl">
-              <span>Crypto whales — <span id="cwName">all coins</span></span>
-              <!-- How much of the market is sitting in dollars. High means
-                   buying power is waiting; low means it has been spent. -->
-              <div class="cw-dom" id="cwDominance"></div>
-            </div>
-
-            <!-- Exchange netflow for the whole market, and the top holders of
-                 the chosen coin. -->
-            <div class="cw-cards cw-cards-2">
-              <div class="cw-card" id="cwNetflow"></div>
-              <div class="cw-card" id="cwTop"></div>
-            </div>
-
-            <!-- The top fifty, stablecoins left out. Chooses the coin for the
-                 holder card and for both sections below. -->
-            <div class="cw-coins" id="cwCoins"></div>
-
-            <!-- Spot on the left, leveraged on the right; one above the other on a phone. -->
-            <div class="wt-pair">
-            <section class="wt-section" id="spotSection">
-              <div class="cw-section-hd">Spot whale buys & sells</div>
-              <p class="wt-explain">Whales buying and selling the coin itself on on-chain exchanges — Uniswap, PancakeSwap, Raydium and others. Only buys and sells: no transfers between wallets or exchanges.</p>
-              <div class="wt-filters">
-                <div class="opt-picker" id="spotSpan"></div>
-                <div class="opt-picker" id="spotSide"></div>
-              </div>
-              <div class="opt-picker wt-bands" id="spotBand"></div>
-              <div class="wt-summary" id="spotSummary"></div>
-              <div id="spotRows"></div>
-              <p class="gam-src" id="spotSrc"></p>
-            </section>
-
-            <section class="wt-section" id="levSection">
-              <div class="cw-section-hd">Leveraged whale trades</div>
-              <p class="wt-explain">Whales opening and closing leveraged positions on Hyperliquid and GMX. OPEN LONG and CLOSE SHORT need the price to rise (green); OPEN SHORT and CLOSE LONG need it to fall (red). An outlined label is a close.</p>
-              <div class="wt-filters">
-                <div class="opt-picker" id="levSpan"></div>
-                <div class="opt-picker" id="levSide"></div>
-              </div>
-              <div class="opt-picker wt-bands" id="levBand"></div>
-              <div class="wt-summary" id="levSummary"></div>
-              <div id="levRows"></div>
-              <p class="gam-src" id="levSrc"></p>
-            </section>
-            </div>
-          </div>
-        </div>
-
-        <!-- Where the turnover is today. Volume has to move before a price can,
-             so a coin trading several times its usual is a coin something is
-             happening to — which is a different question from who is buying. -->
-        <div id="cryptoVolume" hidden>
-          <div class="card gam-card" id="volumeCard">
-            <div class="card-lbl">
-              <span>Unusual volume — <span id="uvCount">loading</span></span>
-              <div class="opt-picker" id="uvTier"></div>
-            </div>
-            <p class="wt-explain">The sixty coins Binance is trading most today, each against a normal day for itself — the median of its last 20 days, weekdays measured against weekdays and weekends against weekends, because Monday trades about twice a Saturday. Ranked by how surprising the figure is for that coin rather than by the multiple, since a fourfold day means less on a coin whose volume always swings. Volume has no direction of its own, so the price move sits beside it, and so does which side crossed the spread — though that is usually close to even even under a large move, and is context rather than a verdict.</p>
-            <div id="uvRows"></div>
-            <p class="gam-src" id="uvSrc"></p>
-          </div>
-        </div>
-
-        <div id="cryptoEtf" hidden>
-          <!-- Net flows into the spot ETFs, by day, week or month. -->
-          <div class="card etf-card" id="etfCard" style="display:none">
-            <div class="card-lbl">
-              <span>Spot ETF flows</span>
-              <div class="opt-picker" id="etfGrain"></div>
-            </div>
-            <div id="etfBody"></div>
-          </div>
-        </div>
-      </div>
-
       <!-- Large bets on macro events: who placed them and for how much. Public
            on-chain Polymarket trades, read straight from the browser.
            Subject first, then size — which is the order the question is asked
@@ -571,8 +480,99 @@
             <p class="gam-src">Polymarket · on-chain, refreshed every 30s</p>
           </div>
         </div>
+      </div>
+    </div>
 
+    <!-- Crypto money: the whales moving it on-chain, where the turnover is
+         today, and what the spot ETFs took in or paid out. Its own page since
+         October 2026; it began as a tab inside News. -->
+    <div id="crypto" class="page">
+      <div class="topbar"><div class="greeting">Crypto</div></div>
 
+      <div class="opt-picker gam-subtabs" id="cryptoTabs">
+        <button class="opt-tab active" data-ctab="whales">Whales</button>
+        <button class="opt-tab" data-ctab="volume">Volume</button>
+        <button class="opt-tab" data-ctab="etf">ETF flows</button>
+      </div>
+
+      <!-- Very large real transfers, from the chains a provider can actually
+           see. The coin list is CoinGecko's top fifty; which of those can be
+           watched is a separate question and the picker answers it. -->
+      <div id="cryptoWhales">
+        <div class="card gam-card" id="cryptoWhaleCard">
+          <div class="card-lbl">
+            <span>Crypto whales — <span id="cwName">all coins</span></span>
+            <!-- How much of the market is sitting in dollars. High means
+                 buying power is waiting; low means it has been spent. -->
+            <div class="cw-dom" id="cwDominance"></div>
+          </div>
+
+          <!-- Exchange netflow for the whole market, and the top holders of
+               the chosen coin. -->
+          <div class="cw-cards cw-cards-2">
+            <div class="cw-card" id="cwNetflow"></div>
+            <div class="cw-card" id="cwTop"></div>
+          </div>
+
+          <!-- The top fifty, stablecoins left out. Chooses the coin for the
+               holder card and for both sections below. -->
+          <div class="cw-coins" id="cwCoins"></div>
+
+          <!-- Spot on the left, leveraged on the right; one above the other on a phone. -->
+          <div class="wt-pair">
+          <section class="wt-section" id="spotSection">
+            <div class="cw-section-hd">Spot whale buys & sells</div>
+            <p class="wt-explain">Whales buying and selling the coin itself on on-chain exchanges — Uniswap, PancakeSwap, Raydium and others. Only buys and sells: no transfers between wallets or exchanges.</p>
+            <div class="wt-filters">
+              <div class="opt-picker" id="spotSpan"></div>
+              <div class="opt-picker" id="spotSide"></div>
+            </div>
+            <div class="opt-picker wt-bands" id="spotBand"></div>
+            <div class="wt-summary" id="spotSummary"></div>
+            <div id="spotRows"></div>
+            <p class="gam-src" id="spotSrc"></p>
+          </section>
+
+          <section class="wt-section" id="levSection">
+            <div class="cw-section-hd">Leveraged whale trades</div>
+            <p class="wt-explain">Whales opening and closing leveraged positions on Hyperliquid and GMX. OPEN LONG and CLOSE SHORT need the price to rise (green); OPEN SHORT and CLOSE LONG need it to fall (red). An outlined label is a close.</p>
+            <div class="wt-filters">
+              <div class="opt-picker" id="levSpan"></div>
+              <div class="opt-picker" id="levSide"></div>
+            </div>
+            <div class="opt-picker wt-bands" id="levBand"></div>
+            <div class="wt-summary" id="levSummary"></div>
+            <div id="levRows"></div>
+            <p class="gam-src" id="levSrc"></p>
+          </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- Where the turnover is today. Volume has to move before a price can,
+           so a coin trading several times its usual is a coin something is
+           happening to — which is a different question from who is buying. -->
+      <div id="cryptoVolume" hidden>
+        <div class="card gam-card" id="volumeCard">
+          <div class="card-lbl">
+            <span>Unusual volume — <span id="uvCount">loading</span></span>
+            <div class="opt-picker" id="uvTier"></div>
+          </div>
+          <p class="wt-explain">The sixty coins Binance is trading most today, each against a normal day for itself — the median of its last 20 days, weekdays measured against weekdays and weekends against weekends, because Monday trades about twice a Saturday. Ranked by how surprising the figure is for that coin rather than by the multiple, since a fourfold day means less on a coin whose volume always swings. Volume has no direction of its own, so the price move sits beside it, and so does which side crossed the spread — though that is usually close to even even under a large move, and is context rather than a verdict.</p>
+          <div id="uvRows"></div>
+          <p class="gam-src" id="uvSrc"></p>
+        </div>
+      </div>
+
+      <div id="cryptoEtf" hidden>
+        <!-- Net flows into the spot ETFs, by day, week or month. -->
+        <div class="card etf-card" id="etfCard" style="display:none">
+          <div class="card-lbl">
+            <span>Spot ETF flows</span>
+            <div class="opt-picker" id="etfGrain"></div>
+          </div>
+          <div id="etfBody"></div>
+        </div>
       </div>
     </div>
 

@@ -146,14 +146,12 @@ export async function renderGamble() {
 }
 
 /**
- * The three parts of the News page: Markets, Crypto and Gamble.
+ * The two halves of the News page: Markets and Gamble.
  *
  * Bound once, on the tab strip rather than on each button, so re-rendering
- * any pane cannot leave a stale handler behind. `onCrypto` redraws whichever
- * view the Crypto pane has open; it is passed in rather than imported so this
- * file does not have to know what is inside that pane.
+ * either pane cannot leave a stale handler behind.
  */
-export function installNewsTabs({ onCrypto } = {}) {
+export function installNewsTabs() {
   const strip = el('newsTabs');
   if (!strip || strip.dataset.bound === '1') return;
   strip.dataset.bound = '1';
@@ -169,13 +167,11 @@ export function installNewsTabs({ onCrypto } = {}) {
     // `hidden` rather than display, so nothing here has to know what each pane
     // is laid out as.
     el('newsMarket').hidden = wanted !== 'market';
-    el('newsCrypto').hidden = wanted !== 'crypto';
     el('newsGamble').hidden = wanted !== 'gamble';
 
     // Coming back to a pane that has been sitting behind another for a while
     // should not show what was true when it was last on screen.
     if (wanted === 'gamble') renderGamble();
-    else if (wanted === 'crypto' && typeof onCrypto === 'function') onCrypto();
   });
 }
 

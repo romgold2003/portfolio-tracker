@@ -12,11 +12,10 @@ import { fedDecision } from '../../services/fed.js';
 import { econReleases } from '../../services/econ.js';
 import { marketSentiment } from '../../services/sentiment.js';
 import { gaugeSvg } from './gauge.js';
-import { optionsProfile, etfFlows } from '../../services/options.js';
-import { renderExposure, renderEtfFlows, currentMarket, setMarket } from './exposure.js';
+import { optionsProfile } from '../../services/options.js';
+import { renderExposure, currentMarket, setMarket } from './exposure.js';
 import { renderGamble, startGamble, installNewsTabs } from './gamble.js';
 // The Crypto half of the Gamble tab. Its own source and its own cadence.
-import { installCryptoTabs, showCryptoView, startCryptoWhales } from './cryptoWhales.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -350,9 +349,8 @@ async function refreshLive() {
  */
 export async function renderNews() {
   // Independent of each other: one source being down must not blank the others.
-  const [fed, econ, mood, opts, etf] = await Promise.allSettled([
-    fedDecision(), econReleases(), marketSentiment(),
-    optionsProfile(currentMarket()), etfFlows(),
+  const [fed, econ, mood, opts] = await Promise.allSettled([
+    fedDecision(), econReleases(), marketSentiment(), optionsProfile(currentMarket()),
   ]);
   const value = (r) => (r.status === 'fulfilled' ? r.value : null);
 
@@ -360,19 +358,16 @@ export async function renderNews() {
   renderEconPanel(value(econ));
   renderGauges(value(mood));
   renderExposure(value(opts), pickMarket);
-  renderEtfFlows(value(etf));
   scheduleLive(value(opts));
 
   // Its own source and its own cadence, so it neither waits on the five above
   // nor blocks them.
-  installNewsTabs({ onCrypto: () => showCryptoView() });
-  installCryptoTabs();
+  installNewsTabs();
   renderGamble();
   startGamble();
-  startCryptoWhales();
   startFedRefresh();
 
-  const anything = value(fed) || value(econ) || value(mood) || value(opts) || value(etf);
+  const anything = value(fed) || value(econ) || value(mood) || value(opts);
   const empty = el('newsEmpty');
   if (empty) empty.style.display = anything ? 'none' : '';
 }

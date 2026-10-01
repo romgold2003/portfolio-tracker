@@ -5,7 +5,7 @@
  * The order matters: it is matched positionally against the nav buttons, so a
  * page added here has to be added there in the same place.
  */
-const PAGES = ['home', 'positions', 'add', 'monthly', 'news'];
+const PAGES = ['home', 'positions', 'add', 'monthly', 'news', 'crypto'];
 
 /** Set at boot so the router can trigger a page's lazy re-render. */
 let onEnter = () => {};

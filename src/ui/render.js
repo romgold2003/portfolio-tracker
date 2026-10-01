@@ -10,6 +10,7 @@ import { setOrbitBackdrop } from '../features/orbitBackdrop.js';
 import { renderPositions } from './views/positions.js';
 import { renderMonthly, renderMonthDetail } from './views/monthly.js';
 import { renderNews } from './views/news.js';
+import { renderCrypto } from './views/crypto.js';
 import { renderAccountSwitcher } from './views/accounts.js';
 
 export { updateLivePill };
@@ -33,6 +34,7 @@ export function renderOnPageEnter(page) {
   if (page === 'home') setTimeout(renderHome, 50);
   if (page === 'monthly') setTimeout(renderMonthly, 50);
   if (page === 'news') renderNews();
+  if (page === 'crypto') renderCrypto();
 }
 
 /** After a theme change every chart must be rebuilt with the new palette. */

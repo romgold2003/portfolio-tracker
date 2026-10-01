@@ -535,11 +535,11 @@ export async function renderCryptoWhales() {
 }
 
 /**
- * The three views inside the News page's Crypto tab: whales, volume, ETF flows.
+ * The three views on the Crypto page: whales, volume, ETF flows.
  *
  * They lived under Gamble until October 2026, beside the Polymarket bets; they
- * are about crypto money rather than about wagers, so they moved to a tab of
- * their own. Bound once, on the strip rather than on each button, so redrawing
+ * are about crypto money rather than about wagers, so they moved to a page of
+ * their own (see crypto.js). Bound once, on the strip rather than on each button, so redrawing
  * a panel cannot leave a stale handler behind.
  */
 const CRYPTO_VIEWS = { whales: 'cryptoWhales', volume: 'cryptoVolume', etf: 'cryptoEtf' };
