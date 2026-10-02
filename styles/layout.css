@@ -55,6 +55,10 @@
   /* The document scrolls, not an inner pane — which is what a phone expects
      and what lets the address bar collapse on scroll. Room is left at the
      bottom so the tab bar never covers the end of a page. */
+  /* base.css locks the body to one screen for the desktop's inner pane; left
+     locked here, the phone could not scroll at all. clip, not hidden: hidden
+     would make the body a scroll box of its own and unstick the header. */
+  body{height:auto;overflow:visible;overflow-x:clip}
   .shell{flex-direction:column;height:auto;min-height:100vh}
   .main{padding:14px 14px calc(84px + env(safe-area-inset-bottom));overflow-y:visible}
 

@@ -84,6 +84,14 @@ describe('a phone looks like a phone app', () => {
     assert.match(html, /viewport-fit=cover/, 'without it the safe-area insets are zero');
   });
 
+  test('the page scrolls: the body is unlocked, since the document is what scrolls', () => {
+    // base.css sets body{height:100vh;overflow:hidden} for the desktop's inner
+    // pane. Romy's phone could not scroll up or down until this was undone.
+    assert.match(read('styles/base.css'), /body\{[^}]*overflow:hidden/);
+    assert.match(phone, /body\{height:auto;overflow:visible;overflow-x:clip\}/);
+    assert.match(phone, /\.main\{[^}]*overflow-y:visible/);
+  });
+
   test('the tools hide behind a button instead of taking a third of the screen', () => {
     assert.match(html, /id="toolsBtn"[^>]*onclick="toggleTools\(\)"/);
     assert.match(phone, /\.sidebar-bot\{display:none/);
