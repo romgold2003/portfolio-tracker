@@ -524,6 +524,11 @@ async function liveDominance(now) {
  * for, on every refresh — because the stripping only happened on the path
  * where the live value had also arrived.
  */
+/** Put Tether's share beside the dominance; nothing to put it beside, nothing sent. */
+function withTether(stables, usdt) {
+  return stables ? { ...stables, usdt: usdt ?? null } : null;
+}
+
 function forWire(stables) {
   if (!stables) return null;
   const { values, ...rest } = stables;
@@ -930,8 +935,17 @@ export default async function handler(req, res) {
          * change once a day. A second round trip for one number on the same
          * clock would be a round trip for nothing.
          */
-        stables: await withBudget(liveDominance(now), DOMINANCE_BUDGET_MS,
-          forWire(await stablecoins.read({ now }).catch(() => null))),
+        stables: withTether(...await Promise.all([
+          withBudget(liveDominance(now), DOMINANCE_BUDGET_MS,
+            forWire(await stablecoins.read({ now }).catch(() => null))),
+          // Tether's share on its own clock, so a slow CoinGecko answer that
+          // runs the dominance into its fallback cannot take this with it.
+          withBudget(stablecoins.usdtShare({
+            // Only asked for if TradingView does not answer; see usdtShare.
+            coins: () => topCoins().then((t) => t.all ?? t.coins),
+            now,
+          }), DOMINANCE_BUDGET_MS, null).catch(() => null),
+        ])),
         at: now,
       });
     } catch (err) {

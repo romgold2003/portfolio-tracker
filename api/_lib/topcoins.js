@@ -228,6 +228,9 @@ export async function topCoins({ limit = 50, fetcher = fetch, now = Date.now() }
       logo: String(c?.image ?? ''),
       rank: Number(c?.market_cap_rank) || i + 1,
       marketCap: Number(c?.market_cap) || null,
+      /** Per cent over 24 hours; read for Tether's share of the market (stablecoins.js). */
+      marketCapChange24h: Number.isFinite(Number(c?.market_cap_change_percentage_24h))
+        ? Number(c.market_cap_change_percentage_24h) : null,
       price: Number(c?.current_price) || null,
       /**
        * The supply figures, carried so a holder share can be a share of the

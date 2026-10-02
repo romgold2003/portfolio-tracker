@@ -490,7 +490,15 @@
          today, and what the spot ETFs took in or paid out. Its own page since
          October 2026; it began as a tab inside News. -->
     <div id="crypto" class="page">
-      <div class="topbar"><div class="greeting">Crypto</div><div class="gauges" data-gauges style="display:none"></div></div>
+      <div class="topbar">
+        <div class="greeting">Crypto</div>
+        <div class="topbar-right">
+          <div class="gauges" data-gauges style="display:none"></div>
+          <!-- Tether's share of the whole crypto market (USDT.D), beside the
+               dials. Filled from the dominance the whale card already loads. -->
+          <div class="usdtd" id="usdtDominance" hidden></div>
+        </div>
+      </div>
 
       <div class="opt-picker gam-subtabs" id="cryptoTabs">
         <button class="opt-tab active" data-ctab="whales">Whales</button>
