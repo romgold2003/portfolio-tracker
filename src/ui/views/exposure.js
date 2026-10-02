@@ -296,6 +296,8 @@ function attachHover({ host, charts, count, tip, describe }) {
 
 /* ── the exposure panel ────────────────────────────────────────────────── */
 
+/** What to call when a market button is pressed. Kept across re-renders. */
+let lastPick = null;
 
 export function renderExposure(profile, onPick) {
   const card = el('optionsCard');
