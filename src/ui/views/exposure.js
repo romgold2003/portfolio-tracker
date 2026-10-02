@@ -79,6 +79,24 @@ const PAD = { left: 60, right: 12, top: 14, bottom: 24 };
 const PLOT = { x0: PAD.left, x1: W - PAD.right, y0: PAD.top, y1: H - PAD.bottom };
 
 /**
+ * The flows chart's box, in units equal to the pixels it is shown at.
+ *
+ * It used to be 900×190 stretched to the card with preserveAspectRatio="none",
+ * which stretched its text as well: on a phone the axis labels were squeezed
+ * to about three pixels wide. Drawn at the width it is shown at, nothing is
+ * stretched and the text is the size the stylesheet gives it.
+ */
+function flowBox(width = W) {
+  const w = Math.max(280, Math.round(width));
+  const narrow = w < 600;
+  const h = narrow ? 170 : H;
+  return {
+    W: w, H: h, narrow,
+    PLOT: { x0: narrow ? 46 : PAD.left, x1: w - (narrow ? 8 : PAD.right), y0: PAD.top, y1: h - PAD.bottom },
+  };
+}
+
+/**
  * The y scale.
  *
  * Zero belongs on it whenever the series is anywhere near zero: both of these
@@ -130,9 +148,9 @@ const xAt = (i, n, plot = PLOT) => (n <= 1
   ? (plot.x0 + plot.x1) / 2
   : plot.x0 + (i / (n - 1)) * (plot.x1 - plot.x0));
 
-function axisLabels(points, xFor, bottom = H) {
+function axisLabels(points, xFor, bottom = H, want = 8) {
   const n = points.length;
-  const step = Math.max(1, Math.ceil(n / 8));
+  const step = Math.max(1, Math.ceil(n / want));
   return points.map((p, i) =>
     (i % step === 0 || i === n - 1
       ? `<text x="${xFor(i).toFixed(1)}" y="${bottom - 8}" class="cv-xtick"
@@ -170,28 +188,30 @@ function gridFor(s, format, levels = 1, plot = PLOT) {
  * Money in is green above the line and money out red below it, which is the
  * shape everyone draws these in and the reason it reads without a legend.
  */
-function columnChart({ points, title, note }) {
+function columnChart({ points, title, note, width = W }) {
   if (!points.length) return '';
-  const s = scaleFor(points.map((p) => p.value));
+  const b = flowBox(width);
+  const { PLOT } = b;
+  const s = scaleFor(points.map((p) => p.value), PLOT);
   const n = points.length;
   const slot = (PLOT.x1 - PLOT.x0) / n;
-  const width = Math.max(2, slot * 0.62);
+  const barWidth = Math.max(2, slot * 0.62);
   const zeroY = s.y(0);
   const centre = (i) => PLOT.x0 + slot * i + slot / 2;
 
   const bars = points.map((p, i) => {
     const y = s.y(p.value);
-    return `<rect x="${(centre(i) - width / 2).toFixed(1)}" y="${Math.min(y, zeroY).toFixed(1)}"
-      width="${width.toFixed(1)}" height="${Math.max(1, Math.abs(y - zeroY)).toFixed(1)}" rx="1"
+    return `<rect x="${(centre(i) - barWidth / 2).toFixed(1)}" y="${Math.min(y, zeroY).toFixed(1)}"
+      width="${barWidth.toFixed(1)}" height="${Math.max(1, Math.abs(y - zeroY)).toFixed(1)}" rx="1"
       class="${p.value >= 0 ? 'cv-bar-up' : 'cv-bar-down'}" />`;
   }).join('');
 
   return `<div class="cv-title">${escapeHtml(title)}${
   note ? `<span class="cv-note">${escapeHtml(note)}</span>` : ''}</div>
-    <svg class="cv" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-         aria-label="${escapeHtml(title)}">
-      ${gridFor(s, (v) => `${v.toFixed(0)}M`)}${bars}
-      ${axisLabels(points, centre)}
+    <svg class="cv" viewBox="0 0 ${b.W} ${b.H}" role="img" aria-label="${escapeHtml(title)}"
+         data-w="${b.W}" data-x0="${PLOT.x0}" data-x1="${PLOT.x1}">
+      ${gridFor(s, (v) => `${v.toFixed(0)}M`, 1, PLOT)}${bars}
+      ${axisLabels(points, centre, b.H, b.narrow ? 4 : 8)}
       <line class="cv-hair" y1="${PLOT.y0}" y2="${PLOT.y1}" x1="0" x2="0" hidden />
     </svg>`;
 }
@@ -201,9 +221,9 @@ function columnChart({ points, title, note }) {
 /**
  * Follow the cursor across a set of charts that share one x axis.
  *
- * The viewBox does not preserve its aspect ratio, so the plot stretches with
- * the card and a pixel maps to a viewBox unit by simple proportion — no
- * getScreenCTM needed, and no listener on resize.
+ * Each drawing carries its own width and plot edges (data-w, data-x0, data-x1),
+ * set when it was drawn at its host's width, so a pixel maps to a drawing unit
+ * by simple proportion — no getScreenCTM needed.
  *
  * `charts` move together because they are the same axis read twice: the picture
  * this was modelled on shows one readout covering both, and separating them
@@ -218,13 +238,23 @@ function attachHover({ host, charts, count, tip, describe }) {
   const svgs = charts.map((c) => c?.querySelector('svg')).filter(Boolean);
   if (!svgs.length) return;
 
+  /** A drawing's own width and plot edges, which it carries; the default box otherwise. */
+  const geo = (svg) => ({
+    w: Number(svg.dataset.w) || W,
+    x0: Number(svg.dataset.x0) || PLOT.x0,
+    x1: Number(svg.dataset.x1) || PLOT.x1,
+  });
+
   const indexFrom = (event, svg) => {
     const rect = svg.getBoundingClientRect();
     if (!rect.width) return -1;
-    const x = ((event.clientX - rect.left) / rect.width) * W;
-    if (x < PLOT.x0 - 12 || x > PLOT.x1 + 12) return -1;
-    const span = PLOT.x1 - PLOT.x0;
-    const at = count <= 1 ? 0 : Math.round(((x - PLOT.x0) / span) * (count - 1));
+    const { w, x0, x1 } = geo(svg);
+    const x = ((event.clientX - rect.left) / rect.width) * w;
+    if (x < x0 - 12 || x > x1 + 12) return -1;
+    // Columns sit in the middle of equal slots; points sit on the slot edges.
+    const at = svg.dataset.slotted === '1'
+      ? Math.floor(((x - x0) / (x1 - x0)) * count)
+      : (count <= 1 ? 0 : Math.round(((x - x0) / (x1 - x0)) * (count - 1)));
     return Math.max(0, Math.min(count - 1, at));
   };
 
@@ -242,9 +272,10 @@ function attachHover({ host, charts, count, tip, describe }) {
     if (i < 0) { clear(); return; }
 
     for (const svg of svgs) {
+      const { x0, x1 } = geo(svg);
       const x = svg.dataset.slotted === '1'
-        ? PLOT.x0 + ((PLOT.x1 - PLOT.x0) / count) * (i + 0.5)
-        : xAt(i, count);
+        ? x0 + ((x1 - x0) / count) * (i + 0.5)
+        : xAt(i, count, { x0, x1 });
       const hair = svg.querySelector('.cv-hair');
       if (hair) {
         hair.setAttribute('x1', x.toFixed(1));
@@ -298,6 +329,50 @@ function attachHover({ host, charts, count, tip, describe }) {
 
 /** What to call when a market button is pressed. Kept across re-renders. */
 let lastPick = null;
+/** The profile last drawn, so a rotated screen can be redrawn at its new width. */
+let lastProfile = null;
+
+/**
+ * Charts are drawn at the width they are shown at (see chartBox), so a width
+ * that changes — a phone turned sideways, a tablet split, a window resized —
+ * has to redraw them, or they keep the old width's layout. Debounced, and only
+ * when the width has really moved.
+ */
+let drawnWidth = 0;
+let redrawTimer = null;
+function redrawAtNewWidth() {
+  clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(() => {
+    // Whichever of the two is on screen: options on News, ETF flows on Crypto.
+    const width = el('optGexNow')?.clientWidth || el('etfBody')?.clientWidth || 0;
+    if (!width || Math.abs(width - drawnWidth) < 24) return;
+    drawnWidth = width;
+    if (lastProfile) {
+      renderExposureNow(lastProfile);
+      renderExposureHistory(lastProfile);
+    }
+    if (lastFlows) drawFlows();
+  }, 200);
+}
+if (typeof window !== 'undefined') window.addEventListener?.('resize', redrawAtNewWidth);
+
+/**
+ * Redraw after being shown.
+ *
+ * A chart drawn while its pane is hidden has no width to measure, so it falls
+ * back to 900 and is scaled down to fit when the pane appears — on a phone the
+ * ETF flows labels came out under four pixels that way, because the Crypto page
+ * draws them while the Whales view is still the one on screen. Whatever shows a
+ * pane calls these once it is visible.
+ */
+export function redrawExposure() {
+  if (!lastProfile) return;
+  renderExposureNow(lastProfile);
+  renderExposureHistory(lastProfile);
+}
+export function redrawFlows() {
+  if (lastFlows) drawFlows();
+}
 
 export function renderExposure(profile, onPick) {
   const card = el('optionsCard');
@@ -305,6 +380,8 @@ export function renderExposure(profile, onPick) {
   card.style.display = profile ? '' : 'none';
   if (!profile) return;
   if (onPick) lastPick = onPick;
+  lastProfile = profile;
+  drawnWidth = el('optGexNow')?.clientWidth || 0;
 
   const name = el('optMarketName');
   if (name) name.textContent = profile.label ?? profile.market;
@@ -425,7 +502,9 @@ function drawFlows() {
     if (!set?.flows?.length || !host) continue;
 
     const rolled = rollUp(set.flows, grain).slice(-bars);
-    host.insertAdjacentHTML('afterbegin', columnChart({ points: rolled, title: 'Net flow', note: '$ millions' }));
+    host.insertAdjacentHTML('afterbegin', columnChart({
+      points: rolled, title: 'Net flow', note: '$ millions', width: host.clientWidth || W,
+    }));
     // Columns sit in the middle of a slot rather than on a shared edge, so the
     // crosshair has to be placed the same way.
     const svg = host.querySelector('svg');

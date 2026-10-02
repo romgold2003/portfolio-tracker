@@ -17,7 +17,9 @@
  * Pure builders exported for the tests; renderExposureNow only fills the page.
  */
 import { escapeHtml } from '../format.js';
-import { DEX_COLOUR, dailyPoints, axisMoney, tipMoney, yRange } from './exposureHistory.js';
+import {
+  DEX_COLOUR, dailyPoints, axisMoney, tipMoney, yRange, chartBox, widthOf,
+} from './exposureHistory.js';
 
 const RED = '#e05561';
 
@@ -45,11 +47,8 @@ export function percentileOf(value, history, key, now = Date.now()) {
 
 /* ── GEX by strike ───────────────────────────────────────────────────── */
 
-const W = 900;
-const H = 260;
-const PLOT = { x0: 84, x1: W - 18, y0: 14, y1: H - 34 };
-
-function barGeometry(strikes) {
+// Drawn at the width it is shown at, like the history; see chartBox.
+function barGeometry(strikes, { PLOT } = chartBox()) {
   const values = strikes.map((r) => r.gex);
   // Bars stand on zero, so zero has to be inside the range.
   const range = yRange([...values, 0]);
@@ -64,26 +63,28 @@ export function labelStride(n, want = 10) {
 }
 
 /** The GEX bars: one per strike bucket, rising or falling from zero. */
-export function gexBars(strikes) {
+export function gexBars(strikes, width = 900) {
   if (!strikes?.length) return '';
-  const g = barGeometry(strikes);
+  const b = chartBox(width);
+  const { W, H, PLOT } = b;
+  const g = barGeometry(strikes, b);
   const zero = g.y(0);
-  const width = Math.max(2, g.slot * 0.62);
+  const barWidth = Math.max(2, g.slot * 0.62);
 
   const grid = g.range.ticks.map((v) => {
     const y = g.y(v).toFixed(1);
     return `<line class="xh-grid" x1="${PLOT.x0}" x2="${PLOT.x1}" y1="${y}" y2="${y}" />
-      <text class="xh-ytick" x="${PLOT.x0 - 12}" y="${y}" text-anchor="end" dominant-baseline="middle">${escapeHtml(axisMoney(v))}</text>`;
+      <text class="xh-ytick" x="${PLOT.x0 - (b.narrow ? 6 : 12)}" y="${y}" text-anchor="end" dominant-baseline="middle">${escapeHtml(axisMoney(v))}</text>`;
   }).join('');
 
   const bars = strikes.map((r, i) => {
     const top = Math.min(g.y(r.gex), zero);
     const height = Math.max(1, Math.abs(g.y(r.gex) - zero));
-    return `<rect class="xn-bar" data-i="${i}" x="${(g.x(i) - width / 2).toFixed(1)}" y="${top.toFixed(1)}"
-      width="${width.toFixed(1)}" height="${height.toFixed(1)}" rx="2" fill="${r.gex >= 0 ? DEX_COLOUR : RED}" />`;
+    return `<rect class="xn-bar" data-i="${i}" x="${(g.x(i) - barWidth / 2).toFixed(1)}" y="${top.toFixed(1)}"
+      width="${barWidth.toFixed(1)}" height="${height.toFixed(1)}" rx="2" fill="${r.gex >= 0 ? DEX_COLOUR : RED}" />`;
   }).join('');
 
-  const stride = labelStride(strikes.length);
+  const stride = labelStride(strikes.length, b.narrow ? 5 : 10);
   const labels = strikes.map((r, i) => (i % stride === 0
     ? `<text class="xh-xtick" x="${g.x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${escapeHtml(strikeText(r.strike))}</text>`
     : '')).join('');
@@ -96,11 +97,12 @@ export function gexBars(strikes) {
     </div>`;
 }
 
-function bindBarHover(host, strikes) {
+function bindBarHover(host, strikes, b = chartBox()) {
+  const { W, PLOT } = b;
   const plot = host?.querySelector('.xh-plot');
   const svg = plot?.querySelector('svg');
   if (!svg) return;
-  const g = barGeometry(strikes);
+  const g = barGeometry(strikes, b);
   const tip = plot.querySelector('.xh-tip');
   const bars = [...svg.querySelectorAll('.xn-bar')];
 
@@ -136,7 +138,7 @@ function bindBarHover(host, strikes) {
 const badge = (text, tone = 'gold') => `<span class="xn-badge is-${tone}">${escapeHtml(text)}</span>`;
 
 /** The GEX section: headline, what it means, max pain, bars. */
-export function gexSection(profile, pct) {
+export function gexSection(profile, pct, width = 900) {
   const positive = profile.netGex >= 0;
   const pain = profile.maxPain;
   const painGap = pain && profile.spot ? ` (${((pain / profile.spot - 1) * 100).toFixed(1)}% from price)` : '';
@@ -153,7 +155,7 @@ export function gexSection(profile, pct) {
   pain ? ` Max pain: <strong>${escapeHtml(strikeText(pain))}</strong>${escapeHtml(painGap)}.` : ''}</p>
     <p class="xn-say">Max pain is the strike where the options outstanding are worth least at expiry; it is not a guaranteed target.</p>
     <p class="xn-fine">Strikes within ±${escapeHtml(String(band))}% of price · the total covers the whole chain</p>
-    ${gexBars(profile.strikes)}
+    ${gexBars(profile.strikes, width)}
     <p class="xn-fine">Strikes and values · USD</p>`;
 }
 
@@ -191,8 +193,9 @@ export function renderExposureNow(profile) {
   const gex = document.getElementById('optGexNow');
   const dex = document.getElementById('optDexNow');
   if (gex) {
-    gex.innerHTML = gexSection(profile, percentileOf(profile.netGex, profile.history, 'gex'));
-    bindBarHover(gex, profile.strikes);
+    const width = widthOf(gex);
+    gex.innerHTML = gexSection(profile, percentileOf(profile.netGex, profile.history, 'gex'), width);
+    bindBarHover(gex, profile.strikes, chartBox(width));
   }
   if (dex) dex.innerHTML = dexSection(profile, percentileOf(profile.netDex, profile.history, 'dex'));
 }

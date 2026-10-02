@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="description" content="A local-first trading journal: positions, partial exits, live prices and monthly P&amp;L.">
 <title>Portfolio Tracker</title>
 
@@ -162,6 +162,10 @@
         </button>
         <div class="acct-menu" id="acctMenu" role="menu" hidden></div>
       </div>
+      <!-- Phones only: voice, live-price settings, designer and sign-out sit
+           behind this instead of taking a third of the screen. -->
+      <button class="tools-btn" id="toolsBtn" type="button" onclick="toggleTools()"
+              aria-expanded="false" aria-controls="sidebarBot" title="Settings and tools">⚙</button>
     </div>
     <nav class="nav-links">
       <button class="nl active" onclick="show('home')"><span class="nl-icon">⌂</span> Home</button>
@@ -171,7 +175,7 @@
       <button class="nl" onclick="show('news')"><span class="nl-icon">◎</span> News</button>
       <button class="nl" onclick="show('crypto')"><span class="nl-icon">₿</span> Crypto</button>
     </nav>
-    <div class="sidebar-bot">
+    <div class="sidebar-bot" id="sidebarBot">
       <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" style="margin-bottom:0"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
       <button class="settings-btn" onclick="openSettings()" style="margin-top:8px">⚙ Live price settings</button>
       <button class="settings-btn" id="themeBtn" onclick="openDesigner()" style="margin-top:6px">🎨 Designer mode</button>
@@ -199,7 +203,7 @@
           <div class="live-pill" id="livePill"><span class="live-dot"></span><span id="livePillTxt">Live prices on</span></div>
           <!-- Money out of the broker: lowers the account, never the returns. -->
           <button class="topbar-btn topbar-btn-warn" onclick="withdrawMoney()" title="Record money taken out of your broker">↓ Withdraw</button>
-          <button class="topbar-btn" onclick="show('add')">+ New trade</button>
+          <button class="topbar-btn topbar-newtrade" onclick="show('add')">+ New trade</button>
         </div>
       </div>
       <div class="hero">
@@ -213,7 +217,7 @@
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Cash</div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <span id="cashDisplay" style="font-size:16px;font-weight:600;color:var(--text)">$0</span>
-                  <button onclick="editCash()" style="background:var(--blue-bg);border:0.5px solid var(--border-blue);border-radius:5px;padding:3px 9px;font-size:11px;color:var(--blue);cursor:pointer;font-family:inherit">Edit</button>
+                  <button class="cash-edit" onclick="editCash()" style="background:var(--blue-bg);border:0.5px solid var(--border-blue);border-radius:5px;padding:3px 9px;font-size:11px;color:var(--blue);cursor:pointer;font-family:inherit">Edit</button>
                 </div>
               </div>
               <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">

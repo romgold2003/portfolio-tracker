@@ -61,7 +61,12 @@ export function gaugeSvg({ value, label, title }) {
       fill="none" stroke-linecap="round" />`;
   }).join('');
 
-  return `<svg class="gauge" viewBox="0 0 200 128" role="img"
+  /**
+   * The dial and its number only. The mood and the market's name are written
+   * under it as ordinary text by the caller: inside the drawing they shrank
+   * with it, and on a phone they came out at five pixels.
+   */
+  return `<svg class="gauge" viewBox="0 0 200 108" role="img"
      aria-label="${title}: ${v}, ${label}">
     ${arcs}
     <circle cx="${marker.x.toFixed(2)}" cy="${marker.y.toFixed(2)}" r="7"
@@ -69,7 +74,5 @@ export function gaugeSvg({ value, label, title }) {
     <circle cx="${marker.x.toFixed(2)}" cy="${marker.y.toFixed(2)}" r="5.2"
       fill="#ffffff" />
     <text x="${CX}" y="${CY - 8}" class="gauge-num" text-anchor="middle">${v}</text>
-    <text x="${CX}" y="${CY + 12}" class="gauge-lbl" text-anchor="middle">${label}</text>
-    <text x="${CX}" y="${CY + 30}" class="gauge-cap" text-anchor="middle">${title}</text>
   </svg>`;
 }

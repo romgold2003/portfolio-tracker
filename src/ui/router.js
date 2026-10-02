@@ -16,5 +16,28 @@ export function show(name) {
   const page = document.getElementById(name);
   if (page) page.classList.add('active');
   document.querySelectorAll('.nl').forEach((btn, i) => btn.classList.toggle('active', PAGES[i] === name));
+  /**
+   * A new page starts at its top. On a phone the document is what scrolls, so
+   * switching pages used to land part-way down the next one, wherever the last
+   * had been left; on a desktop it is the main pane.
+   */
+  toggleTools(false);
+  window.scrollTo?.(0, 0);
+  const main = document.querySelector('.main');
+  if (main) main.scrollTop = 0;
   onEnter(name);
+}
+
+/**
+ * The tools row — voice, live-price settings, designer, sign-out — sits behind
+ * a ⚙ button on a phone, where it otherwise took a third of the screen before
+ * any of the page. On a wider screen the button is not shown and this does
+ * nothing visible. Pass a boolean to set it rather than flip it.
+ */
+export function toggleTools(force) {
+  const side = document.querySelector('.sidebar');
+  if (!side) return;
+  const open = typeof force === 'boolean' ? force : !side.classList.contains('tools-open');
+  side.classList.toggle('tools-open', open);
+  document.getElementById('toolsBtn')?.setAttribute('aria-expanded', String(open));
 }

@@ -10,6 +10,7 @@
  * cannot tell you that. They are public Polygon addresses, linked back to the
  * profile page they came from.
  */
+import { redrawExposure } from './exposure.js';
 import { escapeHtml } from '../format.js';
 import {
   BANDS, bandDef, TOPIC_TABS, countByTopic, selectTrades, whaleTrades,
@@ -172,6 +173,8 @@ export function installNewsTabs() {
     // Coming back to a pane that has been sitting behind another for a while
     // should not show what was true when it was last on screen.
     if (wanted === 'gamble') renderGamble();
+    // Back on Markets: the exposure charts may have been refreshed while hidden.
+    else if (wanted === 'market') redrawExposure();
   });
 }
 

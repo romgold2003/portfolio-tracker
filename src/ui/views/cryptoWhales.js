@@ -15,6 +15,7 @@
  * The coin strip chooses the coin for the holder card and both sections.
  */
 import { renderUnusualVolume } from './unusualVolume.js';
+import { redrawFlows } from './exposure.js';
 import {
   BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
   hyperliquidAction, filterLeveraged, buildPositions, positionSummary, positionMoves,
@@ -556,7 +557,9 @@ export function showCryptoView(wanted = cryptoView) {
   }
   if (cryptoView === 'whales') renderCryptoWhales();
   else if (cryptoView === 'volume') renderUnusualVolume();
-  // ETF flows are drawn with the rest of the News page and need nothing here.
+  // The flows were drawn when the page opened, likely while hidden and so at
+  // no measurable width; now that they are on screen, draw them to fit.
+  else if (cryptoView === 'etf') redrawFlows();
 }
 
 export function installCryptoTabs() {

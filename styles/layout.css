@@ -14,6 +14,10 @@
 .sidebar-bot{padding:14px 16px;border-top:0.5px solid var(--border);font-size:11px;color:var(--text4)}
 .settings-btn{background:none;border:0.5px solid var(--border2);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--text2);cursor:pointer;width:100%;font-family:inherit;margin-bottom:8px}
 .settings-btn:hover{background:var(--input)}
+.tools-btn{display:none;align-items:center;justify-content:center;flex:none;width:40px;height:40px;
+  border-radius:8px;border:0.5px solid var(--border2);background:var(--panel2);color:var(--text2);
+  font-size:18px;cursor:pointer;font-family:inherit}
+.sidebar.tools-open .tools-btn{background:var(--input);color:var(--text)}
 
 /* Main content area */
 .main{flex:1;overflow-y:auto;padding:24px 30px}
@@ -35,32 +39,47 @@
 /* ── Phones ───────────────────────────────────────────────────────────────
    The sidebar was a fixed 210px at every width. On a 375px screen that left
    the content 165 pixels, which is not a layout, it is a column of wrapped
-   words — and layout.css had no media query at all, so nothing ever caught it.
+   words.
 
-   It becomes a top bar instead. Nothing is hidden: a phone still needs the
-   settings, the theme switch and sign-out, so those wrap onto their own row
-   rather than being dropped. */
+   Its first phone version became a top bar with everything in it — name,
+   account, a sideways-scrolling row of sections, then voice, settings,
+   designer, email and sign-out — which took almost half an iPhone screen
+   before any of the page, and cut the menu off at "Month…" so News and Crypto
+   were off the edge unless you knew to swipe. (October 2026.)
+
+   Now it is what a phone app looks like: a slim header with the name, the
+   account and a ⚙ button, the tools behind that button, and the six sections
+   in a tab bar along the bottom, clear of the home indicator. Nothing is
+   dropped — every control is still one tap away. */
 @media (max-width:720px){
   /* The document scrolls, not an inner pane — which is what a phone expects
-     and what lets the address bar collapse on scroll. */
+     and what lets the address bar collapse on scroll. Room is left at the
+     bottom so the tab bar never covers the end of a page. */
   .shell{flex-direction:column;height:auto;min-height:100vh}
-  .main{padding:16px 14px;overflow-y:visible}
+  .main{padding:14px 14px calc(84px + env(safe-area-inset-bottom));overflow-y:visible}
 
-  .sidebar{width:auto;flex-direction:column;flex-shrink:1;
-    border-right:0;border-bottom:0.5px solid var(--border)}
-  .logo-area{padding:12px 14px 10px}
+  .sidebar{position:sticky;top:0;z-index:40;width:auto;flex-direction:column;flex-shrink:1;
+    border-right:0;border-bottom:0.5px solid var(--border);padding-top:env(safe-area-inset-top)}
+  .logo-area{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0}
+  .logo-tag{display:none}
+  .logo-name{flex:none}
+  .acct-switch{margin-top:0;flex:1;min-width:0}
+  .tools-btn{display:flex}
 
-  /* The five sections in a row, scrolled sideways rather than wrapped: five
-     items is one comfortable swipe and wrapping them would cost two rows. */
-  .nav-links{display:flex;gap:4px;padding:8px;flex:0 0 auto;
-    overflow-x:auto;scrollbar-width:none}
-  .nav-links::-webkit-scrollbar{display:none}
-  .nl{width:auto;flex:0 0 auto;white-space:nowrap;margin-bottom:0}
+  /* The six sections, always all visible, along the bottom. */
+  .nav-links{position:fixed;left:0;right:0;bottom:0;z-index:60;display:grid;
+    grid-template-columns:repeat(6,1fr);gap:2px;
+    padding:5px 4px calc(5px + env(safe-area-inset-bottom));
+    background:var(--panel);border-top:0.5px solid var(--border)}
+  .nl{flex-direction:column;justify-content:center;gap:3px;width:auto;min-height:52px;
+    margin:0;padding:6px 2px;border-radius:8px;font-size:10.5px;text-align:center;line-height:1.1}
+  .nl-icon{font-size:18px;width:auto}
 
-  .sidebar-bot{display:flex;flex-wrap:wrap;align-items:center;gap:6px;
-    padding:8px 12px}
+  /* Behind the ⚙ button. */
+  .sidebar-bot{display:none;flex-wrap:wrap;align-items:center;gap:8px;padding:4px 14px 12px;border-top:0}
+  .sidebar.tools-open .sidebar-bot{display:flex}
   .sidebar-bot > *{margin:0!important}
-  .settings-btn,.voice-btn{width:auto!important;margin:0!important}
+  .settings-btn,.voice-btn{width:auto!important;margin:0!important;min-height:38px}
 }
 
 /* Sub-account switcher, under the app name */

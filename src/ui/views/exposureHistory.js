@@ -134,11 +134,30 @@ export function xTickIndices(xs, { want = 8, minGap = 70 } = {}) {
 
 /* ── one chart ───────────────────────────────────────────────────────── */
 
-const W = 900;
-const H = 260;
-const PLOT = { x0: 84, x1: W - 18, y0: 14, y1: H - 34 };
+/**
+ * A chart's drawing box, in units equal to the pixels it will occupy.
+ *
+ * Charts were drawn 900 units wide and scaled to fit, which is fine on a
+ * desktop and ruinous on a phone: the drawing shrinks to a third, and so does
+ * every label in it — thirteen-unit axis text came out at under eight pixels on
+ * an iPhone. Drawn at the width it is shown at, a label is the size the
+ * stylesheet says it is on every screen, and a narrow screen gets a shorter
+ * plot, a narrower gutter and fewer dates.
+ */
+export function chartBox(width = 900) {
+  const W = Math.max(280, Math.round(width));
+  const narrow = W < 600;
+  const H = narrow ? 220 : 260;
+  return {
+    W, H, narrow,
+    PLOT: { x0: narrow ? 58 : 84, x1: W - (narrow ? 10 : 18), y0: 14, y1: H - 30 },
+  };
+}
 
-function geometry(points, key) {
+/** The width a chart's host is drawn at; 900 where there is no layout (tests). */
+export const widthOf = (host) => host?.clientWidth || 900;
+
+function geometry(points, key, { PLOT } = chartBox()) {
   const values = points.map((p) => p[key]);
   const range = yRange(values);
   const t0 = points[0].t;
@@ -154,17 +173,19 @@ function geometry(points, key) {
  * The markup for one chart: its title, the plot, and the values behind it.
  * `key` is 'dex' or 'gex'.
  */
-export function historyChart(points, { key, title, colour }) {
-  const g = geometry(points, key);
+export function historyChart(points, { key, title, colour, width = 900 }) {
+  const b = chartBox(width);
+  const { W, H, PLOT } = b;
+  const g = geometry(points, key, b);
   const grid = g.range.ticks.map((v) => {
     const y = g.y(v).toFixed(1);
     return `<line class="xh-grid" x1="${PLOT.x0}" x2="${PLOT.x1}" y1="${y}" y2="${y}" />
-      <text class="xh-ytick" x="${PLOT.x0 - 12}" y="${y}" text-anchor="end" dominant-baseline="middle">${escapeHtml(axisMoney(v))}</text>`;
+      <text class="xh-ytick" x="${PLOT.x0 - (b.narrow ? 6 : 12)}" y="${y}" text-anchor="end" dominant-baseline="middle">${escapeHtml(axisMoney(v))}</text>`;
   }).join('');
   const path = g.xs.map((x, i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${g.ys[i].toFixed(1)}`).join(' ');
   const dots = g.xs.map((x, i) =>
     `<circle cx="${x.toFixed(1)}" cy="${g.ys[i].toFixed(1)}" r="3.6" fill="${colour}" />`).join('');
-  const dates = xTickIndices(g.xs).map((i) =>
+  const dates = xTickIndices(g.xs, { want: b.narrow ? 5 : 8, minGap: b.narrow ? 52 : 70 }).map((i) =>
     `<text class="xh-xtick" x="${g.xs[i].toFixed(1)}" y="${H - 8}" text-anchor="middle">${escapeHtml(dayMonth(points[i].day))}</text>`).join('');
   const rows = [...points].reverse().map((p) =>
     `<tr><td>${escapeHtml(p.day)}</td><td>${escapeHtml(tipMoney(p[key]))}</td></tr>`).join('');
@@ -194,11 +215,12 @@ export function historyChart(points, { key, title, colour }) {
  * Each chart reads on its own, as in the model: the line drops from the top of
  * the plot to the point, the point is ringed, and the readout sits beside it.
  */
-function bindHover(host, points, key, title) {
+function bindHover(host, points, key, title, b = chartBox()) {
+  const { W, PLOT } = b;
   const plot = host?.querySelector('.xh-plot');
   const svg = plot?.querySelector('svg');
   if (!svg) return;
-  const g = geometry(points, key);
+  const g = geometry(points, key, b);
   const hair = svg.querySelector('.xh-hair');
   const hot = svg.querySelector('.xh-hot');
   const tip = plot.querySelector('.xh-tip');
@@ -292,8 +314,9 @@ export function renderExposureHistory(profile) {
 
   const dexTitle = 'DEX · Delta exposure ($)';
   const gexTitle = 'GEX · Gamma exposure ($)';
-  dexHost.innerHTML = historyChart(points, { key: 'dex', title: dexTitle, colour: DEX_COLOUR });
-  gexHost.innerHTML = historyChart(points, { key: 'gex', title: gexTitle, colour: GEX_COLOUR });
-  bindHover(dexHost, points, 'dex', dexTitle);
-  bindHover(gexHost, points, 'gex', gexTitle);
+  const width = widthOf(dexHost);
+  dexHost.innerHTML = historyChart(points, { key: 'dex', title: dexTitle, colour: DEX_COLOUR, width });
+  gexHost.innerHTML = historyChart(points, { key: 'gex', title: gexTitle, colour: GEX_COLOUR, width });
+  bindHover(dexHost, points, 'dex', dexTitle, chartBox(width));
+  bindHover(gexHost, points, 'gex', gexTitle, chartBox(width));
 }

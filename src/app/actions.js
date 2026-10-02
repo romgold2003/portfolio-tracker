@@ -58,7 +58,7 @@ import {
   updateSizeHint as refreshSizeHint,
   toggleClosedTrade,
 } from '../ui/views/addTrade.js';
-import { show } from '../ui/router.js';
+import { show, toggleTools } from '../ui/router.js';
 import { ui } from '../ui/uiState.js';
 import {
   toggleTheme, openDesigner, closeDesigner, setThemeBase, resetDesign,
@@ -833,7 +833,7 @@ export function installActions(extra = {}) {
     // sub-accounts
     toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
-    show, toggleTheme, toggleVoice, toggleAmounts,
+    show, toggleTools, toggleTheme, toggleVoice, toggleAmounts,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
     openFavorites, closeFavorites,

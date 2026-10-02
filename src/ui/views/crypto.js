@@ -8,7 +8,7 @@
  * the ETF half of exposure.js — this only decides when they are drawn.
  */
 import { etfFlows } from '../../services/options.js';
-import { renderEtfFlows } from './exposure.js';
+import { renderEtfFlows, redrawFlows } from './exposure.js';
 import { installCryptoTabs, showCryptoView, startCryptoWhales } from './cryptoWhales.js';
 
 /** Draw the page on arrival. Each panel keeps its own refresh clock after that. */
@@ -18,4 +18,6 @@ export async function renderCrypto() {
   startCryptoWhales();
   // ETF flows are a separate source; one being down must not hold the others.
   renderEtfFlows(await etfFlows().catch(() => null));
+  // Drawn while the page was settling; draw again now that widths are real.
+  redrawFlows();
 }

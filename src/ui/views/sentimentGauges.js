@@ -12,6 +12,7 @@
  */
 import { marketSentiment } from '../../services/sentiment.js';
 import { gaugeSvg } from './gauge.js';
+import { escapeHtml } from '../format.js';
 
 const DIALS = [
   ['stocks', 'Stocks'],
@@ -23,7 +24,11 @@ export function gaugesHtml(sentiment) {
   return DIALS
     .map(([key, title]) => {
       const r = sentiment?.[key];
-      return r ? gaugeSvg({ value: r.value, label: r.label, title }) : '';
+      if (!r) return '';
+      // The words go under the dial as text, so they stay readable at any size.
+      return `<figure class="gauge-fig">${gaugeSvg({ value: r.value, label: r.label, title })}
+        <figcaption class="gauge-text"><span class="gauge-mood">${escapeHtml(r.label)}</span>
+          <span class="gauge-name">${escapeHtml(title)}</span></figcaption></figure>`;
     })
     .filter(Boolean)
     .join('');
