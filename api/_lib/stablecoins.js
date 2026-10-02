@@ -299,35 +299,35 @@ export async function fetchTrueTotal({ fetcher = fetch, sleep = null } = {}) {
 }
 
 /**
- * CoinGecko's whole-market figures, from the one call that gives all three:
- * the total market cap, Tether's share of it — the USDT dominance traders
- * chart as USDT.D — and how much the total moved over 24 hours.
+ * CoinGecko's whole-market figures, from the one call that gives both: the
+ * total market cap and how much it moved over 24 hours.
  */
 export async function fetchGlobal({ fetcher = fetch, sleep = null } = {}) {
   const data = (await json(`${CG}/global`, { fetcher, sleep }))?.data;
   const totalUsd = Number(data?.total_market_cap?.usd);
   if (!(Number.isFinite(totalUsd) && totalUsd > 0)) return null;
-  const usdtPct = Number(data?.market_cap_percentage?.usdt);
   const change = Number(data?.market_cap_change_percentage_24h_usd);
-  return {
-    totalUsd,
-    usdtPct: Number.isFinite(usdtPct) && usdtPct > 0 ? usdtPct : null,
-    totalChange24h: Number.isFinite(change) ? change : null,
-  };
+  return { totalUsd, totalChange24h: Number.isFinite(change) ? change : null };
 }
 
 /**
- * How many points USDT dominance moved in 24 hours.
+ * How many points the stablecoins' share moved in 24 hours.
  *
- * CoinGecko gives today's share but not yesterday's. Both halves of yesterday's
- * are recoverable, though: Tether's market cap moved by u per cent and the
- * whole market's by t, so the share a day ago was share × (1 + t) / (1 + u).
- * Null when either change is missing, rather than a guessed zero.
+ * CoinGecko gives today's market caps but not yesterday's. Both are
+ * recoverable, though: a coin whose cap moved by u per cent was worth
+ * cap / (1 + u) a day ago, and the same for the whole market. Null when any
+ * change is missing, rather than a guessed zero.
  */
-export function usdtChange24h(sharePct, usdtChangePct, totalChangePct) {
-  if (![sharePct, usdtChangePct, totalChangePct].every(Number.isFinite)) return null;
-  const before = sharePct * (1 + totalChangePct / 100) / (1 + usdtChangePct / 100);
-  return sharePct - before;
+export function stableChange24h(stables, totalUsd, totalChangePct) {
+  if (!stables.length || !(totalUsd > 0) || !Number.isFinite(totalChangePct)) return null;
+  let now = 0;
+  let before = 0;
+  for (const c of stables) {
+    if (!Number.isFinite(c.marketCapChange24h)) return null;
+    now += c.marketCap;
+    before += c.marketCap / (1 + c.marketCapChange24h / 100);
+  }
+  return (now / totalUsd) * 100 - (before / (totalUsd / (1 + totalChangePct / 100))) * 100;
 }
 
 /* ── today, live ────────────────────────────────────────────────────────── */
@@ -343,7 +343,7 @@ const DOLLARS = new Set(['USDT', 'USDC', 'DAI', 'USDE', 'USDS', 'PYUSD', 'FDUSD'
 export const isDollar = (symbol) => DOLLARS.has(String(symbol ?? '').toUpperCase());
 
 /** The total market cap changes by the minute and is worth asking for once. */
-let totalCache = { at: 0, usd: null, usdtPct: null, totalChange24h: null };
+let totalCache = { at: 0, usd: null, totalChange24h: null };
 const TOTAL_TTL_MS = 15 * 60_000;
 
 /**
@@ -360,7 +360,7 @@ export async function current({ coins = [], fetcher = fetch, now = Date.now() } 
   if (!totalCache.usd || now - totalCache.at > TOTAL_TTL_MS) {
     const global = await fetchGlobal({ fetcher }).catch(() => null);
     if (global) {
-      totalCache = { at: now, usd: global.totalUsd, usdtPct: global.usdtPct, totalChange24h: global.totalChange24h };
+      totalCache = { at: now, usd: global.totalUsd, totalChange24h: global.totalChange24h };
     }
   }
   const totalUsd = totalCache.usd;
@@ -382,14 +382,12 @@ export async function current({ coins = [], fetcher = fetch, now = Date.now() } 
   };
 }
 
-/* ── USDT dominance ─────────────────────────────────────────────────────── */
+/* ── the header figure ──────────────────────────────────────────────── */
 
-const TRADINGVIEW = 'https://scanner.tradingview.com/symbol?symbol=CRYPTOCAP%3AUSDT.D&fields=close,change_abs';
-const PAPRIKA = 'https://api.coinpaprika.com/v1';
+const TRADINGVIEW = 'https://scanner.tradingview.com/symbol?symbol=CRYPTOCAP%3ASTABLE.C.D&fields=close,change_abs';
 /** TradingView streams this one; two minutes is fresh enough for a header figure. */
 const TV_TTL_MS = 2 * 60_000;
 let tvCache = { at: 0, value: null };
-let paprikaCache = { at: 0, value: null };
 
 async function getJson(url, fetcher) {
   const res = await fetcher(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8_000) });
@@ -398,27 +396,28 @@ async function getJson(url, fetcher) {
 }
 
 /**
- * Tether's share of the whole crypto market — USDT.D — and how far it has
- * moved, for the figure beside the fear-and-greed dials on the Crypto page.
+ * All stablecoins' share of the crypto market, and how far it has moved, for
+ * the figure beside the fear-and-greed dials on the Crypto page.
  *
- * TradingView first, because it is the USDT.D on Romy's charts: on 2 October
- * 2026 it read 6.33%, against CoinGecko's 6.23% and CoinPaprika's 6.00%, the
- * providers differing in what they count as the whole market. Its endpoint is
- * public but undocumented, which Romy chose knowingly; if it stops answering,
- * CoinGecko stands in when current() already has its figure, and CoinPaprika
- * otherwise. Each answer says which source it came from.
+ * Every stablecoin, not Tether alone: Romy first asked for USDT.D, then for the
+ * whole of it. TradingView's STABLE.C.D first, because it is the one on Romy's
+ * charts — 10.67% on 2 October 2026. Its endpoint is public but undocumented,
+ * which Romy chose knowingly. If it stops answering, the app's own sum stands
+ * in: the dollar tokens in the coin list over CoinGecko's total. That counts
+ * a slightly wider set (tokenised treasury funds such as BUIDL among them) and
+ * reads about a point higher, so the answer names its source and the tile's
+ * tooltip says which it is.
  *
  * Never mixed: whichever source answers supplies every input. Their windows
  * differ too — TradingView's change runs from its daily open at midnight UTC,
- * the others' over a rolling 24 hours — so the answer carries its window and
+ * CoinGecko's over a rolling 24 hours — so the answer carries its window and
  * the tile labels the move "today" or "24h" accordingly.
  *
- * `coins` may be a list or a function returning one. Only the CoinGecko
- * fallback needs it — for Tether's own 24-hour change — and fetching the list
- * up front held TradingView's answer, which needs nothing, behind CoinGecko's
- * rate limit until the request ran out of time.
+ * `coins` may be a list or a function returning one. Only the fallback needs
+ * it, and fetching the list up front held TradingView's answer, which needs
+ * nothing, behind CoinGecko's rate limit until the request ran out of time.
  */
-export async function usdtShare({ coins = [], fetcher = fetch, now = Date.now() } = {}) {
+export async function stableShare({ coins = [], fetcher = fetch, now = Date.now() } = {}) {
   if (tvCache.value && now - tvCache.at <= TV_TTL_MS) return tvCache.value;
   try {
     const tv = await getJson(TRADINGVIEW, fetcher);
@@ -429,41 +428,22 @@ export async function usdtShare({ coins = [], fetcher = fetch, now = Date.now() 
       tvCache = { at: now, value };
       return value;
     }
-  } catch { /* fall through to the official APIs */ }
+  } catch { /* fall through to CoinGecko */ }
 
-  if (totalCache.usdtPct && now - totalCache.at <= TOTAL_TTL_MS) {
-    const list = typeof coins === 'function' ? await coins().catch(() => []) : coins;
-    const tether = (list ?? []).find((c) => String(c?.symbol ?? '').toUpperCase() === 'USDT');
-    return {
-      dominance: totalCache.usdtPct,
-      change: usdtChange24h(totalCache.usdtPct, tether?.marketCapChange24h, totalCache.totalChange24h),
-      window: '24h',
-      source: 'CoinGecko',
-    };
-  }
-
-  if (paprikaCache.value && now - paprikaCache.at <= TOTAL_TTL_MS) return paprikaCache.value;
-  const [global, tether] = await Promise.all([
-    getJson(`${PAPRIKA}/global`, fetcher), getJson(`${PAPRIKA}/tickers/usdt-tether`, fetcher),
-  ]);
-  const totalUsd = Number(global?.market_cap_usd);
-  const usdtUsd = Number(tether?.quotes?.USD?.market_cap);
-  if (!(totalUsd > 0 && usdtUsd > 0)) return null;
-  const dominance = (usdtUsd / totalUsd) * 100;
-  const value = {
-    dominance,
-    change: usdtChange24h(dominance,
-      Number(tether?.quotes?.USD?.market_cap_change_24h), Number(global?.market_cap_change_24h)),
+  const list = (typeof coins === 'function' ? await coins().catch(() => []) : coins) ?? [];
+  const mine = await current({ coins: list, fetcher, now });
+  if (!mine) return null;
+  const stables = list.filter((c) => isDollar(c?.symbol) && c?.marketCap > 0);
+  return {
+    dominance: mine.dominance,
+    change: stableChange24h(stables, mine.totalUsd, totalCache.totalChange24h),
     window: '24h',
-    source: 'CoinPaprika',
+    source: 'CoinGecko',
   };
-  paprikaCache = { at: now, value };
-  return value;
 }
 
 /** Only for the tests, which drive the clock themselves. */
 export function resetTotalCache() {
-  totalCache = { at: 0, usd: null, usdtPct: null, totalChange24h: null };
-  paprikaCache = { at: 0, value: null };
+  totalCache = { at: 0, usd: null, totalChange24h: null };
   tvCache = { at: 0, value: null };
 }

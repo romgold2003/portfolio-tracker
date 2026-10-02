@@ -603,40 +603,39 @@ function drawCoins() {
 }
 
 /**
- * USDT dominance at the top of the Crypto page, beside the fear-and-greed dials.
- *
- * Tether alone — what traders chart as USDT.D — rather than the all-stablecoin
- * share the card itself shows; Romy asked for this one by name. It rides on the
- * dominance the card already loads, so it costs no request of its own. The
- * figure is TradingView's USDT.D, the one on Romy's charts, with the official
- * APIs standing in if it stops answering (usdtShare in stablecoins.js). Hidden
- * until there is a reading.
+ * Stablecoin dominance at the top of the Crypto page, beside the fear-and-greed
+ * dials: every dollar token's share of the market, not Tether's alone — Romy
+ * asked for USDT.D first, then for all of them. It rides on the dominance the
+ * card already loads, so it costs no request of its own. The figure is
+ * TradingView's STABLE.C.D, the one on Romy's charts, with the app's own
+ * CoinGecko sum standing in if it stops answering (stableShare in
+ * stablecoins.js). Hidden until there is a reading.
  */
-export function usdtTileHtml(usdt) {
-  if (!usdt || !Number.isFinite(usdt.dominance)) return '';
-  // TradingView measures from its daily open ("today"); the fallbacks over a
+export function stableTileHtml(share) {
+  if (!share || !Number.isFinite(share.dominance)) return '';
+  // TradingView measures from its daily open ("today"); the fallback over a
   // rolling 24 hours. The label says which, so neither is passed off as the other.
-  const window = usdt.window === 'today' ? 'today' : '24h';
-  const c = usdt.change;
+  const window = share.window === 'today' ? 'today' : '24h';
+  const c = share.change;
   const move = Number.isFinite(c)
     ? `${c > 0.005 ? '▲' : c < -0.005 ? '▼' : '·'} ${Math.abs(c).toFixed(2)} · ${window}`
     : 'change unavailable';
-  return `<div class="usdtd-val">${escapeHtml(usdt.dominance.toFixed(2))}%</div>
+  return `<div class="usdtd-val">${escapeHtml(share.dominance.toFixed(2))}%</div>
     <div class="usdtd-move">${escapeHtml(move)}</div>
-    <div class="usdtd-name">USDT dominance</div>`;
+    <div class="usdtd-name">Stablecoin dominance</div>`;
 }
 
-function drawUsdtTile() {
-  const box = el('usdtDominance');
+function drawStableTile() {
+  const box = el('stableDominance');
   if (!box) return;
-  const html = usdtTileHtml(netflow?.stables?.usdt);
+  const share = netflow?.stables?.headline;
+  const html = stableTileHtml(share);
   box.innerHTML = html;
   box.hidden = !html;
   if (html) {
-    const usdt = netflow.stables.usdt;
-    const since = usdt.window === 'today' ? 'since the daily open (00:00 UTC)' : 'over the last 24 hours';
-    box.title = "Tether's market cap as a share of the whole crypto market"
-      + `${usdt.source ? ` — ${usdt.source}` : ''}. The change is in percentage points, ${since}.`;
+    const since = share.window === 'today' ? 'since the daily open (00:00 UTC)' : 'over the last 24 hours';
+    box.title = "All stablecoins' market cap as a share of the whole crypto market"
+      + `${share.source ? ` — ${share.source}` : ''}. The change is in percentage points, ${since}.`;
   }
 }
 
@@ -644,7 +643,7 @@ function draw() {
   drawCoins();
   drawNetflow();
   drawDominance();
-  drawUsdtTile();
+  drawStableTile();
   drawTopHolders();
   const name = el('cwName');
   if (name) name.textContent = symbol ? symbol : 'all coins';
