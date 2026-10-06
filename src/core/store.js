@@ -364,6 +364,14 @@ function sanitizePosition(raw) {
   if (prevClose != null && prevClose > 0) clean.prevClose = prevClose;
   const weeklyChg = num(raw.weeklyChg);
   if (weeklyChg != null) clean.weeklyChg = weeklyChg;
+  // Splits found while the holding was open, so one is never applied twice and
+  // the card can say why the share count changed.
+  const splits = Array.isArray(raw.splits)
+    ? raw.splits
+      .map((s) => ({ d: date(s?.d), k: num(s?.k), source: oneOf(s?.source, ['yahoo', 'price'], 'price') }))
+      .filter((s) => s.d && s.k > 0)
+    : [];
+  if (splits.length) clean.splits = splits;
   const firstExit = date(raw.firstExit);
   if (firstExit) clean.firstExit = firstExit;
 

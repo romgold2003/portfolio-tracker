@@ -13,6 +13,7 @@ import { state, currentApiKey } from '../core/store.js';
 import { logPrice, seedPrevClose, getWeekChg } from './priceLog.js';
 import { extendedQuotes, applyExtendedQuotes, tradingDayOver, regularSessionOpen } from './extendedHours.js';
 import { weekStartCloses } from './weekStart.js';
+import { catchSplits } from './splits.js';
 
 /** CoinGecko's full symbol list, fetched at most once per session. */
 let coinList = null;
@@ -190,6 +191,14 @@ export async function refreshOpenPositions(now = new Date()) {
   }
 
   await applyWeekToDate(open);
+
+  // Last, so it sees the price every step above settled on and can correct the
+  // day's and the week's change, both of which may span the split.
+  try {
+    await catchSplits(open, now);
+  } catch (err) {
+    console.error('Split check failed; share counts unchanged.', err);
+  }
   return JSON.stringify(open) !== before;
 }
 

@@ -271,9 +271,22 @@ function closedBody(p, retPct) {
     </div>`}`;
 }
 
+/**
+ * "1-for-3 split · Oct 6", on a holding whose share count the app changed for a
+ * split. One found from the price alone says so, since that is an inference.
+ */
+export function splitLabel(s) {
+  const ratio = s.k >= 1 ? `${+s.k.toFixed(2)}-for-1` : `1-for-${+(1 / s.k).toFixed(2)}`;
+  const day = new Date(`${s.d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `${ratio} split · ${escapeHtml(day)}${s.source === 'price' ? ' (from price)' : ''}`;
+}
+
 /** Small amber badge showing partial-close progress or exit count. */
 function progressBadge(p) {
   const badge = (text) => ` <span class="badge" style="background:var(--amber-bg);color:var(--amber);font-size:9px">${text}</span>`;
+  const split = p.splits?.[p.splits.length - 1];
+  // For a week or so: long enough to be seen, not so long it outstays the news.
+  if (split && p.status === 'Open' && Date.now() - Date.parse(split.d) < 10 * 86400000) return badge(splitLabel(split));
   if (p.exits && p.exits.length && p.status === 'Open') {
     return badge(`${(100 - (p.qty / baseQtyOf(p)) * 100).toFixed(0)}% closed`);
   }
