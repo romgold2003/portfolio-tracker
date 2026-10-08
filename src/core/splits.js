@@ -66,6 +66,25 @@ export function applySplit(p, k, date, source) {
 }
 
 /**
+ * The splits found on held positions, as events for the daily history.
+ *
+ * The history counts shares from the statements, which end before these
+ * splits: without them ETHA was 66 shares at $61.59 from 6 October on. One a
+ * statement already reported is left out — the import has restated the counts
+ * for it, and applying it again would divide them twice.
+ */
+export function splitEvents(positions, reported = []) {
+  const out = [];
+  for (const p of positions ?? []) {
+    for (const s of p.splits ?? []) {
+      const known = reported.some((r) => r?.ticker === p.ticker && daysApart(r.date, s.d) <= SAME_SPLIT_DAYS);
+      if (!known) out.push({ kind: 'split', date: s.d, ticker: p.ticker, k: s.k });
+    }
+  }
+  return out;
+}
+
+/**
  * A percentage measured across a split, measured as though it had not been.
  *
  * The feed's previous close, and the close a week's change starts from, can

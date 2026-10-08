@@ -57,11 +57,18 @@ export async function catchSplits(open, now = new Date()) {
       found = true;
     }
 
-    // Not written down yet: yesterday's close is still the old price.
-    const last = rows[rows.length - 1];
-    if (last?.date < today && last.date >= since && !splitRecorded(p, today)) {
-      const k = impliedSplit(last.close, p.cur);
-      if (k) { applySplit(p, k, today, 'price'); found = true; }
+    // Not written down yet: the history still carries the old price up to the
+    // split, so the jump shows between two closes — or between the last close
+    // and now. Every day since the count was known, not only yesterday: after
+    // four o'clock today's close is already in the history, and a split on a
+    // day the app was not opened is still a split the next morning.
+    const path = rows.filter((r) => r.date >= since && r.close > 0).map((r) => [r.date, r.close]);
+    path.push([today, p.cur]);
+    for (let i = 1; i < path.length; i++) {
+      const [day, price] = path[i];
+      if (splitRecorded(p, day)) continue;
+      const k = impliedSplit(path[i - 1][1], price);
+      if (k) { applySplit(p, k, day, 'price'); found = true; }
     }
 
     // The feed re-reads its previous close on every refresh, and the one it

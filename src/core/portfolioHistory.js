@@ -106,6 +106,11 @@ export function buildPortfolioHistory({
       if (MOVES_SHARES.has(event.kind) && event.ticker) {
         holdings.set(event.ticker, (holdings.get(event.ticker) ?? 0) + (Number(event.qty) || 0));
       }
+      // A split found after the last statement (core/splits.js): the count
+      // changes from its day on, and the prices before it stay as traded.
+      if (event.kind === 'split' && event.ticker && event.k > 0 && holdings.has(event.ticker)) {
+        holdings.set(event.ticker, holdings.get(event.ticker) * event.k);
+      }
       if (event.kind === 'flow') {
         const amount = Number(event.cash) || 0;
         if (amount >= 0) deposit += amount; else withdrawal += amount;

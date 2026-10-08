@@ -9,8 +9,10 @@
  */
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
-import { impliedSplit, applySplit, acrossSplit, splitRecorded } from '../src/core/splits.js';
+import { impliedSplit, applySplit, acrossSplit, splitRecorded, splitEvents } from '../src/core/splits.js';
+import { buildPortfolioHistory } from '../src/core/portfolioHistory.js';
 import { refreshOpenPositions } from '../src/services/prices.js';
 import { resetExtendedCache } from '../src/services/extendedHours.js';
 import { state, sanitizePositions } from '../src/core/store.js';
@@ -166,11 +168,63 @@ describe('through a real price refresh', () => {
     assert.equal(state.positions[0].splits, undefined);
   });
 
+  test("after four o'clock, with today's close already in the history, it is still caught", async () => {
+    globalThis.fetch = server({
+      ticker: 'LATE', price: 61.5, previousClose: 20.43,
+      closes: [['2026-10-05', 20.43], ['2026-10-06', 61.4]],
+    });
+    state.positions.push({ ...etha(), ticker: 'LATE', cur: 61.4 });
+    await refreshOpenPositions(new Date('2026-10-06T21:30:00Z'));
+    assert.equal(state.positions[0].qty, 22);
+    assert.equal(state.positions[0].splits[0].d, '2026-10-06');
+  });
+
+  test('and on a day the app was not opened, dated the day it happened', async () => {
+    globalThis.fetch = server({
+      ticker: 'AWAY', price: 62, previousClose: 61.4,
+      closes: [['2026-10-05', 20.43], ['2026-10-06', 61.4], ['2026-10-07', 61.4]],
+    });
+    state.positions.push({ ...etha(), ticker: 'AWAY', cur: 20.43 });
+    await refreshOpenPositions(new Date('2026-10-08T15:00:00Z'));
+    assert.equal(state.positions[0].qty, 22);
+    assert.equal(state.positions[0].splits[0].d, '2026-10-06');
+  });
+
   test('an ordinary day leaves the holding exactly as it was', async () => {
     globalThis.fetch = server({ ticker: 'AMD', price: 653.43, previousClose: 631.75, closes: [['2026-10-05', 631.75]] });
     state.positions.push({ ...etha(), ticker: 'AMD', qty: 10, entry: 125.96, cur: 631.75, prevClose: 631.75 });
     await refreshOpenPositions(NOW);
     assert.equal(state.positions[0].qty, 10);
     assert.equal(state.positions[0].splits, undefined);
+  });
+});
+
+describe('the chart on the main screen', () => {
+  // ETHA alone, as the statement left it: 66 shares, nothing else.
+  const closes = { '2026-10-05': 20.43, '2026-10-06': 61.59, '2026-10-07': 61.0 };
+  const priceOn = (t, day) => closes[day] ?? null;
+  const walk = (events) => buildPortfolioHistory({
+    opening: { date: '2026-10-05', cash: 0, holdings: { ETHA: 66 } },
+    events, priceOn, from: '2026-10-05', to: '2026-10-07',
+  }).map((r) => Math.round(r.totalAccountValue));
+
+  test('without the split it read three times ETHA from the split on — the $50k days', () => {
+    assert.deepEqual(walk([]), [1348, 4065, 4026]);
+  });
+
+  test('with it, the count changes on the day and the days before are untouched', () => {
+    const events = splitEvents([{ ticker: 'ETHA', splits: [{ d: '2026-10-06', k: 1 / 3 }] }]);
+    assert.deepEqual(walk(events), [1348, 1355, 1342]);
+  });
+
+  test('a split a statement already reported is not applied a second time', () => {
+    const held = [{ ticker: 'ETHA', splits: [{ d: '2026-10-06', k: 1 / 3 }] }];
+    assert.deepEqual(splitEvents(held, [{ ticker: 'ETHA', date: '2026-10-06', ratio: 1 / 3 }]), []);
+    assert.equal(splitEvents(held, [{ ticker: 'SCO', date: '2026-10-06' }]).length, 1);
+  });
+
+  test('both history builds on the main screen are given the splits', () => {
+    const home = readFileSync(new URL('../src/ui/views/home.js', import.meta.url), 'utf8');
+    assert.equal((home.match(/\.\.\.splitEvents\(/g) ?? []).length, 2);
   });
 });

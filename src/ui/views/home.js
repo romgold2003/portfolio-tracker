@@ -32,6 +32,7 @@ import {
   yearToDateReturn as measuredYearToDate, asTradedClose, allTimeFromDeposits,
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
+import { splitEvents } from '../../core/splits.js';
 import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
 import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
@@ -493,7 +494,7 @@ async function loadBackfill() {
         opening: {
           date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings,
         },
-        events: ledger.events ?? [],
+        events: [...ledger.events ?? [], ...splitEvents(state.positions, splitsAppliedByJournal())],
         priceOn: pastPrice,
         lastKnown: datedMarks(ledger),
         from: earliest,
@@ -588,7 +589,10 @@ function journalDays(journal, earliest) {
   if (ledger?.openingCash != null && ledger.from) {
     return buildPortfolioHistory({
       opening: { date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings },
-      events: ledger.events ?? [],
+      events: [
+        ...ledger.events ?? [],
+        ...splitEvents(state.positions.filter((p) => p.account === journal.id), allSplits(journal.statements ?? [])),
+      ],
       priceOn: pastPrice,
       lastKnown: datedMarks(ledger),
       from: earliest,
