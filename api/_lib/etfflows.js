@@ -1,24 +1,45 @@
 /**
  * Daily net flows into the spot Bitcoin and Ethereum ETFs.
  *
- * From SoSoValue's open API, which publishes the series the trackers all quote:
- * one row a day, the net dollars in or out across every issuer.
+ * From CoinMarketCap's own chart data: daily for the last 90 days, weekly for a
+ * year and monthly back to launch, so each of the panel's three views is drawn
+ * from the source's own totals rather than from days it does not have.
  *
- * The obvious source was Farside, whose table is where most of this data is
- * read from — but it sits behind a bot check that refuses a server request
- * whatever headers it carries, and getting round that is not something to do.
- * This API is offered for the purpose and its figures match Farside's to the
- * decimal: −236,463,473 against their (236.5)m for the same day.
+ * SoSoValue's open API, which this used to read, answered 404 from October
+ * 2026 and the panel vanished. Its keyed API is used instead whenever
+ * SOSO_API_KEY is set. Farside, whose table the trackers quote, serves a bot
+ * check to any program — curl got through once, Node never — and getting round
+ * that is not something to do.
  *
- * Flows arrive in dollars and are carried in millions, which is the unit these
- * are always quoted in and keeps the numbers on the chart short.
+ * CoinMarketCap matched Farside to the decimal on nine of the twelve days
+ * checked; on 2 October 2026 it read +29.7m against Farside's +189.9m, a fund
+ * missing from the day.
+ *
+ * Flows are carried in millions, which is the unit these are always quoted in
+ * and keeps the numbers on the chart short.
  */
 
-/** What the API calls each fund group. */
+/** What each source calls each fund group. */
 export const SERIES = {
-  BTC: { label: 'Bitcoin', type: 'us-btc-spot' },
-  ETH: { label: 'Ethereum', type: 'us-eth-spot' },
+  BTC: { label: 'Bitcoin', type: 'us-btc-spot', cmc: 'btc' },
+  ETH: { label: 'Ethereum', type: 'us-eth-spot', cmc: 'eth' },
 };
+
+/** CoinMarketCap's points: dollars, dated by a millisecond timestamp. */
+export function parseCmc(payload) {
+  const points = payload?.data?.points;
+  if (!Array.isArray(points)) return null;
+  const out = [];
+  for (const p of points) {
+    const at = Number(p?.timestamp);
+    const value = p?.value;
+    if (!Number.isFinite(at) || value === null || value === undefined || !Number.isFinite(Number(value))) continue;
+    out.push({ date: new Date(at).toISOString().slice(0, 10), flow: +(Number(value) / 1e6).toFixed(1) });
+  }
+  if (!out.length) return null;
+  out.sort((x, y) => x.date.localeCompare(y.date));
+  return out;
+}
 
 /**
  * The daily totals, oldest first and in millions.

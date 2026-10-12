@@ -501,7 +501,9 @@ function drawFlows() {
     const host = el(`etfChart-${id}`);
     if (!set?.flows?.length || !host) continue;
 
-    const rolled = rollUp(set.flows, grain).slice(-bars);
+    // The source's own weekly and monthly totals where it sends them: its daily
+    // figures stop at 90 days, short of 26 weeks or 12 months.
+    const rolled = rollUp(set[grain]?.length ? set[grain] : set.flows, grain).slice(-bars);
     host.insertAdjacentHTML('afterbegin', columnChart({
       points: rolled, title: 'Net flow', note: '$ millions', width: host.clientWidth || W,
     }));
