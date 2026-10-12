@@ -42,14 +42,21 @@ export async function optionsProfile(market) {
   }
 }
 
-/** Daily ETF flows for both coins. */
+/**
+ * Daily ETF flows for both coins. With nothing to show, the server's reason
+ * comes back as { error } so the card can say it, instead of disappearing.
+ */
 export async function etfFlows() {
   if (!cloudEnabled()) return null;
   if (etfCache.data && Date.now() - etfCache.at < ETF_CACHE_MS) return etfCache.data;
 
   try {
     const res = await fetch('/api/etf', { credentials: 'same-origin' });
-    if (!res.ok) return etfCache.data;
+    if (!res.ok) {
+      if (etfCache.data) return etfCache.data;
+      const why = (await res.json().catch(() => null))?.error;
+      return why ? { error: why } : null;
+    }
     const data = await res.json();
     if (!data?.BTC && !data?.ETH) return etfCache.data;
     etfCache = { at: Date.now(), data };

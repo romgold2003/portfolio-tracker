@@ -9,19 +9,28 @@ import { userForToken } from '../_lib/accounts.js';
 import { parseFlows, summarise, SERIES } from '../_lib/etfflows.js';
 
 const SESSION_COOKIE = 'pt_session';
-const ENDPOINT = 'https://api.sosovalue.xyz/openapi/v2/etf/historicalInflowChart';
+/**
+ * SoSoValue's keyed API. The open one at api.sosovalue.xyz answered 404
+ * ("接口不存在", no such endpoint) from October 2026 and the panel vanished;
+ * the same call now lives here and wants a free key, set on Vercel as
+ * SOSO_API_KEY. It reads the key from x-soso-api-key — the only header it
+ * answered "verify the value with SoSoValue" to rather than "no key".
+ */
+const ENDPOINT = 'https://openapi.sosovalue.com/openapi/v2/etf/historicalInflowChart';
 
-async function flowsFor(type) {
+async function flowsFor(type, key) {
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
       'User-Agent': 'portfolio-tracker',
+      'x-soso-api-key': key,
     },
     body: JSON.stringify({ type }),
+    signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) return null;
+  if (!res.ok) throw new Error(`SoSoValue answered ${res.status}`);
   return parseFlows(await res.json());
 }
 
@@ -31,8 +40,11 @@ export default async function handler(req, res) {
   const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
   if (!user) return fail(res, 401, 'Not signed in.');
 
+  const key = process.env.SOSO_API_KEY;
+  if (!key) return fail(res, 503, 'ETF flows need a SoSoValue API key, which is not set yet.');
+
   const ids = Object.keys(SERIES);
-  const settled = await Promise.allSettled(ids.map((id) => flowsFor(SERIES[id].type)));
+  const settled = await Promise.allSettled(ids.map((id) => flowsFor(SERIES[id].type, key)));
 
   const out = {};
   ids.forEach((id, i) => {
@@ -42,7 +54,10 @@ export default async function handler(req, res) {
     out[id] = { label: SERIES[id].label, flows, summary: summarise(flows) };
   });
 
-  if (!Object.keys(out).length) return fail(res, 503, 'ETF flows are not available.');
+  if (!Object.keys(out).length) {
+    const why = settled.find((r) => r.status === 'rejected')?.reason?.message;
+    return fail(res, 503, `ETF flows are not available${why ? ` (${why})` : ''}.`);
+  }
 
   /**
    * An hour. The funds report once a day, after the US close, and a figure that

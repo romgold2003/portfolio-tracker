@@ -530,6 +530,13 @@ export function renderEtfFlows(data) {
   if (!card) return;
   card.style.display = data ? '' : 'none';
   if (!data) return;
+  if (data.error) {
+    const body = el('etfBody');
+    if (body) body.innerHTML = `<div style="font-size:12px;color:var(--text3);padding:14px 0">${escapeHtml(data.error)}</div>`;
+    const picker = el('etfGrain');
+    if (picker) picker.innerHTML = '';
+    return;
+  }
   lastFlows = data;
 
   const picker = el('etfGrain');
