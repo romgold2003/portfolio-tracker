@@ -927,7 +927,10 @@ function readSplits(group) {
   const seen = new Map();
   for (const r of group.rows) {
     if (isTotalRow(r)) continue;
-    const match = /^\s*([A-Z0-9 .-]+?)\s*\([A-Z0-9]+\)\s+split\s+([\d.]+)\s+for\s+([\d.]+)/i.exec(clean(r[iDesc] ?? ''));
+    // The French statement says "Division 1 pour 3" where the English one says
+    // "Split 1 for 3". Read in English only, ETHA's 1-for-3 of October 2026
+    // was missed and the history held 66 shares at the new price.
+    const match = /^\s*([A-Z0-9 .-]+?)\s*\([A-Z0-9]+\)\s+(?:split|division)\s+([\d.]+)\s+(?:for|pour)\s+([\d.]+)/i.exec(clean(r[iDesc] ?? ''));
     const [day, time] = clean(r[iDate] ?? '').split(',').map((s) => s.trim());
     if (!match || !/^\d{4}-\d{2}-\d{2}$/.test(day ?? '')) continue;
     const ratio = num(match[2]) / num(match[3]);

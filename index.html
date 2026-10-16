@@ -233,14 +233,21 @@
             <div class="alloc-chart"><canvas id="sectorChart" role="img" aria-label="Share of the account held in each sector">Sector allocation.</canvas></div>
             <div class="alloc-legend" id="sectorLegend"></div>
           </div>
-          <div class="tf-row" id="tfRow">
-            <div class="tf" data-tf="1W">1W</div>
-            <div class="tf" data-tf="1M">1M</div>
-            <div class="tf active" data-tf="3M">3M</div>
-            <div class="tf" data-tf="6M">6M</div>
-            <div class="tf" data-tf="YTD">YTD</div>
-            <div class="tf" data-tf="1Y">1Y</div>
-            <div class="tf" data-tf="All">All</div>
+          <div class="tf-side">
+            <div class="tf-row" id="tfRow">
+              <div class="tf" data-tf="1W">1W</div>
+              <div class="tf" data-tf="1M">1M</div>
+              <div class="tf active" data-tf="3M">3M</div>
+              <div class="tf" data-tf="6M">6M</div>
+              <div class="tf" data-tf="YTD">YTD</div>
+              <div class="tf" data-tf="1Y">1Y</div>
+              <div class="tf" data-tf="All">All</div>
+            </div>
+            <!-- Every trading day's return, by year: src/ui/views/dailyLog.js. -->
+            <button class="dl-btn" id="dailyLogBtn" onclick="toggleDailyLog()" aria-haspopup="dialog" aria-expanded="false">
+              <span class="dl-btn-ico" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Daily returns
+            </button>
+            <div class="dl-pop" id="dailyLog" role="dialog" aria-label="Daily returns" hidden></div>
           </div>
         </div>
         <div class="curve-wrap"><canvas id="curve" role="img" aria-label="Account value over time">Account value curve.</canvas></div>

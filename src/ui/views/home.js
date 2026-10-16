@@ -33,6 +33,7 @@ import {
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
 import { splitEvents } from '../../core/splits.js';
+import { renderDailyLog } from './dailyLog.js';
 import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
 import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
@@ -954,6 +955,8 @@ export function renderHome() {
   }
 
   renderAllocation();
+  // Open or not, so a day that has just closed is in it the next time it is.
+  renderDailyLog();
 
   // The chart still draws the recorded account value; the figures beside it do
   // not come from it. That curve measures the change in what the account holds,

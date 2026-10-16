@@ -1157,6 +1157,67 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
   .uv-vol,.uv-push{display:none}
 }
 
+/* ── Daily returns ─────────────────────────────────────────────────────────
+   The button under the timeframe row and the window it opens: every trading
+   day's return for a chosen year, newest first. src/ui/views/dailyLog.js. */
+.tf-side{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.dl-btn{display:inline-flex;align-items:center;gap:8px;background:var(--input);border:0.5px solid var(--border2);
+  border-radius:7px;padding:6px 12px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;
+  letter-spacing:0.02em;transition:background .15s,border-color .15s,color .15s}
+.dl-btn:hover,.dl-btn[aria-expanded="true"]{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
+.dl-btn-ico{display:inline-flex;align-items:flex-end;gap:2px;height:11px}
+.dl-btn-ico i{display:block;width:2px;border-radius:1px;background:var(--green)}
+.dl-btn-ico i:nth-child(1){height:6px}.dl-btn-ico i:nth-child(2){height:10px}
+.dl-btn-ico i:nth-child(3){height:4px;background:var(--red)}.dl-btn-ico i:nth-child(4){height:8px}
+
+.dl-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:70;width:392px;max-width:calc(100vw - 32px);
+  background:var(--panel);border:0.5px solid var(--border2);border-radius:12px;padding:14px 14px 6px;
+  box-shadow:0 18px 50px var(--shadow);animation:dl-in .18s ease-out}
+.dl-pop[hidden]{display:none}
+@keyframes dl-in{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+.dl-pop .is-up{color:var(--green)}.dl-pop .is-down{color:var(--red)}
+.dl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.dl-title{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
+.dl-close{background:none;border:0;color:var(--text3);font-size:20px;line-height:1;cursor:pointer;padding:0 4px;font-family:inherit}
+.dl-close:hover{color:var(--text)}
+.dl-years{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
+.dl-year{background:var(--input);border:0.5px solid var(--border2);border-radius:5px;padding:4px 10px;font-size:11px;
+  color:var(--text2);cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums}
+.dl-year:hover{background:var(--hover2)}
+.dl-year.active{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
+.dl-sum{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;padding:10px 12px;margin-bottom:10px;
+  background:var(--panel2);border:0.5px solid var(--border);border-radius:9px}
+.dl-sum>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dl-sum b{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.dl-k{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em}
+.dl-sub{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-sub b{font-size:11px}
+.dl-list{max-height:min(420px,55vh);overflow-y:auto;overscroll-behavior:contain;margin:0 -6px;padding:0 6px 8px;scroll-behavior:smooth}
+.dl-month{margin-top:4px}
+.dl-mhead{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:baseline;
+  padding:8px 2px 6px;background:var(--panel);border-bottom:0.5px solid var(--border);
+  font-size:11px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.dl-mhead span:last-child{font-weight:500;font-size:11px}
+.dl-day{display:grid;grid-template-columns:86px minmax(0,1fr) 64px 92px;align-items:center;gap:10px;
+  padding:6px 4px;border-radius:6px;font-size:12px;font-variant-numeric:tabular-nums;transition:background .12s}
+.dl-day:hover{background:var(--hover)}
+.dl-date{color:var(--text2);white-space:nowrap}
+.dl-flow{margin-left:5px;color:var(--amber);font-size:10px}
+.dl-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden}
+.dl-bar span{display:block;height:100%;border-radius:2px}
+.dl-day.is-up .dl-bar span{background:var(--green)}.dl-day.is-down .dl-bar span{background:var(--red)}
+.dl-pct,.dl-usd{text-align:right;white-space:nowrap}
+.dl-day.is-up .dl-pct,.dl-day.is-up .dl-usd{color:var(--green)}
+.dl-day.is-down .dl-pct,.dl-day.is-down .dl-usd{color:var(--red)}
+.dl-usd{font-size:11px;opacity:.85}
+.dl-empty{font-size:12px;color:var(--text3);padding:18px 4px}
+@media (max-width:720px){
+  .tf-side{align-items:stretch;width:100%}
+  .dl-btn{align-self:flex-start}
+  .dl-pop{position:fixed;left:12px;right:12px;top:auto;bottom:calc(76px + env(safe-area-inset-bottom));width:auto;max-width:none}
+  .dl-day{grid-template-columns:78px minmax(0,1fr) 60px 84px;gap:8px}
+}
+
 /* ── Touch screens ─────────────────────────────────────────────────────────
    Phones and tablets are driven by a finger, and a lot of this app's controls
    were sized for a mouse: sort buttons 24px tall, sign-out 16, the cash Edit
