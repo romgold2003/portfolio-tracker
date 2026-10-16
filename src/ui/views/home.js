@@ -33,6 +33,7 @@ import {
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
 import { splitEvents } from '../../core/splits.js';
+import { appTradeEvents } from '../../core/appTrades.js';
 import { renderDailyLog } from './dailyLog.js';
 import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
 import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/store.js';
@@ -495,7 +496,11 @@ async function loadBackfill() {
         opening: {
           date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings,
         },
-        events: [...ledger.events ?? [], ...splitEvents(state.positions, splitsAppliedByJournal())],
+        events: [
+          ...ledger.events ?? [],
+          ...splitEvents(state.positions, splitsAppliedByJournal()),
+          ...appTradeEvents(state.positions, ledger.to),
+        ],
         priceOn: pastPrice,
         lastKnown: datedMarks(ledger),
         from: earliest,
@@ -593,6 +598,7 @@ function journalDays(journal, earliest) {
       events: [
         ...ledger.events ?? [],
         ...splitEvents(state.positions.filter((p) => p.account === journal.id), allSplits(journal.statements ?? [])),
+        ...appTradeEvents(state.positions.filter((p) => p.account === journal.id), ledger.to),
       ],
       priceOn: pastPrice,
       lastKnown: datedMarks(ledger),
