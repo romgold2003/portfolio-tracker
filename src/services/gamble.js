@@ -49,6 +49,11 @@ const FLOORS = [1_000_000, FLOOR_USD];
  * in bands is how the same list answers "who is nibbling" and "who has decided".
  */
 export const BANDS = [
+  // Added October 2026. Macro bets rarely reach $250k — the biggest on the
+  // October Fed decision in a month was $212k — so with only the three upper
+  // bands the panel sat empty for weeks. The upper three are unchanged.
+  { id: 'k10', label: '$10k–50k', min: 10_000, max: 50_000 },
+  { id: 'k50', label: '$50k–250k', min: 50_000, max: 250_000 },
   { id: 'mid', label: '$250k–500k', min: 250_000, max: 500_000 },
   { id: 'large', label: '$500k–1M', min: 500_000, max: 1_000_000 },
   { id: 'mega', label: '$1M+', min: 1_000_000, max: Infinity },
@@ -196,7 +201,9 @@ export function selectTrades(rows, { band = 'mid', topic: wanted = 'all', limit 
     const wallet = String(t?.proxyWallet ?? '').trim();
     if (!title || !wallet) continue;
 
-    const topic = topicOf(title);
+    // Rows fetched for a topic's own events carry it; the all-market fallback
+    // is sorted by its title, as before.
+    const topic = (t._topic && TOPICS.find((x) => x.id === t._topic)) || topicOf(title);
     if (!topic) continue;
     if (wanted !== 'all' && topic.id !== wanted) continue;
 
@@ -215,6 +222,7 @@ export function selectTrades(rows, { band = 'mid', topic: wanted = 'all', limit 
       usd: Math.round(usd),
       price: Number(t.price) || 0,
       at: Number(t.timestamp) || 0,
+      slug: String(t.eventSlug ?? '').trim(),
     });
   }
 
@@ -222,13 +230,6 @@ export function selectTrades(rows, { band = 'mid', topic: wanted = 'all', limit 
   return out.slice(0, limit);
 }
 
-/**
- * The recent large trades, straight from Polymarket.
- *
- * Asks the feed for everything above the floor and narrows here, because the
- * bands and the macro filter both need more rows than any one band will keep —
- * most of what comes back above $100k is sport.
- */
 /**
  * One fill, identified well enough to recognise it in the other answer.
  *
@@ -238,23 +239,166 @@ export function selectTrades(rows, { band = 'mid', topic: wanted = 'all', limit 
 const fillKey = (t) =>
   `${t?.transactionHash ?? ''}|${t?.proxyWallet ?? ''}|${t?.size ?? ''}|${t?.timestamp ?? ''}`;
 
+/* ── each topic's open markets ─────────────────────────────────────────── */
+
 /**
- * The recent large trades, straight from Polymarket.
+ * Where each topic's markets are found: Polymarket's own tags.
  *
- * Both floors are asked at once and merged, because everything above $100k
- * appears in both answers. Either request failing costs only the bands it
- * feeds, so a panel with one dead floor is thinner rather than empty.
+ * The panel used to read the 500 latest trades over $250k on the whole of
+ * Polymarket and keep the macro ones. Over six weeks to October 2026 that was
+ * 152 trades, nearly all football, and two on the Fed — both on a meeting
+ * already decided. So the topics now ask for their open events first, then for
+ * the bets in those: "Fed Decision in October?" alone traded $2.3m in a day.
+ *
+ * Polymarket has no crypto-policy tag; stablecoins is the nearest, and crypto
+ * events whose titles name a policy (an act, the SEC, a reserve) join it.
+ */
+const TOPIC_TAGS = {
+  fed: ['fed-rates'],
+  geo: ['geopolitics'],
+  policy: ['stablecoins', 'crypto'],
+  econ: ['economy', 'inflation', 'tariffs'],
+  polit: ['politics'],
+  coin: ['crypto'],
+};
+const EVENTS = 'https://gamma-api.polymarket.com/events';
+/** The busiest open events per topic, by the last day's volume. */
+const EVENTS_PER_TOPIC = 12;
+/** Open events change slowly; the bets in them are asked for every refresh. */
+const EVENTS_TTL_MS = 10 * 60_000;
+let eventsCache = { at: 0, topics: null };
+
+/** Test seam. */
+export function resetOpenEvents() { eventsCache = { at: 0, topics: null }; brokenEvents.clear(); }
+
+const POLICY = /\b(act|sec|cftc|regulat\w*|reserve|stablecoins?|ban|law|bill|etf)\b/i;
+
+/**
+ * topic id → { ids, markets }: its open events' ids, and every market in them
+ * by condition id. An event is claimed by the first topic that asks for it, in
+ * the order the tabs are shown, so the October Fed decision is a Fed bet and
+ * not also an economy one.
+ */
+async function openEvents({ signal, now = Date.now() } = {}) {
+  if (eventsCache.topics && now - eventsCache.at < EVENTS_TTL_MS) return eventsCache.topics;
+  const tags = [...new Set(Object.values(TOPIC_TAGS).flat())];
+  const byTag = new Map(await Promise.all(tags.map(async (tag) => {
+    try {
+      const res = await fetch(`${EVENTS}?tag_slug=${tag}&active=true&closed=false&limit=50&order=volume24hr&ascending=false`, { signal });
+      const list = res.ok ? await res.json() : [];
+      return [tag, Array.isArray(list) ? list.filter((e) => e?.id && Array.isArray(e.markets)) : []];
+    } catch {
+      return [tag, []];
+    }
+  })));
+
+  const claimed = new Set();
+  const topics = new Map();
+  for (const { id } of TOPICS) {
+    const events = [];
+    for (const tag of TOPIC_TAGS[id] ?? []) {
+      for (const e of byTag.get(tag) ?? []) {
+        if (claimed.has(e.id)) continue;
+        if (id === 'policy' && tag === 'crypto' && !POLICY.test(e.title ?? '')) continue;
+        claimed.add(e.id);
+        events.push(e);
+      }
+    }
+    events.sort((x, y) => (Number(y.volume24hr) || 0) - (Number(x.volume24hr) || 0));
+    const top = events.slice(0, EVENTS_PER_TOPIC);
+    if (!top.length) continue;
+    const markets = new Map();
+    for (const e of top) for (const m of e.markets) if (m?.conditionId) markets.set(m.conditionId, m);
+    topics.set(id, { ids: top.map((e) => e.id), markets });
+  }
+  if (!topics.size) return null;
+  eventsCache = { at: now, topics };
+  return topics;
+}
+
+/** Still running: not closed, not archived, not past its end. */
+function running(m, now = Date.now()) {
+  if (!m || m.closed === true || m.archived === true) return false;
+  const ends = Date.parse(m.endDate ?? m.endDateIso ?? '');
+  return !(Number.isFinite(ends) && ends < now);
+}
+
+async function tradesFor(query, { signal } = {}) {
+  const res = await fetch(`${ENDPOINT}?${query}`, { signal });
+  if (!res.ok) throw new Error(`Polymarket answered ${res.status}`);
+  const rows = await res.json();
+  if (!Array.isArray(rows)) throw new Error('Polymarket sent something else');
+  return rows;
+}
+
+/**
+ * Events the trades feed cannot answer for, for this session.
+ *
+ * It returns 500 for some of the largest — the 2028 Republican and Democratic
+ * nominee markets, 128 outcomes each — and one of them in a topic's request
+ * takes the whole topic down: Politics read zero bets in October 2026. A
+ * failed request is retried event by event, the ones that fail alone are left
+ * out from then on, and the rest of the topic comes back.
+ */
+const brokenEvents = new Set();
+
+async function topicTrades(ids, floor, { signal } = {}) {
+  const query = (list) => `eventId=${list.join(',')}&limit=500&filterType=CASH&filterAmount=${floor}`;
+  try {
+    return await tradesFor(query(ids), { signal });
+  } catch (err) {
+    if (ids.length < 2) { brokenEvents.add(ids[0]); throw err; }
+    const each = await Promise.allSettled(ids.map((id) => tradesFor(query([id]), { signal })));
+    each.forEach((r, i) => { if (r.status === 'rejected') brokenEvents.add(ids[i]); });
+    if (each.every((r) => r.status === 'rejected')) throw err;
+    return each.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+  }
+}
+
+/**
+ * The recent big bets on each topic's open markets, each row marked with its
+ * topic: one ask per topic at the lowest band's floor, and one at $250k across
+ * every topic's events together, so the largest bets reach further back than a
+ * busy week of small ones would let them.
+ *
+ * A bet on a market that has closed or passed its end leaves the table on the
+ * next refresh, every thirty seconds while the tab is open.
  */
 export async function whaleTrades({ signal } = {}) {
-  const answers = await Promise.allSettled(FLOORS.map(async (floor) => {
-    const res = await fetch(
-      `${ENDPOINT}?limit=500&filterType=CASH&filterAmount=${floor}`, { signal },
-    );
-    if (!res.ok) throw new Error(`Polymarket answered ${res.status}`);
-    const rows = await res.json();
-    if (!Array.isArray(rows)) throw new Error('Polymarket sent something else');
-    return rows;
-  }));
+  const topics = await openEvents({ signal }).catch(() => null);
+  if (!topics) return allMarketTrades({ signal });
+
+  const usable = (t) => t.ids.filter((id) => !brokenEvents.has(id));
+  const asks = [...topics.values()].map((t) => usable(t)).filter((ids) => ids.length)
+    .map((ids) => topicTrades(ids, BANDS[0].min, { signal }));
+  const everyId = [...topics.values()].flatMap(usable);
+  asks.push(topicTrades(everyId, FLOOR_USD, { signal }));
+
+  const answers = await Promise.allSettled(asks);
+  if (answers.every((x) => x.status === 'rejected')) return null;
+  const merged = new Map();
+  for (const answer of answers) {
+    if (answer.status !== 'fulfilled') continue;
+    for (const t of answer.value) merged.set(fillKey(t), t);
+  }
+
+  const now = Date.now();
+  const out = [];
+  for (const t of merged.values()) {
+    const owner = [...topics].find(([, x]) => x.markets.has(t?.conditionId));
+    if (!owner || !running(owner[1].markets.get(t.conditionId), now)) continue;
+    out.push({ ...t, _topic: owner[0] });
+  }
+  return out;
+}
+
+/**
+ * The way it was read before: the latest large trades on all of Polymarket,
+ * sorted into topics by title. Kept for when the events list cannot be had.
+ */
+async function allMarketTrades({ signal } = {}) {
+  const answers = await Promise.allSettled(FLOORS.map((floor) =>
+    tradesFor(`limit=500&filterType=CASH&filterAmount=${floor}`, { signal })));
 
   const merged = new Map();
   for (const answer of answers) {

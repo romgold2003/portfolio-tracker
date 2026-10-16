@@ -717,6 +717,9 @@ body.light{--wave-strength:0.34}
 .gam-outcome{color:var(--text);font-weight:600}
 .gam-price{color:var(--text4);font-variant-numeric:tabular-nums}
 .gam-title{color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A link to the event on Polymarket, reading as the plain title it was. */
+a.gam-title{display:block;text-decoration:none}
+a.gam-title:hover{color:var(--text);text-decoration:underline}
 .gam-topic{color:var(--text4);font-size:10px}
 .gam-when{color:var(--text3);font-size:11px;font-variant-numeric:tabular-nums}
 .gam-src{margin:12px 0 0;font-size:10px;color:var(--text4)}

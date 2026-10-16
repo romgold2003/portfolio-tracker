@@ -36,6 +36,8 @@ const FEED = [
 function stubFeed({ markets, marketsFail = false } = {}) {
   const calls = { trades: 0, markets: 0 };
   globalThis.fetch = async (url) => {
+    // No open events by tag: the all-market feed these tests are about.
+    if (String(url).includes('/events?')) return { ok: true, json: async () => [] };
     if (String(url).includes('data-api')) {
       calls.trades += 1;
       return { ok: true, json: async () => FEED };

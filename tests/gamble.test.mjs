@@ -13,6 +13,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   BANDS, bandDef, topicOf, cashOf, selectTrades, FLOOR_USD, TOPIC_TABS, countByTopic,
@@ -106,11 +107,11 @@ describe('the size bands', () => {
       [1_000_000, 2_400_000]);
   });
 
-  test('a bet under the floor is in no band at all', () => {
-    // $120k used to have a band of its own. It deliberately no longer does, so
-    // it must not fall into the lowest one instead.
-    const all = BANDS.flatMap((b) => selectTrades(rows, { band: b.id }).map((t) => t.usd));
-    assert.ok(!all.includes(120_000), '$120k leaked into a band');
+  test('a bet is in exactly one band', () => {
+    // $120k lost its band once and has one again since October 2026, when
+    // macro bets turned out rarely to reach $250k: it is in $50k–250k only.
+    const holding = BANDS.filter((b) => selectTrades(rows, { band: b.id }).some((t) => t.usd === 120_000));
+    assert.deepEqual(holding.map((b) => b.id), ['k50']);
   });
 
   test('the boundaries fall one way only, so nothing is counted twice', () => {
@@ -124,15 +125,19 @@ describe('the size bands', () => {
     assert.equal(selectTrades(top, { band: 'mega' }).length, 1);
   });
 
-  test('the three bands asked for, in order, with no gaps', () => {
-    assert.deepEqual(BANDS.map((b) => b.label), ['$250k–500k', '$500k–1M', '$1M+']);
+  test('the three bands asked for, after the two added in October 2026, with no gaps', () => {
+    assert.deepEqual(BANDS.map((b) => b.label), ['$10k–50k', '$50k–250k', '$250k–500k', '$500k–1M', '$1M+']);
     for (let i = 1; i < BANDS.length; i++) {
       assert.equal(BANDS[i].min, BANDS[i - 1].max, 'a gap between the bands');
     }
   });
 
   test('the bands start where the feed is asked to start', () => {
-    assert.equal(BANDS[0].min, FLOOR_USD);
+    // Each topic's open events are asked from the lowest band up; FLOOR_USD is
+    // the all-market fallback's floor and the reach of the largest bets.
+    const src = readFileSync(new URL('../src/services/gamble.js', import.meta.url), 'utf8');
+    assert.ok(src.includes('topicTrades(ids, BANDS[0].min'));
+    assert.equal(FLOOR_USD, BANDS.find((b) => b.id === 'mid').min);
     assert.equal(BANDS[BANDS.length - 1].max, Infinity, 'the top band must not close');
   });
 
@@ -212,7 +217,7 @@ describe('filtering to one subject', () => {
 
   test('the counts on the buttons match what pressing them shows', () => {
     // The counts exist so a button cannot promise rows it does not have.
-    const counts = countByTopic(rows, 'small');
+    const counts = countByTopic(rows, 'mid');
     for (const t of TOPIC_TABS) {
       assert.equal(
         counts.get(t.id),
@@ -239,20 +244,24 @@ describe('filtering to one subject', () => {
 });
 
 describe('the floor, now that the small bands are gone', () => {
-  test('a bet under $250k is shown in no band at all', () => {
-    // $60k and $120k each used to have a band. Removing those bands must not
-    // quietly promote their trades into the lowest remaining one.
-    for (const price of [0.06, 0.12, 0.24]) {
+  test('a bet under $10k is shown in no band at all', () => {
+    for (const price of [0.001, 0.005, 0.0099]) {
       const under = [trade({ size: 1e6, price })];
       for (const b of BANDS) {
         assert.equal(selectTrades(under, { band: b.id }).length, 0,
-          `$${price * 1e6} leaked into ${b.label}`);
+          `${price * 1e6} leaked into ${b.label}`);
       }
     }
   });
 
+  test('$60k and $120k are in $50k–250k, $20k in $10k–50k', () => {
+    for (const [price, id] of [[0.06, 'k50'], [0.12, 'k50'], [0.02, 'k10']]) {
+      assert.equal(selectTrades([trade({ size: 1e6, price })], { band: id }).length, 1, `${price * 1e6}`);
+    }
+  });
+
   test('the bands are contiguous from the floor upward', () => {
-    assert.equal(BANDS[0].min, FLOOR_USD);
+    assert.equal(BANDS[0].min, 10_000);
     for (let i = 1; i < BANDS.length; i++) {
       assert.equal(BANDS[i].min, BANDS[i - 1].max, `a gap before ${BANDS[i].label}`);
     }

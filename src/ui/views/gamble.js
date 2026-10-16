@@ -19,7 +19,8 @@ import {
 const el = (id) => document.getElementById(id);
 
 /** Subject and size. Both survive a re-render, like the other panels. */
-let band = 'mid';
+// $50k–250k first: macro bets rarely reach the $250k bands (October 2026).
+let band = 'k50';
 let topic = 'all';
 let lastRows = null;
 
@@ -59,7 +60,9 @@ function row(t) {
       <span class="gam-price">${(t.price * 100).toFixed(0)}¢</span>
     </div>
     <div class="gam-market">
-      <span class="gam-title">${escapeHtml(t.title)}</span>
+      ${t.slug
+    ? `<a class="gam-title" href="https://polymarket.com/event/${encodeURIComponent(t.slug)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.title)}</a>`
+    : `<span class="gam-title">${escapeHtml(t.title)}</span>`}
       <span class="gam-topic">${escapeHtml(t.topicLabel)}</span>
     </div>
     <div class="gam-when">${escapeHtml(ago(t.at))}</div>
@@ -128,7 +131,7 @@ function draw() {
        </div>${trades.map(row).join('')}`
     : `<div class="empty">No ${escapeHtml(bandDef(band).label)} bets on
        ${escapeHtml((TOPIC_TABS.find((t) => t.id === topic) ?? TOPIC_TABS[0]).label.toLowerCase())}
-       in the last few hundred trades.</div>`;
+       on open markets right now.</div>`;
 }
 
 /**
