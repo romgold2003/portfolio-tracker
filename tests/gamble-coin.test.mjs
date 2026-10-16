@@ -68,7 +68,7 @@ describe('it joins the panel on the same terms as everything else', () => {
   });
 
   test('with the same money bands as the other subjects', () => {
-    assert.deepEqual(BANDS.map((b) => b.label), ['$10k–50k', '$50k–250k', '$250k–500k', '$500k–1M', '$1M+']);
+    assert.deepEqual(BANDS.map((b) => b.label), ['$100k–250k', '$250k–500k', '$500k+', 'All']);
   });
 
   const feed = [

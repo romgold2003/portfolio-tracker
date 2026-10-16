@@ -19,8 +19,8 @@ import {
 const el = (id) => document.getElementById(id);
 
 /** Subject and size. Both survive a re-render, like the other panels. */
-// $50k–250k first: macro bets rarely reach the $250k bands (October 2026).
-let band = 'k50';
+// Every bet from $100k up, until a range is picked.
+let band = 'all';
 let topic = 'all';
 let lastRows = null;
 

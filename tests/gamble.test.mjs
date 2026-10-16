@@ -102,16 +102,15 @@ describe('the size bands', () => {
 
   test('each band takes only its own', () => {
     assert.deepEqual(selectTrades(rows, { band: 'mid' }).map((t) => t.usd), [300_000]);
-    assert.deepEqual(selectTrades(rows, { band: 'large' }).map((t) => t.usd), [750_000]);
-    assert.deepEqual(selectTrades(rows, { band: 'mega' }).map((t) => t.usd),
+    assert.deepEqual(selectTrades(rows, { band: 'large' }).map((t) => t.usd).sort((a, b) => a - b), [750_000, 1_000_000, 2_400_000]);
+    assert.deepEqual(selectTrades(rows, { band: 'all' }).map((t) => t.usd).filter((u) => u >= 1_000_000),
       [1_000_000, 2_400_000]);
   });
 
-  test('a bet is in exactly one band', () => {
-    // $120k lost its band once and has one again since October 2026, when
-    // macro bets turned out rarely to reach $250k: it is in $50k–250k only.
+  test('a bet is in exactly one range, and in All', () => {
+    // Romy's ranges, October 2026: $100k–250k, $250k–500k, $500k+ and All.
     const holding = BANDS.filter((b) => selectTrades(rows, { band: b.id }).some((t) => t.usd === 120_000));
-    assert.deepEqual(holding.map((b) => b.id), ['k50']);
+    assert.deepEqual(holding.map((b) => b.id), ['k100', 'all']);
   });
 
   test('the boundaries fall one way only, so nothing is counted twice', () => {
@@ -121,15 +120,22 @@ describe('the size bands', () => {
     assert.equal(selectTrades(edge, { band: 'large' }).length, 1);
     // And exactly $1M belongs to the top one.
     const top = [trade({ size: 1_000_000, price: 1.00 })];
-    assert.equal(selectTrades(top, { band: 'large' }).length, 0);
-    assert.equal(selectTrades(top, { band: 'mega' }).length, 1);
+    assert.equal(selectTrades(top, { band: 'large' }).length, 1);
+    assert.equal(selectTrades(top, { band: 'all' }).length, 1);
   });
 
-  test('the three bands asked for, after the two added in October 2026, with no gaps', () => {
-    assert.deepEqual(BANDS.map((b) => b.label), ['$10k–50k', '$50k–250k', '$250k–500k', '$500k–1M', '$1M+']);
-    for (let i = 1; i < BANDS.length; i++) {
-      assert.equal(BANDS[i].min, BANDS[i - 1].max, 'a gap between the bands');
+  test('the ranges asked for, in order, with no gaps, and All last', () => {
+    assert.deepEqual(BANDS.map((b) => b.label), ['$100k–250k', '$250k–500k', '$500k+', 'All']);
+    const ranges = BANDS.filter((b) => b.id !== 'all');
+    for (let i = 1; i < ranges.length; i++) {
+      assert.equal(ranges[i].min, ranges[i - 1].max, 'a gap between the bands');
     }
+  });
+
+  test('All is every range together', () => {
+    const all = bandDef('all');
+    assert.equal(all.min, BANDS[0].min);
+    assert.equal(all.max, Infinity);
   });
 
   test('the bands start where the feed is asked to start', () => {
@@ -244,8 +250,8 @@ describe('filtering to one subject', () => {
 });
 
 describe('the floor, now that the small bands are gone', () => {
-  test('a bet under $10k is shown in no band at all', () => {
-    for (const price of [0.001, 0.005, 0.0099]) {
+  test('a bet under $100k is shown in no band at all', () => {
+    for (const price of [0.01, 0.05, 0.099]) {
       const under = [trade({ size: 1e6, price })];
       for (const b of BANDS) {
         assert.equal(selectTrades(under, { band: b.id }).length, 0,
@@ -254,17 +260,14 @@ describe('the floor, now that the small bands are gone', () => {
     }
   });
 
-  test('$60k and $120k are in $50k–250k, $20k in $10k–50k', () => {
-    for (const [price, id] of [[0.06, 'k50'], [0.12, 'k50'], [0.02, 'k10']]) {
+  test('$120k and $240k are in $100k–250k, $300k in $250k–500k, $600k in $500k+', () => {
+    for (const [price, id] of [[0.12, 'k100'], [0.24, 'k100'], [0.3, 'mid'], [0.6, 'large']]) {
       assert.equal(selectTrades([trade({ size: 1e6, price })], { band: id }).length, 1, `${price * 1e6}`);
     }
   });
 
-  test('the bands are contiguous from the floor upward', () => {
-    assert.equal(BANDS[0].min, 10_000);
-    for (let i = 1; i < BANDS.length; i++) {
-      assert.equal(BANDS[i].min, BANDS[i - 1].max, `a gap before ${BANDS[i].label}`);
-    }
-    assert.equal(BANDS[BANDS.length - 1].max, Infinity, 'the top band must not close');
+  test('the ranges run from $100k upward and the top one does not close', () => {
+    assert.equal(BANDS[0].min, 100_000);
+    assert.equal(bandDef('large').max, Infinity, 'the top band must not close');
   });
 });

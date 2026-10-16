@@ -40,10 +40,10 @@ const trade = (conditionId, usd, over = {}) => ({
   size: usd * 2, price: 0.5, timestamp: 1_790_000_000, transactionHash: `0x${conditionId}${usd}`, ...over,
 });
 const TRADES = {
-  'e-fed': [trade('c-hold', 60_000), trade('c-hike', 20_000)],
-  'e-cpi': [trade('c-cpi', 15_000)],
-  'e-br': [trade('c-br', 80_000)],
-  'e-btc': [trade('c-btc', 30_000), trade('c-btc-old', 90_000)],
+  'e-fed': [trade('c-hold', 160_000), trade('c-hike', 120_000)],
+  'e-cpi': [trade('c-cpi', 115_000)],
+  'e-br': [trade('c-br', 180_000)],
+  'e-btc': [trade('c-btc', 130_000), trade('c-btc-old', 190_000)],
   'e-clar': [trade('c-clar', 300_000)],
 };
 
@@ -72,20 +72,19 @@ afterEach(() => { globalThis.fetch = realFetch; });
 describe('each topic, from its own open markets', () => {
   test('the October Fed bets are Fed bets, below $250k and all', async () => {
     const rows = await whaleTrades();
-    const fed = selectTrades(rows, { band: 'k50', topic: 'fed' });
-    assert.deepEqual(fed.map((t) => t.usd), [60_000]);
-    assert.deepEqual(selectTrades(rows, { band: 'k10', topic: 'fed' }).map((t) => t.usd), [20_000]);
+    const fed = selectTrades(rows, { band: 'k100', topic: 'fed' });
+    assert.deepEqual(fed.map((t) => t.usd).sort(), [120_000, 160_000]);
   });
 
   test('an event two tags share belongs to the first topic: the Fed decision is not also economy', async () => {
-    const counts = countByTopic(await whaleTrades(), 'k10');
+    const counts = countByTopic(await whaleTrades(), 'k100');
     assert.equal(counts.get('econ'), 1, 'only the inflation bet');
   });
 
   test('crypto events naming a policy are policy; the rest are prices', async () => {
     const rows = await whaleTrades();
     assert.equal(selectTrades(rows, { band: 'mid', topic: 'policy' })[0].usd, 300_000);
-    assert.deepEqual(selectTrades(rows, { band: 'k10', topic: 'coin' }).map((t) => t.usd), [30_000]);
+    assert.deepEqual(selectTrades(rows, { band: 'k100', topic: 'coin' }).map((t) => t.usd), [130_000]);
   });
 
   test('a market that has closed is gone, though its event is still open', async () => {
@@ -95,15 +94,15 @@ describe('each topic, from its own open markets', () => {
 
   test('an event the feed cannot answer for does not take its topic down with it', async () => {
     const rows = await whaleTrades();
-    assert.deepEqual(selectTrades(rows, { band: 'k50', topic: 'polit' }).map((t) => t.usd), [80_000]);
+    assert.deepEqual(selectTrades(rows, { band: 'all', topic: 'polit' }).map((t) => t.usd), [180_000]);
     asked.length = 0;
     await whaleTrades();
     assert.ok(!asked.some((u) => (u.searchParams.get('eventId') ?? '').includes('e-bad')), 'set aside after failing alone');
   });
 
   test('each bet links to its event on Polymarket', async () => {
-    const [t] = selectTrades(await whaleTrades(), { band: 'k50', topic: 'fed' });
-    assert.equal(t.slug, 'slug-c-hold');
+    const [t] = selectTrades(await whaleTrades(), { band: 'all', topic: 'fed' });
+    assert.ok(t.slug.startsWith('slug-c-'));
   });
 
   test('the open events are asked for every ten minutes, the bets every refresh', async () => {

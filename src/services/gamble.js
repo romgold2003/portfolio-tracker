@@ -49,14 +49,12 @@ const FLOORS = [1_000_000, FLOOR_USD];
  * in bands is how the same list answers "who is nibbling" and "who has decided".
  */
 export const BANDS = [
-  // Added October 2026. Macro bets rarely reach $250k — the biggest on the
-  // October Fed decision in a month was $212k — so with only the three upper
-  // bands the panel sat empty for weeks. The upper three are unchanged.
-  { id: 'k10', label: '$10k–50k', min: 10_000, max: 50_000 },
-  { id: 'k50', label: '$50k–250k', min: 50_000, max: 250_000 },
+  // Romy's ranges, October 2026: three bands and every bet from $100k up.
+  // The first band's floor is the floor every topic is asked from.
+  { id: 'k100', label: '$100k–250k', min: 100_000, max: 250_000 },
   { id: 'mid', label: '$250k–500k', min: 250_000, max: 500_000 },
-  { id: 'large', label: '$500k–1M', min: 500_000, max: 1_000_000 },
-  { id: 'mega', label: '$1M+', min: 1_000_000, max: Infinity },
+  { id: 'large', label: '$500k+', min: 500_000, max: Infinity },
+  { id: 'all', label: 'All', min: 100_000, max: Infinity },
 ];
 
 export const bandDef = (id) => BANDS.find((b) => b.id === id) ?? BANDS[0];
