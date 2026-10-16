@@ -39,14 +39,14 @@ const FRESH_FOR_MS = 30 * 60 * 1000;
  */
 const CACHE_MS = 20 * 1000;
 
-let cache = { at: 0, key: '', bySymbol: new Map() };
+let cache = { at: 0, key: '', bySymbol: new Map(), raw: new Map() };
 
 /**
  * Test seam. Without it each test inherits the previous one's cached quotes and
  * the one checking what happens when the feed fails never reaches the feed.
  */
 export function resetExtendedCache() {
-  cache = { at: 0, key: '', bySymbol: new Map() };
+  cache = { at: 0, key: '', bySymbol: new Map(), raw: new Map() };
 }
 
 /**
@@ -172,7 +172,9 @@ export async function extendedQuotes(tickers) {
 
   const now = Date.now();
   const bySymbol = new Map();
+  const raw = new Map();
   for (const q of quotes) {
+    if (q?.symbol && q.price > 0) raw.set(q.symbol.toUpperCase(), q);
     /**
      * Every session, not just the closed ones.
      *
@@ -198,8 +200,22 @@ export async function extendedQuotes(tickers) {
     });
   }
 
-  cache = { at: now, key, bySymbol };
+  cache = { at: now, key, bySymbol, raw };
   return bySymbol;
+}
+
+/**
+ * The server's quote for one symbol from the batch just fetched, whatever its
+ * session, or null.
+ *
+ * A refresh asks for the whole book in one request first, so the per-holding
+ * lookup reads from it instead of asking the server again for every ticker —
+ * fifteen holdings were sixteen requests, one after another, every thirty
+ * seconds (October 2026).
+ */
+export function batchedQuote(ticker) {
+  if (Date.now() - cache.at >= CACHE_MS) return null;
+  return cache.raw.get(String(ticker ?? '').toUpperCase()) ?? null;
 }
 
 /**

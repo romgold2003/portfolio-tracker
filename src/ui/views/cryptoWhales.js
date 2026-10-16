@@ -53,7 +53,7 @@ let loadedAt = 0;
 /** The server's record of when each collector last worked. See collectedText. */
 let collectors = null;
 let loadError = '';
-const hl = { socket: null, markets: new Map(), status: 'idle', open: new Map(), sweep: null };
+const hl = { socket: null, markets: new Map(), status: 'idle', open: new Map(), sweep: null, paused: false };
 
 /* ── formatting ──────────────────────────────────────────────────────── */
 
@@ -400,7 +400,7 @@ async function classify(o) {
 }
 
 async function connectHyperliquid() {
-  if (hl.socket || hl.status === 'connecting' || !coins.length) return;
+  if (hl.paused || hl.socket || hl.status === 'connecting' || !coins.length) return;
   hl.status = 'connecting';
   try {
     const res = await fetch(HL_INFO, {
@@ -431,11 +431,41 @@ async function connectHyperliquid() {
   });
   socket.addEventListener('close', () => {
     hl.socket = null;
-    hl.status = 'closed';
+    hl.status = hl.paused ? 'idle' : 'closed';
     draw();
-    setTimeout(connectHyperliquid, 5_000);
+    if (!hl.paused) setTimeout(connectHyperliquid, 5_000);
   });
 }
+
+/**
+ * Hang up while the whales are not on screen.
+ *
+ * The feed is every trade on forty coins, parsed on the page's own thread —
+ * many messages a second — and it stayed open from the first visit to the
+ * Crypto page until the tab was closed, through every other page and with the
+ * tab in the background. That was a large part of the app turning slow and
+ * stuttering (October 2026). What happens while it is closed is not lost: the
+ * collector keeps the leveraged trades on the server, and they load on return.
+ */
+export function pauseHyperliquid() {
+  hl.paused = true;
+  clearInterval(hl.sweep);
+  hl.sweep = null;
+  hl.open.clear();
+  if (hl.socket) hl.socket.close();
+}
+
+function resumeHyperliquid() {
+  hl.paused = false;
+  connectHyperliquid();
+}
+
+globalThis.document?.addEventListener?.('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') pauseHyperliquid();
+  else if (el('cryptoWhales') && el('cryptoWhales').hidden === false && el('crypto')?.classList.contains('active')) {
+    resumeHyperliquid();
+  }
+});
 
 /* ── following the open positions ────────────────────────────────────── */
 
@@ -526,6 +556,7 @@ function bind() {
 export async function renderCryptoWhales() {
   bind();
   draw();
+  hl.paused = false;
   renderOverview().then(() => {
     if (!coins.length) coins = overviewCoins().map((c) => ({ symbol: c.symbol, name: c.name, rank: c.rank, logo: c.logo }));
     connectHyperliquid();
@@ -556,7 +587,8 @@ export function showCryptoView(wanted = cryptoView) {
     b.classList.toggle('active', b.dataset.ctab === cryptoView);
   }
   if (cryptoView === 'whales') renderCryptoWhales();
-  else if (cryptoView === 'volume') renderUnusualVolume();
+  else pauseHyperliquid();
+  if (cryptoView === 'volume') renderUnusualVolume();
   // The flows were drawn when the page opened, likely while hidden and so at
   // no measurable width; now that they are on screen, draw them to fit.
   else if (cryptoView === 'etf') redrawFlows();

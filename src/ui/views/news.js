@@ -344,7 +344,9 @@ export async function renderNews() {
   // Its own source and its own cadence, so it neither waits on the five above
   // nor blocks them.
   installNewsTabs();
-  renderGamble();
+  // Only when its tab is open: the tab has its own thirty-second timer, and
+  // this ran on every price refresh besides, Polymarket and all, unseen.
+  if (document.getElementById('newsGamble')?.hidden === false) renderGamble();
   startGamble();
   startFedRefresh();
 

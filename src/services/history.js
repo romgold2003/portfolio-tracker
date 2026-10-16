@@ -77,12 +77,17 @@ export function historySymbol(ticker, cls) {
 
 /** Last close on or before a date. Rows must be ascending. */
 export function closeOnOrBefore(rows, date) {
-  let found = null;
-  for (const row of rows) {
-    if (row.date > date) break;
-    found = row;
+  // Halved rather than walked: the daily history asks this for every holding on
+  // every day of the year, and walking three years of closes from the start
+  // each time was millions of steps per rebuild.
+  let lo = 0;
+  let hi = (rows?.length ?? 0) - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (rows[mid].date <= date) { found = mid; lo = mid + 1; } else hi = mid - 1;
   }
-  return found ? found.close : null;
+  return found >= 0 ? rows[found].close : null;
 }
 
 /**

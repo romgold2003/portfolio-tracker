@@ -11,7 +11,12 @@ const PAGES = ['home', 'positions', 'add', 'monthly', 'news', 'crypto'];
 let onEnter = () => {};
 export function setPageEnterHandler(fn) { onEnter = fn; }
 
+/** The page on screen, so a refresh redraws that one and not all six. */
+let current = 'home';
+export function currentPage() { return current; }
+
 export function show(name) {
+  if (PAGES.includes(name)) current = name;
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   const page = document.getElementById(name);
   if (page) page.classList.add('active');

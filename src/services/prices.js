@@ -11,7 +11,7 @@
 import { CG_IDS, API } from '../config/constants.js';
 import { state, currentApiKey } from '../core/store.js';
 import { logPrice, seedPrevClose, getWeekChg } from './priceLog.js';
-import { extendedQuotes, applyExtendedQuotes, tradingDayOver, regularSessionOpen } from './extendedHours.js';
+import { extendedQuotes, applyExtendedQuotes, tradingDayOver, regularSessionOpen, batchedQuote } from './extendedHours.js';
 import { weekStartCloses } from './weekStart.js';
 import { catchSplits } from './splits.js';
 
@@ -77,6 +77,11 @@ async function fetchCryptoPrice(ticker, position) {
  * any ticker has, funds included.
  */
 async function serverQuote(ticker) {
+  const batched = batchedQuote(ticker);
+  if (batched) {
+    const price = batched.regularClose ?? batched.price;
+    if (price > 0) return { c: price, pc: batched.previousClose };
+  }
   try {
     const res = await fetch(`/api/quote?symbols=${encodeURIComponent(ticker)}`, { credentials: 'same-origin' });
     if (!res.ok) return null;
@@ -159,15 +164,32 @@ export async function refreshOpenPositions(now = new Date()) {
    */
   const dayOver = tradingDayOver(now);
 
-  for (const p of open) {
-    if (dayOver && p.cls !== 'Crypto' && p.extPhase) continue;
-    const price = await fetchPrice(p.ticker, p.cls, p);
-    if (price) p.cur = price;
-  }
+  /**
+   * Worked out on copies and put back in one step at the end.
+   *
+   * It used to write into the live positions as each answer came in, one
+   * holding at a time, and anything that drew the page in between — the chart
+   * rebuilding, another panel's timer — showed a book half old and half new: a
+   * price moved but its day's move not yet, or the regular close back before
+   * the pre-market price went over it. That was the daily percentage that was
+   * "totally wrong and then goes back to the right number" (October 2026).
+   */
+  const work = open.map((p) => structuredClone(p));
 
   // Crypto is deliberately excluded: it trades around the clock, so its price
   // is already current and there is no "extended session" to ask about.
-  const tradable = open.filter((p) => p.cls !== 'Crypto').map((p) => p.ticker);
+  const tradable = work.filter((p) => p.cls !== 'Crypto').map((p) => p.ticker);
+
+  // The whole book in one request first; each holding below reads from it.
+  if (tradable.length) await extendedQuotes(tradable).catch(() => null);
+
+  // All at once rather than one after another.
+  await Promise.all(work.map(async (p) => {
+    if (dayOver && p.cls !== 'Crypto' && p.extPhase) return;
+    const price = await fetchPrice(p.ticker, p.cls, p);
+    if (price) p.cur = price;
+  }));
+
   if (tradable.length) {
     /**
      * Contained, because of how this failed the first time.
@@ -184,22 +206,42 @@ export async function refreshOpenPositions(now = new Date()) {
      */
     try {
       const extended = await extendedQuotes(tradable);
-      applyExtendedQuotes(state.positions, extended, now);
+      applyExtendedQuotes(work, extended, now);
     } catch (err) {
       console.error('Extended-hours quotes failed; keeping regular prices.', err);
     }
   }
 
-  await applyWeekToDate(open);
+  await applyWeekToDate(work);
 
   // Last, so it sees the price every step above settled on and can correct the
   // day's and the week's change, both of which may span the split.
   try {
-    await catchSplits(open, now);
+    await catchSplits(work, now);
   } catch (err) {
     console.error('Split check failed; share counts unchanged.', err);
   }
+
+  open.forEach((p, i) => commitQuote(p, work[i]));
   return JSON.stringify(open) !== before;
+}
+
+/**
+ * What a refresh may change on a holding: its price and the figures measured
+ * from it — and, only when it found a split, the counts the split restated.
+ * Nothing else is copied back, so a top-up or an edit made while the refresh
+ * was out is not undone by it.
+ */
+const QUOTE_FIELDS = ['cur', 'dailyChg', 'prevClose', 'weeklyChg', 'extPhase'];
+const SPLIT_FIELDS = ['qty', 'entry', 'origQty', 'exits', 'adds', 'splits'];
+
+function commitQuote(p, w) {
+  if (p.status !== 'Open') return;
+  const fields = (w.splits?.length ?? 0) > (p.splits?.length ?? 0) ? [...QUOTE_FIELDS, ...SPLIT_FIELDS] : QUOTE_FIELDS;
+  for (const k of fields) {
+    if (w[k] === undefined) delete p[k];
+    else p[k] = w[k];
+  }
 }
 
 /**
