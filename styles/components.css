@@ -1198,9 +1198,24 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
   padding:8px 2px 6px;background:var(--panel);border-bottom:0.5px solid var(--border);
   font-size:11px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
 .dl-mhead span:last-child{font-weight:500;font-size:11px}
-.dl-day{display:grid;grid-template-columns:86px minmax(0,1fr) 64px 92px;align-items:center;gap:10px;
-  padding:6px 4px;border-radius:6px;font-size:12px;font-variant-numeric:tabular-nums;transition:background .12s}
-.dl-day:hover{background:var(--hover)}
+.dl-day{display:grid;grid-template-columns:86px minmax(0,1fr) 64px 92px 10px;align-items:center;gap:10px;
+  padding:6px 4px;border-radius:6px;font-size:12px;font-variant-numeric:tabular-nums;transition:background .12s;cursor:pointer;outline:none}
+.dl-day:hover,.dl-day:focus-visible{background:var(--hover)}
+.dl-go{color:var(--text3);font-size:14px;line-height:1;transition:transform .15s,color .15s}
+.dl-day:hover .dl-go{color:var(--text2);transform:translateX(2px)}
+/* One day, holding by holding. */
+.dl-back{background:none;border:0;color:var(--blue);font-size:12px;cursor:pointer;padding:2px 0;font-family:inherit}
+.dl-back:hover{text-decoration:underline}
+.dl-dhead{padding:2px 2px 12px;border-bottom:0.5px solid var(--border);margin-bottom:6px;animation:dl-slide .2s ease-out}
+.dl-ddate{font-size:13px;color:var(--text);font-weight:600}
+.dl-dtot{display:flex;align-items:baseline;gap:10px;margin-top:4px;font-variant-numeric:tabular-nums}
+.dl-dtot b{font-size:22px;font-weight:700}.dl-dtot span{font-size:13px}
+.dl-dsub{font-size:11px;color:var(--text3);margin-top:3px}
+.dl-hold{grid-template-columns:64px minmax(0,1fr) 64px 92px;cursor:default;animation:dl-slide .22s ease-out both}
+.dl-tick{font-weight:600;color:var(--text);letter-spacing:0.02em}
+.dl-rest{display:flex;justify-content:space-between;gap:10px;padding:9px 4px 6px;border-top:0.5px solid var(--border);
+  font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums}
+@keyframes dl-slide{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
 .dl-date{color:var(--text2);white-space:nowrap}
 .dl-flow{margin-left:5px;color:var(--amber);font-size:10px}
 .dl-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden}
@@ -1215,7 +1230,8 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
   .tf-side{align-items:stretch;width:100%}
   .dl-btn{align-self:flex-start}
   .dl-pop{position:fixed;left:12px;right:12px;top:auto;bottom:calc(76px + env(safe-area-inset-bottom));width:auto;max-width:none}
-  .dl-day{grid-template-columns:78px minmax(0,1fr) 60px 84px;gap:8px}
+  .dl-day{grid-template-columns:78px minmax(0,1fr) 60px 84px 8px;gap:8px}
+  .dl-hold{grid-template-columns:56px minmax(0,1fr) 60px 84px}
 }
 
 /* ── Touch screens ─────────────────────────────────────────────────────────

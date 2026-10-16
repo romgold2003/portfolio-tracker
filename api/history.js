@@ -90,12 +90,22 @@ export default async function handler(req, res) {
       .filter((s) => s.numerator > 0 && s.denominator > 0 && /^\d{4}-\d{2}-\d{2}$/.test(s.date))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // A daily close does not change during the day, so let Vercel's edge serve
-    // this to everyone for an hour rather than calling upstream each time.
-    res.setHeader('Cache-Control', cutAt
-      // Ends on a closed day: the same answer all day, for everyone.
-      ? 'public, s-maxage=86400, stale-while-revalidate=3600'
-      : 'public, s-maxage=3600, stale-while-revalidate=86400');
+    /**
+     * Ends on a closed day: the same answer all day, for everyone — but only
+     * once that day's close is actually in it.
+     *
+     * Yahoo leaves a day's close blank for hours after the bell (SOFI and GOOG
+     * still had none for 15 October at half past nine that night). Cached for a
+     * day in that state, the series priced 14 October at the 13th's closes for
+     * half the book, and the 14th's −3.5% turned up on the 15th instead, a day
+     * that was up. An answer missing its own last day is kept five minutes.
+     */
+    const complete = rows[rows.length - 1].date === cutAt;
+    res.setHeader('Cache-Control', !cutAt
+      ? 'public, s-maxage=3600, stale-while-revalidate=86400'
+      : complete
+        ? 'public, s-maxage=86400, stale-while-revalidate=3600'
+        : 'public, s-maxage=300');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify({ symbol, rows, splits }));

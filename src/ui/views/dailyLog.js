@@ -11,10 +11,14 @@ import { accountHistory } from '../../core/snapshots.js';
 import { dailyReturns, yearsOf, yearView } from '../../core/dailyLog.js';
 import { lastClosedSession } from '../../config/marketCalendar.js';
 import { escapeHtml } from '../format.js';
-import { amountsHidden, MASK } from './home.js';
+import { amountsHidden, MASK, pricedThrough, breakDownDay } from './home.js';
 
 let open = false;
 let year = null;
+/** The day taken apart, or null for the list of days. */
+let detail = null;
+/** Where the list of days was scrolled to, for coming back to it. */
+let listScroll = 0;
 
 const el = (id) => document.getElementById(id);
 
@@ -34,12 +38,57 @@ function dayLabel(date) {
 function dayRow(d, scale) {
   const width = Math.max(2, Math.round((Math.abs(d.pct) / scale) * 100));
   const flow = d.flow ? ` title="Money in or out that day: ${escapeHtml(usd(d.flow))}, not counted as return"` : '';
-  return `<div class="dl-day ${tone(d.pnl)}"${flow}>
+  return `<div class="dl-day ${tone(d.pnl)}" data-day="${escapeHtml(d.date)}" role="button" tabindex="0"${flow}>
     <span class="dl-date">${escapeHtml(dayLabel(d.date))}${d.flow ? '<span class="dl-flow">⇅</span>' : ''}</span>
     <span class="dl-bar"><span style="width:${width}%"></span></span>
     <span class="dl-pct">${pct(d.pct)}</span>
     <span class="dl-usd">${escapeHtml(usd(d.pnl))}</span>
+    <span class="dl-go" aria-hidden="true">›</span>
   </div>`;
+}
+
+/** "Wednesday 14 October 2026" */
+function longDay(date) {
+  // By hand: engines disagree on the comma after the weekday.
+  const d = new Date(`${date}T12:00:00Z`);
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  const month = d.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+  return `${weekday} ${d.getUTCDate()} ${month} ${d.getUTCFullYear()}`;
+}
+
+/**
+ * One day, holding by holding, best first. `breakdown` is what
+ * core/dayBreakdown.js returns, or null when there is no statement to walk.
+ * Exported for the tests.
+ */
+export function dayDetailHtml(d, breakdown) {
+  const head = `<div class="dl-head">
+      <button class="dl-back" data-back aria-label="Back to every day">‹ All days</button>
+      <button class="dl-close" data-close aria-label="Close">×</button>
+    </div>
+    <div class="dl-dhead">
+      <div class="dl-ddate">${escapeHtml(longDay(d.date))}</div>
+      <div class="dl-dtot ${tone(d.pnl)}"><b>${pct(d.pct)}</b><span>${escapeHtml(usd(d.pnl))}</span></div>
+      <div class="dl-dsub">from the close of ${escapeHtml(dayLabel(d.prev ?? d.date))}${
+  breakdown ? ` · ${breakdown.holdings.length} holding${breakdown.holdings.length === 1 ? '' : 's'}` : ''}</div>
+    </div>`;
+  if (!breakdown) {
+    return `${head}<div class="dl-empty">Holding by holding needs an imported statement to walk from.</div>`;
+  }
+  const scale = Math.max(...breakdown.holdings.map((h) => Math.abs(h.pct)), 0.01);
+  const rows = breakdown.holdings.map((h, i) => {
+    const width = Math.max(2, Math.round((Math.abs(h.pct) / scale) * 100));
+    return `<div class="dl-day dl-hold ${tone(h.pnl)}" style="animation-delay:${Math.min(i, 20) * 18}ms">
+      <span class="dl-tick">${escapeHtml(h.ticker)}</span>
+      <span class="dl-bar"><span style="width:${width}%"></span></span>
+      <span class="dl-pct">${pct(h.pct)}</span>
+      <span class="dl-usd">${escapeHtml(usd(h.pnl))}</span>
+    </div>`;
+  }).join('');
+  const rest = Number.isFinite(breakdown.rest) && Math.abs(breakdown.rest) >= 0.5
+    ? `<div class="dl-rest"><span>Cash, interest, dividends and fees</span><span class="${tone(breakdown.rest)}">${escapeHtml(usd(breakdown.rest))}</span></div>`
+    : '';
+  return `${head}<div class="dl-list dl-detail">${rows || '<div class="dl-empty">Nothing was held that day.</div>'}</div>${rest}`;
 }
 
 /** The window's contents for the year on show. Exported for the tests. */
@@ -71,9 +120,16 @@ export function dailyLogHtml(days, chosen) {
       </div>`).join('')}</div>`;
 }
 
-/** The days so far, every one whose session has closed. */
+/**
+ * The days so far: every one whose session has closed and that every holding
+ * has a close for. Yahoo fills a close in hours after the bell; a day shown
+ * before then is priced at the day before for part of the book, and showed
+ * 14 October's fall on the 15th.
+ */
 function closedDays() {
-  return dailyReturns(accountHistory(), { through: lastClosedSession() });
+  const closed = lastClosedSession();
+  const priced = pricedThrough();
+  return dailyReturns(accountHistory(), { through: priced && priced < closed ? priced : closed });
 }
 
 export function renderDailyLog() {
@@ -88,12 +144,32 @@ export function renderDailyLog() {
   const scrolled = list?.scrollTop ?? 0;
   const days = closedDays();
   if (year == null) year = yearsOf(days)[0] ?? null;
-  box.innerHTML = dailyLogHtml(days, year);
+  const day = detail && days.find((d) => d.date === detail);
+  box.innerHTML = day
+    ? dayDetailHtml(day, breakDownDay(day.prev, day.date, day.pnl))
+    : dailyLogHtml(days, year);
   const fresh = box.querySelector('.dl-list');
   if (fresh) fresh.scrollTop = scrolled;
 }
 
+/** Into one day, or back out to the list where it was left. */
+function showDay(date) {
+  const box = el('dailyLog');
+  if (date) listScroll = box?.querySelector('.dl-list')?.scrollTop ?? 0;
+  detail = date;
+  if (box) box.querySelector('.dl-list')?.scrollTo?.(0, 0);
+  if (box) box.innerHTML = '';
+  renderDailyLog();
+  if (!date) {
+    const list = el('dailyLog')?.querySelector('.dl-list');
+    if (list) list.scrollTop = listScroll;
+  }
+}
+
 function onClick(e) {
+  const day = e.target.closest?.('[data-day]');
+  if (day) { showDay(day.dataset.day); return; }
+  if (e.target.closest?.('[data-back]')) { showDay(null); return; }
   const pick = e.target.closest?.('[data-year]');
   if (pick) {
     year = Number(pick.dataset.year);
@@ -113,12 +189,20 @@ function onOutside(e) {
 }
 
 function onKey(e) {
-  if (open && e.key === 'Escape') toggleDailyLog(false);
+  if (!open) return;
+  if (e.key === 'Escape') {
+    // Out of a day first, then out of the window.
+    if (detail) showDay(null); else toggleDailyLog(false);
+    return;
+  }
+  const day = e.key === 'Enter' && e.target.closest?.('#dailyLog [data-day]');
+  if (day) showDay(day.dataset.day);
 }
 
 let wired = false;
 export function toggleDailyLog(force) {
   open = typeof force === 'boolean' ? force : !open;
+  if (!open) detail = null;
   if (!wired) {
     wired = true;
     el('dailyLog')?.addEventListener('click', onClick);

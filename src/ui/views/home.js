@@ -32,8 +32,10 @@ import {
   yearToDateReturn as measuredYearToDate, asTradedClose, allTimeFromDeposits,
 } from '../../core/portfolioHistory.js';
 import { splitsOf } from '../../services/history.js';
+import { lastClosedSession } from '../../config/marketCalendar.js';
 import { splitEvents } from '../../core/splits.js';
 import { appTradeEvents } from '../../core/appTrades.js';
+import { dayBreakdown } from '../../core/dayBreakdown.js';
 import { renderDailyLog } from './dailyLog.js';
 import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
 import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/store.js';
@@ -358,6 +360,23 @@ let backfillFor = null;
  * different percentages on the same account value.
  */
 let backfillTriedFor = null;
+
+/**
+ * What the daily history was last walked from, one per account, so a day can be
+ * taken apart holding by holding (core/dayBreakdown.js) from the same numbers.
+ */
+let walks = [];
+function remember(args) { walks.push({ opening: args.opening, events: args.events }); return args; }
+
+/** One day, holding by holding, best first; null when there is no statement to walk. */
+export function breakDownDay(prev, day, dayPnl) {
+  if (!walks.length) return null;
+  return dayBreakdown({ walks, priceOn: pastPrice, prev, day, dayPnl });
+}
+
+/** The last day every open holding has a close for; see the backfill below. */
+let pricedThroughDay = null;
+export function pricedThrough() { return pricedThroughDay; }
 let backfillRetryAt = 0;
 let backfillAttempts = 0;
 
@@ -442,9 +461,11 @@ async function loadBackfill() {
   if (!wanted.length) return;
 
   /** What this run would be built from. Unchanged means nothing to redo. */
+  // The last closed session is in it, so each close brings a rebuild of its own.
+  const through = lastClosedSession();
   const key = `${earliest}|${state.cash}|${wanted.map(([sym]) => sym).sort().join(',')}|`
     + `${state.positions.length}|${(state.cashFlows ?? []).length}|`
-    + `${(state.ledger?.events ?? []).length}`;
+    + `${(state.ledger?.events ?? []).length}|${through}`;
   if (key === backfillFor) return;
   if (key !== backfillTriedFor) backfillAttempts = 0;
   // A run that came back short is tried again, but not on every redraw.
@@ -489,10 +510,11 @@ async function loadBackfill() {
      * broker consolidates linked accounts. The combined return is then measured
      * on the combined balance, not averaged from each account's return.
      */
+    walks = [];
     const forward = state.combined
       ? combineHistories(combinedJournals().map((j) => journalHistory(j, earliest)))
       : ledger?.openingCash != null && ledger.from
-      ? buildPortfolioHistory({
+      ? buildPortfolioHistory(remember({
         opening: {
           date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings,
         },
@@ -505,7 +527,7 @@ async function loadBackfill() {
         lastKnown: datedMarks(ledger),
         from: earliest,
         to: historyEnd(),
-      })
+      }))
       : null;
 
     if (forward?.length) {
@@ -552,11 +574,27 @@ async function loadBackfill() {
      * rest a little later, three times at most — a ticker the price service
      * genuinely does not carry should not be asked for all session.
      */
+    /**
+     * How far every holding has a close. Yahoo fills a day's close in hours
+     * after the bell; until it has, that day is priced at the day before for
+     * part of the book, so the daily log stops short of it and this is built
+     * again every few minutes until it is whole.
+     */
+    const held = new Set(state.positions.filter((p) => p.status === 'Open')
+      .map((p) => historySymbol(p.ticker, p.cls)));
+    const lastDays = [...held].map((sym) => priceHistories.get(sym)?.at(-1)?.date).filter(Boolean);
+    pricedThroughDay = lastDays.length ? lastDays.reduce((a, b) => (b < a ? b : a)) : through;
+    const short = pricedThroughDay < through;
+
     if (unpriced && backfillAttempts < 3) {
       backfillAttempts += 1;
       backfillTriedFor = key;
       backfillRetryAt = Date.now() + 15000 * backfillAttempts;
       setTimeout(() => renderHome(), 15000 * backfillAttempts + 50);
+    } else if (short) {
+      backfillTriedFor = key;
+      backfillRetryAt = Date.now() + 5 * 60_000;
+      setTimeout(() => renderHome(), 5 * 60_000 + 50);
     } else {
       backfillFor = key;
     }
@@ -593,7 +631,7 @@ function journalHistory(journal, earliest) {
 function journalDays(journal, earliest) {
   const ledger = journal.ledger;
   if (ledger?.openingCash != null && ledger.from) {
-    return buildPortfolioHistory({
+    return buildPortfolioHistory(remember({
       opening: { date: ledger.from, cash: ledger.openingCash, holdings: ledger.openingHoldings },
       events: [
         ...ledger.events ?? [],
@@ -604,7 +642,7 @@ function journalDays(journal, earliest) {
       lastKnown: datedMarks(ledger),
       from: earliest,
       to: historyEnd(journal.statements),
-    });
+    }));
   }
   const flows = new Map();
   for (const f of journal.cashFlows ?? []) flows.set(f.date, (flows.get(f.date) ?? 0) + f.amount);

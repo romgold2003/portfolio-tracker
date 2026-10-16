@@ -17,11 +17,13 @@ const valueOf = (row) => Number(row?.totalAccountValue ?? row?.value);
 
 /**
  * `rows` oldest first: { date, totalAccountValue | value, externalCashFlow? }.
- * Returns oldest first: { date, value, pnl, pct, flow }.
+ * Returns oldest first: { date, prev, value, pnl, pct, flow }, `prev` being the
+ * day the move is measured from.
  */
 export function dailyReturns(rows, { through } = {}) {
   const out = [];
   let prev = null;
+  let prevDate = null;
   let flow = 0;
   for (const row of rows ?? []) {
     const date = row?.date;
@@ -32,14 +34,15 @@ export function dailyReturns(rows, { through } = {}) {
     if (marketHoliday(date)) {
       // The history opens on 1 January, a holiday, at the year's opening
       // balance — which is what the first trading day is measured from.
-      if (prev == null) { prev = value; flow = 0; }
+      if (prev == null) { prev = value; prevDate = date; flow = 0; }
       continue;
     }
     if (prev != null && prev > 0) {
       const pnl = value - prev - flow;
-      out.push({ date, value, pnl, pct: (pnl / prev) * 100, flow });
+      out.push({ date, prev: prevDate, value, pnl, pct: (pnl / prev) * 100, flow });
     }
     prev = value;
+    prevDate = date;
     flow = 0;
   }
   return out;

@@ -19,6 +19,10 @@ const PRICE_CACHE_KEY = 'pt_historic_prices';
 /** ticker -> rows, for this session only. */
 const seriesCache = new Map();
 
+/** When a series without its last closed day was fetched, to ask again later. */
+const incompleteAt = new Map();
+const INCOMPLETE_MS = 5 * 60 * 1000;
+
 /** ticker -> the splits its price history is adjusted for, once the series has loaded. */
 const splitCache = new Map();
 
@@ -105,7 +109,12 @@ export async function dailySeries(ticker) { return seriesFor(ticker); }
 async function seriesFor(ticker) {
   const through = lastClosedSession();
   const cacheKey = `${ticker}@${through}`;
-  if (seriesCache.has(cacheKey)) return seriesCache.get(cacheKey);
+  if (seriesCache.has(cacheKey)) {
+    // One still missing its last day's close is asked again a few minutes on:
+    // Yahoo fills a day's close in hours after the bell, not at it.
+    const hit = seriesCache.get(cacheKey);
+    if (hit?.[hit.length - 1]?.date === through || Date.now() - (incompleteAt.get(cacheKey) ?? 0) < INCOMPLETE_MS) return hit;
+  }
   const url = `/api/history?symbol=${encodeURIComponent(ticker)}&years=3&through=${through}`;
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -118,6 +127,7 @@ async function seriesFor(ticker) {
       const rows = Array.isArray(json?.rows) ? json.rows : null;
       if (rows) {
         seriesCache.set(cacheKey, rows);
+        if (rows[rows.length - 1]?.date !== through) incompleteAt.set(cacheKey, Date.now());
         splitCache.set(ticker, (Array.isArray(json?.splits) ? json.splits : [])
           .filter((s) => typeof s?.date === 'string' && s.numerator > 0 && s.denominator > 0));
       }
