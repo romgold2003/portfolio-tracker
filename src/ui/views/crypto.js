@@ -1,11 +1,11 @@
 /**
- * The Crypto page: whale trades, unusual volume and the spot ETF flows.
+ * The Crypto page: whale trades and the spot ETF flows.
  *
  * Its own page, under News in the menu, since October 2026. The three views
  * began under Gamble, then briefly as a tab inside News; Romy wanted crypto as
  * a section of its own, like Monthly or New trade. The panels themselves did not
- * change — each still draws itself from cryptoWhales.js, unusualVolume.js and
- * the ETF half of exposure.js — this only decides when they are drawn.
+ * change — each still draws itself from cryptoWhales.js and the ETF half of
+ * exposure.js — this only decides when they are drawn.
  */
 import { etfFlows } from '../../services/options.js';
 import { renderEtfFlows, redrawFlows } from './exposure.js';

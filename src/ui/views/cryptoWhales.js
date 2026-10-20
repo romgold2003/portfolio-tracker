@@ -14,7 +14,6 @@
  *
  * The coin strip chooses the coin for the holder card and both sections.
  */
-import { renderUnusualVolume } from './unusualVolume.js';
 import { redrawFlows } from './exposure.js';
 import {
   BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
@@ -567,14 +566,15 @@ export async function renderCryptoWhales() {
 }
 
 /**
- * The three views on the Crypto page: whales, volume, ETF flows.
+ * The two views on the Crypto page: whales and ETF flows. Unusual volume was
+ * a third until October 2026; Romy did not use it.
  *
  * They lived under Gamble until October 2026, beside the Polymarket bets; they
  * are about crypto money rather than about wagers, so they moved to a page of
  * their own (see crypto.js). Bound once, on the strip rather than on each button, so redrawing
  * a panel cannot leave a stale handler behind.
  */
-const CRYPTO_VIEWS = { whales: 'cryptoWhales', volume: 'cryptoVolume', etf: 'cryptoEtf' };
+const CRYPTO_VIEWS = { whales: 'cryptoWhales', etf: 'cryptoEtf' };
 let cryptoView = 'whales';
 
 /** Draw whichever Crypto view is open — on arrival at the tab, or on a switch. */
@@ -588,7 +588,6 @@ export function showCryptoView(wanted = cryptoView) {
   }
   if (cryptoView === 'whales') renderCryptoWhales();
   else pauseHyperliquid();
-  if (cryptoView === 'volume') renderUnusualVolume();
   // The flows were drawn when the page opened, likely while hidden and so at
   // no measurable width; now that they are on screen, draw them to fit.
   else if (cryptoView === 'etf') redrawFlows();

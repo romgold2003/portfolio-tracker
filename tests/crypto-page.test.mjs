@@ -47,21 +47,22 @@ describe('the menu', () => {
 });
 
 describe('the Crypto page', () => {
-  test('holds the whale trades, unusual volume and spot ETF flows', () => {
+  test('holds the whale trades and spot ETF flows', () => {
     const crypto = page('crypto');
-    for (const id of ['cryptoWhaleCard', 'spotSection', 'levSection', 'volumeCard', 'etfCard']) {
+    for (const id of ['cryptoWhaleCard', 'spotSection', 'levSection', 'etfCard']) {
       assert.match(crypto, new RegExp(`id="${id}"`), id);
     }
   });
 
-  test('opens on Whales, with Volume and ETF flows beside it', () => {
+  test('opens on Whales, with ETF flows beside it — Volume removed, October 2026, unused', () => {
     const inner = [...page('crypto').matchAll(/data-ctab="(\w+)">([^<]+)</g)].map((m) => [m[1], m[2]]);
-    assert.deepEqual(inner, [['whales', 'Whales'], ['volume', 'Volume'], ['etf', 'ETF flows']]);
+    assert.deepEqual(inner, [['whales', 'Whales'], ['etf', 'ETF flows']]);
+    assert.doesNotMatch(html, /id="cryptoVolume"|id="volumeCard"/);
     assert.match(page('crypto'), /class="opt-tab active" data-ctab="whales"/);
   });
 
   test('its views map to their panes', () => {
-    assert.match(whales, /whales: 'cryptoWhales', volume: 'cryptoVolume', etf: 'cryptoEtf'/);
+    assert.match(whales, /whales: 'cryptoWhales', etf: 'cryptoEtf'/);
   });
 });
 
@@ -75,7 +76,7 @@ describe('the News page', () => {
   test('keeps rates, data and options, and none of the crypto cards', () => {
     const n = page('news');
     for (const id of ['fedCard', 'econCard', 'optionsCard', 'gambleCard']) assert.match(n, new RegExp(`id="${id}"`), id);
-    for (const id of ['cryptoWhaleCard', 'volumeCard', 'etfCard']) assert.doesNotMatch(n, new RegExp(`id="${id}"`), id);
+    for (const id of ['cryptoWhaleCard', 'etfCard']) assert.doesNotMatch(n, new RegExp(`id="${id}"`), id);
   });
 
   test('no longer fetches or starts anything that moved away', () => {
@@ -85,7 +86,7 @@ describe('the News page', () => {
 });
 
 describe('every card appears exactly once', () => {
-  for (const id of ['cryptoWhaleCard', 'volumeCard', 'etfCard', 'gambleCard', 'optionsCard']) {
+  for (const id of ['cryptoWhaleCard', 'etfCard', 'gambleCard', 'optionsCard']) {
     test(id, () => assert.equal(html.split(`id="${id}"`).length - 1, 1));
   }
 });

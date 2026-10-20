@@ -509,7 +509,6 @@
 
       <div class="opt-picker gam-subtabs" id="cryptoTabs">
         <button class="opt-tab active" data-ctab="whales">Whales</button>
-        <button class="opt-tab" data-ctab="volume">Volume</button>
         <button class="opt-tab" data-ctab="etf">ETF flows</button>
       </div>
 
@@ -564,21 +563,6 @@
             <p class="gam-src" id="levSrc"></p>
           </section>
           </div>
-        </div>
-      </div>
-
-      <!-- Where the turnover is today. Volume has to move before a price can,
-           so a coin trading several times its usual is a coin something is
-           happening to — which is a different question from who is buying. -->
-      <div id="cryptoVolume" hidden>
-        <div class="card gam-card" id="volumeCard">
-          <div class="card-lbl">
-            <span>Unusual volume — <span id="uvCount">loading</span></span>
-            <div class="opt-picker" id="uvTier"></div>
-          </div>
-          <p class="wt-explain">The sixty coins Binance is trading most today, each against a normal day for itself — the median of its last 20 days, weekdays measured against weekdays and weekends against weekends, because Monday trades about twice a Saturday. Ranked by how surprising the figure is for that coin rather than by the multiple, since a fourfold day means less on a coin whose volume always swings. Volume has no direction of its own, so the price move sits beside it, and so does which side crossed the spread — though that is usually close to even even under a large move, and is context rather than a verdict.</p>
-          <div id="uvRows"></div>
-          <p class="gam-src" id="uvSrc"></p>
         </div>
       </div>
 
