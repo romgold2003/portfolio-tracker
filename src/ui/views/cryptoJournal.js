@@ -81,12 +81,16 @@ export function previewText(input) {
   const t = cleanTrade({ ...input, d: input.d || today() });
   if (!t) return 'Enter the P&L, the average entry and the average exit.';
   const x = derive(t);
-  return `${x.dir} · ${pct(x.pct)}${x.size == null ? '' : ` · size at entry ≈ ${plain(x.size)}`}`;
+  // A side chosen against what the figures say: fees outweighing a small move,
+  // or a figure typed with the wrong sign.
+  const odd = t.dir && x.pct !== 0 && t.pnl !== 0 && Math.sign(x.pct) !== Math.sign(t.pnl)
+    ? ` · the P&L and the move disagree for a ${x.dir.toLowerCase()} — fees, or a sign?` : '';
+  return `${x.dir} · ${pct(x.pct)}${x.size == null ? '' : ` · size at entry ≈ ${plain(x.size)}`}${odd}`;
 }
 
 function formValues() {
   const v = (id) => el(id)?.value ?? '';
-  return { d: v('cjDate'), coin: v('cjCoin'), entry: v('cjEntry'), exit: v('cjExit'), pnl: v('cjPnl'), note: v('cjNote') };
+  return { d: v('cjDate'), coin: v('cjCoin'), entry: v('cjEntry'), exit: v('cjExit'), pnl: v('cjPnl'), dir: v('cjSide'), note: v('cjNote') };
 }
 
 function save() {
@@ -95,7 +99,7 @@ function save() {
   setCryptoTrades([...state.cryptoTrades, t]);
   year = Number(t.d.slice(0, 4));
   month = t.d.slice(0, 7);
-  for (const id of ['cjEntry', 'cjExit', 'cjPnl', 'cjNote']) if (el(id)) el(id).value = '';
+  for (const id of ['cjEntry', 'cjExit', 'cjPnl', 'cjNote', 'cjSide']) if (el(id)) el(id).value = '';
   el('cjForm').hidden = true;
   renderCryptoJournal();
 }
@@ -127,6 +131,9 @@ function bind() {
     }
     const row = e.target.closest('[data-month]');
     if (row) { month = month === row.dataset.month ? null : row.dataset.month; renderCryptoJournal(); }
+  });
+  card.addEventListener('change', (e) => {
+    if (e.target.id === 'cjSide') el('cjPreview').textContent = previewText(formValues());
   });
   card.addEventListener('input', (e) => {
     if (e.target.closest('#cjForm')) el('cjPreview').textContent = previewText(formValues());

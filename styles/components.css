@@ -1214,7 +1214,7 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
    src/ui/views/cryptoJournal.js. */
 #cjCard .is-up{color:var(--green)}#cjCard .is-down{color:var(--red)}
 .cj-sub{font-size:10px;color:var(--text3);font-weight:400}
-.cj-form{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:14px;margin:4px 0 14px;
+.cj-form{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;padding:14px;margin:4px 0 14px;
   background:var(--panel2);border:0.5px solid var(--border2);border-radius:10px;animation:dl-in .18s ease-out}
 .cj-form[hidden]{display:none}
 .cj-form label{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}

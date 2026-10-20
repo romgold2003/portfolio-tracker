@@ -116,3 +116,49 @@ describe('the page', () => {
     assert.match(previewText({ entry: '', exit: '1', pnl: '1' }), /Enter the P&L/);
   });
 });
+
+describe('shorts and losses, worked out either way', () => {
+  test('a winning short: price down, P&L up, the move counts for it', () => {
+    const t = derive(cleanTrade(trade({ entry: 100, exit: 90, pnl: 100 })));
+    assert.deepEqual([t.dir, +t.pct.toFixed(4), +t.size.toFixed(4), t.win], ['Short', 10, 1000, true]);
+  });
+
+  test('a losing short: price up, P&L negative, the move counts against it', () => {
+    const t = derive(cleanTrade(trade({ entry: 100, exit: 110, pnl: -100 })));
+    assert.deepEqual([t.dir, +t.pct.toFixed(4), +t.size.toFixed(4), t.loss], ['Short', -10, 1000, true]);
+  });
+
+  test('a short chosen outright stays a short when fees outweigh a small move', () => {
+    const t = derive(cleanTrade(trade({ entry: 100, exit: 99.9, pnl: -5, dir: 'Short' })));
+    assert.equal(t.dir, 'Short');
+    assert.ok(t.pct > 0, 'the price moved its way');
+    assert.equal(t.loss, true, 'but it lost, and is counted as a loss');
+    // Left to work out, the same figures read as a losing long.
+    assert.equal(derive(cleanTrade(trade({ entry: 100, exit: 99.9, pnl: -5 }))).dir, 'Long');
+  });
+
+  test('a month of shorts and longs adds up the same way', () => {
+    const [m] = monthsOf([
+      trade({ entry: 100, exit: 90, pnl: 100 }), // short +10%
+      trade({ entry: 100, exit: 110, pnl: -100 }), // short −10%
+      trade({ entry: 100, exit: 105, pnl: 50 }), // long +5%
+    ]);
+    assert.equal(m.pnl, 50);
+    assert.deepEqual([m.wins, m.losses], [2, 1]);
+    assert.ok(Math.abs(m.avgPct - 5 / 3) < 1e-9);
+    assert.ok(Math.abs(m.worst.pct - -10) < 1e-9);
+  });
+
+  test('the side survives a save', () => {
+    assert.equal(cleanTrade({ ...trade(), dir: 'Short' }).dir, 'Short');
+    assert.equal(cleanTrade({ ...trade(), dir: 'sideways' }).dir, '');
+  });
+
+  test('the form says so when a chosen side disagrees with the figures', async () => {
+    globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+    const { previewText } = await import('../src/ui/views/cryptoJournal.js');
+    assert.match(previewText({ entry: '100', exit: '110', pnl: '50', dir: 'Short' }), /disagree for a short/);
+    assert.equal(previewText({ entry: '100', exit: '90', pnl: '100' }), 'Short · +10.00% · size at entry ≈ $1,000');
+    assert.equal(previewText({ entry: '100', exit: '110', pnl: '-100' }), 'Short · −10.00% · size at entry ≈ $1,000');
+  });
+});

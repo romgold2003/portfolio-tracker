@@ -37,6 +37,8 @@ export function cleanTrade(raw) {
     entry,
     exit,
     pnl,
+    // Chosen, or empty to be worked out from the P&L and the move.
+    dir: raw.dir === 'Long' || raw.dir === 'Short' ? raw.dir : '',
     note: text(raw.note, 200),
   };
 }
@@ -47,11 +49,18 @@ export function cleanTrades(list) {
 
 const newId = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
-/** Direction, the move in the trade's favour (%), and the size at entry ($). */
+/**
+ * Direction, the move in the trade's favour (%), and the size at entry ($).
+ *
+ * The side as chosen; when it was left to work out, a profit on a fall or a
+ * loss on a rise was a short. Choosing matters only when fees outweigh the
+ * move — a short from 100 to 99.9 that paid more in fees than it made reads
+ * as a losing long otherwise. Win and loss always follow the P&L itself.
+ */
 export function derive(t) {
   const move = (t.exit - t.entry) / t.entry;
-  // A profit on a fall, or a loss on a rise, was a short.
-  const dir = t.pnl !== 0 && Math.sign(t.pnl) !== Math.sign(move) && move !== 0 ? 'Short' : 'Long';
+  const inferred = t.pnl !== 0 && Math.sign(t.pnl) !== Math.sign(move) && move !== 0 ? 'Short' : 'Long';
+  const dir = t.dir === 'Long' || t.dir === 'Short' ? t.dir : inferred;
   const pct = (dir === 'Long' ? move : -move) * 100;
   const size = move !== 0 ? Math.abs(t.pnl / move) : null;
   return { ...t, dir, pct, size, win: t.pnl > 0, loss: t.pnl < 0 };
