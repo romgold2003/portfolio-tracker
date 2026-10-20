@@ -586,11 +586,14 @@ export function showCryptoView(wanted = cryptoView) {
   for (const b of el('cryptoTabs')?.querySelectorAll('[data-ctab]') ?? []) {
     b.classList.toggle('active', b.dataset.ctab === cryptoView);
   }
-  if (cryptoView === 'whales') renderCryptoWhales();
-  else pauseHyperliquid();
-  // The flows were drawn when the page opened, likely while hidden and so at
-  // no measurable width; now that they are on screen, draw them to fit.
-  else if (cryptoView === 'etf') redrawFlows();
+  if (cryptoView === 'whales') {
+    renderCryptoWhales();
+  } else {
+    pauseHyperliquid();
+    // The flows were drawn when the page opened, likely while hidden and so at
+    // no measurable width; now that they are on screen, draw them to fit.
+    if (cryptoView === 'etf') redrawFlows();
+  }
 }
 
 export function installCryptoTabs() {
