@@ -7,6 +7,7 @@
  *
  * This module never touches the DOM.
  */
+import { cleanTrades } from './cryptoJournal.js';
 import { STORAGE_KEYS, ASSET_CLASSES } from '../config/constants.js';
 import { SECTOR_NAMES } from '../config/sectors.js';
 
@@ -62,6 +63,12 @@ export const state = {
   apiKey: '',
   /** Five places for Designer mode codes, kept with the account: {name, code} or null. */
   favoriteDesigns: [],
+  /**
+   * The crypto journal (core/cryptoJournal.js): trades with money outside the
+   * account, for reference. Kept with the sign-in, not with a sub-account, and
+   * never counted in any account's value.
+   */
+  cryptoTrades: [],
 };
 
 export const FAVORITE_SLOTS = 5;
@@ -77,6 +84,12 @@ function sanitizeFavorites(list) {
       : null);
   }
   return out;
+}
+
+/** Replace the crypto journal's trades and save them with the sign-in. */
+export function setCryptoTrades(list) {
+  state.cryptoTrades = cleanTrades(list);
+  scheduleFlush();
 }
 
 /** Replace the favourite designs and save them with the account. */
@@ -707,6 +720,7 @@ export function loadState(journal) {
   if (Array.isArray(source.accounts) || !book) {
     book = readBook(source);
     state.favoriteDesigns = sanitizeFavorites(source.favoriteDesigns);
+    state.cryptoTrades = cleanTrades(source.cryptoTrades);
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -725,6 +739,7 @@ export function journalSnapshot() {
     apiKey: state.apiKey,
     cashModel: SHORT_CASH_MODEL,
     favoriteDesigns: state.favoriteDesigns,
+    cryptoTrades: state.cryptoTrades,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -746,6 +761,7 @@ export function clearState() {
   state.cashModel = SHORT_CASH_MODEL;
   state.combined = false;
   state.favoriteDesigns = [];
+  state.cryptoTrades = [];
   announceJournal();
 }
 

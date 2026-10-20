@@ -510,6 +510,7 @@
       <div class="opt-picker gam-subtabs" id="cryptoTabs">
         <button class="opt-tab active" data-ctab="whales">Whales</button>
         <button class="opt-tab" data-ctab="etf">ETF flows</button>
+        <button class="opt-tab" data-ctab="journal">Journal</button>
       </div>
 
       <!-- Very large real transfers, from the chains a provider can actually
@@ -563,6 +564,35 @@
             <p class="gam-src" id="levSrc"></p>
           </section>
           </div>
+        </div>
+      </div>
+
+      <!-- A strategy's trades with money outside the account, entered by hand and
+           read like Monthly. Never counted in the account. src/ui/views/cryptoJournal.js. -->
+      <div id="cryptoJournal" hidden>
+        <div class="card" id="cjCard">
+          <div class="card-lbl">
+            <span>Crypto journal <span class="cj-sub" style="text-transform:none;letter-spacing:0">· not counted in the account</span></span>
+            <button class="dl-btn" id="cjAdd" type="button">+ Add trade</button>
+          </div>
+          <div class="cj-form" id="cjForm" hidden>
+            <label>Date<input type="date" id="cjDate"></label>
+            <label>Coin<input type="text" id="cjCoin" placeholder="BTC" maxlength="16"></label>
+            <label>P&amp;L ($)<input type="number" step="any" id="cjPnl" placeholder="250 or -120"></label>
+            <label>Avg entry<input type="number" step="any" min="0" id="cjEntry" placeholder="61250"></label>
+            <label>Avg exit<input type="number" step="any" min="0" id="cjExit" placeholder="63100"></label>
+            <label class="cj-wide">Note<input type="text" id="cjNote" maxlength="200" placeholder="optional"></label>
+            <div class="cj-preview" id="cjPreview">Enter the P&amp;L, the average entry and the average exit.</div>
+            <div class="cj-actions"><button class="btn" id="cjCancel" type="button">Cancel</button><button class="btn btn-blue" id="cjSave" type="button">Save trade</button></div>
+          </div>
+          <div class="cj-totals" id="cjTotals"></div>
+          <div class="card-lbl" style="margin-top:14px">
+            <span>P&amp;L by month</span>
+            <select id="cjYear" style="width:auto;font-size:12px;padding:5px 8px"></select>
+          </div>
+          <div class="chart-wrap2"><canvas id="cjChart" role="img" aria-label="Crypto journal profit and loss by month">Crypto P&amp;L by month.</canvas></div>
+          <div class="cj-months" id="cjMonths"></div>
+          <div class="cj-trades" id="cjTrades"></div>
         </div>
       </div>
 

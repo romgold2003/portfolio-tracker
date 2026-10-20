@@ -54,15 +54,15 @@ describe('the Crypto page', () => {
     }
   });
 
-  test('opens on Whales, with ETF flows beside it — Volume removed, October 2026, unused', () => {
+  test('opens on Whales, with ETF flows and the Journal beside it — Volume removed, October 2026, unused', () => {
     const inner = [...page('crypto').matchAll(/data-ctab="(\w+)">([^<]+)</g)].map((m) => [m[1], m[2]]);
-    assert.deepEqual(inner, [['whales', 'Whales'], ['etf', 'ETF flows']]);
+    assert.deepEqual(inner, [['whales', 'Whales'], ['etf', 'ETF flows'], ['journal', 'Journal']]);
     assert.doesNotMatch(html, /id="cryptoVolume"|id="volumeCard"/);
     assert.match(page('crypto'), /class="opt-tab active" data-ctab="whales"/);
   });
 
   test('its views map to their panes', () => {
-    assert.match(whales, /whales: 'cryptoWhales', etf: 'cryptoEtf'/);
+    assert.match(whales, /whales: 'cryptoWhales', etf: 'cryptoEtf', journal: 'cryptoJournal'/);
   });
 });
 

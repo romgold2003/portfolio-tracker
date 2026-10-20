@@ -1209,6 +1209,47 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
   .dl-hold{grid-template-columns:56px minmax(0,1fr) 60px 84px}
 }
 
+/* ── Crypto journal ────────────────────────────────────────────────────────
+   The Crypto page's Journal tab: a strategy's trades, read like Monthly.
+   src/ui/views/cryptoJournal.js. */
+#cjCard .is-up{color:var(--green)}#cjCard .is-down{color:var(--red)}
+.cj-sub{font-size:10px;color:var(--text3);font-weight:400}
+.cj-form{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:14px;margin:4px 0 14px;
+  background:var(--panel2);border:0.5px solid var(--border2);border-radius:10px;animation:dl-in .18s ease-out}
+.cj-form[hidden]{display:none}
+.cj-form label{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
+.cj-form input{font-size:13px;padding:8px 10px}
+.cj-wide{grid-column:1 / -1}
+.cj-preview{grid-column:1 / -1;font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}
+.cj-actions{grid-column:1 / -1;display:flex;justify-content:flex-end;gap:8px}
+.cj-actions .btn{padding:7px 16px;font-size:12px}
+.cj-totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.cj-tile{background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:10px 14px}
+.cj-k{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px}
+.cj-v{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.cj-months{margin-top:12px;overflow-x:auto}
+.cj-table td,.cj-table th{white-space:nowrap}
+.cj-month{cursor:pointer}
+.cj-month:hover td,.cj-month.active td{background:var(--hover)}
+.cj-trades{margin-top:10px}
+.cj-trades-head{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin:6px 0 4px}
+.cj-trade{display:grid;grid-template-columns:56px minmax(48px,1fr) 64px minmax(120px,1.4fr) 72px 70px 96px 22px;
+  gap:8px;align-items:center;padding:7px 4px;border-bottom:0.5px solid var(--border);font-size:12px;font-variant-numeric:tabular-nums}
+.cj-trade-head{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em}
+.cj-coin{font-weight:600;color:var(--text)}
+.cj-note{color:var(--text3);font-weight:400}
+.cj-pct,.cj-pnl{text-align:right}
+.cj-trade.is-up .cj-pct,.cj-trade.is-up .cj-pnl{color:var(--green)}
+.cj-trade.is-down .cj-pct,.cj-trade.is-down .cj-pnl{color:var(--red)}
+.cj-del{background:none;border:0;color:var(--text3);font-size:16px;cursor:pointer;padding:0;line-height:1}
+.cj-del:hover{color:var(--red)}
+@media (max-width:720px){
+  .cj-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cj-totals{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cj-trade{grid-template-columns:44px minmax(40px,1fr) 56px 64px 84px 18px}
+  .cj-trade > :nth-child(4),.cj-trade > :nth-child(5){display:none}
+}
+
 /* ── Touch screens ─────────────────────────────────────────────────────────
    Phones and tablets are driven by a finger, and a lot of this app's controls
    were sized for a mouse: sort buttons 24px tall, sign-out 16, the cash Edit

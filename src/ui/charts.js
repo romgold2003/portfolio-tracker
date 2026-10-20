@@ -305,13 +305,14 @@ export function renderSectorChart(rows) {
 }
 
 /** Twelve bars of realised P&L for one calendar year. */
-export function renderMonthlyChart(monthlyTotals) {
-  const canvas = document.getElementById('monthChart');
+/** `canvasId` and `slot` let the crypto journal draw the same chart of its own. */
+export function renderMonthlyChart(monthlyTotals, { canvasId = 'monthChart', slot = 'month' } = {}) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const c = chartColors();
 
-  charts.month?.destroy();
-  charts.month = new Chart(canvas, {
+  charts[slot]?.destroy();
+  charts[slot] = new Chart(canvas, {
     type: 'bar',
     data: {
       labels: MONTHS_SHORT,
