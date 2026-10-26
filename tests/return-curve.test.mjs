@@ -191,4 +191,42 @@ describe('against the real statements', async () => {
     const ibkr = ((1 + y2024.twr / 100) * (1 + y2025.twr / 100) * 1.285297 - 1) * 100;
     assert.ok(near(all, ibkr, 0.2), `since the account began: ${all.toFixed(2)}% vs IBKR ${ibkr.toFixed(2)}%`);
   });
+
+  test('every other % on the page is the same measure, so none can disagree with the chart', { skip: !(ready && zips.every(Boolean)) }, async () => {
+    const { dailyReturns } = await import('../src/core/dailyLog.js');
+    const { allTimeHigh } = await import('../src/core/snapshots.js');
+    const [y2024, y2025] = zips.map((z) => parseIbkrStatement(unzipFirst(z)));
+    const y2026 = parseIbkrStatement(readFileSync(latest, 'utf8'));
+    const rows = await walk([y2024, y2025, y2026]);
+    const since = new Map(returnCurve(rows).map((p) => [p.date, p.pct]));
+    const growthTo = (d) => 1 + since.get(d) / 100;
+
+    // Each year opens and closes on the balance IBKR states.
+    const on = (d) => rows.find((r) => r.date === d).totalAccountValue;
+    assert.ok(near(on('2024-12-31'), y2024.navChange.endNav, 1), `31 Dec 2024: ${on('2024-12-31')}`);
+    assert.ok(near(on('2025-12-31'), y2025.navChange.endNav, 5), `31 Dec 2025: ${on('2025-12-31')}`);
+    assert.ok(near(on('2026-10-14'), y2026.navChange.endNav, 20), `14 Oct 2026: ${on('2026-10-14')}`);
+
+    // The return under the chart, for every window ending 14 October: the chart's own figure.
+    for (const from of ['2026-10-08', '2026-09-15', '2026-07-15', '2026-04-15', '2026-01-01', '2025-10-15']) {
+      const kpi = periodReturnFromHistory(rows, from, '2026-10-14').returnPct;
+      const chart = returnCurve(rows.filter((r) => r.date <= '2026-10-14'), from).at(-1).pct;
+      assert.ok(near(kpi, chart, 1e-9), `${from}: KPI ${kpi} vs chart ${chart}`);
+    }
+
+    // The daily log: its days compound to the chart, year by year.
+    for (const [year, statement] of [[2025, y2025], [2026, y2026]]) {
+      const days = dailyReturns(rows).filter((d) => d.date.startsWith(`${year}-`) && d.date <= '2026-10-14');
+      const compounded = (days.reduce((g, d) => g * (1 + d.pct / 100), 1) - 1) * 100;
+      const end = days.at(-1).date;
+      const chart = (growthTo(end) / growthTo(`${year - 1}-12-31`) - 1) * 100;
+      assert.ok(near(compounded, chart, 1e-6), `${year}: daily log ${compounded} vs chart ${chart}`);
+      assert.ok(near(compounded, statement.twr, 0.1), `${year}: daily log ${compounded.toFixed(3)}% vs IBKR ${statement.twr}%`);
+    }
+
+    // The all-time-high star: the chart's peak, with the chart's figure.
+    const high = allTimeHigh(rows);
+    assert.ok(near(high.returnPct, since.get(high.date), 1e-9));
+    assert.ok(Math.max(...since.values()) <= high.returnPct + 1e-9);
+  });
 });

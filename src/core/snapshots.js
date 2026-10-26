@@ -8,6 +8,7 @@ import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
 import { lastClosedSession } from '../config/marketCalendar.js';
 import { returnCurve } from './returnCurve.js';
+import { dayGrowth } from './portfolioHistory.js';
 
 /**
  * Record (or overwrite) today's account value. Idempotent within a day.
@@ -261,15 +262,10 @@ export function allTimeHigh(rows = accountHistory()) {
      * earned, and taking money out puts the high out of reach for good: draw
      * $20,000 out of a $50,000 account and the star stays on the day before the
      * withdrawal until the remaining $30,000 has grown by two thirds, however
-     * well it does. So each day is compounded the way a return is — the change
-     * in value less the money that moved that day, over the day before — and
-     * the star marks the peak of that.
+     * well it does. So each day is compounded the way a return is (dayGrowth,
+     * as the % chart) and the star marks the peak of that.
      */
-    if (prevValue != null) {
-      const flow = Number(row.externalCashFlow) || 0;
-      const earned = value - flow;
-      if (earned > 0) growth *= earned / prevValue;
-    }
+    if (prevValue > 0) growth *= dayGrowth(prevValue, value, row.externalCashFlow, row.joinedAtClose);
     prevValue = value;
 
     // Strictly better, so a flat stretch keeps the day the account FIRST

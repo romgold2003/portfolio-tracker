@@ -25,7 +25,8 @@ describe('a day\'s return', () => {
   test('a deposit is not a gain', () => {
     const [d] = dailyReturns([row('2026-10-12', 1000), row('2026-10-13', 2010, 1000)]);
     assert.ok(Math.abs(d.pnl - 10) < 1e-9);
-    assert.ok(Math.abs(d.pct - 1) < 1e-9);
+    // Counted as arriving halfway through the day, as IBKR does: 10 / (1000 + 500).
+    assert.ok(Math.abs(d.pct - 10 / 15) < 1e-9);
     assert.equal(d.flow, 1000);
   });
 

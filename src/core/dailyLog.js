@@ -4,7 +4,8 @@
  * Read off the same daily history the chart draws, so the two can never
  * disagree. A day is the move from the previous trading day's close to this
  * one's, less any money paid in or taken out in between — a deposit is not a
- * gain — measured the way every return here is: (value − flow) / previous − 1.
+ * gain — measured the way every return here is (dayGrowth): the profit over the
+ * previous close plus half the money moved, as IBKR measures a day.
  *
  * Only days the market traded count. A weekend or holiday row carries Friday's
  * prices and moves nothing; money that landed on one is carried to the next
@@ -12,6 +13,7 @@
  * closed (`through`), so today appears by itself after four in New York.
  */
 import { marketHoliday } from '../config/marketCalendar.js';
+import { dayGrowth } from './portfolioHistory.js';
 
 const valueOf = (row) => Number(row?.totalAccountValue ?? row?.value);
 
@@ -25,25 +27,32 @@ export function dailyReturns(rows, { through } = {}) {
   let prev = null;
   let prevDate = null;
   let flow = 0;
+  // Every calendar day since the last trading day compounded, as the % chart
+  // does: a deposit settling on a Saturday is whole by Monday, not halfway in.
+  let growth = 1;
+  let last = null;
   for (const row of rows ?? []) {
     const date = row?.date;
     const value = valueOf(row);
     if (!date || !Number.isFinite(value)) continue;
     if (through && date > through) break;
     flow += Number(row.externalCashFlow) || 0;
+    if (last > 0) growth *= dayGrowth(last, value, row.externalCashFlow, row.joinedAtClose);
+    last = value;
     if (marketHoliday(date)) {
       // The history opens on 1 January, a holiday, at the year's opening
       // balance — which is what the first trading day is measured from.
-      if (prev == null) { prev = value; prevDate = date; flow = 0; }
+      if (prev == null) { prev = value; prevDate = date; flow = 0; growth = 1; }
       continue;
     }
     if (prev != null && prev > 0) {
       const pnl = value - prev - flow;
-      out.push({ date, prev: prevDate, value, pnl, pct: (pnl / prev) * 100, flow });
+      out.push({ date, prev: prevDate, value, pnl, pct: (growth - 1) * 100, flow });
     }
     prev = value;
     prevDate = date;
     flow = 0;
+    growth = 1;
   }
   return out;
 }
