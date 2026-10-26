@@ -7,6 +7,7 @@ import { spliceHistory } from './rebuild.js';
 import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
 import { lastClosedSession } from '../config/marketCalendar.js';
+import { returnCurve } from './returnCurve.js';
 
 /**
  * Record (or overwrite) today's account value. Idempotent within a day.
@@ -415,5 +416,25 @@ export function curveSeries(timeframe) {
     gain: last - first - paidIn,
     paidIn,
     returnPct: first ? ((last - first - paidIn) / first) * 100 : 0,
+  };
+}
+
+/**
+ * The % view of the chart: the account's time-weighted return since the window
+ * began, one point a day (core/returnCurve.js). Drawn from the forward-walked
+ * history only — the one checked against the broker's statements — since a
+ * recorded snapshot does not know which of its moves were deposits. Null when
+ * there is no such history to draw.
+ */
+export function percentSeries(timeframe) {
+  const from = timeframe === 'All' ? null : cutoffFor(timeframe).toISOString().slice(0, 10);
+  const points = returnCurve(forward, from);
+  if (points.length < 2) return null;
+  const dates = points.map((p) => p.date);
+  return {
+    labels: dates.map((d) => d.slice(5)),
+    data: points.map((p) => +p.pct.toFixed(3)),
+    dates,
+    returnPct: points[points.length - 1].pct,
   };
 }

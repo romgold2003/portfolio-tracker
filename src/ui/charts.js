@@ -6,7 +6,7 @@
  * theme toggle re-renders instead of just swapping a class.
  */
 import { MONTHS_SHORT } from '../config/constants.js';
-import { curveSeries, externalFlows } from '../core/snapshots.js';
+import { curveSeries, percentSeries, externalFlows } from '../core/snapshots.js';
 
 /** Live chart instances, so each redraw can destroy the previous one. */
 const charts = {};
@@ -112,14 +112,24 @@ function allTimeHighMark(high, colour) {
   };
 }
 
-/** Draws the account-value curve and returns the period return it implies. */
-export function renderCurve(timeframe) {
+/**
+ * Draws the account curve: its value in dollars, or with `mode` '%' its return
+ * since the window began (core/returnCurve.js). The % view needs the imported
+ * history; without it the dollar curve is drawn, and the returned `mode`
+ * says which one is on screen.
+ */
+export function renderCurve(timeframe, mode = '$') {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
-  const series = curveSeries(timeframe);
+  const pct = mode === '%' ? percentSeries(timeframe) : null;
+  const series = pct ?? curveSeries(timeframe);
   const { labels, data } = series;
   const c = chartColors();
-  const high = series.allTimeHigh;
+  // The star is the best the account has ever done, which a window's return does not show.
+  const high = pct ? null : series.allTimeHigh;
+  // Green above the start of the window, red below it.
+  const line = pct ? (pct.returnPct >= 0 ? c.green : c.red) : c.curve;
+  const signed = (v, digits) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(digits)}%`;
 
   /**
    * The external flows inside this window, matched to the point they sit on.
@@ -148,26 +158,27 @@ export function renderCurve(timeframe) {
       labels,
       datasets: [{
         data,
-        borderColor: c.curve,
+        borderColor: line,
         borderWidth: 2,
         pointRadius: 0,
-        fill: true,
-        backgroundColor: c.curve + '14',
+        fill: pct ? { target: { value: 0 }, above: c.green + '1f', below: c.red + '1f' } : true,
+        backgroundColor: line + '14',
         tension: 0.4,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      // Room above the line for the all-time-high star, which always sits at the top.
-      layout: { padding: { top: 18, right: 8 } },
+      // Room above the line for the all-time-high star, which always sits at the top,
+      // and for the $/% button over the top-left corner.
+      layout: { padding: { top: 26, right: 8 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
           callbacks: {
-            label: (ctx) => ' $' + Math.round(ctx.raw).toLocaleString(),
+            label: (ctx) => (pct ? ` ${signed(ctx.raw, 2)}` : ' $' + Math.round(ctx.raw).toLocaleString()),
             /**
              * A deposit is named under the value rather than folded into it.
              * The account really did grow by that much and really did not earn
@@ -208,13 +219,18 @@ export function renderCurve(timeframe) {
       scales: {
         x: { ticks: { color: c.txt, font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: c.grid } },
         y: {
-          ticks: { color: c.txt, font: { size: 10 }, callback: (v) => '$' + (v / 1000).toFixed(1) + 'k' },
-          grid: { color: c.grid },
+          ticks: {
+            color: c.txt,
+            font: { size: 10 },
+            callback: (v) => (pct ? signed(v, Math.abs(v) < 10 ? 1 : 0) : '$' + (v / 1000).toFixed(1) + 'k'),
+          },
+          // The window's starting line, drawn plainer than the rest.
+          grid: { color: (ctx) => (pct && ctx.tick?.value === 0 ? c.txt : c.grid) },
         },
       },
     },
   });
-  return series;
+  return { ...series, mode: pct ? '%' : '$' };
 }
 
 /**

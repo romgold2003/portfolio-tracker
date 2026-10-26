@@ -380,6 +380,27 @@ export function pricedThrough() { return pricedThroughDay; }
 let backfillRetryAt = 0;
 let backfillAttempts = 0;
 
+/** The curve in the mode chosen, and the $/% button saying which is on screen. */
+function drawCurve() {
+  const drawn = renderCurve(ui.timeframe, ui.curveMode);
+  const btn = document.getElementById('curveModeBtn');
+  if (!btn) return;
+  const on = drawn?.mode === '%';
+  btn.classList.toggle('active', on);
+  btn.setAttribute('aria-pressed', String(on));
+  // Asked for and not drawn: the daily history it is measured from is not there yet.
+  btn.title = ui.curveMode === '%' && !on
+    ? 'The return view needs the daily history — still loading, or no statement imported'
+    : on ? 'Show the account value in $' : 'Show the return in %';
+  document.getElementById('curve')?.setAttribute('aria-label', on ? 'Account return over time, in percent' : 'Account value over time');
+}
+
+/** The % button on the chart: the window's return day by day, or back to dollars. */
+export function toggleCurveMode() {
+  ui.curveMode = ui.curveMode === '%' ? '$' : '%';
+  drawCurve();
+}
+
 /**
  * Which journal the history and prices above were worked out for.
  *
@@ -1007,7 +1028,7 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
-  renderCurve(ui.timeframe);
+  drawCurve();
 
   // Kicked off after the draw, so the chart appears immediately and lengthens
   // when the price histories land rather than blocking on the network.

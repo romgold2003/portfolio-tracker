@@ -8,6 +8,8 @@ export const ui = {
   openClosedMonth: null,
   /** Chart timeframe on the home page. */
   timeframe: '3M',
+  /** The curve in dollars ('$') or as the window's return ('%'). */
+  curveMode: '$',
   /** Direction selected in the new-trade form. */
   formDirection: 'Long',
   /** Expanded position card id, or null. */
