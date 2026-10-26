@@ -251,8 +251,11 @@
           </div>
         </div>
         <div class="curve-wrap">
-          <!-- The curve as the window's return: src/core/returnCurve.js. -->
-          <button class="curve-mode" id="curveModeBtn" onclick="toggleCurveMode()" aria-pressed="false" title="Show the return in %" aria-label="Show the return in percent">%</button>
+          <!-- Dollars, or the return since the account began: src/core/returnCurve.js. -->
+          <div class="curve-modes" role="group" aria-label="Chart in dollars or percent">
+            <button class="curve-mode active" data-mode="$" onclick="setCurveMode('$')" aria-pressed="true" title="Account value in $">$</button>
+            <button class="curve-mode" data-mode="%" onclick="setCurveMode('%')" aria-pressed="false" title="Return since the account began, in %">%</button>
+          </div>
           <canvas id="curve" role="img" aria-label="Account value over time">Account value curve.</canvas></div>
       </div>
       <div class="kpi-row">

@@ -11,8 +11,9 @@
 .tf:hover{background:var(--hover2)}
 .tf.active{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
 .curve-wrap{position:relative;height:160px;margin-top:6px}
-/* The $/% switch over the chart's top-left corner. */
-.curve-mode{position:absolute;top:0;left:0;z-index:1;width:26px;height:22px;padding:0;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text3);font-family:inherit;font-size:12px;font-weight:600;line-height:1;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+/* The $ and % switch over the chart's top-left corner, a little clear of the line. */
+.curve-modes{position:absolute;top:-10px;left:0;z-index:1;display:flex;gap:4px}
+.curve-mode{width:26px;height:22px;padding:0;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text3);font-family:inherit;font-size:12px;font-weight:600;line-height:1;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .curve-mode:hover{color:var(--text)}
 .curve-mode.active{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
 .curve-mode:focus-visible{outline:2px solid var(--blue);outline-offset:1px}

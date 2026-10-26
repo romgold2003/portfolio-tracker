@@ -19,7 +19,9 @@ import { tmpdir } from 'node:os';
 import { returnCurve } from '../src/core/returnCurve.js';
 import { buildPortfolioHistory, periodReturnFromHistory, asTradedClose } from '../src/core/portfolioHistory.js';
 import { parseIbkrStatement } from '../src/features/ibkr.js';
-import { statementRecord, withStatements, journalFromStatements, allSplits } from '../src/features/statementLibrary.js';
+import {
+  statementRecord, withStatements, journalFromStatements, allSplits, openingMarksByYear,
+} from '../src/features/statementLibrary.js';
 import { historySymbol, closeOnOrBefore } from '../src/services/history.js';
 
 const day = (date, value, flow = 0) => ({ date, totalAccountValue: value, externalCashFlow: flow });
@@ -56,11 +58,18 @@ describe('the arithmetic', () => {
   });
 });
 
-describe('the button', () => {
+describe('the buttons', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  test('sits on the chart and switches the curve', () => {
-    assert.match(html, /<div class="curve-wrap">\s*<!--[^>]*-->\s*<button class="curve-mode" id="curveModeBtn" onclick="toggleCurveMode\(\)"[^>]*>%<\/button>\s*<canvas id="curve"/);
-    assert.match(readFileSync(new URL('../src/app/actions.js', import.meta.url), 'utf8'), /toggleAmounts, toggleDailyLog, toggleCurveMode,/);
+  const actions = readFileSync(new URL('../src/app/actions.js', import.meta.url), 'utf8');
+  test('$ and %, side by side on the chart', () => {
+    assert.match(html, /<div class="curve-modes"[^>]*>\s*<button class="curve-mode active" data-mode="\$" onclick="setCurveMode\('\$'\)"[^>]*>\$<\/button>\s*<button class="curve-mode" data-mode="%" onclick="setCurveMode\('%'\)"[^>]*>%<\/button>/);
+    assert.match(actions, /toggleAmounts, toggleDailyLog, setCurveMode,/);
+  });
+
+  test('% is the account since it began: it shows All, and a shorter window goes back to $', () => {
+    assert.match(actions, /if \(ui\.curveMode === '%' && ui\.timeframe !== 'All'\) setTimeframe\('All'\)/);
+    assert.match(actions, /if \(tf !== 'All'\) ui\.curveMode = '\$';/);
+    assert.match(readFileSync(new URL('../src/core/snapshots.js', import.meta.url), 'utf8'), /export function percentSeries\(\) \{\s*const points = returnCurve\(forward\);/);
   });
 });
 
@@ -119,6 +128,7 @@ async function walk(parsedList) {
 
   const marks = {};
   for (const [t, p] of Object.entries(ledger.openingMarks ?? {})) if (p > 0) marks[t] = [{ date: ledger.from, price: p }];
+  for (const [t, list] of Object.entries(openingMarksByYear(records))) (marks[t] ??= []).push(...list.filter((m) => m.date >= ledger.from));
   for (const e of ledger.events ?? []) if (e.kind === 'trade' && e.price > 0 && e.ticker) (marks[e.ticker] ??= []).push({ date: e.date, price: e.price });
   for (const list of Object.values(marks)) list.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -161,13 +171,24 @@ describe('against the real statements', async () => {
   });
 
   const zips = [locate('Annuals.2024 (1).zip') ?? locate('Annuals.2024.zip'), locate('Annuals.2025.zip')];
-  test('2024 and 2025: each year as the 1Y window would draw it', { skip: !(ready && zips.every(Boolean)) }, async () => {
+  test('2024, 2025, and the account since it began, each within a tenth or two of IBKR', { skip: !(ready && zips.every(Boolean)) }, async () => {
     const [y2024, y2025] = zips.map((z) => parseIbkrStatement(unzipFirst(z)));
     const rows = await walk([y2024, y2025, parseIbkrStatement(readFileSync(latest, 'utf8'))]);
     const year = (y) => returnCurve(rows.filter((r) => r.date <= `${y}-12-31`), `${y}-01-01`).at(-1).pct;
-    assert.ok(near(year(2025), y2025.twr, 0.5), `2025: curve ${year(2025).toFixed(2)}% vs IBKR ${y2025.twr}%`);
+    assert.ok(near(year(2025), y2025.twr, 0.1), `2025: curve ${year(2025).toFixed(2)}% vs IBKR ${y2025.twr}%`);
     // 2024 opened at nothing, so the curve starts the day money first arrived.
     const first = returnCurve(rows.filter((r) => r.date <= '2024-12-31')).at(-1).pct;
-    assert.ok(near(first, y2024.twr, 0.5), `2024: curve ${first.toFixed(2)}% vs IBKR ${y2024.twr}%`);
+    assert.ok(near(first, y2024.twr, 0.05), `2024: curve ${first.toFixed(2)}% vs IBKR ${y2024.twr}%`);
+    // Each year opens on the balance IBKR states. TBH, which has no price
+    // history, opened 2026 $135 high before each year's marks were used.
+    const on = (d) => rows.find((r) => r.date === d).totalAccountValue;
+    assert.ok(near(on('2025-12-31'), y2025.navChange.endNav, 5), `31 Dec 2025: ${on('2025-12-31')} vs ${y2025.navChange.endNav}`);
+    // 2026 within the whole history, as the year inside All, matches as well.
+    const y2026 = returnCurve(rows, '2026-01-01').at(-1).pct;
+    assert.ok(near(y2026, 28.5297, 0.1), `2026 inside All: ${y2026.toFixed(3)}%`);
+    // The % view: the three years compounded, as IBKR's own since-inception figure.
+    const all = returnCurve(rows).at(-1).pct;
+    const ibkr = ((1 + y2024.twr / 100) * (1 + y2025.twr / 100) * 1.285297 - 1) * 100;
+    assert.ok(near(all, ibkr, 0.2), `since the account began: ${all.toFixed(2)}% vs IBKR ${ibkr.toFixed(2)}%`);
   });
 });

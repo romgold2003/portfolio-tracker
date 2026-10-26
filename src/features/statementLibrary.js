@@ -170,6 +170,32 @@ function adjustPrices(marks, splits, moment) {
   return out;
 }
 
+/**
+ * Each year's opening marks, dated the close they are: the day before the year
+ * opens. For the holdings the price service has no history for.
+ *
+ * Only the first year's marks reached the daily walk, so with 2024 to 2026
+ * imported, TBH — a delisted stub IBKR marked at 0.40 on 31 December 2025 — was
+ * carried at the 0.94 it was bought for, and 2026 opened $135 high: the % view
+ * since the account began read 49.9% where IBKR's years compound to 50.9%.
+ * A ticker split after the year opened is left out, since a statement may
+ * already state its opening in after-split shares; those are priced by the
+ * price service anyway.
+ */
+export function openingMarksByYear(records) {
+  const splits = allSplits(records ?? []);
+  const out = {};
+  for (const record of records ?? []) {
+    if (!record?.openingMarks || !DATE_ONLY.test(record.from ?? '')) continue;
+    const date = new Date(Date.parse(`${record.from}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+    for (const [ticker, price] of Object.entries(record.openingMarks)) {
+      if (!(price > 0) || splitFactor(splits, ticker, `${record.from} 00:00:00`) !== 1) continue;
+      (out[ticker] ??= []).push({ date, price });
+    }
+  }
+  return out;
+}
+
 const money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**

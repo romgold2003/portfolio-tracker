@@ -114,20 +114,20 @@ function allTimeHighMark(high, colour) {
 
 /**
  * Draws the account curve: its value in dollars, or with `mode` '%' its return
- * since the window began (core/returnCurve.js). The % view needs the imported
+ * since the account began (core/returnCurve.js). The % view needs the imported
  * history; without it the dollar curve is drawn, and the returned `mode`
  * says which one is on screen.
  */
 export function renderCurve(timeframe, mode = '$') {
   const canvas = document.getElementById('curve');
   if (!canvas) return null;
-  const pct = mode === '%' ? percentSeries(timeframe) : null;
+  const pct = mode === '%' ? percentSeries() : null;
   const series = pct ?? curveSeries(timeframe);
   const { labels, data } = series;
   const c = chartColors();
   // The star is the best the account has ever done, which a window's return does not show.
   const high = pct ? null : series.allTimeHigh;
-  // Green above the start of the window, red below it.
+  // Green above where the account started, red below it.
   const line = pct ? (pct.returnPct >= 0 ? c.green : c.red) : c.curve;
   const signed = (v, digits) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(digits)}%`;
 

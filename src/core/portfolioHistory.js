@@ -209,6 +209,29 @@ export function cashFlowMarkers(history) {
  * before it; `from` null means the whole history. Null when the window holds no
  * day with a balance before it to measure from.
  */
+/**
+ * One day's growth, money moved that day counted as arriving halfway through it.
+ *
+ *   growth = 1 + (value − before − flow) / (before + flow / 2)
+ *
+ * The profit is the change less the money moved; the base is the day before
+ * plus half of it. Interactive Brokers measures a day this way. Counting a
+ * deposit at the close instead (the money earned nothing that day) read 2025 at
+ * 19.45% where IBKR says 20.36%, because a $3,031 deposit landed on 10 April, a
+ * 5% fall on a $12,000 account; counting it at the open read 21.08%. Halfway
+ * reads 20.35%, and the account since it began 50.85% against IBKR's 50.94%.
+ * A deposit with no profit still moves nothing: value = before + flow gives 1.
+ *
+ * `atClose` is the part of the flow that arrived at the close and earned nothing
+ * of the day — an account joining the combined view with money already in it,
+ * valued at that day's close — so it stays out of the base.
+ */
+export function dayGrowth(before, value, flow = 0, atClose = 0) {
+  const f = Number(flow) || 0;
+  const base = before + (f - (Number(atClose) || 0)) / 2;
+  return base > 0 ? 1 + (value - before - f) / base : (value - f) / before;
+}
+
 export function periodReturnFromHistory(rows, from, to) {
   let growth = 1;
   let startValue = null;
@@ -236,7 +259,7 @@ export function periodReturnFromHistory(rows, from, to) {
     if (!(prev.totalAccountValue > 0)) continue;
     if (startValue == null) startValue = prev.totalAccountValue;
     const flow = Number(row.externalCashFlow) || 0;
-    growth *= (row.totalAccountValue - flow) / prev.totalAccountValue;
+    growth *= dayGrowth(prev.totalAccountValue, row.totalAccountValue, flow, row.joinedAtClose);
     paidIn += flow;
     endValue = row.totalAccountValue;
   }
@@ -370,6 +393,8 @@ export function combineHistories(histories) {
         const value = Number(own.totalAccountValue ?? own.value) || 0;
         const joins = !cursor.last && date > firstDay && value - flow > 0 ? value - flow : 0;
         row.externalCashFlow += flow + joins;
+        // Valued at the close it joined on: no part of that day is its own (dayGrowth).
+        if (joins) row.joinedAtClose = round((row.joinedAtClose ?? 0) + joins);
         row.deposit += (Number(own.deposit) || Math.max(flow, 0)) + joins;
         row.withdrawal += Number(own.withdrawal) || Math.min(flow, 0);
         cursor.last = { ...own, totalAccountValue: value };

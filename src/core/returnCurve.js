@@ -1,15 +1,17 @@
+import { dayGrowth } from './portfolioHistory.js';
+
 /**
- * The account's return over a window, day by day, for the % view of the chart.
+ * The account's return, day by day, for the % view of the chart.
  *
- * Asked for in October 2026: the same curve as the dollar one, read as the
- * percentage made since the window began. It is the time-weighted return the
- * broker reports — each day's change in value, less the money paid in or taken
- * out that day, over the day before, compounded — so a deposit lifts the dollar
- * curve and leaves this one where it was. Its last point is the window's return
- * in the KPI below the chart (periodReturnFromHistory), measured identically.
+ * Asked for in October 2026, and shown since the account began. It is the
+ * time-weighted return the broker reports — each day's profit, less the money
+ * paid in or taken out that day, over the day before (dayGrowth), compounded —
+ * so a deposit lifts the dollar curve and leaves this one where it was. A
+ * window's last point is that window's return as periodReturnFromHistory
+ * measures it.
  *
- * Checked against every IBKR statement Romy downloaded from 28 August to 14
- * October: tests/return-curve.test.mjs.
+ * Checked against every IBKR statement Romy downloaded — 2024, 2025 and
+ * thirteen of 2026 — in tests/return-curve.test.mjs.
  */
 
 /**
@@ -33,7 +35,7 @@ export function returnCurve(rows, from = null) {
     const prev = list[i - 1].totalAccountValue;
     const row = list[i];
     // A day the account held nothing has no return; the curve carries on flat.
-    if (prev > 0) growth *= (row.totalAccountValue - (Number(row.externalCashFlow) || 0)) / prev;
+    if (prev > 0) growth *= dayGrowth(prev, row.totalAccountValue, row.externalCashFlow, row.joinedAtClose);
     out.push({ date: row.date, pct: (growth - 1) * 100, value: row.totalAccountValue });
   }
   return out;

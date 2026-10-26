@@ -37,7 +37,7 @@ import { splitEvents } from '../../core/splits.js';
 import { appTradeEvents } from '../../core/appTrades.js';
 import { dayBreakdown } from '../../core/dayBreakdown.js';
 import { renderDailyLog } from './dailyLog.js';
-import { allSplits, historyGaps, gapInWindow } from '../../features/statementLibrary.js';
+import { allSplits, historyGaps, gapInWindow, openingMarksByYear } from '../../features/statementLibrary.js';
 import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
@@ -380,25 +380,23 @@ export function pricedThrough() { return pricedThroughDay; }
 let backfillRetryAt = 0;
 let backfillAttempts = 0;
 
-/** The curve in the mode chosen, and the $/% button saying which is on screen. */
-function drawCurve() {
+/** The curve in the mode chosen, and the $ and % buttons saying which is on screen. */
+export function drawCurve() {
   const drawn = renderCurve(ui.timeframe, ui.curveMode);
-  const btn = document.getElementById('curveModeBtn');
-  if (!btn) return;
   const on = drawn?.mode === '%';
-  btn.classList.toggle('active', on);
-  btn.setAttribute('aria-pressed', String(on));
+  for (const btn of document.querySelectorAll('.curve-mode')) {
+    const mine = btn.dataset.mode === (on ? '%' : '$');
+    btn.classList.toggle('active', mine);
+    btn.setAttribute('aria-pressed', String(mine));
+  }
   // Asked for and not drawn: the daily history it is measured from is not there yet.
-  btn.title = ui.curveMode === '%' && !on
-    ? 'The return view needs the daily history — still loading, or no statement imported'
-    : on ? 'Show the account value in $' : 'Show the return in %';
-  document.getElementById('curve')?.setAttribute('aria-label', on ? 'Account return over time, in percent' : 'Account value over time');
-}
-
-/** The % button on the chart: the window's return day by day, or back to dollars. */
-export function toggleCurveMode() {
-  ui.curveMode = ui.curveMode === '%' ? '$' : '%';
-  drawCurve();
+  const pctBtn = document.querySelector('.curve-mode[data-mode="%"]');
+  if (pctBtn) {
+    pctBtn.title = ui.curveMode === '%' && !on
+      ? 'The return view needs the daily history — still loading, or no statement imported'
+      : 'Return since the account began, in %';
+  }
+  document.getElementById('curve')?.setAttribute('aria-label', on ? 'Account return since it began, in percent' : 'Account value over time');
 }
 
 /**
@@ -545,7 +543,7 @@ async function loadBackfill() {
           ...appTradeEvents(state.positions, ledger.to),
         ],
         priceOn: pastPrice,
-        lastKnown: datedMarks(ledger),
+        lastKnown: datedMarks(ledger, state.statements),
         from: earliest,
         to: historyEnd(),
       }))
@@ -660,7 +658,7 @@ function journalDays(journal, earliest) {
         ...appTradeEvents(state.positions.filter((p) => p.account === journal.id), ledger.to),
       ],
       priceOn: pastPrice,
-      lastKnown: datedMarks(ledger),
+      lastKnown: datedMarks(ledger, journal.statements),
       from: earliest,
       to: historyEnd(journal.statements),
     }));
@@ -726,15 +724,21 @@ function earliestInterest() {
 /**
  * The prices we know for a ticker without asking anyone, with their dates.
  *
- * The statement's opening mark, then the price of every trade in it. Dated,
+ * The statement's opening mark, each later year's opening mark
+ * (openingMarksByYear), then the price of every trade in it. Dated,
  * because "the last price we ever saw" values a holding on every past day at a
  * price from its future — a delisted stub marked at 0.40 on the thirty-first of
  * December and sold at 0.70 in April was carried at 0.70 all year.
  */
-function datedMarks(ledger) {
+function datedMarks(ledger, statements = []) {
   const out = {};
   for (const [ticker, price] of Object.entries(ledger.openingMarks ?? {})) {
     if (price > 0) out[ticker] = [{ date: ledger.from, price }];
+  }
+  for (const [ticker, marks] of Object.entries(openingMarksByYear(statements))) {
+    // The first year's are the ledger's own, above.
+    const later = marks.filter((m) => m.date >= ledger.from);
+    if (later.length) (out[ticker] ??= []).push(...later);
   }
   for (const event of ledger.events ?? []) {
     if (event.kind !== 'trade' || !(event.price > 0) || !event.ticker) continue;

@@ -31,7 +31,7 @@ import {
 import { baseQtyOf, todayStr } from '../core/portfolio.js';
 import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
-import { renderHome, toggleAmounts, toggleCurveMode } from '../ui/views/home.js';
+import { renderHome, toggleAmounts, drawCurve } from '../ui/views/home.js';
 import { toggleDailyLog } from '../ui/views/dailyLog.js';
 import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
@@ -680,11 +680,23 @@ export function setPosSort(key) {
  * though it had been earned.
  */
 export function setTimeframe(tf) {
+  // The % view is the account since it began, so any shorter window is in dollars.
+  if (tf !== 'All') ui.curveMode = '$';
   ui.timeframe = tf;
   document.querySelectorAll('.tf').forEach((x) => x.classList.toggle('active', x.dataset.tf === tf));
   const label = el('kRetLbl');
   if (label) label.textContent = tf;
   show('home');
+}
+
+/**
+ * The $ and % buttons on the home chart. % is the return since the account
+ * began, so it always shows All; $ keeps whichever window is selected.
+ */
+export function setCurveMode(mode) {
+  ui.curveMode = mode === '%' ? '%' : '$';
+  if (ui.curveMode === '%' && ui.timeframe !== 'All') setTimeframe('All');
+  else drawCurve();
 }
 
 export function setDir(direction) { setDirection(direction); }
@@ -834,7 +846,7 @@ export function installActions(extra = {}) {
     // sub-accounts
     toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
-    show, toggleTools, toggleTheme, toggleVoice, toggleAmounts, toggleDailyLog, toggleCurveMode,
+    show, toggleTools, toggleTheme, toggleVoice, toggleAmounts, toggleDailyLog, setCurveMode,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
     openFavorites, closeFavorites,

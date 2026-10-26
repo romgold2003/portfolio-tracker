@@ -420,15 +420,15 @@ export function curveSeries(timeframe) {
 }
 
 /**
- * The % view of the chart: the account's time-weighted return since the window
- * began, one point a day (core/returnCurve.js). Drawn from the forward-walked
+ * The % view of the chart: the account's time-weighted return since it began,
+ * one point a day (core/returnCurve.js). Always the whole life of the account —
+ * Romy's choice, so the % view is only ever All. Drawn from the forward-walked
  * history only — the one checked against the broker's statements — since a
  * recorded snapshot does not know which of its moves were deposits. Null when
  * there is no such history to draw.
  */
-export function percentSeries(timeframe) {
-  const from = timeframe === 'All' ? null : cutoffFor(timeframe).toISOString().slice(0, 10);
-  const points = returnCurve(forward, from);
+export function percentSeries() {
+  const points = returnCurve(forward);
   if (points.length < 2) return null;
   const dates = points.map((p) => p.date);
   return {
