@@ -121,7 +121,9 @@ export function companyHtml(c, today, forecasts = {}) {
     const beat = actual != null && forecast ? ((actual - forecast) / Math.abs(forecast)) * 100 : null;
     return `<span class="earn-k">${label}</span>
       <span class="earn-fc">${fmt(forecast, cur)}</span>
-      <span class="earn-act">${actual == null ? '<span class="earn-muted">—</span>'
+      <span class="earn-act">${actual == null
+        // Released, and this figure not yet with Yahoo: SoFi's revenue came hours before its EPS.
+        ? `<span class="earn-muted">${v.reported ? 'not out yet' : '—'}</span>`
         : `<b>${fmt(actual, cur)}</b>${beat != null ? ` <span class="${tone(beat)}">${pctText(beat)}</span>` : ''}`}</span>`;
   };
   return `<div class="earn-row${v.reported ? ' is-new' : ''}">${head}

@@ -47,7 +47,7 @@ function sessionOf(sec) {
  * quarter's, and the year-ago revenue the quarter four back. `next` is the
  * coming report, only when it falls after the last one.
  */
-export function readCompany(symbol, summary, revenue = []) {
+export function readCompany(symbol, summary, revenue = [], now = Date.now()) {
   const chart = summary?.earnings?.earningsChart;
   const quarters = (chart?.quarterly ?? []).filter((q) => raw(q.actual) != null);
   const q = quarters[quarters.length - 1];
@@ -80,6 +80,48 @@ export function readCompany(symbol, summary, revenue = []) {
   const nextSec = raw(cal?.earningsDate?.[0]);
   const nextDate = iso(nextSec);
   const trend = (summary?.earningsTrend?.trend ?? []).find((t) => t.period === '0q');
+
+  /**
+   * A quarter whose revenue is out before its EPS.
+   *
+   * Yahoo's revenue chart takes a release within the hour; its EPS can take
+   * the rest of the day. SoFi reported on 27 October before the open, and two
+   * hours on Yahoo had its $1.371B revenue and not yet its EPS, so the panel,
+   * keyed on EPS, still showed the forecast alone. A newer quarter in the
+   * revenue chart, on a report day already reached, is that report: the
+   * revenue now, the EPS when it comes.
+   */
+  const order = (label) => { const m = /^(\d)Q(\d{4})$/.exec(label ?? ''); return m ? Number(m[2]) * 4 + Number(m[1]) : -1; };
+  const fin = summary?.earnings?.financialsChart?.quarterly ?? [];
+  const newest = fin.reduce((best, f) => (order(f.date) > order(best?.date) ? f : best), null);
+  const today = new Date(now).toISOString().slice(0, 10);
+  if (newest && raw(newest.revenue) != null && order(newest.date) > order(q?.date) && nextDate && nextDate <= today) {
+    // The quarter's own end: the analysts' current quarter, until Yahoo moves on from it.
+    const step = order(newest.date) - order(q?.date);
+    const shifted = q ? new Date(Date.parse(iso(raw(q.periodEndDate))) + step * 91.3 * DAY) : null;
+    const periodEnd = trend?.endDate && (!last?.periodEnd || trend.endDate > last.periodEnd)
+      ? trend.endDate
+      : shifted ? shifted.toISOString().slice(0, 10) : null;
+    // The fiscal name moves with the calendar one: Microsoft's 3Q2025 was its Q1 FY26.
+    const fiscalStep = q ? order(q.fiscalQuarter) - order(q.date) : 0;
+    const n = order(newest.date) + fiscalStep;
+    const fiscal = `${((n - 1) % 4) + 1}Q${Math.floor((n - 1) / 4)}`;
+    const rev = raw(newest.revenue);
+    const yearAgo = periodEnd ? near(new Date(Date.parse(periodEnd) - 365 * DAY).toISOString().slice(0, 10), 20)?.value ?? null : null;
+    last = {
+      quarter: fiscalLabel(fiscal),
+      periodEnd,
+      reported: nextDate,
+      eps: null,
+      epsEst: raw(trend?.earningsEstimate?.avg) ?? raw(cal?.earningsAverage),
+      epsSurprise: null,
+      revenue: rev,
+      revenueYearAgo: yearAgo,
+      revenueYoY: pct(rev, yearAgo),
+      // Yahoo has the revenue and not yet the EPS.
+      epsPending: true,
+    };
+  }
   // Yahoo's own flag: the company has not confirmed the day yet, and its time of day means nothing.
   const estimated = Boolean(cal?.isEarningsDateEstimate ?? chart?.isEarningsDateEstimate);
   /**

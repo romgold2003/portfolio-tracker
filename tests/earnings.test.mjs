@@ -45,6 +45,30 @@ describe('one company, from Yahoo', () => {
     assert.ok(next.revenueEst > 2e10 && next.epsEst > 0);
   });
 
+  test('SoFi, 27 October: the whole quarter once Yahoo has it', () => {
+    const s = company('SOFI');
+    assert.deepEqual([s.last.quarter, s.last.periodEnd, s.last.reported, s.last.eps], ['Q3 FY26', '2026-09-30', '2026-10-27', 0.18]);
+    assert.equal(s.last.revenue, 1371124000);
+    assert.equal(s.next.periodEnd, '2026-12-31', 'and the next quarter forecast');
+  });
+
+  test('revenue out before EPS: the report shows at once, its EPS when it comes (SoFi, two hours in)', () => {
+    // As Yahoo had it two hours after the release: the revenue chart with the
+    // September quarter, the EPS chart still ending in June.
+    const summary = structuredClone(yahoo.SOFI.summary);
+    summary.earnings.earningsChart.quarterly = summary.earnings.earningsChart.quarterly.filter((q) => q.date !== '3Q2026');
+    summary.earningsTrend.trend = summary.earningsTrend.trend.map((t) => (t.period === '0q'
+      ? { ...t, endDate: '2026-09-30', earningsEstimate: { avg: { raw: 0.16752 } }, revenueEstimate: { avg: { raw: 1264367430 } } } : t));
+    const s = readCompany('SOFI', summary, readRevenueSeries(yahoo.SOFI.series), Date.parse('2026-10-27T14:00:00Z'));
+    assert.deepEqual([s.last.quarter, s.last.periodEnd, s.last.reported], ['Q3 FY26', '2026-09-30', '2026-10-27']);
+    assert.equal(s.last.revenue, 1371124000);
+    assert.equal(s.last.eps, null);
+    assert.equal(s.last.epsEst, 0.16752);
+    // The day before, the same answer is not a report: nothing was due yet.
+    const before = readCompany('SOFI', summary, readRevenueSeries(yahoo.SOFI.series), Date.parse('2026-10-26T14:00:00Z'));
+    assert.equal(before.last.quarter, 'Q2 FY26');
+  });
+
   test("a company's own currency: ASML reports in euros", () => {
     assert.equal(company('ASML').currency, 'EUR');
     assert.equal(company('MSFT').currency, 'USD');
@@ -146,6 +170,14 @@ describe('the panel', () => {
     // Revenue against the forecast kept; EPS against Yahoo's consensus at the report.
     assert.deepEqual(cells(tsla), [['Revenue', '$29.3B', '$28.0B −4.3%'], ['EPS', '$0.451', '$0.48 +6.4%']]);
     assert.deepEqual(cells(companyHtml(company('TSLA'), '2026-10-28', kept))[0], ['Revenue', '$29.3B', '$28.0B −4.3%'], 'day seven');
+  });
+
+  test('released with a figure still on its way: it says so rather than a bare dash', async () => {
+    const { companyHtml } = await import('../src/ui/views/earnings.js');
+    const sofi = { symbol: 'SOFI', name: 'SoFi Technologies, Inc.', currency: 'USD', next: null,
+      last: { quarter: 'Q3 FY26', periodEnd: '2026-09-30', reported: '2026-10-27', eps: null, epsEst: 0.16752, revenue: 1371124000, epsPending: true } };
+    const kept = { 'SOFI|2026-09-30': { rev: 1264367430, eps: 0.16752 } };
+    assert.deepEqual(cells(companyHtml(sofi, '2026-10-27', kept)), [['Revenue', '$1.26B', '$1.37B +8.4%'], ['EPS', '$0.168', 'not out yet']]);
   });
 
   test('then it goes, and only the next forecast shows', async () => {
