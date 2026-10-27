@@ -10,7 +10,7 @@
  * while it is on screen. Data: api/_lib/earnings.js.
  */
 import { state, setEarningsWatch, EARNINGS_WATCH_MAX } from '../../core/store.js';
-import { earningsFor, nasdaqList, estimateFor } from '../../services/earnings.js';
+import { earningsFor, nasdaqList, estimateFor, earningsProblem } from '../../services/earnings.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
 
@@ -126,12 +126,18 @@ export async function renderEarnings() {
   }
   if (!host.children.length || host.querySelector('.earn-empty')) host.innerHTML = '<div class="earn-muted earn-none">Loading earnings…</div>';
   const companies = await earningsFor(chosen);
-  if (!companies) { host.innerHTML = '<div class="earn-muted earn-none">Earnings are unavailable right now.</div>'; return; }
+  if (!companies) { host.innerHTML = unavailable('Earnings are unavailable right now'); return; }
   // Only the companies still chosen: one could have been unticked while this loaded.
   const now = state.earningsWatch ?? [];
   const today = todayIso();
   host.innerHTML = orderCompanies(companies.filter((c) => now.includes(c.symbol)), today)
     .map((c) => companyHtml(c, today, estimateFor(c.symbol, c.last?.periodEnd))).join('');
+}
+
+/** A failure, with the reason the server gave, so it can be acted on rather than guessed at. */
+function unavailable(what) {
+  const why = earningsProblem();
+  return `<div class="earn-muted earn-none">${escapeHtml(what)}${why ? ` — ${escapeHtml(why)}` : ''}.</div>`;
 }
 
 /* ───────────────────────── the picker ───────────────────────── */
@@ -163,7 +169,7 @@ function drawOptions() {
   el('earnPickedNote').textContent = `${chosen.length} chosen${chosen.length >= EARNINGS_WATCH_MAX ? ` — ${EARNINGS_WATCH_MAX} at most` : ''}`;
   el('earnOptions').innerHTML = list
     ? optionsHtml(list, chosen, el('earnSearch').value)
-    : '<div class="earn-muted earn-none">Nasdaq\'s list is unavailable right now.</div>';
+    : unavailable('Nasdaq\'s list is unavailable right now');
 }
 
 function bind() {

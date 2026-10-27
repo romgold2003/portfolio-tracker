@@ -73,6 +73,24 @@ describe("Nasdaq's list", () => {
   });
 });
 
+describe('when Nasdaq does not answer the server', () => {
+  test("the picker still has the list: the copy kept in the repository (Vercel's first day)", async () => {
+    const { nasdaqCompanies } = await import('../api/_lib/earnings.js');
+    const refused = async () => { throw new Error('fetch failed'); };
+    const list = await nasdaqCompanies(refused);
+    assert.ok(list.length > 3000, `${list.length} companies`);
+    for (const s of ['GOOGL', 'GOOG', 'MSFT', 'AAPL', 'NVDA']) assert.ok(list.some((c) => c.s === s), s);
+    const names = list.map((c) => c.n);
+    assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })));
+  });
+
+  test('and says why when even that fails, rather than only that it did', () => {
+    const view = readFileSync(new URL('../src/ui/views/earnings.js', import.meta.url), 'utf8');
+    assert.match(view, /unavailable\('Nasdaq\\'s list is unavailable right now'\)/);
+    assert.match(view, /\$\{why \? ` — \$\{escapeHtml\(why\)\}` : ''\}/);
+  });
+});
+
 describe('the panel', () => {
   globalThis.localStorage ??= { getItem: () => null, setItem: () => {} };
 

@@ -10,6 +10,15 @@ import { cloudEnabled } from './cloud.js';
 const CACHE_MS = 2 * 60 * 1000;
 let cache = { key: '', at: 0, companies: null };
 let listCache = null;
+let problem = '';
+
+/** Why the last request failed, in the server's words, for the panel to say. */
+export function earningsProblem() { return problem; }
+
+/** The server's own reason, when it gave one. */
+async function reasonOf(res) {
+  try { return (await res.json())?.error || `the server answered ${res.status}`; } catch { return `the server answered ${res.status}`; }
+}
 
 /** Each company's last report and next date, in the order asked, or null. */
 export async function earningsFor(symbols) {
@@ -18,13 +27,14 @@ export async function earningsFor(symbols) {
   if (cache.key === key && cache.companies && Date.now() - cache.at < CACHE_MS) return cache.companies;
   try {
     const res = await fetch(`/api/earnings?symbols=${encodeURIComponent(key)}`, { credentials: 'same-origin' });
-    if (!res.ok) return cache.key === key ? cache.companies : null;
+    if (!res.ok) { problem = await reasonOf(res); return cache.key === key ? cache.companies : null; }
     const { companies } = await res.json();
     if (!Array.isArray(companies)) return null;
     for (const c of companies) rememberEstimate(c);
     cache = { key, at: Date.now(), companies };
     return companies;
-  } catch {
+  } catch (err) {
+    problem = err.message;
     return cache.key === key ? cache.companies : null;
   }
 }
@@ -35,11 +45,12 @@ export async function nasdaqList() {
   if (!cloudEnabled()) return null;
   try {
     const res = await fetch('/api/earnings?list=nasdaq', { credentials: 'same-origin' });
-    if (!res.ok) return null;
+    if (!res.ok) { problem = await reasonOf(res); return null; }
     const { companies } = await res.json();
     if (Array.isArray(companies) && companies.length) listCache = companies;
     return listCache;
-  } catch {
+  } catch (err) {
+    problem = err.message;
     return null;
   }
 }

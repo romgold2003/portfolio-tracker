@@ -152,11 +152,11 @@ let session = null;
 /** A Yahoo cookie and crumb, kept for a few hours and renewed when refused. */
 async function yahooSession(fetcher, renew = false) {
   if (!renew && session && Date.now() - session.at < SESSION_MS) return session;
-  const first = await fetcher('https://fc.yahoo.com', { headers: { 'User-Agent': UA }, redirect: 'manual' });
+  const first = await fetcher('https://fc.yahoo.com', { headers: { 'User-Agent': UA }, redirect: 'manual', signal: AbortSignal.timeout(8000) });
   const cookies = (first.headers.getSetCookie?.() ?? [first.headers.get('set-cookie')].filter(Boolean))
     .map((c) => c.split(';')[0]).join('; ');
   if (!cookies) throw new Error('Yahoo gave no session.');
-  const crumbRes = await fetcher('https://query2.finance.yahoo.com/v1/test/getcrumb', { headers: { 'User-Agent': UA, Cookie: cookies } });
+  const crumbRes = await fetcher('https://query2.finance.yahoo.com/v1/test/getcrumb', { headers: { 'User-Agent': UA, Cookie: cookies }, signal: AbortSignal.timeout(8000) });
   const crumb = (await crumbRes.text()).trim();
   if (!crumbRes.ok || !crumb || crumb.length > 40) throw new Error('Yahoo gave no crumb.');
   session = { cookie: cookies, crumb, at: Date.now() };
@@ -167,7 +167,7 @@ async function yahooJson(fetcher, url) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const s = await yahooSession(fetcher, attempt > 0);
     const res = await fetcher(`${url}${url.includes('?') ? '&' : '?'}crumb=${encodeURIComponent(s.crumb)}`, {
-      headers: { 'User-Agent': UA, Cookie: s.cookie, Accept: 'application/json' },
+      headers: { 'User-Agent': UA, Cookie: s.cookie, Accept: 'application/json' }, signal: AbortSignal.timeout(10000),
     });
     if (res.status === 401 || res.status === 403) continue;
     if (!res.ok) throw new Error(`Yahoo answered ${res.status}.`);
@@ -198,13 +198,28 @@ export async function companyEarnings(symbol, fetcher = fetch) {
 
 let listed = { at: 0, list: null };
 
-/** Every company listed on Nasdaq, alphabetical, refreshed daily. */
+/**
+ * Every company listed on Nasdaq, alphabetical, refreshed daily.
+ *
+ * From Nasdaq's directory when it answers, and otherwise from the copy kept in
+ * the repository (nasdaqListed.js, `npm run refresh:nasdaq`): on the day the
+ * picker shipped the directory answered from a laptop and not from Vercel,
+ * and the picker said the list was unavailable. A failed attempt is not
+ * retried for an hour, so the copy serves at once in the meantime.
+ */
 export async function nasdaqCompanies(fetcher = fetch) {
-  if (listed.list && Date.now() - listed.at < DAY) return listed.list;
-  const res = await fetcher('https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt', { headers: { 'User-Agent': UA } });
-  if (!res.ok) throw new Error(`Nasdaq answered ${res.status}.`);
-  const list = readNasdaqListed(await res.text());
-  if (list.length < 500) throw new Error('Nasdaq\'s list came back short.');
-  listed = { at: Date.now(), list };
-  return list;
+  if (listed.list && Date.now() - listed.at < (listed.live ? DAY : 60 * 60 * 1000)) return listed.list;
+  try {
+    const res = await fetcher('https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt', {
+      headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`Nasdaq answered ${res.status}.`);
+    const list = readNasdaqListed(await res.text());
+    if (list.length < 500) throw new Error('Nasdaq\'s list came back short.');
+    listed = { at: Date.now(), list, live: true };
+  } catch {
+    const { COMPANIES } = await import('./nasdaqListed.js');
+    listed = { at: Date.now(), list: COMPANIES, live: false };
+  }
+  return listed.list;
 }
