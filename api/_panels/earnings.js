@@ -3,14 +3,14 @@
  * them from (api/_lib/earnings.js).
  *
  *   GET /api/earnings?symbols=GOOGL,MSFT   each company's last report and next date
- *   GET /api/earnings?list=nasdaq          every company listed on Nasdaq
+ *   GET /api/earnings?list=companies       every company on Nasdaq, the NYSE and NYSE American
  *
- * Server-side because neither Yahoo's summary nor Nasdaq's directory can be
+ * Server-side because neither Yahoo's summary nor Nasdaq's directories can be
  * read from the browser.
  */
 import { fail, send, methodIs, readCookies } from '../_lib/http.js';
 import { userForToken } from '../_lib/accounts.js';
-import { companyEarnings, nasdaqCompanies } from '../_lib/earnings.js';
+import { companyEarnings, listedCompanies } from '../_lib/earnings.js';
 
 const SESSION_COOKIE = 'pt_session';
 /** More than anyone reads in one panel, and a bound on what one request can ask of Yahoo. */
@@ -23,8 +23,8 @@ export default async function handler(req, res) {
 
   const url = new URL(req.url, 'http://local');
   try {
-    if (url.searchParams.get('list') === 'nasdaq') {
-      const companies = await nasdaqCompanies();
+    if (url.searchParams.get('list')) {
+      const companies = await listedCompanies();
       return send(res, 200, { companies });
     }
 

@@ -11,7 +11,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { readCompany, readRevenueSeries, readNasdaqListed } from '../api/_lib/earnings.js';
+import { readCompany, readRevenueSeries, readListings } from '../api/_lib/earnings.js';
 
 const yahoo = JSON.parse(readFileSync(new URL('./fixtures/earnings-yahoo.json', import.meta.url), 'utf8'));
 const company = (s) => readCompany(s, yahoo[s].summary, readRevenueSeries(yahoo[s].series));
@@ -54,39 +54,62 @@ describe('one company, from Yahoo', () => {
   });
 });
 
-describe("Nasdaq's list", () => {
-  const list = readNasdaqListed(readFileSync(new URL('./fixtures/nasdaqlisted-sample.txt', import.meta.url), 'utf8'));
+describe('the companies to choose from: Nasdaq, the NYSE and NYSE American', () => {
+  const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
+  const list = readListings({ nasdaq: fixture('nasdaqlisted-sample.txt'), other: fixture('otherlisted-sample.txt') });
+  const symbols = list.map((c) => c.s);
 
-  test('companies only: no funds, test issues, warrants or units', () => {
-    const symbols = list.map((c) => c.s);
+  test('companies only: no funds, test issues, warrants, units, preferred shares or bonds', () => {
     for (const s of ['AAPL', 'GOOGL', 'GOOG', 'MSFT', 'NVDA', 'ASML', 'FLWS']) assert.ok(symbols.includes(s), s);
     for (const s of ['AAAP', 'ZWZZT', 'AACIU', 'ADACW', 'ENRDW']) assert.ok(!symbols.includes(s), s);
+    for (const s of ['SPY', 'ABR$D', 'AAC.U', 'AAC.W', 'ELC']) assert.ok(!symbols.includes(s), s);
+  });
+
+  test('the NYSE too: Oracle was missing from a list of Nasdaq alone (October 2026)', () => {
+    assert.deepEqual(list.find((c) => c.s === 'ORCL'), { s: 'ORCL', n: 'Oracle Corporation', x: 'NYSE' });
+    assert.equal(list.find((c) => c.s === 'KO').n, 'Coca-Cola Company (The)');
+    assert.equal(list.find((c) => c.s === 'TNL').n, 'Travel Leisure Co.');
+    assert.equal(list.find((c) => c.s === 'MSFT').x, 'Nasdaq');
   });
 
   test('alphabetical by name, with the share class where a company lists two', () => {
     const names = list.map((c) => c.n);
     assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })));
     assert.deepEqual(list.filter((c) => c.n === 'Alphabet Inc.').map((c) => [c.s, c.c]), [['GOOG', 'C'], ['GOOGL', 'A']]);
-    assert.equal(list.find((c) => c.s === 'MSFT').n, 'Microsoft Corporation');
+    assert.deepEqual(list.filter((c) => c.n === 'Berkshire Hathaway Inc.').map((c) => [c.s, c.c]), [['BRK.A', 'A'], ['BRK.B', 'B']]);
     // One listing: its class says nothing.
-    assert.deepEqual(list.find((c) => c.s === 'FLWS'), { s: 'FLWS', n: '1-800-FLOWERS.COM, Inc.' });
+    assert.deepEqual(list.find((c) => c.s === 'FLWS'), { s: 'FLWS', n: '1-800-FLOWERS.COM, Inc.', x: 'Nasdaq' });
+  });
+
+  test('a class share is asked of Yahoo the way Yahoo writes it: BRK.B as BRK-B', async () => {
+    const { companyEarnings } = await import('../api/_lib/earnings.js');
+    const asked = [];
+    const fetcher = async (url) => {
+      asked.push(url);
+      if (url.includes('fc.yahoo.com')) return new Response('', { status: 404, headers: { 'set-cookie': 'A3=x; Path=/' } });
+      if (url.includes('getcrumb')) return new Response('crumb1');
+      return new Response(JSON.stringify({ quoteSummary: { result: [{ price: { longName: 'Berkshire Hathaway Inc.' } }] } }));
+    };
+    const c = await companyEarnings('BRK.B', fetcher);
+    assert.equal(c.symbol, 'BRK.B');
+    assert.ok(asked.some((u) => u.includes('/quoteSummary/BRK-B?')), asked.join('\n'));
   });
 });
 
 describe('when Nasdaq does not answer the server', () => {
   test("the picker still has the list: the copy kept in the repository (Vercel's first day)", async () => {
-    const { nasdaqCompanies } = await import('../api/_lib/earnings.js');
+    const { listedCompanies } = await import('../api/_lib/earnings.js');
     const refused = async () => { throw new Error('fetch failed'); };
-    const list = await nasdaqCompanies(refused);
-    assert.ok(list.length > 3000, `${list.length} companies`);
-    for (const s of ['GOOGL', 'GOOG', 'MSFT', 'AAPL', 'NVDA']) assert.ok(list.some((c) => c.s === s), s);
+    const list = await listedCompanies(refused);
+    assert.ok(list.length > 5000, `${list.length} companies`);
+    for (const s of ['GOOGL', 'GOOG', 'MSFT', 'AAPL', 'NVDA', 'ORCL', 'BRK.B', 'JPM']) assert.ok(list.some((c) => c.s === s), s);
     const names = list.map((c) => c.n);
     assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })));
   });
 
   test('and says why when even that fails, rather than only that it did', () => {
     const view = readFileSync(new URL('../src/ui/views/earnings.js', import.meta.url), 'utf8');
-    assert.match(view, /unavailable\('Nasdaq\\'s list is unavailable right now'\)/);
+    assert.match(view, /unavailable\('The list of companies is unavailable right now'\)/);
     assert.match(view, /\$\{why \? ` — \$\{escapeHtml\(why\)\}` : ''\}/);
   });
 });
@@ -122,6 +145,9 @@ describe('the panel', () => {
     assert.match(all, /Alphabet Inc\. <span class="earn-muted">· Class A/);
     assert.deepEqual([...optionsHtml(list, [], 'micro').matchAll(/data-s="(\w+)"/g)].map((m) => m[1]), ['MSFT']);
     assert.deepEqual([...optionsHtml(list, [], 'goo').matchAll(/data-s="(\w+)"/g)].map((m) => m[1]), ['GOOGL']);
+    // The exchange beside the ticker, so an NYSE company reads as one.
+    const nyse = optionsHtml([{ s: 'ORCL', n: 'Oracle Corporation', x: 'NYSE' }], [], 'oracle');
+    assert.match(nyse, /data-s="ORCL"[\s\S]*ORCL <span class="earn-opt-x">NYSE<\/span>/);
   });
 
   test('the companies chosen are kept with the sign-in', async () => {

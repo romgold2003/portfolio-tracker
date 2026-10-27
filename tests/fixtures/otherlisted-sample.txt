@@ -1,0 +1,12 @@
+ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
+AAC.W|Ares Acquisition Corporation III Redeemable warrants, each whole warrant exercisable for one Class A ordinary share at an exercise price of $11.50|N|AAC.WS|N|100|N|AAC+
+BRK.A|Berkshire Hathaway Inc. Common Stock|N|BRK.A|N|1|N|BRK.A
+BRK.B|Berkshire Hathaway Inc. New Common Stock|N|BRK.B|N|40|N|BRK.B
+ELC|Entergy Louisiana, Inc. Collateral Trust Mortgage Bonds, 4.875 % Series due September 1, 2066|N|ELC|N|100|N|ELC
+JPM|JP Morgan Chase & Co. Common Stock|N|JPM|N|40|N|JPM
+KO|Coca-Cola Company (The) Common Stock|N|KO|N|100|N|KO
+ORCL|Oracle Corporation Common Stock|N|ORCL|N|100|N|ORCL
+SPY|State Street SPDR S&P 500 ETF Trust|P|SPY|Y|40|N|SPY
+TNL|Travel   Leisure Co. Common  Stock|N|TNL|N|100|N|TNL
+ABR$D|Arbor Realty Trust 6.375% Series D Cumulative Redeemable Preferred Stock, Liquidation Preference $25.00 per Share|N|ABRpD|N|100|N|ABR-D
+AAC.U|Ares Acquisition Corporation III Units, each consisting of one Class A ordinary share and one-tenth of one redeemable warrant|N|AAC.U|N|100|N|AAC=

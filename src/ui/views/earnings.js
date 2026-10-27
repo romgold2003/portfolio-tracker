@@ -3,14 +3,14 @@
  * (October 2026).
  *
  * Only the companies chosen with the Companies button — every company listed
- * on Nasdaq, alphabetical — and for each: what it last reported, EPS against
+ * on Nasdaq, the NYSE and NYSE American, alphabetical — and for each: what it last reported, EPS against
  * the estimate and revenue against a year earlier (and against the estimate
  * when this device saw it coming), and when it reports next. A report appears
  * here within minutes of its release: the panel asks again every two minutes
  * while it is on screen. Data: api/_lib/earnings.js.
  */
 import { state, setEarningsWatch, EARNINGS_WATCH_MAX } from '../../core/store.js';
-import { earningsFor, nasdaqList, estimateFor, earningsProblem } from '../../services/earnings.js';
+import { earningsFor, companyList, estimateFor, earningsProblem } from '../../services/earnings.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
 
@@ -92,17 +92,17 @@ export function companyHtml(c, today, est = null) {
   return `<div class="earn-row${isNew ? ' is-new' : ''}">${head}${figures}${nextLine}</div>`;
 }
 
-/** The picker's list, alphabetical as Nasdaq's directory comes, filtered by a search. Exported for the tests. */
+/** The picker's list, alphabetical as the server sends it, filtered by a search. Exported for the tests. */
 export function optionsHtml(list, chosen, query = '') {
   const q = query.trim().toLowerCase();
   const picked = new Set(chosen);
   const shown = q
     ? list.filter((c) => c.s.toLowerCase().startsWith(q) || c.n.toLowerCase().includes(q))
     : list;
-  if (!shown.length) return '<div class="earn-muted earn-none">No Nasdaq company matches.</div>';
+  if (!shown.length) return '<div class="earn-muted earn-none">No company matches.</div>';
   return shown.map((c) => `<label class="earn-opt"><input type="checkbox" data-s="${escapeHtml(c.s)}"${picked.has(c.s) ? ' checked' : ''}>
       <span class="earn-opt-name">${escapeHtml(c.n)}${c.c ? ` <span class="earn-muted">· Class ${escapeHtml(c.c)}</span>` : ''}</span>
-      <span class="earn-opt-sym">${escapeHtml(c.s)}</span></label>`).join('');
+      <span class="earn-opt-sym">${escapeHtml(c.s)}${c.x ? ` <span class="earn-opt-x">${escapeHtml(c.x)}</span>` : ''}</span></label>`).join('');
 }
 
 const todayIso = () => {
@@ -150,8 +150,8 @@ async function openPicker() {
   el('earnPickBtn').setAttribute('aria-expanded', 'true');
   el('earnSearch').focus();
   if (!list) {
-    el('earnOptions').innerHTML = '<div class="earn-muted earn-none">Loading Nasdaq companies…</div>';
-    list = await nasdaqList();
+    el('earnOptions').innerHTML = '<div class="earn-muted earn-none">Loading the companies…</div>';
+    list = await companyList();
   }
   drawOptions();
 }
@@ -169,7 +169,7 @@ function drawOptions() {
   el('earnPickedNote').textContent = `${chosen.length} chosen${chosen.length >= EARNINGS_WATCH_MAX ? ` — ${EARNINGS_WATCH_MAX} at most` : ''}`;
   el('earnOptions').innerHTML = list
     ? optionsHtml(list, chosen, el('earnSearch').value)
-    : unavailable('Nasdaq\'s list is unavailable right now');
+    : unavailable('The list of companies is unavailable right now');
 }
 
 function bind() {

@@ -39,12 +39,12 @@ export async function earningsFor(symbols) {
   }
 }
 
-/** Every company listed on Nasdaq, alphabetical: `[{s, n, c?}]`, or null. */
-export async function nasdaqList() {
+/** Every company on Nasdaq, the NYSE and NYSE American, alphabetical: `[{s, n, x, c?}]`, or null. */
+export async function companyList() {
   if (listCache) return listCache;
   if (!cloudEnabled()) return null;
   try {
-    const res = await fetch('/api/earnings?list=nasdaq', { credentials: 'same-origin' });
+    const res = await fetch('/api/earnings?list=companies', { credentials: 'same-origin' });
     if (!res.ok) { problem = await reasonOf(res); return null; }
     const { companies } = await res.json();
     if (Array.isArray(companies) && companies.length) listCache = companies;

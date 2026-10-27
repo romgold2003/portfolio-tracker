@@ -114,7 +114,8 @@
   content-visibility:auto;contain-intrinsic-size:auto 30px}
 .earn-opt:hover{background:var(--input)}
 .earn-opt-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
-.earn-opt-sym{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums}
+.earn-opt-sym{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.earn-opt-x{font-size:9px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text4);margin-left:3px}
 .fed-meeting{font-size:11px;color:var(--text2);text-transform:none;letter-spacing:0}
 .fed-body{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap}
 .fed-bars{display:flex;align-items:flex-end;gap:10px;flex:none;flex-wrap:wrap}
