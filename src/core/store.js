@@ -69,7 +69,31 @@ export const state = {
    * never counted in any account's value.
    */
   cryptoTrades: [],
+  /**
+   * The companies whose earnings the News page follows (views/earnings.js),
+   * as tickers. Kept with the sign-in, like the crypto journal.
+   */
+  earningsWatch: [],
 };
+
+/** At most this many companies followed, which is one request's worth (api/_panels/earnings.js). */
+export const EARNINGS_WATCH_MAX = 40;
+
+/** Tickers as stored: upper case, each once, in the order chosen. */
+function cleanWatch(list) {
+  const out = [];
+  for (const t of Array.isArray(list) ? list : []) {
+    const s = typeof t === 'string' ? t.trim().toUpperCase() : '';
+    if (/^[A-Z][A-Z.-]{0,9}$/.test(s) && !out.includes(s)) out.push(s);
+  }
+  return out.slice(0, EARNINGS_WATCH_MAX);
+}
+
+/** Replace the companies followed for earnings and save them with the sign-in. */
+export function setEarningsWatch(list) {
+  state.earningsWatch = cleanWatch(list);
+  scheduleFlush();
+}
 
 export const FAVORITE_SLOTS = 5;
 
@@ -721,6 +745,7 @@ export function loadState(journal) {
     book = readBook(source);
     state.favoriteDesigns = sanitizeFavorites(source.favoriteDesigns);
     state.cryptoTrades = cleanTrades(source.cryptoTrades);
+    state.earningsWatch = cleanWatch(source.earningsWatch);
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -740,6 +765,7 @@ export function journalSnapshot() {
     cashModel: SHORT_CASH_MODEL,
     favoriteDesigns: state.favoriteDesigns,
     cryptoTrades: state.cryptoTrades,
+    earningsWatch: state.earningsWatch,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -762,6 +788,7 @@ export function clearState() {
   state.combined = false;
   state.favoriteDesigns = [];
   state.cryptoTrades = [];
+  state.earningsWatch = [];
   announceJournal();
 }
 

@@ -32,6 +32,7 @@ const PANELS = {
   options: () => import('../_panels/options.js'),
   weekstart: () => import('../_panels/weekstart.js'),
   whales: () => import('../_panels/whales.js'),
+  earnings: () => import('../_panels/earnings.js'),
 };
 
 /**

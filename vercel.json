@@ -32,6 +32,10 @@
     {
       "source": "/api/whales",
       "destination": "/api/news/whales"
+    },
+    {
+      "source": "/api/earnings",
+      "destination": "/api/news/earnings"
     }
   ],
   "headers": [

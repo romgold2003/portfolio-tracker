@@ -422,16 +422,31 @@
         empty bars says less than no panel at all.
       -->
       <div class="card fed-card" id="fedCard" style="display:none">
-        <div class="card-lbl">
-          <span>Fed — next decision</span>
-          <span class="fed-meeting" id="fedMeeting"></span>
+        <div class="fed-main" id="fedMain">
+          <div class="card-lbl">
+            <span>Fed — next decision</span>
+            <span class="fed-meeting" id="fedMeeting"></span>
+          </div>
+          <div class="fed-body">
+            <div class="fed-bars" id="fedBars"></div>
+          </div>
+          <!-- What each market says on its own. The bars are the blend, and a
+               blend that hides an eight-point disagreement reads as confidence. -->
+          <div class="fed-sources" id="fedSources"></div>
         </div>
-        <div class="fed-body">
-          <div class="fed-bars" id="fedBars"></div>
+        <!-- Earnings and revenue of the companies chosen: src/ui/views/earnings.js. -->
+        <div class="earn-pane" id="earnPane" hidden>
+          <div class="card-lbl">
+            <span>Earnings &amp; revenue</span>
+            <button class="earn-pick-btn" id="earnPickBtn" aria-haspopup="dialog" aria-expanded="false">Companies <span id="earnCount"></span></button>
+          </div>
+          <div class="earn-list" id="earnList"></div>
+          <div class="earn-picker" id="earnPicker" role="dialog" aria-label="Choose the companies to follow" hidden>
+            <input type="search" class="earn-search" id="earnSearch" placeholder="Search Nasdaq — name or ticker" autocomplete="off" spellcheck="false">
+            <div class="earn-picker-meta"><span id="earnPickedNote"></span><button class="earn-clear" id="earnClear">Clear all</button></div>
+            <div class="earn-options" id="earnOptions"></div>
+          </div>
         </div>
-        <!-- What each market says on its own. The bars are the blend, and a
-             blend that hides an eight-point disagreement reads as confidence. -->
-        <div class="fed-sources" id="fedSources"></div>
       </div>
 
       <!-- Forecast and previous for the US releases that move rates. -->

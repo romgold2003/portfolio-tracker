@@ -1,0 +1,20 @@
+Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
+AAAP|Pacer Barings CLO Market Flex ETF|G|N|N|100|Y|N
+AACIU|Armada Acquisition Corp. III - Units|G|N|N|100|N|N
+AAPL|Apple Inc. - Common Stock|Q|N|N|40|N|N
+ADACW|American Drive Acquisition Company - Warrant|G|N|N|100|N|N
+ASML|ASML Holding N.V. - New York Registry Shares|Q|N|N|10|N|N
+CCXIU|Churchill Capital Corp XI - Units|G|N|N|100|N|N
+CRAQU|Cal Redwood Acquisition Corp. - Units|G|N|N|100|N|N
+ENRDW|Einride AB - Warrants|S|N|N|100|N|N
+FLDDW|Fold Holdings, Inc. - Warrant|S|N|N|100|N|N
+FLWS|1-800-FLOWERS.COM, Inc. - Class A Common Stock|Q|N|N|100|N|N
+GOOG|Alphabet Inc. - Class C Capital Stock|Q|N|N|40|N|N
+GOOGL|Alphabet Inc. - Class A Common Stock|Q|N|N|40|N|N
+HVMCW|Highview Merger Corp. - Warrants|G|N|N|100|N|N
+LEDRU|Leader's Advantage Acquisition Corp. - Units|G|N|N|100|N|N
+MSFT|Microsoft Corporation - Common Stock|Q|N|N|40|N|N
+NVDA|NVIDIA Corporation - Common Stock|Q|N|N|100|N|N
+SCAGW|Scage Future - Warrants|S|N|N|100|N|N
+TNONW|Tenon Medical, Inc. - Warrant|S|N|N|100|N|N
+ZWZZT|NASDAQ TEST STOCK|S|Y|N|100|N|N

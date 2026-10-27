@@ -15,6 +15,8 @@ import { drawGauges } from './sentimentGauges.js';
 import { optionsProfile } from '../../services/options.js';
 import { renderExposure, currentMarket, setMarket } from './exposure.js';
 import { renderGamble, startGamble, installNewsTabs } from './gamble.js';
+import { renderEarnings, startEarningsRefresh } from './earnings.js';
+import { cloudEnabled } from '../../services/cloud.js';
 // The Crypto half of the Gamble tab. Its own source and its own cadence.
 import { escapeHtml } from '../format.js';
 
@@ -60,8 +62,10 @@ export function renderFedPanel(decision) {
   const bars = el('fedBars');
   if (!card || !bars) return;
 
-  // No answer, no panel. See the note in the markup.
-  card.style.display = decision ? '' : 'none';
+  // No answer, no Fed half; the card stays for the earnings beside it.
+  const main = el('fedMain');
+  if (main) main.hidden = !decision;
+  card.style.display = decision || cloudEnabled() ? '' : 'none';
   if (!decision) return;
 
   const meeting = el('fedMeeting');
@@ -336,6 +340,7 @@ export async function renderNews() {
   const value = (r) => (r.status === 'fulfilled' ? r.value : null);
 
   renderFedPanel(value(fed));
+  renderEarnings();
   renderEconPanel(value(econ));
   drawGauges(value(mood));
   renderExposure(value(opts), pickMarket);
@@ -349,6 +354,7 @@ export async function renderNews() {
   if (document.getElementById('newsGamble')?.hidden === false) renderGamble();
   startGamble();
   startFedRefresh();
+  startEarningsRefresh();
 
   const anything = value(fed) || value(econ) || value(mood) || value(opts);
   const empty = el('newsEmpty');

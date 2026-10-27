@@ -96,6 +96,7 @@ const ROUTES = {
   '/api/options': '../api/_panels/options.js',
   '/api/etf': '../api/_panels/etf.js',
   '/api/whales': '../api/_panels/whales.js',
+  '/api/earnings': '../api/_panels/earnings.js',
   '/api/auth/begin': '../api/_auth/begin.js',
   '/api/auth/signup': '../api/_auth/signup.js',
   '/api/auth/login': '../api/_auth/login.js',
