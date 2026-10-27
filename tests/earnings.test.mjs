@@ -206,15 +206,31 @@ describe('the panel', () => {
   test('the picker: Nasdaq alphabetical, searchable by name or ticker, ticked as chosen', async () => {
     const { optionsHtml } = await import('../src/ui/views/earnings.js');
     const list = [{ s: 'GOOGL', n: 'Alphabet Inc.', c: 'A' }, { s: 'AAPL', n: 'Apple Inc.' }, { s: 'MSFT', n: 'Microsoft Corporation' }];
-    const all = optionsHtml(list, ['MSFT']);
+    const all = optionsHtml(list, []);
     assert.deepEqual([...all.matchAll(/data-s="(\w+)"/g)].map((m) => m[1]), ['GOOGL', 'AAPL', 'MSFT']);
-    assert.match(all, /data-s="MSFT" checked/);
+    assert.match(optionsHtml(list, ['MSFT']), /data-s="MSFT" checked/);
     assert.match(all, /Alphabet Inc\. <span class="earn-muted">· Class A/);
     assert.deepEqual([...optionsHtml(list, [], 'micro').matchAll(/data-s="(\w+)"/g)].map((m) => m[1]), ['MSFT']);
     assert.deepEqual([...optionsHtml(list, [], 'goo').matchAll(/data-s="(\w+)"/g)].map((m) => m[1]), ['GOOGL']);
     // The exchange beside the ticker, so an NYSE company reads as one.
     const nyse = optionsHtml([{ s: 'ORCL', n: 'Oracle Corporation', x: 'NYSE' }], [], 'oracle');
     assert.match(nyse, /data-s="ORCL"[\s\S]*ORCL <span class="earn-opt-x">NYSE<\/span>/);
+  });
+
+  test('ticked companies rise to the top, alphabetical; unticked, each goes back to its place', async () => {
+    const { optionsHtml } = await import('../src/ui/views/earnings.js');
+    const list = [
+      { s: 'GOOGL', n: 'Alphabet Inc.' }, { s: 'AAPL', n: 'Apple Inc.' }, { s: 'MSFT', n: 'Microsoft Corporation' },
+      { s: 'NVDA', n: 'NVIDIA Corporation' }, { s: 'ORCL', n: 'Oracle Corporation' },
+    ];
+    const order = (chosen) => [...optionsHtml(list, chosen).matchAll(/data-s="(\w+)"/g)].map((m) => m[1]);
+    // Ticked in the order Oracle, then Apple: on top they still read alphabetically.
+    assert.deepEqual(order(['ORCL', 'AAPL']), ['AAPL', 'ORCL', 'GOOGL', 'MSFT', 'NVDA']);
+    assert.match(optionsHtml(list, ['ORCL', 'AAPL']), /data-s="ORCL" checked[\s\S]*class="earn-sep">All companies[\s\S]*data-s="GOOGL"/);
+    // Oracle unticked: back between NVIDIA and the end, where it belongs.
+    assert.deepEqual(order(['AAPL']), ['AAPL', 'GOOGL', 'MSFT', 'NVDA', 'ORCL']);
+    assert.deepEqual(order([]), ['GOOGL', 'AAPL', 'MSFT', 'NVDA', 'ORCL']);
+    assert.doesNotMatch(optionsHtml(list, []), /earn-sep/, 'no divider with nothing ticked');
   });
 
   test('the companies chosen are kept with the sign-in', async () => {

@@ -152,16 +152,30 @@ export function matching(list, query = '') {
 /** Rows of the picker, for companies already filtered. Exported for the tests. */
 export function optionRows(companies, chosen) {
   const picked = new Set(chosen);
-  return companies.map((c) => `<label class="earn-opt"><input type="checkbox" data-s="${escapeHtml(c.s)}"${picked.has(c.s) ? ' checked' : ''}>
+  return companies.map((c) => `<label class="earn-opt${picked.has(c.s) ? ' is-picked' : ''}"><input type="checkbox" data-s="${escapeHtml(c.s)}"${picked.has(c.s) ? ' checked' : ''}>
       <span class="earn-opt-name">${escapeHtml(c.n)}${c.c ? ` <span class="earn-muted">· Class ${escapeHtml(c.c)}</span>` : ''}</span>
       <span class="earn-opt-sym">${escapeHtml(c.s)}${c.x ? ` <span class="earn-opt-x">${escapeHtml(c.x)}</span>` : ''}</span></label>`).join('');
 }
 
 /** The picker's list, alphabetical as the server sends it, filtered by a search. Exported for the tests. */
 export function optionsHtml(list, chosen, query = '') {
-  const shown = matching(list, query);
-  return shown.length ? optionRows(shown, chosen) : '<div class="earn-muted earn-none">No company matches.</div>';
+  const shown = chosenFirst(matching(list, query), chosen);
+  if (!shown.length) return '<div class="earn-muted earn-none">No company matches.</div>';
+  const n = shown.filter((c) => chosen.includes(c.s)).length;
+  return optionRows(shown.slice(0, n), chosen) + (n && n < shown.length ? DIVIDER : '') + optionRows(shown.slice(n), chosen);
 }
+
+/**
+ * The companies ticked first, then the rest, each part alphabetical (Romy,
+ * October 2026): a company ticked rises to the top, and unticked it goes back
+ * to its place. Exported for the tests.
+ */
+export function chosenFirst(companies, chosen) {
+  const picked = new Set(chosen);
+  return [...companies.filter((c) => picked.has(c.s)), ...companies.filter((c) => !picked.has(c.s))];
+}
+
+const DIVIDER = '<div class="earn-sep">All companies</div>';
 
 const todayIso = () => {
   const d = new Date();
@@ -231,17 +245,27 @@ function closePicker() {
 const PAGE = 150;
 let found = [];
 let drawn = 0;
+/** How many of `found` are ticked, and so sit above the divider. */
+let pickedCount = 0;
 
-function drawOptions() {
+/**
+ * Draw the list afresh. `keep` holds the scroll where it was and redraws as
+ * far down as had been drawn, so ticking a company deep in the list moves it
+ * to the top without throwing the list back to the start.
+ */
+function drawOptions(keep = false) {
   const chosen = state.earningsWatch ?? [];
   el('earnPickedNote').textContent = `${chosen.length} chosen${chosen.length >= EARNINGS_WATCH_MAX ? ` — ${EARNINGS_WATCH_MAX} at most` : ''}`;
   const host = el('earnOptions');
   if (!list) { host.innerHTML = unavailable('The list of companies is unavailable right now'); return; }
-  found = matching(list, el('earnSearch').value);
+  const scroll = keep ? host.scrollTop : 0;
+  const upTo = keep ? drawn : 0;
+  found = chosenFirst(matching(list, el('earnSearch').value), chosen);
+  pickedCount = found.filter((c) => chosen.includes(c.s)).length;
   drawn = 0;
-  host.scrollTop = 0;
   host.innerHTML = found.length ? '' : '<div class="earn-muted earn-none">No company matches.</div>';
-  drawMore();
+  do drawMore(); while (drawn < upTo && drawn < found.length);
+  host.scrollTop = scroll;
 }
 
 /** The next page, when the end of what is drawn comes into view. */
@@ -249,8 +273,14 @@ function drawMore() {
   if (drawn >= found.length) return;
   const host = el('earnOptions');
   host.querySelector('.earn-more')?.remove();
-  host.insertAdjacentHTML('beforeend', optionRows(found.slice(drawn, drawn + PAGE), state.earningsWatch ?? []));
-  drawn = Math.min(drawn + PAGE, found.length);
+  const chosen = state.earningsWatch ?? [];
+  const end = Math.min(drawn + PAGE, found.length);
+  // The divider between the ticked companies and the rest, where this page crosses it.
+  const split = pickedCount && pickedCount < found.length && drawn <= pickedCount && pickedCount < end ? pickedCount : null;
+  host.insertAdjacentHTML('beforeend', split == null
+    ? optionRows(found.slice(drawn, end), chosen)
+    : optionRows(found.slice(drawn, split), chosen) + DIVIDER + optionRows(found.slice(split, end), chosen));
+  drawn = end;
   if (drawn < found.length) {
     host.insertAdjacentHTML('beforeend', `<div class="earn-more earn-muted">${drawn.toLocaleString('en-US')} of ${found.length.toLocaleString('en-US')} — scroll for more, or search</div>`);
   }
@@ -264,7 +294,7 @@ function bind() {
   pane.dataset.bound = '1';
   el('earnPickBtn').addEventListener('click', () => (el('earnPicker').hidden ? openPicker() : closePicker()));
   // Drawn once typing pauses, not on every key.
-  el('earnSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(drawOptions, 120); });
+  el('earnSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => drawOptions(), 120); });
   el('earnOptions').addEventListener('scroll', (e) => {
     const box = e.currentTarget;
     if (box.scrollTop + box.clientHeight > box.scrollHeight - 400) drawMore();
@@ -279,7 +309,8 @@ function bind() {
       chosen.push(box.dataset.s);
     }
     setEarningsWatch(chosen);
-    el('earnPickedNote').textContent = `${chosen.length} chosen`;
+    // Ticked to the top, unticked back to its place.
+    drawOptions(true);
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePicker(); });
   document.addEventListener('click', (e) => {
