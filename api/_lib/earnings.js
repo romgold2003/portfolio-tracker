@@ -82,14 +82,23 @@ export function readCompany(symbol, summary, revenue = []) {
   const trend = (summary?.earningsTrend?.trend ?? []).find((t) => t.period === '0q');
   // Yahoo's own flag: the company has not confirmed the day yet, and its time of day means nothing.
   const estimated = Boolean(cal?.isEarningsDateEstimate ?? chart?.isEarningsDateEstimate);
-  const next = nextDate && (!last?.reported || nextDate > last.reported)
+  /**
+   * The quarter coming: its forecast always, from the analysts' trend for the
+   * current quarter, and its day once Yahoo has one after the last report.
+   * Tesla reported on 21 October with no next day set, and its December
+   * quarter was already forecast; that forecast is what the panel shows.
+   */
+  const dated = nextDate && (!last?.reported || nextDate > last.reported);
+  const periodEnd = trend?.endDate ?? null;
+  const ahead = periodEnd && (!last?.periodEnd || periodEnd > last.periodEnd);
+  const next = ahead || dated
     ? {
-      date: nextDate,
-      session: estimated ? null : sessionOf(nextSec),
-      estimated,
-      periodEnd: trend?.endDate ?? null,
-      epsEst: raw(cal?.earningsAverage),
-      revenueEst: raw(cal?.revenueAverage),
+      date: dated ? nextDate : null,
+      session: dated && !estimated ? sessionOf(nextSec) : null,
+      estimated: dated ? estimated : false,
+      periodEnd: ahead ? periodEnd : null,
+      epsEst: (ahead ? raw(trend?.earningsEstimate?.avg) : null) ?? (dated ? raw(cal?.earningsAverage) : null),
+      revenueEst: (ahead ? raw(trend?.revenueEstimate?.avg) : null) ?? (dated ? raw(cal?.revenueAverage) : null),
     }
     : null;
 

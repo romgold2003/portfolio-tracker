@@ -74,6 +74,13 @@ export const state = {
    * as tickers. Kept with the sign-in, like the crypto journal.
    */
   earningsWatch: [],
+  /**
+   * What each followed company's coming quarter was forecast to bring, as
+   * 'TICKER|period end' → {rev, eps}. Yahoo drops a quarter's revenue forecast
+   * the moment the company reports, so it is kept from before, with the
+   * sign-in, for the panel to set the actual figures beside for a week.
+   */
+  earningsForecasts: {},
 };
 
 /** At most this many companies followed, which is one request's worth (api/_panels/earnings.js). */
@@ -92,6 +99,50 @@ function cleanWatch(list) {
 /** Replace the companies followed for earnings and save them with the sign-in. */
 export function setEarningsWatch(list) {
   state.earningsWatch = cleanWatch(list);
+  state.earningsForecasts = cleanForecasts(state.earningsForecasts, state.earningsWatch);
+  scheduleFlush();
+}
+
+const FORECAST_KEY = /^([A-Z][A-Z.-]{0,9})\|(\d{4}-\d{2}-\d{2})$/;
+const figure = (v) => (Number.isFinite(v) ? v : null);
+
+/** Forecasts as stored: followed companies only, their three latest quarters at most. */
+function cleanForecasts(map, watch) {
+  const byTicker = new Map();
+  for (const [key, v] of Object.entries(map && typeof map === 'object' ? map : {})) {
+    const m = FORECAST_KEY.exec(key);
+    if (!m || (watch && !watch.includes(m[1]))) continue;
+    const entry = { rev: figure(v?.rev), eps: figure(v?.eps) };
+    if (entry.rev == null && entry.eps == null) continue;
+    if (!byTicker.has(m[1])) byTicker.set(m[1], []);
+    byTicker.get(m[1]).push([key, entry]);
+  }
+  const out = {};
+  for (const list of byTicker.values()) {
+    for (const [key, entry] of list.sort(([a], [b]) => b.localeCompare(a)).slice(0, 3)) out[key] = entry;
+  }
+  return out;
+}
+
+/**
+ * Note each company's forecast for its coming quarter. Saved only when one is
+ * new or has moved by more than a tenth of a per cent, so a page asking every
+ * two minutes does not write every two minutes.
+ */
+export function rememberForecasts(companies) {
+  const map = { ...state.earningsForecasts };
+  let changed = false;
+  const moved = (a, b) => (a == null) !== (b == null) || (a != null && Math.abs(a - b) > Math.abs(b) * 0.001);
+  for (const c of companies ?? []) {
+    const n = c?.next;
+    if (!n?.periodEnd || (n.revenueEst == null && n.epsEst == null)) continue;
+    const key = `${c.symbol}|${n.periodEnd}`;
+    const old = map[key];
+    const entry = { rev: figure(n.revenueEst) ?? old?.rev ?? null, eps: figure(n.epsEst) ?? old?.eps ?? null };
+    if (!old || moved(entry.rev, old.rev) || moved(entry.eps, old.eps)) { map[key] = entry; changed = true; }
+  }
+  if (!changed) return;
+  state.earningsForecasts = cleanForecasts(map, state.earningsWatch);
   scheduleFlush();
 }
 
@@ -746,6 +797,7 @@ export function loadState(journal) {
     state.favoriteDesigns = sanitizeFavorites(source.favoriteDesigns);
     state.cryptoTrades = cleanTrades(source.cryptoTrades);
     state.earningsWatch = cleanWatch(source.earningsWatch);
+    state.earningsForecasts = cleanForecasts(source.earningsForecasts, state.earningsWatch);
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -766,6 +818,7 @@ export function journalSnapshot() {
     favoriteDesigns: state.favoriteDesigns,
     cryptoTrades: state.cryptoTrades,
     earningsWatch: state.earningsWatch,
+    earningsForecasts: state.earningsForecasts,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -789,6 +842,7 @@ export function clearState() {
   state.favoriteDesigns = [];
   state.cryptoTrades = [];
   state.earningsWatch = [];
+  state.earningsForecasts = {};
   announceJournal();
 }
 

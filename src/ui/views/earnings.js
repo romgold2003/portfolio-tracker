@@ -2,22 +2,21 @@
  * Earnings and revenue on the News page, beside the Fed's next decision
  * (October 2026).
  *
- * Only the companies chosen with the Companies button — every company listed
- * on Nasdaq, the NYSE and NYSE American, alphabetical — and for each: what it last reported, EPS against
- * the estimate and revenue against a year earlier (and against the estimate
- * when this device saw it coming), and when it reports next. A report appears
- * here within minutes of its release: the panel asks again every two minutes
- * while it is on screen. Data: api/_lib/earnings.js.
+ * Only the companies chosen with the Companies button — every company on
+ * Nasdaq, the NYSE and NYSE American, alphabetical — and for each only this:
+ * the revenue and EPS forecast for the coming quarter, and once it reports,
+ * the actual figures beside the forecast for seven days, after which the next
+ * quarter's forecast takes its place. A report appears within minutes of its
+ * release: the panel asks again every two minutes while it is on screen.
+ * Data: api/_lib/earnings.js.
  */
 import { state, setEarningsWatch, EARNINGS_WATCH_MAX } from '../../core/store.js';
-import { earningsFor, companyList, estimateFor, earningsProblem } from '../../services/earnings.js';
+import { earningsFor, companyList, earningsProblem } from '../../services/earnings.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
 const DAY = 86400000;
-/** A report this recent is marked new. */
-const NEW_DAYS = 2;
 const REFRESH_MS = 2 * 60 * 1000;
 
 const SYMBOL = { USD: '$', EUR: '€', GBP: '£', JPY: '¥', CNY: '¥', INR: '₹' };
@@ -45,51 +44,81 @@ function perShare(n, currency = 'USD') {
 const dayLabel = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
 
+/** How long a report's actual figures stay beside its forecast (Romy, October 2026). */
+const SHOWN_DAYS = 7;
+
 /**
- * The order the companies are listed in: a report from the last week first,
- * newest on top; then the ones reporting next, soonest first; then the rest by
- * when they last reported.
+ * What a company shows: for seven days after it reports, the quarter's
+ * forecast beside its actual figures; otherwise the coming quarter's
+ * forecast, and nothing else. `forecasts` are the ones kept before the report
+ * (store.rememberForecasts), since Yahoo drops a quarter's revenue forecast the
+ * moment it reports. Exported for the tests.
  */
-export function orderCompanies(companies, today) {
-  const recent = (c) => c.last?.reported && daysBetween(c.last.reported, today) <= 7;
-  const rank = (c) => (recent(c) ? 0 : c.next ? 1 : 2);
-  return [...companies].sort((a, b) => rank(a) - rank(b)
-    || (rank(a) === 1 ? a.next.date.localeCompare(b.next.date) : (b.last?.reported ?? '').localeCompare(a.last?.reported ?? ''))
-    || a.symbol.localeCompare(b.symbol));
+export function companyView(c, today, forecasts = {}) {
+  const last = c.last;
+  const age = last?.reported ? daysBetween(last.reported, today) : null;
+  if (age != null && age >= 0 && age <= SHOWN_DAYS) {
+    const kept = forecasts[`${c.symbol}|${last.periodEnd}`];
+    return {
+      reported: true,
+      date: last.reported,
+      quarter: last.quarter,
+      revenue: { forecast: kept?.rev ?? null, actual: last.revenue },
+      // Yahoo's own consensus at the report, which is what a beat is measured against.
+      eps: { forecast: last.epsEst ?? kept?.eps ?? null, actual: last.eps },
+    };
+  }
+  const n = c.next;
+  return {
+    reported: false,
+    date: n?.date ?? null,
+    session: n?.session ?? null,
+    estimated: Boolean(n?.estimated),
+    revenue: { forecast: n?.revenueEst ?? null, actual: null },
+    eps: { forecast: n?.epsEst ?? null, actual: null },
+  };
 }
 
-/** One company. `est` is what the quarter was expected to bring, if remembered. Exported for the tests. */
-export function companyHtml(c, today, est = null) {
+/**
+ * The order the companies are listed in: a report from the last week first,
+ * newest on top; then the ones reporting next, soonest first, and those with
+ * no day yet last.
+ */
+export function orderCompanies(companies, today, forecasts = {}) {
+  const key = (c) => {
+    const v = companyView(c, today, forecasts);
+    return v.reported ? `0${9999 - daysBetween('2000-01-01', v.date)}` : v.date ? `1${v.date}` : '2';
+  };
+  return [...companies].sort((a, b) => key(a).localeCompare(key(b)) || a.symbol.localeCompare(b.symbol));
+}
+
+/** One company: forecast, and the actual figures beside it once out. Exported for the tests. */
+export function companyHtml(c, today, forecasts = {}) {
   const cur = c.currency ?? 'USD';
-  const last = c.last;
-  const isNew = last?.reported && daysBetween(last.reported, today) <= NEW_DAYS;
+  const v = companyView(c, today, forecasts);
+  const when = v.reported
+    ? `<span class="earn-new">Released</span><span class="earn-when">${escapeHtml(dayLabel(v.date))} · ${escapeHtml(v.quarter ?? '')}</span>`
+    : `<span class="earn-when">${v.date ? `Reports ${v.estimated ? '~' : ''}${escapeHtml(dayLabel(v.date))}${v.session ? ` ${escapeHtml(v.session)}` : ''}` : 'Date not set'}</span>`;
   const head = `<div class="earn-head">
       <span class="earn-sym">${escapeHtml(c.symbol)}</span>
       <span class="earn-name">${escapeHtml(c.name ?? '')}</span>
-      ${isNew ? '<span class="earn-new">New</span>' : ''}
-      ${last ? `<span class="earn-when">${escapeHtml(last.quarter)} · ${escapeHtml(dayLabel(last.reported))}</span>` : ''}
+      ${c.missing ? '' : when}
     </div>`;
-
   if (c.missing) return `<div class="earn-row">${head}<div class="earn-line earn-muted">No earnings found for this ticker.</div></div>`;
 
-  let figures = '';
-  if (last) {
-    const epsLine = `<span class="earn-k">EPS</span> <b>${perShare(last.eps, cur)}</b>`
-      + (last.epsEst != null ? ` <span class="earn-muted">vs ${perShare(last.epsEst, cur)} est</span>` : '')
-      + (last.epsSurprise != null ? ` <span class="${tone(last.epsSurprise)}">${pctText(last.epsSurprise)}</span>` : '');
-    const vsEst = est?.rev && last.revenue != null ? ((last.revenue - est.rev) / est.rev) * 100 : null;
-    const revLine = `<span class="earn-k">Revenue</span> <b>${money(last.revenue, cur)}</b>`
-      + (last.revenueYoY != null ? ` <span class="${tone(last.revenueYoY)}">${pctText(last.revenueYoY)} y/y</span>` : '')
-      + (vsEst != null ? ` <span class="earn-muted">vs ${money(est.rev, cur)} est</span> <span class="${tone(vsEst)}">${pctText(vsEst)}</span>` : '');
-    figures = `<div class="earn-line">${epsLine}</div><div class="earn-line">${revLine}</div>`;
-  }
-
-  const n = c.next;
-  const nextLine = n
-    ? `<div class="earn-line earn-next"><span class="earn-k">Next</span> ${n.estimated ? '~' : ''}${escapeHtml(dayLabel(n.date))}${n.session ? ` ${escapeHtml(n.session)}` : ''}${
-      n.epsEst != null ? ` · EPS est ${perShare(n.epsEst, cur)}` : ''}${n.revenueEst != null ? ` · Revenue est ${money(n.revenueEst, cur)}` : ''}</div>`
-    : '';
-  return `<div class="earn-row${isNew ? ' is-new' : ''}">${head}${figures}${nextLine}</div>`;
+  const row = (label, { forecast, actual }, fmt) => {
+    const beat = actual != null && forecast ? ((actual - forecast) / Math.abs(forecast)) * 100 : null;
+    return `<span class="earn-k">${label}</span>
+      <span class="earn-fc">${fmt(forecast, cur)}</span>
+      <span class="earn-act">${actual == null ? '<span class="earn-muted">—</span>'
+        : `<b>${fmt(actual, cur)}</b>${beat != null ? ` <span class="${tone(beat)}">${pctText(beat)}</span>` : ''}`}</span>`;
+  };
+  return `<div class="earn-row${v.reported ? ' is-new' : ''}">${head}
+    <div class="earn-grid">
+      <span></span><span class="earn-col">Forecast</span><span class="earn-col">Actual</span>
+      ${row('Revenue', v.revenue, money)}
+      ${row('EPS', v.eps, perShare)}
+    </div></div>`;
 }
 
 /** The picker's list, alphabetical as the server sends it, filtered by a search. Exported for the tests. */
@@ -130,8 +159,9 @@ export async function renderEarnings() {
   // Only the companies still chosen: one could have been unticked while this loaded.
   const now = state.earningsWatch ?? [];
   const today = todayIso();
-  host.innerHTML = orderCompanies(companies.filter((c) => now.includes(c.symbol)), today)
-    .map((c) => companyHtml(c, today, estimateFor(c.symbol, c.last?.periodEnd))).join('');
+  const kept = state.earningsForecasts ?? {};
+  host.innerHTML = orderCompanies(companies.filter((c) => now.includes(c.symbol)), today, kept)
+    .map((c) => companyHtml(c, today, kept)).join('');
 }
 
 /** A failure, with the reason the server gave, so it can be acted on rather than guessed at. */

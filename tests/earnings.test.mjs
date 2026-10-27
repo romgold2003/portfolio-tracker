@@ -38,8 +38,11 @@ describe('one company, from Yahoo', () => {
     assert.ok(m.next.epsEst > 4 && m.next.revenueEst > 8e10);
   });
 
-  test('no next report once the last one is the latest Yahoo knows', () => {
-    assert.equal(company('TSLA').next, null);
+  test('the coming quarter is forecast even before its day is set', () => {
+    const next = company('TSLA').next;
+    assert.equal(next.date, null, 'Tesla had no next day on 27 October');
+    assert.equal(next.periodEnd, '2026-12-31');
+    assert.ok(next.revenueEst > 2e10 && next.epsEst > 0);
   });
 
   test("a company's own currency: ASML reports in euros", () => {
@@ -123,17 +126,60 @@ describe('the panel', () => {
     assert.deepEqual(order, ['TSLA', 'MSFT', 'ASML']);
   });
 
-  test('a company reads as figures, in its own currency, and against the estimate this device saw', async () => {
+  // What Romy asked for (27 October 2026): the forecast; the actual beside it
+  // for seven days once released; then the next forecast alone.
+  const cells = (html) => [...html.matchAll(/<span class="earn-k">(\w+)<\/span>\s*<span class="earn-fc">([^<]*)<\/span>\s*<span class="earn-act">([\s\S]*?)<\/span>\s*(?=<span class="earn-k">|<\/div>)/g)]
+    .map((m) => [m[1], m[2], m[3].replace(/<[^>]+>/g, '').trim()]);
+
+  test('before the report: the forecast, and no actual yet', async () => {
     const { companyHtml } = await import('../src/ui/views/earnings.js');
-    const tsla = companyHtml(company('TSLA'), '2026-10-22');
-    assert.match(tsla, /TSLA[\s\S]*Tesla, Inc\.[\s\S]*class="earn-new">New/);
-    assert.match(tsla, /EPS<\/span> <b>\$0\.48<\/b> <span class="earn-muted">vs \$0\.45 est<\/span> <span class="is-up">\+6\.4%<\/span>/);
-    assert.match(tsla, /Revenue<\/span> <b>\$28\.0B<\/b> <span class="is-down">−0\.2% y\/y<\/span>/);
-    const withEst = companyHtml(company('TSLA'), '2026-10-27', { rev: 29.3e9 });
-    assert.match(withEst, /vs \$29\.3B est<\/span> <span class="is-down">−4\.3%/);
-    assert.doesNotMatch(withEst, /earn-new/, 'six days on, no longer new');
-    assert.match(companyHtml(company('ASML'), '2026-10-27'), /<b>€11\.7B<\/b>/);
-    assert.match(companyHtml(company('MSFT'), '2026-10-27'), /Next<\/span> 28 Oct after close · EPS est \$4\.72 · Revenue est \$90\.7B/);
+    const msft = companyHtml(company('MSFT'), '2026-10-27');
+    assert.match(msft, /Reports 28 Oct after close/);
+    assert.deepEqual(cells(msft), [['Revenue', '$90.7B', '—'], ['EPS', '$4.72', '—']]);
+  });
+
+  test('for seven days after it: the actual beside the forecast kept from before', async () => {
+    const { companyHtml } = await import('../src/ui/views/earnings.js');
+    const kept = { 'TSLA|2026-09-30': { rev: 29.3e9, eps: 0.5 } };
+    const tsla = companyHtml(company('TSLA'), '2026-10-22', kept);
+    assert.match(tsla, /class="earn-new">Released<\/span><span class="earn-when">21 Oct · Q3 FY26/);
+    // Revenue against the forecast kept; EPS against Yahoo's consensus at the report.
+    assert.deepEqual(cells(tsla), [['Revenue', '$29.3B', '$28.0B −4.3%'], ['EPS', '$0.45', '$0.48 +6.4%']]);
+    assert.deepEqual(cells(companyHtml(company('TSLA'), '2026-10-28', kept))[0], ['Revenue', '$29.3B', '$28.0B −4.3%'], 'day seven');
+  });
+
+  test('then it goes, and only the next forecast shows', async () => {
+    const { companyHtml } = await import('../src/ui/views/earnings.js');
+    const tsla = companyHtml(company('TSLA'), '2026-10-29');
+    assert.doesNotMatch(tsla, /Released|\$28\.0B/);
+    assert.match(tsla, /Date not set/);
+    assert.deepEqual(cells(tsla).map(([k, , a]) => [k, a]), [['Revenue', '—'], ['EPS', '—']]);
+    assert.ok(cells(tsla).every(([, f]) => f !== '—'), 'the December quarter is forecast');
+  });
+
+  test('a company followed only after its report has no revenue forecast to show, and says so plainly', async () => {
+    const { companyHtml } = await import('../src/ui/views/earnings.js');
+    assert.deepEqual(cells(companyHtml(company('TSLA'), '2026-10-22'))[0], ['Revenue', '—', '$28.0B']);
+  });
+
+  test('in its own currency: ASML in euros', async () => {
+    const { companyHtml } = await import('../src/ui/views/earnings.js');
+    const kept = { 'ASML|2026-09-30': { rev: 11e9 } };
+    assert.match(companyHtml(company('ASML'), '2026-10-15', kept), /<b>€11\.7B<\/b>/);
+  });
+
+  test('forecasts are kept with the sign-in, for the followed companies, and not rewritten on every poll', async () => {
+    const { state, loadState, journalSnapshot, setEarningsWatch, rememberForecasts } = await import('../src/core/store.js');
+    loadState({ positions: [], cash: 0 });
+    setEarningsWatch(['MSFT']);
+    rememberForecasts([company('MSFT'), company('TSLA')]);
+    const key = 'MSFT|2026-09-30';
+    assert.deepEqual(Object.keys(state.earningsForecasts), [key], 'Tesla is not followed');
+    const before = state.earningsForecasts;
+    rememberForecasts([company('MSFT')]);
+    assert.equal(state.earningsForecasts, before, 'nothing moved, nothing written');
+    loadState(JSON.parse(JSON.stringify(journalSnapshot())));
+    assert.ok(state.earningsForecasts[key].rev > 8e10);
   });
 
   test('the picker: Nasdaq alphabetical, searchable by name or ticker, ticked as chosen', async () => {

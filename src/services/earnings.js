@@ -5,6 +5,7 @@
  * Never throws — a panel on a page about something else.
  */
 import { cloudEnabled } from './cloud.js';
+import { rememberForecasts } from '../core/store.js';
 
 /** The endpoint keeps each company five minutes; asking faster returns the same. */
 const CACHE_MS = 2 * 60 * 1000;
@@ -30,7 +31,8 @@ export async function earningsFor(symbols) {
     if (!res.ok) { problem = await reasonOf(res); return cache.key === key ? cache.companies : null; }
     const { companies } = await res.json();
     if (!Array.isArray(companies)) return null;
-    for (const c of companies) rememberEstimate(c);
+    // Each coming quarter's forecast, kept for when the actual figures land.
+    rememberForecasts(companies);
     cache = { key, at: Date.now(), companies };
     return companies;
   } catch (err) {
@@ -53,34 +55,4 @@ export async function companyList() {
     problem = err.message;
     return null;
   }
-}
-
-/**
- * The estimates a quarter was expected to come in at, remembered on this device.
- *
- * Yahoo drops a quarter's revenue estimate the moment it reports, so the panel
- * notes what the coming quarter is expected to bring and, once it has
- * reported, compares the figures with that. A company followed only after it
- * reported has none, and its revenue is shown against the year before only.
- */
-const EST_KEY = 'earn-est';
-
-function readEstimates() {
-  try { return JSON.parse(localStorage.getItem(EST_KEY) ?? '{}') ?? {}; } catch { return {}; }
-}
-
-function rememberEstimate(company) {
-  const next = company?.next;
-  if (!next?.periodEnd || (next.revenueEst == null && next.epsEst == null)) return;
-  const all = readEstimates();
-  all[`${company.symbol}|${next.periodEnd}`] = { rev: next.revenueEst, eps: next.epsEst };
-  // Two years of quarters for forty companies is plenty; the oldest go first.
-  const keys = Object.keys(all);
-  for (const k of keys.slice(0, Math.max(0, keys.length - 320))) delete all[k];
-  try { localStorage.setItem(EST_KEY, JSON.stringify(all)); } catch { /* private window */ }
-}
-
-/** What the quarter just reported was expected to bring, if this device saw it coming. */
-export function estimateFor(symbol, periodEnd) {
-  return periodEnd ? readEstimates()[`${symbol}|${periodEnd}`] ?? null : null;
 }
