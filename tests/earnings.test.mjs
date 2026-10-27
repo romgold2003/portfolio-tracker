@@ -144,7 +144,7 @@ describe('the panel', () => {
     const tsla = companyHtml(company('TSLA'), '2026-10-22', kept);
     assert.match(tsla, /class="earn-new">Released<\/span><span class="earn-when">21 Oct · Q3 FY26/);
     // Revenue against the forecast kept; EPS against Yahoo's consensus at the report.
-    assert.deepEqual(cells(tsla), [['Revenue', '$29.3B', '$28.0B −4.3%'], ['EPS', '$0.45', '$0.48 +6.4%']]);
+    assert.deepEqual(cells(tsla), [['Revenue', '$29.3B', '$28.0B −4.3%'], ['EPS', '$0.451', '$0.48 +6.4%']]);
     assert.deepEqual(cells(companyHtml(company('TSLA'), '2026-10-28', kept))[0], ['Revenue', '$29.3B', '$28.0B −4.3%'], 'day seven');
   });
 
@@ -160,6 +160,17 @@ describe('the panel', () => {
   test('a company followed only after its report has no revenue forecast to show, and says so plainly', async () => {
     const { companyHtml } = await import('../src/ui/views/earnings.js');
     assert.deepEqual(cells(companyHtml(company('TSLA'), '2026-10-22'))[0], ['Revenue', '—', '$28.0B']);
+  });
+
+  test("figures exact enough to check against another site: SoFi's $1.264B and $0.1675", async () => {
+    // At one decimal and two they read $1.3B and $0.17, and looked wrong
+    // beside the $1.25B and $0.162 another site quoted (27 October 2026).
+    const { companyHtml, money } = await import('../src/ui/views/earnings.js');
+    const sofi = { symbol: 'SOFI', name: 'SoFi Technologies, Inc.', currency: 'USD', last: null,
+      next: { date: '2026-10-27', session: 'before open', periodEnd: '2026-09-30', epsEst: 0.16752, revenueEst: 1264367430 } };
+    assert.deepEqual(cells(companyHtml(sofi, '2026-10-26')), [['Revenue', '$1.26B', '—'], ['EPS', '$0.168', '—']]);
+    assert.equal(money(90735945570), '$90.7B');
+    assert.equal(money(412e6), '$412M');
   });
 
   test('in its own currency: ASML in euros', async () => {

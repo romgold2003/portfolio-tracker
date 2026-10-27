@@ -29,7 +29,8 @@ export function money(n, currency = 'USD') {
   if (n == null) return '—';
   const abs = Math.abs(n);
   const [v, unit] = abs >= 1e12 ? [abs / 1e12, 'T'] : abs >= 1e9 ? [abs / 1e9, 'B'] : abs >= 1e6 ? [abs / 1e6, 'M'] : [abs / 1e3, 'K'];
-  const figure = `${v.toFixed(v >= 100 ? 0 : 1)}${unit}`;
+  // Three significant figures: SoFi's $1.264B forecast read "$1.3B" at one decimal.
+  const figure = `${v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2)}${unit}`;
   const s = SYMBOL[currency];
   return `${n < 0 ? '−' : ''}${s ? `${s}${figure}` : `${figure} ${currency}`}`;
 }
@@ -37,7 +38,10 @@ export function money(n, currency = 'USD') {
 function perShare(n, currency = 'USD') {
   if (n == null) return '—';
   const s = SYMBOL[currency];
-  const figure = Math.abs(n).toFixed(2);
+  // A forecast under a dollar keeps its third decimal (SoFi's $0.1675 is $0.168,
+  // not $0.17); a reported figure is in whole cents and stays as reported.
+  const cents = Math.abs(n * 100 - Math.round(n * 100)) < 1e-6;
+  const figure = Math.abs(n).toFixed(Math.abs(n) < 1 && !cents ? 3 : 2);
   return `${n < 0 ? '−' : ''}${s ? `${s}${figure}` : `${figure} ${currency}`}`;
 }
 
@@ -115,7 +119,7 @@ export function companyHtml(c, today, forecasts = {}) {
   };
   return `<div class="earn-row${v.reported ? ' is-new' : ''}">${head}
     <div class="earn-grid">
-      <span></span><span class="earn-col">Forecast</span><span class="earn-col">Actual</span>
+      <span></span><span class="earn-col" title="The analysts' average (consensus), from Yahoo Finance. Other sites average other analysts, so their figure can differ a little.">Forecast</span><span class="earn-col">Actual</span>
       ${row('Revenue', v.revenue, money)}
       ${row('EPS', v.eps, perShare)}
     </div></div>`;
