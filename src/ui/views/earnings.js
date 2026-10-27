@@ -46,6 +46,13 @@ function perShare(n, currency = 'USD') {
 }
 
 const dayLabel = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+// "Wed 28 Oct 2026", built by hand: browsers disagree on the comma after the weekday.
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const longDay = (d) => {
+  const t = new Date(`${d}T12:00:00Z`);
+  return `${WEEKDAYS[t.getUTCDay()]} ${t.getUTCDate()} ${MONTHS[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+};
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
 
 /** How long a report's actual figures stay beside its forecast (Romy, October 2026). */
@@ -102,7 +109,7 @@ export function companyHtml(c, today, forecasts = {}) {
   const v = companyView(c, today, forecasts);
   const when = v.reported
     ? `<span class="earn-new">Released</span><span class="earn-when">${escapeHtml(dayLabel(v.date))} · ${escapeHtml(v.quarter ?? '')}</span>`
-    : `<span class="earn-when">${v.date ? `Reports ${v.estimated ? '~' : ''}${escapeHtml(dayLabel(v.date))}${v.session ? ` ${escapeHtml(v.session)}` : ''}` : 'Date not set'}</span>`;
+    : '';
   const head = `<div class="earn-head">
       <span class="earn-sym">${escapeHtml(c.symbol)}</span>
       <span class="earn-name">${escapeHtml(c.name ?? '')}</span>
@@ -122,20 +129,38 @@ export function companyHtml(c, today, forecasts = {}) {
       <span></span><span class="earn-col" title="The analysts' average (consensus), from Yahoo Finance. Other sites average other analysts, so their figure can differ a little.">Forecast</span><span class="earn-col">Actual</span>
       ${row('Revenue', v.revenue, money)}
       ${row('EPS', v.eps, perShare)}
-    </div></div>`;
+    </div>${nextReportHtml(c.next)}</div>`;
+}
+
+/**
+ * The day of the next report, under the figures, released or not (Romy,
+ * October 2026). Marked as expected while the company has not confirmed it.
+ */
+function nextReportHtml(n) {
+  const day = n?.date
+    ? `<b>${escapeHtml(longDay(n.date))}</b>${n.session ? ` · ${escapeHtml(n.session)}` : ''}${n.estimated ? ' <span class="earn-muted">(expected, not confirmed)</span>' : ''}`
+    : '<span class="earn-muted">not announced yet</span>';
+  return `<div class="earn-date"><span class="earn-k">Next report</span> ${day}</div>`;
+}
+
+/** The companies a search finds, by ticker or name, in the list's alphabetical order. */
+export function matching(list, query = '') {
+  const q = query.trim().toLowerCase();
+  return q ? list.filter((c) => c.s.toLowerCase().startsWith(q) || c.n.toLowerCase().includes(q)) : list;
+}
+
+/** Rows of the picker, for companies already filtered. Exported for the tests. */
+export function optionRows(companies, chosen) {
+  const picked = new Set(chosen);
+  return companies.map((c) => `<label class="earn-opt"><input type="checkbox" data-s="${escapeHtml(c.s)}"${picked.has(c.s) ? ' checked' : ''}>
+      <span class="earn-opt-name">${escapeHtml(c.n)}${c.c ? ` <span class="earn-muted">· Class ${escapeHtml(c.c)}</span>` : ''}</span>
+      <span class="earn-opt-sym">${escapeHtml(c.s)}${c.x ? ` <span class="earn-opt-x">${escapeHtml(c.x)}</span>` : ''}</span></label>`).join('');
 }
 
 /** The picker's list, alphabetical as the server sends it, filtered by a search. Exported for the tests. */
 export function optionsHtml(list, chosen, query = '') {
-  const q = query.trim().toLowerCase();
-  const picked = new Set(chosen);
-  const shown = q
-    ? list.filter((c) => c.s.toLowerCase().startsWith(q) || c.n.toLowerCase().includes(q))
-    : list;
-  if (!shown.length) return '<div class="earn-muted earn-none">No company matches.</div>';
-  return shown.map((c) => `<label class="earn-opt"><input type="checkbox" data-s="${escapeHtml(c.s)}"${picked.has(c.s) ? ' checked' : ''}>
-      <span class="earn-opt-name">${escapeHtml(c.n)}${c.c ? ` <span class="earn-muted">· Class ${escapeHtml(c.c)}</span>` : ''}</span>
-      <span class="earn-opt-sym">${escapeHtml(c.s)}${c.x ? ` <span class="earn-opt-x">${escapeHtml(c.x)}</span>` : ''}</span></label>`).join('');
+  const shown = matching(list, query);
+  return shown.length ? optionRows(shown, chosen) : '<div class="earn-muted earn-none">No company matches.</div>';
 }
 
 const todayIso = () => {
@@ -198,20 +223,52 @@ function closePicker() {
   renderEarnings();
 }
 
+/**
+ * The picker draws a page of companies at a time and the next as it is
+ * scrolled to. All 5,893 at once was some 30,000 elements, and with the
+ * picker open the whole app slowed until the mouse lagged (October 2026).
+ */
+const PAGE = 150;
+let found = [];
+let drawn = 0;
+
 function drawOptions() {
   const chosen = state.earningsWatch ?? [];
   el('earnPickedNote').textContent = `${chosen.length} chosen${chosen.length >= EARNINGS_WATCH_MAX ? ` — ${EARNINGS_WATCH_MAX} at most` : ''}`;
-  el('earnOptions').innerHTML = list
-    ? optionsHtml(list, chosen, el('earnSearch').value)
-    : unavailable('The list of companies is unavailable right now');
+  const host = el('earnOptions');
+  if (!list) { host.innerHTML = unavailable('The list of companies is unavailable right now'); return; }
+  found = matching(list, el('earnSearch').value);
+  drawn = 0;
+  host.scrollTop = 0;
+  host.innerHTML = found.length ? '' : '<div class="earn-muted earn-none">No company matches.</div>';
+  drawMore();
 }
+
+/** The next page, when the end of what is drawn comes into view. */
+function drawMore() {
+  if (drawn >= found.length) return;
+  const host = el('earnOptions');
+  host.querySelector('.earn-more')?.remove();
+  host.insertAdjacentHTML('beforeend', optionRows(found.slice(drawn, drawn + PAGE), state.earningsWatch ?? []));
+  drawn = Math.min(drawn + PAGE, found.length);
+  if (drawn < found.length) {
+    host.insertAdjacentHTML('beforeend', `<div class="earn-more earn-muted">${drawn.toLocaleString('en-US')} of ${found.length.toLocaleString('en-US')} — scroll for more, or search</div>`);
+  }
+}
+
+let searchTimer = 0;
 
 function bind() {
   const pane = el('earnPane');
   if (pane.dataset.bound === '1') return;
   pane.dataset.bound = '1';
   el('earnPickBtn').addEventListener('click', () => (el('earnPicker').hidden ? openPicker() : closePicker()));
-  el('earnSearch').addEventListener('input', drawOptions);
+  // Drawn once typing pauses, not on every key.
+  el('earnSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(drawOptions, 120); });
+  el('earnOptions').addEventListener('scroll', (e) => {
+    const box = e.currentTarget;
+    if (box.scrollTop + box.clientHeight > box.scrollHeight - 400) drawMore();
+  }, { passive: true });
   el('earnClear').addEventListener('click', () => { setEarningsWatch([]); drawOptions(); });
   el('earnOptions').addEventListener('change', (e) => {
     const box = e.target.closest('input[data-s]');

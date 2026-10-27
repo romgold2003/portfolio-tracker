@@ -75,8 +75,8 @@
 
 /* Fed decision panel: three columns whose heights are the odds. Earnings beside it. */
 .fed-card{margin-bottom:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 28px}
-.fed-main{min-width:min(440px,100%)}
-@media (max-width:900px){.fed-card{grid-template-columns:minmax(0,1fr)}}
+.fed-main{min-width:440px}
+@media (max-width:900px){.fed-card{grid-template-columns:minmax(0,1fr)}.fed-main{min-width:0}}
 
 /* Earnings & revenue of the companies chosen, beside the Fed (views/earnings.js). */
 .earn-pane{position:relative;min-width:0;border-left:0.5px solid var(--input);padding-left:24px}
@@ -104,6 +104,9 @@
 .earn-fc{color:var(--text2)}
 .earn-act b{color:var(--text);font-weight:600}
 .earn-act span{font-size:11px}
+.earn-date{font-size:12px;color:var(--text2);margin-top:7px}
+.earn-date b{color:var(--text);font-weight:600}
+.earn-more{font-size:11px;text-align:center;padding:10px 4px}
 .earn-muted{color:var(--text3)}
 .earn-pane .is-up{color:var(--green)}
 .earn-pane .is-down{color:var(--red)}
@@ -114,7 +117,7 @@
   color:var(--text);font:inherit;font-size:13px;padding:7px 10px}
 .earn-picker-meta{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text3);margin:8px 2px 6px}
 .earn-clear{font:inherit;font-size:11px;color:var(--text3);background:none;border:0;cursor:pointer;text-decoration:underline}
-.earn-options{max-height:300px;overflow-y:auto}
+.earn-options{max-height:300px;overflow-y:auto;contain:content;overscroll-behavior:contain}
 .earn-opt{display:flex;align-items:center;gap:9px;padding:6px 4px;border-radius:6px;cursor:pointer;font-size:12px;
   content-visibility:auto;contain-intrinsic-size:auto 30px}
 .earn-opt:hover{background:var(--input)}

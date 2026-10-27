@@ -134,7 +134,7 @@ describe('the panel', () => {
   test('before the report: the forecast, and no actual yet', async () => {
     const { companyHtml } = await import('../src/ui/views/earnings.js');
     const msft = companyHtml(company('MSFT'), '2026-10-27');
-    assert.match(msft, /Reports 28 Oct after close/);
+    assert.match(msft, /Next report<\/span> <b>Wed 28 Oct 2026<\/b> · after close/);
     assert.deepEqual(cells(msft), [['Revenue', '$90.7B', '—'], ['EPS', '$4.72', '—']]);
   });
 
@@ -152,7 +152,7 @@ describe('the panel', () => {
     const { companyHtml } = await import('../src/ui/views/earnings.js');
     const tsla = companyHtml(company('TSLA'), '2026-10-29');
     assert.doesNotMatch(tsla, /Released|\$28\.0B/);
-    assert.match(tsla, /Date not set/);
+    assert.match(tsla, /Next report<\/span> <span class="earn-muted">not announced yet/);
     assert.deepEqual(cells(tsla).map(([k, , a]) => [k, a]), [['Revenue', '—'], ['EPS', '—']]);
     assert.ok(cells(tsla).every(([, f]) => f !== '—'), 'the December quarter is forecast');
   });
@@ -171,6 +171,16 @@ describe('the panel', () => {
     assert.deepEqual(cells(companyHtml(sofi, '2026-10-26')), [['Revenue', '$1.26B', '—'], ['EPS', '$0.168', '—']]);
     assert.equal(money(90735945570), '$90.7B');
     assert.equal(money(412e6), '$412M');
+  });
+
+  test('the day of the next report under the figures, while the last one is still shown too', async () => {
+    const { companyHtml } = await import('../src/ui/views/earnings.js');
+    const kept = { 'TSLA|2026-09-30': { rev: 29.3e9 } };
+    const tsla = { ...company('TSLA'), next: { ...company('TSLA').next, date: '2027-01-27', session: 'after close' } };
+    const html = companyHtml(tsla, '2026-10-22', kept);
+    assert.match(html, /Released[\s\S]*Next report<\/span> <b>Wed 27 Jan 2027<\/b> · after close/);
+    const unconfirmed = { ...tsla, next: { ...tsla.next, estimated: true, session: null } };
+    assert.match(companyHtml(unconfirmed, '2026-10-22', kept), /<b>Wed 27 Jan 2027<\/b> <span class="earn-muted">\(expected, not confirmed\)/);
   });
 
   test('in its own currency: ASML in euros', async () => {
