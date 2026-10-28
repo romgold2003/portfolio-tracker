@@ -61,6 +61,17 @@ function longDay(date) {
  * core/dayBreakdown.js returns, or null when there is no statement to walk.
  * Exported for the tests.
  */
+/**
+ * The stock's own move under a holding whose return was not it, with why: a
+ * trade that day, a short, or money added. The stock's move is the same for
+ * anyone who held it; the percentage above it is this account's.
+ */
+function moveNote(h) {
+  if (h.move == null || Math.abs(h.move - h.pct) < 0.05) return '';
+  const why = h.traded ? 'you traded it that day' : h.short ? 'short: you gain when it falls' : 'shares moved in or out that day';
+  return `<span class="dl-note">Stock ${pct(h.move)} close to close · ${escapeHtml(why)}</span>`;
+}
+
 export function dayDetailHtml(d, breakdown) {
   const head = `<div class="dl-head">
       <button class="dl-back" data-back aria-label="Back to every day">‹ All days</button>
@@ -82,7 +93,7 @@ export function dayDetailHtml(d, breakdown) {
       <span class="dl-tick">${escapeHtml(h.ticker)}</span>
       <span class="dl-bar"><span style="width:${width}%"></span></span>
       <span class="dl-pct">${pct(h.pct)}</span>
-      <span class="dl-usd">${escapeHtml(usd(h.pnl))}</span>
+      <span class="dl-usd">${escapeHtml(usd(h.pnl))}</span>${moveNote(h)}
     </div>`;
   }).join('');
   const rest = Number.isFinite(breakdown.rest) && Math.abs(breakdown.rest) >= 0.5

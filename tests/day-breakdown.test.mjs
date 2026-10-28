@@ -50,6 +50,44 @@ describe('one day, holding by holding', () => {
     assert.equal(bbb.pct, -4);
   });
 
+  describe("the stock's own move beside the position's (October 2026: two accounts, one stock, two percentages)", () => {
+    test('held all day: the two are the same', () => {
+      const [aaa] = dayBreakdown({ walks: [{ opening, events: [] }], priceOn, prev: '2026-10-13', day: '2026-10-14' }).holdings;
+      assert.ok(Math.abs(aaa.move - 10) < 1e-9);
+      assert.ok(Math.abs(aaa.pct - aaa.move) < 1e-9);
+      assert.equal(aaa.traded, false);
+    });
+
+    test('sold in the day: the position made +2%, the stock +5%, and it says the trade is why', async () => {
+      const closes5 = { XYZ: { '2026-10-13': 100, '2026-10-14': 105 } };
+      const walk = { opening: { date: '2026-10-01', cash: 0, holdings: { XYZ: 10 } },
+        events: [{ date: '2026-10-14', ticker: 'XYZ', qty: -10, price: 102, cash: 1020, kind: 'trade' }] };
+      const [xyz] = dayBreakdown({ walks: [walk], priceOn: (t, d) => closes5[t]?.[d] ?? null, prev: '2026-10-13', day: '2026-10-14' }).holdings;
+      assert.ok(Math.abs(xyz.pct - 2) < 1e-9);
+      assert.ok(Math.abs(xyz.move - 5) < 1e-9);
+      assert.equal(xyz.traded, true);
+      globalThis.localStorage ??= { getItem: () => null, setItem: () => {} };
+      const { dayDetailHtml } = await import('../src/ui/views/dailyLog.js');
+      const html = dayDetailHtml({ date: '2026-10-14', prev: '2026-10-13', pct: 2, pnl: 20 }, { holdings: [xyz], rest: 0 });
+      assert.match(html, /class="dl-note">Stock \+5\.00% close to close · you traded it that day/);
+    });
+
+    test('short: the position falls as the stock rises, and it says so', () => {
+      const walk = { opening: { date: '2026-10-01', cash: 0, holdings: { AAA: -10 } }, events: [] };
+      const [aaa] = dayBreakdown({ walks: [walk], priceOn, prev: '2026-10-13', day: '2026-10-14' }).holdings;
+      assert.ok(Math.abs(aaa.pct - -10) < 1e-9);
+      assert.ok(Math.abs(aaa.move - 10) < 1e-9);
+      assert.equal(aaa.short, true);
+    });
+
+    test("a split between the closes is undone in the stock's move", () => {
+      const walk = { opening: { date: '2026-10-01', cash: 0, holdings: { ETHA: 66 } },
+        events: [{ kind: 'split', date: '2026-10-06', ticker: 'ETHA', k: 1 / 3 }] };
+      const [etha] = dayBreakdown({ walks: [walk, walk], priceOn, prev: '2026-10-05', day: '2026-10-06' }).holdings;
+      assert.ok(Math.abs(etha.move - ((61.59 / 3) / 20.43 - 1) * 100) < 1e-9, `${etha.move}`);
+    });
+  });
+
   test('a split that day changes the count, not the result', () => {
     const walk = { opening: { date: '2026-10-01', cash: 0, holdings: { ETHA: 66 } },
       events: [{ kind: 'split', date: '2026-10-06', ticker: 'ETHA', k: 1 / 3 }] };

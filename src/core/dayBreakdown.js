@@ -63,8 +63,45 @@ export function dayBreakdown({ walks, priceOn, prev, day, dayPnl = null }) {
       by.set(t, row);
     }
   }
+  /**
+   * The stock's own move, close to close — the same for anyone who held it —
+   * beside the position's return, which is not: a trade that day counts at its
+   * own price, a short gains on a fall, and money added that day is part of
+   * the base. Two people looking at one stock on one day saw two percentages
+   * and asked which was wrong (October 2026); neither was, and now both show.
+   * A split in between is undone: the shares multiplied as the price divided.
+   */
+  // Each split once, though every account holding the stock carries it.
+  const splits = new Map();
+  for (const walk of walks ?? []) {
+    for (const e of walk?.events ?? []) {
+      if (e?.kind === 'split' && e.k > 0 && e.date > prev && e.date <= day) splits.set(`${e.ticker}|${e.date}`, e);
+    }
+  }
+  const moveOf = (t) => {
+    const p0 = priceOn(t, prev);
+    const p1 = priceOn(t, day);
+    if (!(p0 > 0) || !(p1 > 0)) return null;
+    const k = [...splits.values()].filter((e) => e.ticker === t).reduce((m, e) => m * e.k, 1);
+    return ((p1 * k) / p0 - 1) * 100;
+  };
+  const traded = new Set();
+  const short = new Set();
+  for (const walk of walks ?? []) {
+    if (!walk?.opening?.date) continue;
+    const { start, end, cash } = walkTo(walk, prev, day);
+    for (const t of cash.keys()) traded.add(t);
+    for (const [t, q] of [...start, ...end]) if (q < -1e-9) short.add(t);
+  }
+
   const holdings = [...by.values()]
-    .map((r) => ({ ...r, pct: r.base > 0 ? (r.pnl / r.base) * 100 : 0 }))
+    .map((r) => ({
+      ...r,
+      pct: r.base > 0 ? (r.pnl / r.base) * 100 : 0,
+      move: moveOf(r.ticker),
+      traded: traded.has(r.ticker),
+      short: short.has(r.ticker),
+    }))
     .sort((a, b) => b.pct - a.pct || b.pnl - a.pnl);
   const explained = holdings.reduce((s, r) => s + r.pnl, 0);
   return { holdings, rest: Number.isFinite(dayPnl) ? dayPnl - explained : null };
