@@ -289,7 +289,7 @@ export function renderSectorChart(rows) {
     data: {
       labels: rows.map((r) => r.name),
       datasets: [{
-        data: rows.map((r) => r.value),
+        data: rows.map((r) => r.wedge ?? r.value),
         backgroundColor: rows.map((r) => r.colour),
         // The gap reads as separation between wedges without drawing a stroke.
         borderColor: cssVar('--panel', '#131313'),

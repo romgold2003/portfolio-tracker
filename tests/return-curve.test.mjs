@@ -146,7 +146,15 @@ async function walk(parsedList) {
   });
 }
 
-const latest = locate('MULTI_20260101_20261014.csv');
+/**
+ * The newest of this year's statements, wherever it is kept: the walk is built
+ * from it and checked against every earlier one. Fixed to 14 October, a
+ * statement to 27 October had no curve to be checked against.
+ */
+const latest = PLACES
+  .flatMap((p) => (existsSync(p) ? readdirSync(p).filter((f) => /^MULTI_20260101_\d{8}\.csv$/.test(f)).map((f) => `${p}/${f}`) : []))
+  .sort((a, b) => a.slice(-12).localeCompare(b.slice(-12)))
+  .at(-1);
 const online = async () => {
   try { return (await fetch('https://query1.finance.yahoo.com', { method: 'HEAD' })).status > 0; } catch { return false; }
 };
@@ -184,11 +192,12 @@ describe('against the real statements', async () => {
     const on = (d) => rows.find((r) => r.date === d).totalAccountValue;
     assert.ok(near(on('2025-12-31'), y2025.navChange.endNav, 5), `31 Dec 2025: ${on('2025-12-31')} vs ${y2025.navChange.endNav}`);
     // 2026 within the whole history, as the year inside All, matches as well.
+    const stated = parseIbkrStatement(readFileSync(latest, 'utf8'));
     const y2026 = returnCurve(rows, '2026-01-01').at(-1).pct;
-    assert.ok(near(y2026, 28.5297, 0.1), `2026 inside All: ${y2026.toFixed(3)}%`);
+    assert.ok(near(y2026, stated.twr, 0.1), `2026 inside All: ${y2026.toFixed(3)}% vs IBKR ${stated.twr}%`);
     // The % view: the three years compounded, as IBKR's own since-inception figure.
     const all = returnCurve(rows).at(-1).pct;
-    const ibkr = ((1 + y2024.twr / 100) * (1 + y2025.twr / 100) * 1.285297 - 1) * 100;
+    const ibkr = ((1 + y2024.twr / 100) * (1 + y2025.twr / 100) * (1 + stated.twr / 100) - 1) * 100;
     assert.ok(near(all, ibkr, 0.2), `since the account began: ${all.toFixed(2)}% vs IBKR ${ibkr.toFixed(2)}%`);
   });
 
@@ -205,18 +214,18 @@ describe('against the real statements', async () => {
     const on = (d) => rows.find((r) => r.date === d).totalAccountValue;
     assert.ok(near(on('2024-12-31'), y2024.navChange.endNav, 1), `31 Dec 2024: ${on('2024-12-31')}`);
     assert.ok(near(on('2025-12-31'), y2025.navChange.endNav, 5), `31 Dec 2025: ${on('2025-12-31')}`);
-    assert.ok(near(on('2026-10-14'), y2026.navChange.endNav, 20), `14 Oct 2026: ${on('2026-10-14')}`);
+    assert.ok(near(on(y2026.periodEnd), y2026.navChange.endNav, 20), `${y2026.periodEnd}: ${on(y2026.periodEnd)} vs ${y2026.navChange.endNav}`);
 
     // The return under the chart, for every window ending 14 October: the chart's own figure.
     for (const from of ['2026-10-08', '2026-09-15', '2026-07-15', '2026-04-15', '2026-01-01', '2025-10-15']) {
-      const kpi = periodReturnFromHistory(rows, from, '2026-10-14').returnPct;
-      const chart = returnCurve(rows.filter((r) => r.date <= '2026-10-14'), from).at(-1).pct;
+      const kpi = periodReturnFromHistory(rows, from, y2026.periodEnd).returnPct;
+      const chart = returnCurve(rows.filter((r) => r.date <= y2026.periodEnd), from).at(-1).pct;
       assert.ok(near(kpi, chart, 1e-9), `${from}: KPI ${kpi} vs chart ${chart}`);
     }
 
     // The daily log: its days compound to the chart, year by year.
     for (const [year, statement] of [[2025, y2025], [2026, y2026]]) {
-      const days = dailyReturns(rows).filter((d) => d.date.startsWith(`${year}-`) && d.date <= '2026-10-14');
+      const days = dailyReturns(rows).filter((d) => d.date.startsWith(`${year}-`) && d.date <= y2026.periodEnd);
       const compounded = (days.reduce((g, d) => g * (1 + d.pct / 100), 1) - 1) * 100;
       const end = days.at(-1).date;
       const chart = (growthTo(end) / growthTo(`${year - 1}-12-31`) - 1) * 100;

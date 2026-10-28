@@ -42,7 +42,8 @@ function holdingsIn(name) {
     .filter((p) => p.status === 'Open' && sectorOf(p) === name)
     .map((p) => ({
       ticker: p.ticker,
-      value: Math.abs(posValue(p)),
+      // Signed, as the account counts it: a short is owed, and its sector adds up net.
+      value: posValue(p),
       pnl: unreal(p),
       pct: pctD(unreal(p), costOf(p)),
       dir: p.dir,
@@ -67,7 +68,7 @@ function renderDetail(index) {
 
   if (index < 0 || !rows[index]) {
     centre.innerHTML = `<div class="alloc-centre-val">${money(total)}</div>
-      <div class="alloc-centre-lbl">${rows.length} sector${rows.length === 1 ? '' : 's'}</div>`;
+      <div class="alloc-centre-lbl">Account value</div>`;
     host.innerHTML = `<div class="alloc-detail-head">
         <span class="alloc-detail-title">Allocation</span>
         <span class="alloc-detail-hint">Point at a sector</span>
@@ -101,7 +102,7 @@ function renderDetail(index) {
         <span class="alloc-pct" style="color:${clr(h.pct)}">${fp(h.pct)}</span>
       </div>`).join('')
     // Cash is a real answer to "where is my money", and has no holdings.
-    : `<div class="alloc-empty">Not invested — this is cash sitting in the account.</div>`}
+    : `<div class="alloc-empty">${row.value < 0 ? 'Borrowed — cash below zero, owed to the broker.' : 'Not invested — this is cash sitting in the account.'}</div>`}
     ${holdings.length ? `<div class="alloc-row-lg alloc-total">
       <span class="alloc-tk">Sector P&L</span>
       <span class="alloc-lg-pnl" style="color:${clr(sectorPnl)}">${hidden ? MASK : $s(sectorPnl)}</span>
@@ -132,7 +133,7 @@ function buildChart() {
     data: {
       labels: rows.map((r) => r.name),
       datasets: [{
-        data: rows.map((r) => r.value),
+        data: rows.map((r) => r.wedge ?? r.value),
         backgroundColor: rows.map((r) => r.colour),
         borderColor: panel,
         borderWidth: 3,

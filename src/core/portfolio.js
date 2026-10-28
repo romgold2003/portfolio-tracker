@@ -676,8 +676,13 @@ export function accountTotals(positions, cash) {
  * 40% cash is positioned very differently from one that is fully invested, and
  * a chart of only the invested part hides that entirely.
  *
- * Shorts contribute their absolute size: a short is exposure to a sector, not
- * negative space in a pie, and a negative wedge cannot be drawn.
+ * Each sector is what it adds to the account: its longs less its shorts, as
+ * the account value counts them. Shorts used to count at their absolute size,
+ * as exposure, so the pie came to longs plus shorts plus cash — $47,515 beside
+ * an account value of $45,058 on the October 2026 book, twice its $1,228 short
+ * apart (October 2026). Now the sectors and cash add up to the account value
+ * exactly. A sector net short, or cash borrowed, has no wedge to draw (`wedge`
+ * is 0) and stays in the list, negative.
  */
 /**
  * What the account made over a window, and the return that implies.
@@ -924,18 +929,19 @@ export function sectorBreakdown(positions, cash = 0) {
   positions.filter((p) => p.status === 'Open').forEach((p) => {
     const name = sectorOf(p);
     const bucket = buckets.get(name) ?? { name, value: 0, holdings: [], colour: sectorColour(name) };
-    bucket.value += Math.abs(posValue(p));
+    bucket.value += posValue(p);
     bucket.holdings.push(p.ticker);
     buckets.set(name, bucket);
   });
 
   const rows = [...buckets.values()].sort((a, b) => b.value - a.value);
-  if (cash > 0) {
+  if (cash) {
     rows.push({ name: 'Cash', value: cash, holdings: [], colour: CASH_COLOUR, isCash: true });
   }
 
+  // The account value: every row, negative ones included.
   const total = rows.reduce((sum, r) => sum + r.value, 0);
-  return rows.map((r) => ({ ...r, pct: total ? (r.value / total) * 100 : 0 }));
+  return rows.map((r) => ({ ...r, wedge: Math.max(r.value, 0), pct: total > 0 ? (r.value / total) * 100 : 0 }));
 }
 
 /**
