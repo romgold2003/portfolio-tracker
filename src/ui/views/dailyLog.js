@@ -62,14 +62,21 @@ function longDay(date) {
  * Exported for the tests.
  */
 /**
- * The stock's own move under a holding whose return was not it, with why: a
- * trade that day, a short, or money added. The stock's move is the same for
- * anyone who held it; the percentage above it is this account's.
+ * The percentage a holding shows: the stock's own move, close to close.
+ *
+ * Romy (October 2026): "if a stock goes up 4%, we both should see 4%". It
+ * showed the position's return instead, which a trade that day, a short or
+ * shares added make differ from one account to the next. The stock's move is
+ * the same for everyone; the dollars beside it stay this account's. Without
+ * a close for the day before (a listing that day), the position's return.
  */
-function moveNote(h) {
+const shownPct = (h) => h.move ?? h.pct;
+
+/** The position's own return under the stock's move, when they differ, and why. */
+function positionNote(h) {
   if (h.move == null || Math.abs(h.move - h.pct) < 0.05) return '';
   const why = h.traded ? 'you traded it that day' : h.short ? 'short: you gain when it falls' : 'shares moved in or out that day';
-  return `<span class="dl-note">Stock ${pct(h.move)} close to close · ${escapeHtml(why)}</span>`;
+  return `<span class="dl-note">Your position ${pct(h.pct)} · ${escapeHtml(why)}</span>`;
 }
 
 export function dayDetailHtml(d, breakdown) {
@@ -86,14 +93,17 @@ export function dayDetailHtml(d, breakdown) {
   if (!breakdown) {
     return `${head}<div class="dl-empty">Holding by holding needs an imported statement to walk from.</div>`;
   }
-  const scale = Math.max(...breakdown.holdings.map((h) => Math.abs(h.pct)), 0.01);
-  const rows = breakdown.holdings.map((h, i) => {
-    const width = Math.max(2, Math.round((Math.abs(h.pct) / scale) * 100));
-    return `<div class="dl-day dl-hold ${tone(h.pnl)}" style="animation-delay:${Math.min(i, 20) * 18}ms">
+  // Best to worst by the stock's move, as the list reads.
+  const ordered = [...breakdown.holdings].sort((a, b) => shownPct(b) - shownPct(a) || b.pnl - a.pnl);
+  const scale = Math.max(...ordered.map((h) => Math.abs(shownPct(h))), 0.01);
+  const rows = ordered.map((h, i) => {
+    const width = Math.max(2, Math.round((Math.abs(shownPct(h)) / scale) * 100));
+    // The row in the stock's colour; the dollars in their own, which a short turns over.
+    return `<div class="dl-day dl-hold ${tone(shownPct(h))}" style="animation-delay:${Math.min(i, 20) * 18}ms">
       <span class="dl-tick">${escapeHtml(h.ticker)}</span>
       <span class="dl-bar"><span style="width:${width}%"></span></span>
-      <span class="dl-pct">${pct(h.pct)}</span>
-      <span class="dl-usd">${escapeHtml(usd(h.pnl))}</span>${moveNote(h)}
+      <span class="dl-pct">${pct(shownPct(h))}</span>
+      <span class="dl-usd" style="color:var(--${h.pnl < 0 ? 'red' : h.pnl > 0 ? 'green' : 'text3'})">${escapeHtml(usd(h.pnl))}</span>${positionNote(h)}
     </div>`;
   }).join('');
   const rest = Number.isFinite(breakdown.rest) && Math.abs(breakdown.rest) >= 0.5

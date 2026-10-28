@@ -69,15 +69,34 @@ describe('one day, holding by holding', () => {
       globalThis.localStorage ??= { getItem: () => null, setItem: () => {} };
       const { dayDetailHtml } = await import('../src/ui/views/dailyLog.js');
       const html = dayDetailHtml({ date: '2026-10-14', prev: '2026-10-13', pct: 2, pnl: 20 }, { holdings: [xyz], rest: 0 });
-      assert.match(html, /class="dl-note">Stock \+5\.00% close to close · you traded it that day/);
+      // "If a stock goes up 4%, we both should see 4%": the stock's move is the figure, the trade the footnote.
+      assert.match(html, /class="dl-pct">\+5\.00%<\/span>/);
+      assert.match(html, /class="dl-note">Your position \+2\.00% · you traded it that day/);
     });
 
-    test('short: the position falls as the stock rises, and it says so', () => {
+    test('short: the stock up 10% reads +10%, the dollars lost in red, and the note says why', async () => {
       const walk = { opening: { date: '2026-10-01', cash: 0, holdings: { AAA: -10 } }, events: [] };
       const [aaa] = dayBreakdown({ walks: [walk], priceOn, prev: '2026-10-13', day: '2026-10-14' }).holdings;
       assert.ok(Math.abs(aaa.pct - -10) < 1e-9);
       assert.ok(Math.abs(aaa.move - 10) < 1e-9);
       assert.equal(aaa.short, true);
+      globalThis.localStorage ??= { getItem: () => null, setItem: () => {} };
+      const { dayDetailHtml } = await import('../src/ui/views/dailyLog.js');
+      const html = dayDetailHtml({ date: '2026-10-14', prev: '2026-10-13', pct: -1, pnl: -100 }, { holdings: [aaa], rest: 0 });
+      assert.match(html, /class="dl-pct">\+10\.00%<\/span>\s*<span class="dl-usd" style="color:var\(--red\)">/);
+      assert.match(html, /Your position −10\.00% · short: you gain when it falls/);
+    });
+
+    test('two accounts, one stock, one day: the same figure for both', async () => {
+      const { dayDetailHtml } = await import('../src/ui/views/dailyLog.js');
+      const mine = dayBreakdown({ walks: [{ opening, events: [] }], priceOn, prev: '2026-10-13', day: '2026-10-14' }).holdings;
+      // A friend who bought more AAA that morning at 105.
+      const theirs = dayBreakdown({ walks: [{ opening, events: [{ date: '2026-10-14', ticker: 'AAA', qty: 10, price: 105, cash: -1050, kind: 'trade' }] }],
+        priceOn, prev: '2026-10-13', day: '2026-10-14' }).holdings;
+      const figure = (holdings) => /<span class="dl-tick">AAA<\/span>[\s\S]*?class="dl-pct">([^<]+)</.exec(
+        dayDetailHtml({ date: '2026-10-14', prev: '2026-10-13', pct: 0, pnl: 0 }, { holdings, rest: 0 }))[1];
+      assert.equal(figure(mine), '+10.00%');
+      assert.equal(figure(theirs), '+10.00%');
     });
 
     test("a split between the closes is undone in the stock's move", () => {
