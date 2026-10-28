@@ -16,7 +16,7 @@ import { dayStillRunning } from '../dayReset.js';
 import { ui } from '../uiState.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
-  fmtPrice, fmtQty, escapeHtml,
+  fmtPrice, fmtQty, fmtShares, escapeHtml,
 } from '../format.js';
 
 /** Entry-reason note, shown on both open and closed cards. */
@@ -62,8 +62,8 @@ function pnlSplit(p, unrealised, positions) {
 }
 
 /** One figure: a label over a value, optionally coloured and right-aligned. */
-function figure(label, value, { color = null, right = false } = {}) {
-  return `<div${right ? ' style="text-align:right"' : ''}>
+function figure(label, value, { color = null, right = false, center = false } = {}) {
+  return `<div${right ? ' style="text-align:right"' : center ? ' style="text-align:center"' : ''}>
       <div class="dgi-k">${label}</div>
       <div class="dgi-v"${color ? ` style="color:${color}"` : ''}>${value}</div>
     </div>`;
@@ -98,10 +98,15 @@ function detailGrid(p, pnl, positions = null) {
       figure(held ? 'Current price' : 'Exit price', `$${fmtPrice(p.cur)}`, { color: held ? clr(pnl) : null, right: true }),
     );
 
-  const values = pairBox(
-    figure('Amount invested', $u(costOf(p))),
-    figure(held ? 'Current value' : 'Value at exit', $u(marketValueOf(p)), { color: clr(pnl), right: true }),
-  );
+  // The shares between what they cost and what they are worth: "10 shares"
+  // (Romy, October 2026). A closed position shows how many it traded.
+  const count = held ? p.qty : baseQtyOf(p);
+  const unit = p.cls === 'Crypto' ? escapeHtml(p.ticker) : count === 1 ? 'share' : 'shares';
+  const values = `<div class="dgi dgi-pair dgi-trio">
+      ${figure('Amount invested', $u(costOf(p)))}
+      ${p.summary ? '' : figure(held ? 'Shares' : 'Shares traded', `${escapeHtml(fmtShares(count))} <span class="dgi-unit">${unit}</span>`, { center: true })}
+      ${figure(held ? 'Current value' : 'Value at exit', $u(marketValueOf(p)), { color: clr(pnl), right: true })}
+    </div>`;
 
   // Reset with the figures on the overview once the session is over: this box
   // and the total above it must not describe different days.

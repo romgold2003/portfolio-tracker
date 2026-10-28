@@ -44,7 +44,7 @@ import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
-  fmtPrice, escapeHtml,
+  fmtPrice, fmtShares, escapeHtml,
 } from '../format.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -108,6 +108,7 @@ function renderPrivacyToggle() {
 const HEAD = 'font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em';
 const LIST_HEADER = `<div class="mini-grid" style="margin-bottom:6px;padding:0 2px">
   <div style="${HEAD}">Asset</div>
+  <div style="${HEAD};text-align:center">Size</div>
   <div style="${HEAD};text-align:center">D%</div>
   <div class="mini-ytd" style="${HEAD};text-align:center">YTD %</div>
   <div style="${HEAD};text-align:right">P&L</div>
@@ -175,6 +176,7 @@ function miniRow(p) {
       <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
       <span class="mini-price" style="color:${daily == null ? 'var(--text3)' : clr(dailySign)}">$${fmtPrice(p.cur)}</span>${extBadge(p)}
     </div>
+    <div class="mini-col mini-size" title="${escapeHtml(fmtShares(p.qty))} ${p.cls === 'Crypto' ? escapeHtml(p.ticker) : 'shares'} held">${escapeHtml(fmtShares(p.qty))}</div>
     <div class="mini-col">
       ${dailyText}
       ${dailyMoney != null ? `<div style="font-size:10px;color:${clr(dailyMoney)};margin-top:2px">${$s(+dailyMoney.toFixed(2))}</div>` : ''}

@@ -43,12 +43,12 @@
  * fixed width for that reason, and the header shares the class so the two
  * cannot drift apart again.
  */
-.mini-grid{display:grid;grid-template-columns:minmax(0,1fr) 92px 66px 104px;align-items:center}
-@media (max-width:900px){.mini-grid{grid-template-columns:minmax(0,1fr) 80px 56px 88px}}
+.mini-grid{display:grid;grid-template-columns:minmax(0,1fr) 64px 92px 66px 104px;align-items:center}
+@media (max-width:900px){.mini-grid{grid-template-columns:minmax(0,1fr) 54px 80px 56px 88px}}
 /* No empty slot for the hidden cell: display:none takes a cell out of the
    grid entirely, so a zero-width column left for it was filled by the next
    cell along and every one after it sat a column to the left. */
-@media (max-width:640px){.mini-grid{grid-template-columns:minmax(0,1fr) 72px 76px}}
+@media (max-width:640px){.mini-grid{grid-template-columns:minmax(0,1fr) 46px 72px 76px}}
 
 .mini-row{padding:9px 0;border-bottom:0.5px solid var(--input)}
 .mini-row:last-child{border-bottom:none}
@@ -365,6 +365,9 @@
 .dgi{background:var(--panel2);border:0.5px solid var(--input);border-radius:7px;padding:11px 13px}
 .dgi-k{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px}
 .dgi-v{font-size:15px;font-weight:600;color:var(--text)}
+.dgi-unit{font-size:11px;font-weight:400;color:var(--text3)}
+/* The size of a holding, in the column left of its day: Home (views/home.js). */
+.mini-size{text-align:center;font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pos-btns{display:flex;gap:6px;flex-wrap:wrap}
 .pbtn{background:var(--input);border:0.5px solid var(--border2);border-radius:6px;padding:7px 14px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit}
 .pbtn:hover{background:var(--hover2)}

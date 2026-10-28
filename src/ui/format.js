@@ -38,6 +38,12 @@ export function fmtQty(n) {
   return n.toFixed(n < 1 ? 6 : 4);
 }
 
+/** A holding's size as people say it: 10, 1,250, 0.25 — no trailing zeros. */
+export function fmtShares(n) {
+  const q = Math.abs(Number(n) || 0);
+  return q.toLocaleString('en-US', { maximumFractionDigits: q < 1 ? 6 : 4 });
+}
+
 /** Escapes user-entered text before it goes into an HTML template literal. */
 export function escapeHtml(value) {
   return String(value ?? '')
