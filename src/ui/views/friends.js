@@ -104,6 +104,37 @@ export function friendPickerHtml(friends, checked = [], locked = []) {
 
 /* ───────────────────────── the page ───────────────────────── */
 
+/**
+ * A box's title bar: the arrow that folds it shut and opens it again, the
+ * title, and whatever goes on the right. Which boxes are folded is kept on
+ * this device (October 2026: "close each window, open it back").
+ */
+const head = (title, right = '') => `<div class="card-lbl fr-head"><button class="fr-fold" data-fold aria-expanded="true" aria-label="Close or open ${escapeHtml(title)}"></button><span class="fr-title">${escapeHtml(title)}</span>${right}</div>`;
+/** A title bar with ← in place of the fold arrow: for a view opened over another. */
+const backHead = (title, back, right = '') => `<div class="card-lbl fr-head"><button class="fr-back" ${back} aria-label="Back">←</button><span class="fr-title">${title}</span>${right}</div>`;
+
+const FOLD_KEY = 'fr-folded';
+function folded() {
+  try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY) ?? '[]')); } catch { return new Set(); }
+}
+/** Put each box back as it was left, folded or open. */
+function applyFolds() {
+  const shut = folded();
+  for (const id of ['frAddCard', 'frRequests', 'frFriendsCard', 'frChats']) {
+    const card = el(id);
+    if (!card) continue;
+    const isShut = shut.has(id) && !(id === 'frChats' && view.chat);
+    card.classList.toggle('folded', isShut);
+    card.querySelector(':scope > .fr-head .fr-fold')?.setAttribute('aria-expanded', String(!isShut));
+  }
+}
+function toggleFold(card) {
+  const shut = folded();
+  if (shut.has(card.id)) shut.delete(card.id); else shut.add(card.id);
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify([...shut])); } catch { /* this session only */ }
+  applyFolds();
+}
+
 function profileHtml(d) {
   const email = currentProfile()?.email ?? '';
   const shows = choice(d.share?.mode);
@@ -126,7 +157,7 @@ function friendsListHtml(d) {
 
 function requestsHtml(d) {
   if (!d.incoming.length && !d.outgoing.length) return '';
-  return `<div class="card-lbl"><span>Requests</span></div>
+  return `${head('Requests', `<span class="fr-count">${d.incoming.length + d.outgoing.length}</span>`)}
     ${d.incoming.map((r) => `<div class="fr-req">
       <span class="fr-ava">${initial(r.email)}</span>
       <span class="fr-who"><span class="fr-name">${escapeHtml(r.email)}</span><span class="fr-mail">wants to be friends</span></span>
@@ -142,10 +173,10 @@ function requestsHtml(d) {
 
 function detailHtml() {
   const f = view.friend;
-  if (!f) return '<div class="fr-empty fr-pick">Choose a friend to see their investments.</div>';
-  return `<div class="card-lbl"><span>${escapeHtml(nameOf(f.email))}'s investments</span>
-      <span class="fr-actions"><button class="fr-btn fr-ok" data-dm="${escapeHtml(f.id)}">💬 Message</button>
-      <button class="fr-btn" data-remove="${escapeHtml(f.id)}">Remove</button></span></div>
+  if (!f) return '';
+  return `${backHead(`${escapeHtml(nameOf(f.email))}'s investments`, 'data-close-friend',
+    `<span class="fr-actions"><button class="fr-btn fr-ok" data-dm="${escapeHtml(f.id)}">💬 Message</button>
+      <button class="fr-btn" data-remove="${escapeHtml(f.id)}">Remove</button></span>`)}
     <div class="fr-mail" style="margin:-4px 0 10px">${escapeHtml(f.email)} · friends since ${escapeHtml(new Date(f.since).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}</div>
     <div id="frHoldings"><div class="fr-empty">Loading…</div></div>`;
 }
@@ -159,8 +190,7 @@ function chatsHtml() {
     const action = !group ? '' : c.owner
       ? `<button class="fr-btn" data-modal="members">Members</button>`
       : `<button class="fr-btn" data-leave="${escapeHtml(c.id)}">Leave</button>`;
-    return `<div class="card-lbl"><button class="fr-btn" data-back>‹ Messages</button>
-        <span class="fr-chat-title">${escapeHtml(chatTitle(c))}</span>${action || '<span style="width:56px"></span>'}</div>
+    return `${backHead(escapeHtml(chatTitle(c)), 'data-back', action)}
       <div class="fr-mail" style="margin:-4px 0 8px">${group
     ? `${c.members.length} member${c.members.length === 1 ? '' : 's'}: ${c.members.map((m) => escapeHtml(nameOf(m.email))).join(', ')}${c.owner ? ' · you made this group' : ''}`
     : escapeHtml(c.with?.email ?? '')}</div>
@@ -168,7 +198,7 @@ function chatsHtml() {
       <form class="fr-send" id="frSend"><textarea id="frText" rows="1" maxlength="2000" placeholder="Message ${escapeHtml(chatTitle(c))}"></textarea>
         <button class="fr-btn fr-ok" type="submit">Send</button></form>`;
   }
-  return `<div class="card-lbl"><span>Messages</span><button class="fr-btn fr-ok" data-modal="groupName">+ Create group</button></div>
+  return `${head('Messages', '<button class="fr-btn fr-ok" data-modal="groupName">+ Create group</button>')}
     ${view.chats.length ? view.chats.map((c) => `<button class="fr-row" data-chat="${escapeHtml(c.id)}">
       ${c.kind === 'direct' ? `<span class="fr-ava">${initial(c.name)}</span>` : `<span class="fr-ava group">${c.members.length}</span>`}
       <span class="fr-who"><span class="fr-name">${escapeHtml(chatTitle(c))}${c.kind === 'direct' ? '' : ' <span class="fr-kind">group</span>'}</span>
@@ -256,19 +286,28 @@ function draw() {
   el('frList').innerHTML = friendsListHtml(d);
   el('frNote').textContent = view.note;
   drawChats();
+  drawDetail();
+}
+
+function drawDetail() {
+  el('frDetail').hidden = !view.friend;
+  el('frDetail').innerHTML = detailHtml();
 }
 
 function drawChats() {
   el('frChats').innerHTML = chatsHtml();
+  applyFolds();
   const box = el('frMsgs');
   if (box) box.scrollTop = box.scrollHeight;
 }
 
 async function openFriend(id) {
   view.friend = view.data.friends.find((f) => f.id === id) ?? null;
-  el('frDetail').innerHTML = detailHtml();
+  drawDetail();
   el('frList').innerHTML = friendsListHtml(view.data);
   if (!view.friend) return;
+  // On a phone the box opens below the list: bring it into view.
+  if (matchMedia?.('(max-width:900px)').matches) el('frDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
     const share = await social.portfolio(id);
     if (view.friend?.id === id) el('frHoldings').innerHTML = holdingsHtml(share, nameOf(view.friend.email));
@@ -284,7 +323,6 @@ async function load() {
   view.chats = (await social.chats()).chats;
   if (view.chat) view.chat = view.chats.find((c) => c.id === view.chat.id) ?? null;
   draw();
-  el('frDetail').innerHTML = detailHtml();
   if (view.friend) openFriend(view.friend.id);
 }
 
@@ -448,6 +486,13 @@ function bind() {
   page.addEventListener('click', (e) => {
     if (e.target.closest('#frModal')) return undefined;
     const t = (sel) => e.target.closest(sel);
+    if (t('[data-fold]')) return toggleFold(t('[data-fold]').closest('.card'));
+    if (t('[data-close-friend]')) {
+      view.friend = null;
+      drawDetail();
+      el('frList').innerHTML = friendsListHtml(view.data);
+      return undefined;
+    }
     if (t('[data-modal]')) {
       const type = t('[data-modal]').dataset.modal;
       return openModal({ type });

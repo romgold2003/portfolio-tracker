@@ -643,8 +643,9 @@
         <!-- You: what friends see of your investments is chosen in Profile. -->
         <div class="card fr-profile" id="frProfile"></div>
         <div class="fr-col">
-          <div class="card">
-            <div class="card-lbl"><span>Add a friend</span></div>
+          <!-- Every box folds shut and opens again from its title (views/friends.js). -->
+          <div class="card" id="frAddCard">
+            <div class="card-lbl fr-head"><button class="fr-fold" data-fold aria-expanded="true" aria-label="Close or open Add a friend"></button><span class="fr-title">Add a friend</span></div>
             <form class="fr-add" id="frAdd">
               <input class="fr-input" id="frEmail" type="email" placeholder="Their Riskbook email" autocomplete="off" spellcheck="false">
               <button class="fr-btn fr-ok" type="submit">Add</button>
@@ -652,13 +653,14 @@
             <div class="fr-note" id="frNote" role="status"></div>
           </div>
           <div class="card" id="frRequests" hidden></div>
-          <div class="card">
-            <div class="card-lbl"><span>Your friends</span><span class="fr-count" id="frCount"></span></div>
+          <div class="card" id="frFriendsCard">
+            <div class="card-lbl fr-head"><button class="fr-fold" data-fold aria-expanded="true" aria-label="Close or open Your friends"></button><span class="fr-title">Your friends</span><span class="fr-count" id="frCount"></span></div>
             <div id="frList"></div>
           </div>
         </div>
         <div class="fr-col">
-          <div class="card" id="frDetail"></div>
+          <!-- A friend's investments, open only while one is chosen; ← closes it. -->
+          <div class="card" id="frDetail" hidden></div>
           <div class="card" id="frChats"></div>
         </div>
       </div>

@@ -108,6 +108,20 @@ describe('the page', () => {
     assert.match(friendPickerHtml([]), /Add a friend first/);
   });
 
+  test('every box folds from its title, and ← closes a friend or a conversation (October 2026)', () => {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    for (const id of ['frAddCard', 'frFriendsCard']) {
+      assert.match(html, new RegExp(`id="${id}">\\s*<div class="card-lbl fr-head"><button class="fr-fold" data-fold`), id);
+    }
+    assert.match(html, /id="frDetail" hidden><\/div>/, 'no empty box until a friend is chosen');
+    const view = readFileSync(new URL('../src/ui/views/friends.js', import.meta.url), 'utf8');
+    assert.match(view, /\$\{head\('Requests'/);
+    assert.match(view, /\$\{head\('Messages'/);
+    assert.match(view, /backHead\(`\$\{escapeHtml\(nameOf\(f\.email\)\)\}'s investments`, 'data-close-friend'/);
+    assert.match(view, /backHead\(escapeHtml\(chatTitle\(c\)\), 'data-back'/);
+    assert.match(readFileSync(new URL('../styles/components.css', import.meta.url), 'utf8'), /\.card\.folded > :not\(\.fr-head\)\{display:none!important\}/);
+  });
+
   test('in the menu after Crypto, with its person icon; profile on top, windows over the page', () => {
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
     assert.match(html, /show\('crypto'\)[^\n]*\n\s*<button class="nl" onclick="show\('friends'\)"><span class="nl-icon">👤<\/span> Friends<\/button>/);

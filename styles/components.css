@@ -1418,7 +1418,6 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
 .fr-pickers{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--text2)}
 .fr-pickf{display:flex;align-items:center;gap:5px;cursor:pointer}
 .fr-actions{display:flex;gap:8px}
-.fr-chat-title{flex:1;text-align:center;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);font-weight:600}
 .fr-msgs{height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px;overscroll-behavior:contain}
 .fr-msg{max-width:78%;align-self:flex-start;background:var(--input);border-radius:10px 10px 10px 3px;padding:7px 10px}
 .fr-msg.mine{align-self:flex-end;background:var(--blue-bg);border-radius:10px 10px 3px 10px}
@@ -1471,3 +1470,21 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
 .fr-pickrow:last-child{border-bottom:0}
 .fr-pickrow:hover{background:var(--input)}
 @media (max-width:640px){.fr-hold.amounts{grid-template-columns:84px minmax(0,1fr) 66px 46px}}
+/* Friends, third pass: every box folds from its title; ← closes a view opened over another. */
+.fr-head{justify-content:flex-start;gap:8px}
+.fr-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr-head .fr-count{margin-left:auto}
+.fr-fold,.fr-back{flex:none;display:grid;place-items:center;width:22px;height:22px;padding:0;border-radius:6px;cursor:pointer;
+  border:0.5px solid transparent;background:none;color:var(--text3);font:inherit;transition:background .15s,color .15s}
+.fr-fold:hover,.fr-back:hover{background:var(--input);color:var(--text)}
+.fr-fold:focus-visible,.fr-back:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+/* A chevron drawn from two borders: down when open, right when folded. */
+.fr-fold::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;
+  transform:translateY(-2px) rotate(45deg);transition:transform .18s}
+.card.folded .fr-fold::before{transform:translateX(-1px) rotate(-45deg)}
+.fr-back{font-size:15px;text-transform:none;letter-spacing:0;border-color:var(--border2);background:var(--input);color:var(--text)}
+.fr-head .fr-title{text-transform:uppercase}
+.card.folded > :not(.fr-head){display:none!important}
+.card.folded > .fr-head{margin-bottom:0}
+#frDetail .fr-title{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--text)}
+#frChats .fr-head .fr-back + .fr-title{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--text)}
