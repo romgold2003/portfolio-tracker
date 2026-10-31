@@ -77,9 +77,10 @@ describe('no table leaves a slot for a cell it hides', () => {
 describe('a phone looks like a phone app', () => {
   const phone = css.slice(css.indexOf('/* ── Phones'));
 
-  test('the six sections sit in a bar along the bottom, clear of the home indicator', () => {
+  test('the seven sections sit in one bar along the bottom, clear of the home indicator', () => {
     assert.match(phone, /\.nav-links\{position:fixed;left:0;right:0;bottom:0/);
-    assert.match(phone, /grid-template-columns:repeat\(6,1fr\)/);
+    // Friends made seven (October 2026); one row, so none wraps under the rest.
+    assert.match(phone, /grid-template-columns:repeat\(7,minmax\(0,1fr\)\)/);
     assert.match(phone, /env\(safe-area-inset-bottom\)/);
     assert.match(html, /viewport-fit=cover/, 'without it the safe-area insets are zero');
   });

@@ -15,6 +15,8 @@ import { pauseHyperliquid } from './views/cryptoWhales.js';
 import { showGauges } from './views/sentimentGauges.js';
 import { renderAccountSwitcher } from './views/accounts.js';
 import { currentPage } from './router.js';
+import { renderFriends } from './views/friends.js';
+import { syncShare } from '../services/social.js';
 
 export { updateLivePill };
 
@@ -36,6 +38,8 @@ export function renderAll() {
   else if (page === 'monthly') renderMonthly();
   // Fetches over the network and resolves on its own; nothing here waits on it.
   else if (page === 'news') renderNews();
+  // A summary shared with friends follows the book, at most every ten minutes.
+  syncShare();
 }
 
 /**
@@ -49,6 +53,7 @@ export function renderOnPageEnter(page) {
   if (page === 'positions') renderPositions();
   if (page === 'monthly') setTimeout(renderMonthly, 50);
   if (page === 'news') renderNews();
+  if (page === 'friends') renderFriends();
   if (page === 'crypto') renderCrypto();
   // The live whale feed is only worth its cost while it is on screen.
   else pauseHyperliquid();

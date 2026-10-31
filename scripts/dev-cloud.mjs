@@ -107,6 +107,19 @@ const ROUTES = {
   '/api/auth/forgot': '../api/_auth/forgot.js',
   '/api/auth/reset': '../api/_auth/reset.js',
   '/api/auth/escrow': '../api/_auth/escrow.js',
+  // The Friends page: one handler, which reads the action off the path.
+  '/api/social/friends': '../api/social/[action].js',
+  '/api/social/request': '../api/social/[action].js',
+  '/api/social/answer': '../api/social/[action].js',
+  '/api/social/cancel': '../api/social/[action].js',
+  '/api/social/remove': '../api/social/[action].js',
+  '/api/social/share': '../api/social/[action].js',
+  '/api/social/portfolio': '../api/social/[action].js',
+  '/api/social/chats': '../api/social/[action].js',
+  '/api/social/chat': '../api/social/[action].js',
+  '/api/social/messages': '../api/social/[action].js',
+  '/api/social/send': '../api/social/[action].js',
+  '/api/social/leave': '../api/social/[action].js',
 };
 
 const handlers = new Map();

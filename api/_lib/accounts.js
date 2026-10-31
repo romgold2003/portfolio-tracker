@@ -283,6 +283,10 @@ export function endAllSessions(userId) {
  * `deleted = true` is still the row.
  */
 export async function deleteUser(userId) {
+  // Friends, requests, the shared summary, memberships and messages go too.
+  const user = await findUserById(userId);
+  const { forgetUser } = await import('./social.js');
+  await forgetUser(userId, user?.email);
   forgetAllSessions();
   await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   await query('DELETE FROM resets WHERE user_id = $1', [userId]);

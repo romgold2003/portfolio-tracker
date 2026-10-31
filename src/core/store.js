@@ -727,6 +727,20 @@ export function combinedJournals() {
   return book.accounts.map((a) => ({ id: a.id, name: a.name, ...normalizeJournal(a.journal) }));
 }
 
+/**
+ * Every sub-account's positions and cash together, whichever is on screen:
+ * what friends are shown (core/shareSummary.js) is the whole book.
+ */
+export function wholeBook() {
+  if (!book) return { positions: state.positions, cash: state.cash };
+  commitActive();
+  const parts = book.accounts.map((a) => normalizeJournal(a.journal));
+  return {
+    positions: parts.flatMap((j) => j.positions ?? []),
+    cash: parts.reduce((sum, j) => sum + (Number(j.cash) || 0), 0),
+  };
+}
+
 /** Show another sub-account, or ALL_ACCOUNTS. */
 export function switchAccount(id) {
   if (!book || id === book.activeId) return false;

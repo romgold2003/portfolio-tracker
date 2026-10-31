@@ -30,7 +30,7 @@ describe('the menu', () => {
   test('has Crypto straight after News', () => {
     const items = [...html.matchAll(/onclick="show\('(\w+)'\)"><span class="nl-icon">[^<]*<\/span> ([^<]+)</g)]
       .map((m) => m[2].trim());
-    assert.deepEqual(items, ['Home', 'Positions', 'New trade', 'Monthly', 'News', 'Crypto']);
+    assert.deepEqual(items, ['Home', 'Positions', 'New trade', 'Monthly', 'News', 'Crypto', 'Friends']);
   });
 
   test('and the router lists the pages in the same order as the buttons', () => {
