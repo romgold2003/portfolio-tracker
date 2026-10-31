@@ -2,8 +2,9 @@
  * Friends, what friends share, and group chats (October 2026).
  *
  * Asked for as the start of a social side to Riskbook: add a friend by the
- * email they signed up with, see the list, open a friend to see how their
- * money is spread — percentages only, no dollar amounts — and talk in groups.
+ * email they signed up with, see the list, open a friend to see what they
+ * chose to show of their investments — amounts, percentages, or nothing —
+ * and talk one-to-one or in groups. Messages are permanent.
  *
  * Three rules shape it.
  *
@@ -14,7 +15,7 @@
  *
  * A journal stays encrypted; the server still cannot read one. What a friend
  * sees is a separate summary the owner's own device works out and publishes,
- * only once they switch sharing on: each holding's share of the account.
+ * only once they choose to show something in Profile → Investment details.
  *
  * Only friends see it, only members read a chat, and every check is made here
  * on the server, never trusted from the browser.
@@ -69,6 +70,14 @@ const TABLES = [
      at      TEXT NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS messages_chat ON messages (chat_id, at)`,
+  // A chat between two friends: one per pair, the smaller id first.
+  `CREATE TABLE IF NOT EXISTS direct_chats (
+     a       TEXT NOT NULL,
+     b       TEXT NOT NULL,
+     chat_id TEXT NOT NULL,
+     PRIMARY KEY (a, b)
+   )`,
+  `CREATE INDEX IF NOT EXISTS direct_chats_chat ON direct_chats (chat_id)`,
 ];
 
 let readyFor = -1;
@@ -176,7 +185,7 @@ export async function removeFriend(user, friendId) {
 export async function friendsOf(user) {
   await ensureTables();
   const { rows: links } = await query(
-    `SELECT f.since, u.id, u.email, s.updated_at AS shared_at
+    `SELECT f.since, u.id, u.email, s.updated_at AS shared_at, s.summary
        FROM friendships f
        JOIN users u ON u.id = CASE WHEN f.a = $1 THEN f.b ELSE f.a END
        LEFT JOIN shares s ON s.user_id = u.id
@@ -194,7 +203,14 @@ export async function friendsOf(user) {
   );
   const byEmail = (x, y) => x.email.localeCompare(y.email);
   return {
-    friends: links.map((r) => ({ id: r.id, email: r.email, since: r.since, sharedAt: r.shared_at ?? null })).sort(byEmail),
+    friends: links.map((r) => ({
+      id: r.id,
+      email: r.email,
+      since: r.since,
+      sharedAt: r.shared_at ?? null,
+      // What they let friends see: 'amount', 'percent', or 'none'.
+      shows: r.summary ? modeOf(r.summary) : 'none',
+    })).sort(byEmail),
     incoming: incoming.map((r) => ({ id: r.id, email: r.email, at: r.created_at })).sort(byEmail),
     outgoing: outgoing.map((r) => ({ id: r.id, email: r.email, at: r.created_at })).sort(byEmail),
   };
@@ -202,25 +218,34 @@ export async function friendsOf(user) {
 
 /* ───────────────────────── what a friend shares ───────────────────────── */
 
+const modeOf = (json) => { try { return JSON.parse(json).mode === 'amount' ? 'amount' : 'percent'; } catch { return 'percent'; } };
+
 /**
- * The summary as stored: holdings as a share of the account, nothing in
- * dollars. Anything else the browser sends is dropped.
+ * The summary as stored. Percentages always; dollars — each holding's value
+ * and what was put into it, the cash and the total — only when its owner chose
+ * "Amounts" (mode 'amount'). Anything else the browser sends is dropped.
  */
 export function cleanSummary(raw) {
   const num = (v, lo, hi) => (Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : null);
+  const money = (v) => { const n = num(v, -1e12, 1e12); return n == null ? null : Math.round(n * 100) / 100; };
+  const amounts = raw?.mode === 'amount';
   const holdings = (Array.isArray(raw?.holdings) ? raw.holdings : []).slice(0, LIMITS.holdings).map((h) => {
     const t = typeof h?.t === 'string' ? h.t.trim().toUpperCase().slice(0, 16) : '';
     const w = num(h?.w, -1000, 1000);
     if (!t || w == null) return null;
-    return {
+    const row = {
       t,
       w: Math.round(w * 100) / 100,
       d: h?.d === 'Short' ? 'Short' : 'Long',
       c: typeof h?.c === 'string' ? h.c.slice(0, 16) : '',
     };
+    if (amounts) { row.v = money(h?.v); row.inv = money(h?.inv); }
+    return row;
   }).filter(Boolean);
   const cash = num(raw?.cash, -1000, 1000);
-  return { holdings, cash: cash == null ? 0 : Math.round(cash * 100) / 100 };
+  const out = { mode: amounts ? 'amount' : 'percent', holdings, cash: cash == null ? 0 : Math.round(cash * 100) / 100 };
+  if (amounts) { out.cashV = money(raw?.cashV); out.total = money(raw?.total); }
+  return out;
 }
 
 /** Publish this user's summary for their friends, or withdraw it. */
@@ -244,7 +269,7 @@ export async function setShare(user, summary) {
 export async function ownShare(user) {
   await ensureTables();
   const row = await one('SELECT summary, updated_at FROM shares WHERE user_id = $1', [user.id]);
-  return row ? { shared: true, at: row.updated_at } : { shared: false };
+  return row ? { shared: true, at: row.updated_at, mode: modeOf(row.summary) } : { shared: false, mode: 'none' };
 }
 
 /** A friend's summary — to friends only. */
@@ -288,9 +313,10 @@ export async function createChat(user, name, memberIds) {
 export async function chatsOf(user) {
   await ensureTables();
   const { rows } = await query(
-    `SELECT c.id, c.name, c.created_at,
+    `SELECT c.id, c.name, c.created_at, c.created_by, d.chat_id AS direct,
             (SELECT MAX(m.at) FROM messages m WHERE m.chat_id = c.id) AS last_at
        FROM chats c JOIN chat_members cm ON cm.chat_id = c.id
+       LEFT JOIN direct_chats d ON d.chat_id = c.id
       WHERE cm.user_id = $1`,
     [user.id],
   );
@@ -303,9 +329,15 @@ export async function chatsOf(user) {
       `SELECT m.body, u.email FROM messages m LEFT JOIN users u ON u.id = m.user_id
         WHERE m.chat_id = $1 ORDER BY m.at DESC LIMIT 1`, [r.id],
     ) : null;
+    const direct = Boolean(r.direct);
+    // A direct chat is named for the other person.
+    const other = direct ? members.find((m) => m.id !== user.id) : null;
     out.push({
       id: r.id,
-      name: r.name,
+      kind: direct ? 'direct' : 'group',
+      name: direct ? (other?.email ?? 'Former friend') : r.name,
+      with: other ? { id: other.id, email: other.email } : null,
+      owner: !direct && r.created_by === user.id,
       members: members.map((m) => ({ id: m.id, email: m.email })).sort((x, y) => x.email.localeCompare(y.email)),
       lastAt: r.last_at ?? r.created_at,
       last: last ? { body: last.body.slice(0, 120), email: last.email ?? null } : null,
@@ -344,17 +376,76 @@ export async function sendMessage(user, chatId, body) {
   return { ...message, from: user.id, email: user.email, body: text, mine: true };
 }
 
-/** Leave a chat. The last one out takes its messages with them. */
+/**
+ * Leave a group. Its messages stay — they are permanent (Romy, October 2026),
+ * and the others are still reading them. A direct chat is not left. When the
+ * person who made the group leaves, whoever has been in it longest can manage
+ * it from then on.
+ */
 export async function leaveChat(user, chatId) {
   await ensureTables();
-  await memberOf(user, chatId);
-  await query('DELETE FROM chat_members WHERE chat_id = $1 AND user_id = $2', [String(chatId), user.id]);
-  const left = await one('SELECT 1 AS ok FROM chat_members WHERE chat_id = $1', [String(chatId)]);
-  if (!left) {
-    await query('DELETE FROM messages WHERE chat_id = $1', [String(chatId)]);
-    await query('DELETE FROM chats WHERE id = $1', [String(chatId)]);
+  const id = String(chatId);
+  await memberOf(user, id);
+  if (await one('SELECT 1 AS ok FROM direct_chats WHERE chat_id = $1', [id])) {
+    throw new SocialError(400, 'A chat with one friend is not left; it stays between you.');
+  }
+  await query('DELETE FROM chat_members WHERE chat_id = $1 AND user_id = $2', [id, user.id]);
+  const chat = await one('SELECT created_by FROM chats WHERE id = $1', [id]);
+  if (chat?.created_by === user.id) {
+    const next = await one('SELECT user_id FROM chat_members WHERE chat_id = $1 ORDER BY joined_at ASC, user_id ASC LIMIT 1', [id]);
+    if (next) await query('UPDATE chats SET created_by = $1 WHERE id = $2', [next.user_id, id]);
   }
   return { status: 'left' };
+}
+
+/**
+ * The chat with one friend, made the first time either opens it and the same
+ * one ever after, from either side.
+ */
+export async function directChat(user, friendId) {
+  await ensureTables();
+  const id = String(friendId);
+  if (id === user.id || !await areFriends(user.id, id)) throw new SocialError(403, 'You can message friends only.');
+  const [a, b] = pair(user.id, id);
+  const found = await one('SELECT chat_id FROM direct_chats WHERE a = $1 AND b = $2', [a, b]);
+  if (found) return { id: found.chat_id };
+  const chat = newId('ch');
+  const at = now();
+  await query('INSERT INTO chats (id, name, created_by, created_at) VALUES ($1, $2, $3, $4)', [chat, '', user.id, at]);
+  for (const member of [a, b]) {
+    await query('INSERT INTO chat_members (chat_id, user_id, joined_at) VALUES ($1, $2, $3)', [chat, member, at]);
+  }
+  await query('INSERT INTO direct_chats (a, b, chat_id) VALUES ($1, $2, $3)', [a, b, chat]);
+  return { id: chat };
+}
+
+/**
+ * Change who is in a group — its maker only. Those added must be the maker's
+ * friends; the maker leaves through leaveChat, not here.
+ */
+export async function setMembers(user, chatId, add = [], remove = []) {
+  await ensureTables();
+  const id = String(chatId);
+  const chat = await one('SELECT created_by FROM chats WHERE id = $1', [id]);
+  if (!chat) throw new SocialError(404, 'No such chat.');
+  await memberOf(user, id);
+  if (await one('SELECT 1 AS ok FROM direct_chats WHERE chat_id = $1', [id])) throw new SocialError(400, 'A chat with one friend has no members to change.');
+  if (chat.created_by !== user.id) throw new SocialError(403, 'Only the person who made the group can change who is in it.');
+
+  const { rows } = await query('SELECT user_id FROM chat_members WHERE chat_id = $1', [id]);
+  const current = new Set(rows.map((r) => r.user_id));
+  const adding = [...new Set((Array.isArray(add) ? add : []).map(String))].filter((m) => !current.has(m));
+  const removing = [...new Set((Array.isArray(remove) ? remove : []).map(String))].filter((m) => current.has(m) && m !== user.id);
+  if (current.size + adding.length - removing.length > LIMITS.chatMembers) {
+    throw new SocialError(400, `A group holds ${LIMITS.chatMembers} at most.`);
+  }
+  for (const m of adding) {
+    if (!await areFriends(user.id, m)) throw new SocialError(403, 'Only friends can be added to a group.');
+  }
+  const at = now();
+  for (const m of adding) await query('INSERT INTO chat_members (chat_id, user_id, joined_at) VALUES ($1, $2, $3)', [id, m, at]);
+  for (const m of removing) await query('DELETE FROM chat_members WHERE chat_id = $1 AND user_id = $2', [id, m]);
+  return { added: adding.length, removed: removing.length };
 }
 
 /** Everything social about an account, when the account is deleted. */
@@ -364,6 +455,7 @@ export async function forgetUser(userId, email) {
   await query('DELETE FROM friendships WHERE a = $1 OR b = $1', [userId]);
   await query('DELETE FROM shares WHERE user_id = $1', [userId]);
   await query('DELETE FROM messages WHERE user_id = $1', [userId]);
+  await query('DELETE FROM direct_chats WHERE a = $1 OR b = $1', [userId]);
   const { rows } = await query('SELECT chat_id FROM chat_members WHERE user_id = $1', [userId]);
   for (const r of rows) await leaveChat({ id: userId }, r.chat_id).catch(() => {});
 }

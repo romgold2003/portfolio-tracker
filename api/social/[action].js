@@ -8,12 +8,14 @@
  *   POST /api/social/cancel     {id}        withdraw a request sent
  *   POST /api/social/remove     {friendId}
  *   POST /api/social/share      {summary} | {summary: null}
- *   GET  /api/social/portfolio?friend=ID    a friend's holdings, in percent
+ *   GET  /api/social/portfolio?friend=ID    a friend's holdings, as they chose to show them
  *   GET  /api/social/chats
  *   POST /api/social/chat       {name, members}
  *   GET  /api/social/messages?chat=ID[&after=ISO]
  *   POST /api/social/send       {chat, body}
  *   POST /api/social/leave      {chat}
+ *   POST /api/social/direct     {friendId}  the chat with one friend
+ *   POST /api/social/members    {chat, add, remove}  a group's maker only
  *
  * One function for all of them, as with auth and the News panels: a Hobby
  * deployment allows twelve, and this is the eighth.
@@ -46,6 +48,8 @@ const POSTS = {
   chat: { limit: [20, 60], run: (user, b) => social.createChat(user, b.name, b.members) },
   send: { limit: [60, 1], run: (user, b) => social.sendMessage(user, b.chat, b.body) },
   leave: { limit: [60, 60], run: (user, b) => social.leaveChat(user, b.chat) },
+  direct: { limit: [120, 60], run: (user, b) => social.directChat(user, b.friendId) },
+  members: { limit: [60, 60], run: (user, b) => social.setMembers(user, b.chat, b.add, b.remove) },
 };
 
 function actionFrom(url) {

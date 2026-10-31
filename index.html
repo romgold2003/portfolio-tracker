@@ -640,6 +640,8 @@
       </div>
       <div class="fr-empty fr-offline" id="frOffline" hidden>Friends need a Riskbook account: sign in on the cloud version to add them.</div>
       <div class="fr-grid" id="frBody">
+        <!-- You: what friends see of your investments is chosen in Profile. -->
+        <div class="card fr-profile" id="frProfile"></div>
         <div class="fr-col">
           <div class="card">
             <div class="card-lbl"><span>Add a friend</span></div>
@@ -654,13 +656,14 @@
             <div class="card-lbl"><span>Your friends</span><span class="fr-count" id="frCount"></span></div>
             <div id="frList"></div>
           </div>
-          <div class="card" id="frShareCard"></div>
         </div>
         <div class="fr-col">
           <div class="card" id="frDetail"></div>
           <div class="card" id="frChats"></div>
         </div>
       </div>
+      <!-- Profile, Create group and Members open here, over the page. -->
+      <div class="fr-modal" id="frModal" hidden><div class="fr-dialog" role="dialog" aria-modal="true"></div></div>
     </div>
 
   </main>

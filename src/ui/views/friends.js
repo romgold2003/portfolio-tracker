@@ -1,18 +1,25 @@
 /**
- * The Friends page (October 2026): add a friend by the email they signed up
- * with, see the list, open one to see how their money is spread — in percent,
- * never in dollars — share your own the same way if you choose, and talk in
- * group chats with friends.
+ * The Friends page (October 2026), laid out the way a professional network is:
+ * your profile on top, your friends down the side — each with a button to
+ * message them — and your conversations, one-to-one and in groups, beside.
  *
- * The rules are the server's (api/_lib/social.js); this draws and asks. A
- * chat that is open is asked for new messages every few seconds while it is on
- * screen, and not at all otherwise: each check wakes the database, which is
- * billed by the hour it is awake.
+ * - Profile → Investment details: what friends may see of your investments —
+ *   amounts (dollars and percentages), percentages only, or nothing at all.
+ * - Add a friend by the email they signed up with; open one to see what they
+ *   chose to show.
+ * - Create group: name it, then Add friends in a second window, by checkbox.
+ *   The person who made a group can add or remove people later.
+ * - Messages are permanent: nothing expires.
+ *
+ * The rules are the server's (api/_lib/social.js); this draws and asks. An
+ * open chat is asked for new messages every few seconds while it is on screen,
+ * and not at all otherwise: each check wakes the database, billed by the hour.
  */
 import { cloudEnabled } from '../../services/cloud.js';
-import { social, setSharing, knowSharing } from '../../services/social.js';
+import { social, setShowing, knowShowing } from '../../services/social.js';
 import { shareSummary } from '../../core/shareSummary.js';
 import { wholeBook } from '../../core/store.js';
+import { currentProfile } from '../../core/profiles.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -25,14 +32,15 @@ const view = {
   chats: [],
   chat: null,
   messages: [],
-  composing: false,
   note: '',
+  /** The window open over the page: null, or {type, ...}. */
+  modal: null,
 };
 
 /* ───────────────────────── small pieces, exported for the tests ───────────────────────── */
 
 const initial = (email) => escapeHtml((email ?? '?').trim().charAt(0).toUpperCase() || '?');
-const nameOf = (email) => (email ?? 'Former member').split('@')[0];
+export const nameOf = (email) => (email ?? 'Former member').split('@')[0];
 
 export function ago(iso, now = Date.now()) {
   if (!iso) return '';
@@ -44,44 +52,76 @@ export function ago(iso, now = Date.now()) {
 }
 
 const pct = (w) => `${w < 0 ? '−' : ''}${Math.abs(w).toFixed(1)}%`;
+const usd = (n) => (n == null ? '—' : `${n < 0 ? '−' : ''}$${Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`);
 
-/** A friend's holdings, largest first, as bars of their share of the account. */
-export function holdingsHtml(share) {
-  if (!share?.shared) return '<div class="fr-empty">Not shared yet. They can switch sharing on from their own Friends page.</div>';
+/** What each choice in Investment details means, in the words the page uses. */
+export const SHOW_CHOICES = [
+  { mode: 'amount', title: 'Amounts', tag: 'Amounts', text: 'Friends see how much is in each company in dollars — what it is worth and what you put in — and its share of your account.' },
+  { mode: 'percent', title: 'Percentages', tag: 'Percentages', text: 'Friends see how much of your account is in each company, in percent. No dollar amounts.' },
+  { mode: 'none', title: 'None', tag: 'Private', text: 'Nobody sees anything about your investments.' },
+];
+const choice = (mode) => SHOW_CHOICES.find((c) => c.mode === mode) ?? SHOW_CHOICES[2];
+
+/** A friend's holdings as they chose to show them: bars of their share, dollars too if they allow. */
+export function holdingsHtml(share, who = 'They') {
+  if (!share?.shared) return `<div class="fr-empty">${escapeHtml(who)} keep${who === 'They' ? '' : 's'} their investments private.</div>`;
+  const amounts = share.mode === 'amount';
   const rows = [...(share.holdings ?? [])];
-  if (share.cash) rows.push({ t: 'Cash', w: share.cash, d: '', c: 'Cash' });
+  if (share.cash) rows.push({ t: 'Cash', w: share.cash, d: '', v: share.cashV ?? null });
   if (!rows.length) return '<div class="fr-empty">Nothing held right now.</div>';
   const top = Math.max(...rows.map((r) => Math.abs(r.w)), 1);
-  return `<div class="fr-hold-head"><span>Holding</span><span>Share of account</span></div>
-    ${rows.map((r) => `<div class="fr-hold">
-      <span class="fr-tk">${escapeHtml(r.t)}${r.d === 'Short' ? ' <span class="mini-dir d-short">Short</span>' : ''}</span>
+  return `<div class="fr-hold-head"><span>Holding</span><span>${amounts ? 'Value · share' : 'Share of account'}</span></div>
+    ${rows.map((r) => `<div class="fr-hold${amounts ? ' amounts' : ''}">
+      <span class="fr-tk">${escapeHtml(r.t)}${r.d === 'Short' ? ' <span class="mini-dir d-short">Short</span>' : ''}${
+  amounts && r.inv != null ? `<span class="fr-inv">invested ${usd(r.inv)}</span>` : ''}</span>
       <span class="fr-bar"><span class="${r.w < 0 ? 'neg' : r.t === 'Cash' ? 'cash' : ''}" style="width:${Math.max(2, (Math.abs(r.w) / top) * 100)}%"></span></span>
+      ${amounts ? `<span class="fr-v">${usd(r.v)}</span>` : ''}
       <span class="fr-w">${pct(r.w)}</span>
     </div>`).join('')}
-    <div class="fr-foot">Updated ${escapeHtml(ago(share.at))} · percentages only, no amounts</div>`;
+    ${amounts && share.total != null ? `<div class="fr-total"><span>Account</span><b>${usd(share.total)}</b></div>` : ''}
+    <div class="fr-foot">Updated ${escapeHtml(ago(share.at))} · ${amounts ? 'amounts and percentages' : 'percentages only, no amounts'}</div>`;
 }
 
 /** The chat's messages, oldest first, yours on the right. */
-export function messagesHtml(messages) {
+export function messagesHtml(messages, group = true) {
   if (!messages.length) return '<div class="fr-empty">No messages yet. Say hello.</div>';
   return messages.map((m) => `<div class="fr-msg${m.mine ? ' mine' : ''}">
-      ${m.mine ? '' : `<div class="fr-msg-who">${escapeHtml(nameOf(m.email))}</div>`}
+      ${m.mine || !group ? '' : `<div class="fr-msg-who">${escapeHtml(nameOf(m.email))}</div>`}
       <div class="fr-msg-body">${escapeHtml(m.body)}</div>
       <div class="fr-msg-at">${escapeHtml(ago(m.at))}</div>
     </div>`).join('');
 }
 
-/* ───────────────────────── drawing ───────────────────────── */
-
-function friendsListHtml(d) {
-  if (!d.friends.length) {
-    return '<div class="fr-empty">No friends yet. Add one by the email they use for Riskbook.</div>';
-  }
-  return d.friends.map((f) => `<button class="fr-row${view.friend?.id === f.id ? ' active' : ''}" data-friend="${escapeHtml(f.id)}">
+/** Checkboxes of friends, for a group: `checked` ticked, `locked` shown but fixed. */
+export function friendPickerHtml(friends, checked = [], locked = []) {
+  if (!friends.length) return '<div class="fr-empty">Add a friend first.</div>';
+  return friends.map((f) => `<label class="fr-pickrow">
+      <input type="checkbox" value="${escapeHtml(f.id)}"${checked.includes(f.id) ? ' checked' : ''}${locked.includes(f.id) ? ' disabled' : ''}>
       <span class="fr-ava">${initial(f.email)}</span>
       <span class="fr-who"><span class="fr-name">${escapeHtml(nameOf(f.email))}</span><span class="fr-mail">${escapeHtml(f.email)}</span></span>
-      <span class="fr-tag${f.sharedAt ? ' on' : ''}">${f.sharedAt ? 'Sharing' : 'Not sharing'}</span>
-    </button>`).join('');
+    </label>`).join('');
+}
+
+/* ───────────────────────── the page ───────────────────────── */
+
+function profileHtml(d) {
+  const email = currentProfile()?.email ?? '';
+  const shows = choice(d.share?.mode);
+  return `<span class="fr-ava big">${initial(email)}</span>
+    <span class="fr-who"><span class="fr-name big">${escapeHtml(nameOf(email))}</span>
+      <span class="fr-mail">${escapeHtml(email)} · ${d.friends.length} friend${d.friends.length === 1 ? '' : 's'}</span></span>
+    <span class="fr-tag ${shows.mode}" title="What friends see of your investments">${escapeHtml(shows.tag)}</span>
+    <button class="fr-btn fr-ok" data-modal="profile">Profile</button>`;
+}
+
+function friendsListHtml(d) {
+  if (!d.friends.length) return '<div class="fr-empty">No friends yet. Add one by the email they use for Riskbook.</div>';
+  return d.friends.map((f) => `<div class="fr-row${view.friend?.id === f.id ? ' active' : ''}" data-friend="${escapeHtml(f.id)}" role="button" tabindex="0">
+      <span class="fr-ava">${initial(f.email)}</span>
+      <span class="fr-who"><span class="fr-name">${escapeHtml(nameOf(f.email))}</span><span class="fr-mail">${escapeHtml(f.email)}</span></span>
+      <span class="fr-tag ${f.shows}">${escapeHtml(choice(f.shows).tag)}</span>
+      <button class="fr-icon" data-dm="${escapeHtml(f.id)}" title="Message ${escapeHtml(nameOf(f.email))}" aria-label="Message ${escapeHtml(nameOf(f.email))}">💬</button>
+    </div>`).join('');
 }
 
 function requestsHtml(d) {
@@ -100,63 +140,120 @@ function requestsHtml(d) {
     </div>`).join('')}`;
 }
 
-function shareHtml(d) {
-  const on = Boolean(d.share?.shared);
-  const preview = shareSummary(wholeBook());
-  const top = preview.holdings.slice(0, 4).map((h) => `${escapeHtml(h.t)} ${pct(h.w)}`).join(' · ');
-  return `<div class="card-lbl"><span>Share my holdings with friends</span>
-      <label class="fr-switch"><input type="checkbox" id="frShareToggle"${on ? ' checked' : ''}><span></span></label></div>
-    <div class="fr-share-note">${on
-    ? `Friends see each holding as a percentage of your account${d.share.at ? `, updated ${escapeHtml(ago(d.share.at))}` : ''}. Never amounts.`
-    : 'Off. When on, friends see each holding as a percentage of your account — never amounts, share counts or cash in dollars.'}</div>
-    ${top ? `<div class="fr-share-prev">They would see: ${top}${preview.holdings.length > 4 ? ' …' : ''}</div>` : ''}`;
-}
-
 function detailHtml() {
   const f = view.friend;
-  if (!f) return '<div class="fr-empty fr-pick">Choose a friend to see how their account is spread.</div>';
-  return `<div class="card-lbl"><span>${escapeHtml(nameOf(f.email))}'s holdings</span>
-      <button class="fr-btn" data-remove="${escapeHtml(f.id)}">Remove friend</button></div>
+  if (!f) return '<div class="fr-empty fr-pick">Choose a friend to see their investments.</div>';
+  return `<div class="card-lbl"><span>${escapeHtml(nameOf(f.email))}'s investments</span>
+      <span class="fr-actions"><button class="fr-btn fr-ok" data-dm="${escapeHtml(f.id)}">💬 Message</button>
+      <button class="fr-btn" data-remove="${escapeHtml(f.id)}">Remove</button></span></div>
     <div class="fr-mail" style="margin:-4px 0 10px">${escapeHtml(f.email)} · friends since ${escapeHtml(new Date(f.since).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}</div>
     <div id="frHoldings"><div class="fr-empty">Loading…</div></div>`;
 }
 
+function chatTitle(c) { return c.kind === 'direct' ? nameOf(c.name) : c.name; }
+
 function chatsHtml() {
-  const d = view.data;
   if (view.chat) {
     const c = view.chat;
-    return `<div class="card-lbl"><button class="fr-btn" data-back>‹ Groups</button>
-        <span class="fr-chat-title">${escapeHtml(c.name)}</span>
-        <button class="fr-btn" data-leave="${escapeHtml(c.id)}">Leave</button></div>
-      <div class="fr-mail" style="margin:-4px 0 8px">${c.members.map((m) => escapeHtml(nameOf(m.email))).join(', ')}</div>
-      <div class="fr-msgs" id="frMsgs">${messagesHtml(view.messages)}</div>
-      <form class="fr-send" id="frSend"><textarea id="frText" rows="1" maxlength="2000" placeholder="Message ${escapeHtml(c.name)}"></textarea>
+    const group = c.kind !== 'direct';
+    const action = !group ? '' : c.owner
+      ? `<button class="fr-btn" data-modal="members">Members</button>`
+      : `<button class="fr-btn" data-leave="${escapeHtml(c.id)}">Leave</button>`;
+    return `<div class="card-lbl"><button class="fr-btn" data-back>‹ Messages</button>
+        <span class="fr-chat-title">${escapeHtml(chatTitle(c))}</span>${action || '<span style="width:56px"></span>'}</div>
+      <div class="fr-mail" style="margin:-4px 0 8px">${group
+    ? `${c.members.length} member${c.members.length === 1 ? '' : 's'}: ${c.members.map((m) => escapeHtml(nameOf(m.email))).join(', ')}${c.owner ? ' · you made this group' : ''}`
+    : escapeHtml(c.with?.email ?? '')}</div>
+      <div class="fr-msgs" id="frMsgs">${messagesHtml(view.messages, group)}</div>
+      <form class="fr-send" id="frSend"><textarea id="frText" rows="1" maxlength="2000" placeholder="Message ${escapeHtml(chatTitle(c))}"></textarea>
         <button class="fr-btn fr-ok" type="submit">Send</button></form>`;
   }
-  const form = view.composing ? `<form class="fr-new" id="frNewChat">
-      <input class="fr-input" id="frChatName" maxlength="40" placeholder="Group name" autocomplete="off">
-      <div class="fr-pickers">${d.friends.length ? d.friends.map((f) => `<label class="fr-pickf"><input type="checkbox" value="${escapeHtml(f.id)}"> ${escapeHtml(nameOf(f.email))}</label>`).join('')
-    : '<span class="fr-mail">Add a friend first.</span>'}</div>
-      <div class="fr-actions"><button class="fr-btn fr-ok" type="submit">Create group</button><button class="fr-btn" type="button" data-compose="0">Cancel</button></div>
-    </form>` : '';
-  return `<div class="card-lbl"><span>Group chats</span>${view.composing ? '' : '<button class="fr-btn fr-ok" data-compose="1">+ New group</button>'}</div>
-    ${form}
+  return `<div class="card-lbl"><span>Messages</span><button class="fr-btn fr-ok" data-modal="groupName">+ Create group</button></div>
     ${view.chats.length ? view.chats.map((c) => `<button class="fr-row" data-chat="${escapeHtml(c.id)}">
-      <span class="fr-ava group">${c.members.length}</span>
-      <span class="fr-who"><span class="fr-name">${escapeHtml(c.name)}</span>
-        <span class="fr-mail">${c.last ? `${escapeHtml(nameOf(c.last.email))}: ${escapeHtml(c.last.body)}` : `${c.members.map((m) => escapeHtml(nameOf(m.email))).join(', ')}`}</span></span>
+      ${c.kind === 'direct' ? `<span class="fr-ava">${initial(c.name)}</span>` : `<span class="fr-ava group">${c.members.length}</span>`}
+      <span class="fr-who"><span class="fr-name">${escapeHtml(chatTitle(c))}${c.kind === 'direct' ? '' : ' <span class="fr-kind">group</span>'}</span>
+        <span class="fr-mail">${c.last ? `${c.last.email === currentProfile()?.email ? 'You' : escapeHtml(nameOf(c.last.email))}: ${escapeHtml(c.last.body)}` : 'No messages yet'}</span></span>
       <span class="fr-mail">${escapeHtml(ago(c.lastAt))}</span>
-    </button>`).join('') : view.composing ? '' : '<div class="fr-empty">No groups yet. Make one with friends.</div>'}`;
+    </button>`).join('') : '<div class="fr-empty">No conversations yet. Press 💬 beside a friend, or create a group.</div>'}`;
 }
+
+/* ───────────────────────── windows ───────────────────────── */
+
+function modalHtml(m) {
+  const d = view.data;
+  if (m.type === 'profile') {
+    const now = d.share?.mode ?? 'none';
+    const picked = m.mode ?? now;
+    const preview = picked === 'none' ? null : shareSummary(wholeBook(), picked);
+    return `<div class="fr-dhead"><span>Your profile</span><button class="fr-x" data-close aria-label="Close">×</button></div>
+      <div class="fr-profile-id"><span class="fr-ava big">${initial(currentProfile()?.email)}</span>
+        <span class="fr-who"><span class="fr-name big">${escapeHtml(nameOf(currentProfile()?.email))}</span><span class="fr-mail">${escapeHtml(currentProfile()?.email ?? '')}</span></span></div>
+      <div class="fr-section">Investment details</div>
+      <div class="fr-sub">Who can see your investments: your friends only, and only what you choose here.</div>
+      ${SHOW_CHOICES.map((c) => `<label class="fr-choice${picked === c.mode ? ' on' : ''}">
+        <input type="radio" name="frShow" value="${c.mode}"${picked === c.mode ? ' checked' : ''}>
+        <span><b>${escapeHtml(c.title)}</b><span class="fr-mail wrap">${escapeHtml(c.text)}</span></span>
+      </label>`).join('')}
+      <div class="fr-preview">${preview
+    ? `<div class="fr-sub">Your friends would see:</div>${holdingsHtml({ shared: true, ...preview, at: new Date().toISOString() })}`
+    : '<div class="fr-sub">Your friends see: “keeps their investments private”.</div>'}</div>
+      <div class="fr-dfoot"><button class="fr-btn" data-close>Cancel</button><button class="fr-btn fr-ok" data-save-profile>Save</button></div>`;
+  }
+  if (m.type === 'groupName') {
+    return `<div class="fr-dhead"><span>Create group</span><button class="fr-x" data-close aria-label="Close">×</button></div>
+      <div class="fr-section">Name</div>
+      <input class="fr-input" id="frGroupName" maxlength="40" placeholder="e.g. Tech longs" autocomplete="off" value="${escapeHtml(m.name ?? '')}">
+      <div class="fr-dfoot"><button class="fr-btn" data-close>Cancel</button><button class="fr-btn fr-ok" data-group-next>Add friends ›</button></div>`;
+  }
+  if (m.type === 'groupFriends') {
+    return `<div class="fr-dhead"><span>Add friends to “${escapeHtml(m.name)}”</span><button class="fr-x" data-close aria-label="Close">×</button></div>
+      <div class="fr-sub">Tick the friends you want in the group.</div>
+      <div class="fr-picklist" id="frPick">${friendPickerHtml(d.friends, m.members ?? [])}</div>
+      <div class="fr-dfoot"><button class="fr-btn" data-group-back>‹ Back</button><button class="fr-btn fr-ok" data-group-create>Create group</button></div>`;
+  }
+  if (m.type === 'members') {
+    const c = view.chat;
+    const inGroup = c.members.map((x) => x.id);
+    // Members who are not this person's friends stay in the list, ticked: they can be removed, not re-added.
+    const others = c.members.filter((x) => x.id !== currentUserId() && !d.friends.some((f) => f.id === x.id))
+      .map((x) => ({ id: x.id, email: x.email }));
+    return `<div class="fr-dhead"><span>Members of “${escapeHtml(c.name)}”</span><button class="fr-x" data-close aria-label="Close">×</button></div>
+      <div class="fr-sub">Tick to add, untick to remove. You stay in the group.</div>
+      <div class="fr-picklist" id="frPick">${friendPickerHtml([...d.friends, ...others], inGroup)}</div>
+      <div class="fr-dfoot"><button class="fr-btn" data-close>Cancel</button><button class="fr-btn fr-ok" data-save-members>Save</button></div>`;
+  }
+  return '';
+}
+
+/** The signed-in user's id, as the chats list reports members. */
+function currentUserId() {
+  const email = currentProfile()?.email;
+  return view.chats.flatMap((c) => c.members).find((m) => m.email === email)?.id ?? null;
+}
+
+function openModal(m) {
+  view.modal = m;
+  const host = el('frModal');
+  host.querySelector('.fr-dialog').innerHTML = modalHtml(m);
+  host.hidden = false;
+  host.querySelector('input:not([type=radio]):not([type=checkbox])')?.focus();
+}
+
+function closeModal() {
+  view.modal = null;
+  el('frModal').hidden = true;
+}
+
+/* ───────────────────────── drawing and loading ───────────────────────── */
 
 function draw() {
   const d = view.data;
   if (!d) return;
+  el('frProfile').innerHTML = profileHtml(d);
   el('frRequests').innerHTML = requestsHtml(d);
   el('frRequests').hidden = !d.incoming.length && !d.outgoing.length;
   el('frCount').textContent = d.friends.length ? String(d.friends.length) : '';
   el('frList').innerHTML = friendsListHtml(d);
-  el('frShareCard').innerHTML = shareHtml(d);
   el('frNote').textContent = view.note;
   drawChats();
 }
@@ -174,7 +271,7 @@ async function openFriend(id) {
   if (!view.friend) return;
   try {
     const share = await social.portfolio(id);
-    if (view.friend?.id === id) el('frHoldings').innerHTML = holdingsHtml(share);
+    if (view.friend?.id === id) el('frHoldings').innerHTML = holdingsHtml(share, nameOf(view.friend.email));
   } catch (err) {
     el('frHoldings').innerHTML = `<div class="fr-empty">${escapeHtml(err.message)}</div>`;
   }
@@ -182,9 +279,10 @@ async function openFriend(id) {
 
 async function load() {
   view.data = await social.friends();
-  knowSharing(view.data.share?.shared);
+  knowShowing(view.data.share?.mode);
   if (view.friend && !view.data.friends.some((f) => f.id === view.friend.id)) view.friend = null;
   view.chats = (await social.chats()).chats;
+  if (view.chat) view.chat = view.chats.find((c) => c.id === view.chat.id) ?? null;
   draw();
   el('frDetail').innerHTML = detailHtml();
   if (view.friend) openFriend(view.friend.id);
@@ -208,6 +306,13 @@ async function openChat(id) {
   chatTimer = setInterval(pollChat, CHAT_EVERY_MS);
 }
 
+/** The chat with one friend: made the first time, the same one after. */
+async function openDirect(friendId) {
+  const { id } = await social.direct(friendId);
+  view.chats = (await social.chats()).chats;
+  await openChat(id);
+}
+
 async function pollChat() {
   if (!view.chat || !onScreen()) return;
   const id = view.chat.id;
@@ -219,16 +324,34 @@ async function pollChat() {
     view.messages.push(...messages.filter((m) => !seen.has(m.id)));
     const box = el('frMsgs');
     const atBottom = box && box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
-    if (box) box.innerHTML = messagesHtml(view.messages);
+    if (box) box.innerHTML = messagesHtml(view.messages, view.chat.kind !== 'direct');
     if (box && atBottom) box.scrollTop = box.scrollHeight;
   } catch { /* the next check tries again */ }
 }
 
-function closeChat() {
+/** Back to the list, read again: what was just sent is its last message, and it moves to the top. */
+async function closeChat() {
   clearInterval(chatTimer);
   view.chat = null;
   view.messages = [];
   drawChats();
+  try {
+    view.chats = (await social.chats()).chats;
+    if (!view.chat) drawChats();
+  } catch { /* the list as it was */ }
+}
+
+function sendCurrent() {
+  const box = el('frText');
+  const text = box?.value.trim();
+  if (!text || !view.chat) return;
+  box.value = '';
+  act(async () => {
+    const sent = await social.send(view.chat.id, text);
+    view.messages.push(sent);
+    const list = el('frMsgs');
+    if (list) { list.innerHTML = messagesHtml(view.messages, view.chat.kind !== 'direct'); list.scrollTop = list.scrollHeight; }
+  });
 }
 
 /* ───────────────────────── events ───────────────────────── */
@@ -240,8 +363,55 @@ async function act(fn) {
     await fn();
   } catch (err) {
     view.note = err.message;
+    if (view.modal) {
+      const foot = el('frModal').querySelector('.fr-dfoot');
+      foot?.insertAdjacentHTML('beforebegin', `<div class="fr-note fr-err">${escapeHtml(err.message)}</div>`);
+    }
   }
   el('frNote').textContent = view.note;
+}
+
+function picked() {
+  return [...el('frModal').querySelectorAll('#frPick input[type=checkbox]:checked')].map((b) => b.value);
+}
+
+function onModalClick(e) {
+  const t = (sel) => e.target.closest(sel);
+  const m = view.modal;
+  if (e.target === el('frModal') || t('[data-close]')) return closeModal();
+  if (t('[data-save-profile]')) {
+    const mode = el('frModal').querySelector('input[name=frShow]:checked')?.value ?? 'none';
+    return act(async () => { await setShowing(mode); closeModal(); await load(); });
+  }
+  if (t('[data-group-next]')) {
+    const name = el('frGroupName').value.trim();
+    if (!name) { el('frGroupName').focus(); return undefined; }
+    return openModal({ type: 'groupFriends', name, members: m.members ?? [] });
+  }
+  if (t('[data-group-back]')) return openModal({ type: 'groupName', name: m.name, members: picked() });
+  if (t('[data-group-create]')) {
+    const members = picked();
+    return act(async () => {
+      const made = await social.createChat(m.name, members);
+      closeModal();
+      view.chats = (await social.chats()).chats;
+      await openChat(made.id);
+    });
+  }
+  if (t('[data-save-members]')) {
+    const want = new Set(picked());
+    const now = view.chat.members.map((x) => x.id).filter((id) => id !== currentUserId());
+    const add = [...want].filter((id) => !now.includes(id));
+    const remove = now.filter((id) => !want.has(id));
+    return act(async () => {
+      await social.members(view.chat.id, add, remove);
+      closeModal();
+      view.chats = (await social.chats()).chats;
+      view.chat = view.chats.find((c) => c.id === view.chat.id) ?? null;
+      drawChats();
+    });
+  }
+  return undefined;
 }
 
 function bind() {
@@ -265,8 +435,24 @@ function bind() {
     });
   });
 
+  el('frModal').addEventListener('click', onModalClick);
+  el('frModal').addEventListener('change', (e) => {
+    // The preview follows the choice before it is saved.
+    if (e.target.name === 'frShow') openModal({ type: 'profile', mode: e.target.value });
+  });
+  el('frModal').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'frGroupName') { e.preventDefault(); el('frModal').querySelector('[data-group-next]')?.click(); }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && view.modal) closeModal(); });
+
   page.addEventListener('click', (e) => {
+    if (e.target.closest('#frModal')) return undefined;
     const t = (sel) => e.target.closest(sel);
+    if (t('[data-modal]')) {
+      const type = t('[data-modal]').dataset.modal;
+      return openModal({ type });
+    }
+    if (t('[data-dm]')) return act(() => openDirect(t('[data-dm]').dataset.dm));
     if (t('[data-friend]')) return openFriend(t('[data-friend]').dataset.friend);
     if (t('[data-accept]')) return act(async () => { await social.answer(t('[data-accept]').dataset.accept, true); await load(); });
     if (t('[data-decline]')) return act(async () => { await social.answer(t('[data-decline]').dataset.decline, false); await load(); });
@@ -278,60 +464,24 @@ function bind() {
       }
       return undefined;
     }
-    if (t('[data-compose]')) { view.composing = t('[data-compose]').dataset.compose === '1'; drawChats(); el('frChatName')?.focus(); return undefined; }
     if (t('[data-chat]')) return openChat(t('[data-chat]').dataset.chat);
     if (t('[data-back]')) return closeChat();
-    if (t('[data-leave]')) {
-      if (confirm(`Leave ${view.chat?.name}?`)) {
-        return act(async () => { await social.leave(view.chat.id); closeChat(); view.chats = (await social.chats()).chats; drawChats(); });
-      }
+    if (t('[data-leave]') && confirm(`Leave ${view.chat?.name}? Its messages stay for the others.`)) {
+      return act(async () => { await social.leave(view.chat.id); closeChat(); view.chats = (await social.chats()).chats; drawChats(); });
     }
     return undefined;
   });
 
-  page.addEventListener('change', (e) => {
-    if (e.target.id !== 'frShareToggle') return;
-    const on = e.target.checked;
-    act(async () => { await setSharing(on); await load(); });
-  });
-
-  page.addEventListener('submit', (e) => {
-    if (e.target.id === 'frNewChat') {
-      e.preventDefault();
-      const name = el('frChatName').value.trim();
-      const members = [...e.target.querySelectorAll('input[type=checkbox]:checked')].map((b) => b.value);
-      act(async () => {
-        const made = await social.createChat(name, members);
-        view.composing = false;
-        view.chats = (await social.chats()).chats;
-        await openChat(made.id);
-      });
-    }
-    if (e.target.id === 'frSend') {
-      e.preventDefault();
-      sendCurrent();
-    }
-  });
-
   page.addEventListener('keydown', (e) => {
-    // Enter sends; Shift+Enter starts a new line.
     if (e.target.id === 'frText' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCurrent(); }
+    // A friend row opens with the keyboard as with the mouse.
+    if (e.key === 'Enter' && e.target.matches?.('.fr-row[data-friend]')) openFriend(e.target.dataset.friend);
+  });
+  page.addEventListener('submit', (e) => {
+    if (e.target.id === 'frSend') { e.preventDefault(); sendCurrent(); }
   });
 
   document.addEventListener('visibilitychange', () => { if (onScreen()) pollChat(); });
-}
-
-function sendCurrent() {
-  const box = el('frText');
-  const text = box?.value.trim();
-  if (!text || !view.chat) return;
-  box.value = '';
-  act(async () => {
-    const sent = await social.send(view.chat.id, text);
-    view.messages.push(sent);
-    const list = el('frMsgs');
-    if (list) { list.innerHTML = messagesHtml(view.messages); list.scrollTop = list.scrollHeight; }
-  });
 }
 
 /** Draw the page; called each time it comes on screen. */
@@ -349,9 +499,9 @@ export async function renderFriends() {
     el('frNote').textContent = view.note;
   }
   clearInterval(listTimer);
-  // Requests and new groups, now and then, while the page is open.
+  // Requests and new conversations, now and then, while the page is open.
   listTimer = setInterval(async () => {
-    if (!onScreen() || view.chat || view.composing) return;
+    if (!onScreen() || view.chat || view.modal) return;
     try { await load(); } catch { /* next time */ }
   }, LIST_EVERY_MS);
 }

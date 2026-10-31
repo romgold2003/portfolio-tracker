@@ -210,6 +210,105 @@ describe('group chats', () => {
   });
 });
 
+describe('what each person chose to show (Profile → Investment details)', () => {
+  test('Amounts: dollars as well — value, invested, cash and total', async () => {
+    const romy = await person('romy@example.com');
+    const dan = await person('dan@example.com');
+    await friends(romy, dan);
+    await romy.call('share', {
+      summary: { mode: 'amount', holdings: [{ t: 'NVDA', w: 80, d: 'Long', v: 4000, inv: 2800 }], cash: 20, cashV: 1000, total: 5000 },
+    });
+    const seen = (await dan.call('portfolio', undefined, `?friend=${romy.id}`)).body;
+    assert.equal(seen.mode, 'amount');
+    assert.deepEqual(seen.holdings, [{ t: 'NVDA', w: 80, d: 'Long', c: '', v: 4000, inv: 2800 }]);
+    assert.deepEqual([seen.cashV, seen.total], [1000, 5000]);
+    assert.equal((await dan.call('friends')).body.friends[0].shows, 'amount');
+    assert.equal((await romy.call('friends')).body.share.mode, 'amount');
+  });
+
+  test('Percentages: any dollars sent along are dropped', async () => {
+    const romy = await person('romy@example.com');
+    const dan = await person('dan@example.com');
+    await friends(romy, dan);
+    await romy.call('share', { summary: { mode: 'percent', holdings: [{ t: 'NVDA', w: 80, v: 4000, inv: 2800 }], cash: 20, cashV: 1000, total: 5000 } });
+    const seen = (await dan.call('portfolio', undefined, `?friend=${romy.id}`)).body;
+    assert.equal(seen.mode, 'percent');
+    assert.doesNotMatch(JSON.stringify(seen), /4000|2800|1000|5000|"v"|inv|total|cashV/);
+    assert.equal((await dan.call('friends')).body.friends[0].shows, 'percent');
+  });
+
+  test('None: nothing at all', async () => {
+    const romy = await person('romy@example.com');
+    const dan = await person('dan@example.com');
+    await friends(romy, dan);
+    await romy.call('share', { summary: { mode: 'amount', holdings: [{ t: 'NVDA', w: 100, v: 1 }] } });
+    await romy.call('share', { summary: null });
+    assert.equal((await dan.call('portfolio', undefined, `?friend=${romy.id}`)).body.shared, false);
+    assert.equal((await dan.call('friends')).body.friends[0].shows, 'none');
+    assert.equal((await romy.call('friends')).body.share.mode, 'none');
+  });
+});
+
+describe('a chat with one friend', () => {
+  test('the same chat from either side, friends only, and not left', async () => {
+    const romy = await person('romy@example.com');
+    const dan = await person('dan@example.com');
+    const eve = await person('eve@example.com');
+    await friends(romy, dan);
+    assert.equal((await romy.call('direct', { friendId: eve.id })).status, 403);
+
+    const mine = (await romy.call('direct', { friendId: dan.id })).body.id;
+    const theirs = (await dan.call('direct', { friendId: romy.id })).body.id;
+    assert.equal(mine, theirs);
+    await romy.call('send', { chat: mine, body: 'Just us' });
+
+    const [c] = (await dan.call('chats')).body.chats;
+    assert.deepEqual([c.kind, c.name, c.with.email, c.owner], ['direct', 'romy@example.com', 'romy@example.com', false]);
+    assert.equal((await dan.call('leave', { chat: mine })).status, 400);
+    assert.equal((await romy.call('members', { chat: mine, add: [], remove: [dan.id] })).status, 400);
+  });
+});
+
+describe("a group's members", () => {
+  test('its maker adds and removes friends; nobody else can', async () => {
+    const romy = await person('romy@example.com');
+    const dan = await person('dan@example.com');
+    const eve = await person('eve@example.com');
+    const zoe = await person('zoe@example.com');
+    await friends(romy, dan);
+    await friends(romy, eve);
+    const chat = (await romy.call('chat', { name: 'Desk', members: [dan.id] })).body.id;
+    assert.equal((await romy.call('chats')).body.chats[0].owner, true);
+
+    assert.equal((await dan.call('members', { chat, add: [eve.id] })).status, 403, 'only the maker');
+    assert.equal((await romy.call('members', { chat, add: [zoe.id] })).status, 403, 'only friends');
+
+    const changed = await romy.call('members', { chat, add: [eve.id], remove: [dan.id, romy.id] });
+    assert.deepEqual(changed.body, { added: 1, removed: 1 }, 'the maker cannot remove themselves this way');
+    const [c] = (await romy.call('chats')).body.chats;
+    assert.deepEqual(c.members.map((m) => m.email), ['eve@example.com', 'romy@example.com']);
+    assert.equal((await dan.call('messages', undefined, `?chat=${chat}`)).status, 404, 'removed: no longer reads it');
+  });
+
+  test('messages are permanent: they stay when people leave, even the last', async () => {
+    const romy = await person('romy@example.com');
+    const dan = await person('dan@example.com');
+    const eve = await person('eve@example.com');
+    await friends(romy, dan);
+    await friends(romy, eve);
+    const chat = (await romy.call('chat', { name: 'Desk', members: [dan.id, eve.id] })).body.id;
+    await dan.call('send', { chat, body: 'kept' });
+
+    // The maker leaves: whoever has been in it longest manages it now.
+    await romy.call('leave', { chat });
+    const owners = await Promise.all([dan, eve].map(async (p) => (await p.call('chats')).body.chats[0].owner));
+    assert.equal(owners.filter(Boolean).length, 1);
+
+    await dan.call('leave', { chat });
+    assert.deepEqual((await eve.call('messages', undefined, `?chat=${chat}`)).body.messages.map((m) => m.body), ['kept']);
+  });
+});
+
 describe('the endpoint', () => {
   test('signed in only, the right method, and no writes from another site', async () => {
     const stranger = makeClient();
