@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="description" content="A local-first trading journal: positions, partial exits, live prices and monthly P&amp;L.">
-<title>Portfolio Tracker</title>
+<title>Riskbook</title>
 
 <!--
   Say what broke, before anything else can break.
@@ -154,7 +154,7 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="logo-area">
-      <div class="logo-name">Portfolio</div>
+      <div class="logo-name">Riskbook</div>
       <div class="logo-tag">Trading journal</div>
       <div class="acct-switch" id="acctSwitch">
         <button class="acct-btn" id="acctBtn" type="button" onclick="toggleAccountMenu()" aria-haspopup="menu" aria-expanded="false" title="Switch sub-account">
@@ -171,7 +171,7 @@
       <button class="nl active" onclick="show('home')"><span class="nl-icon">⌂</span> Home</button>
       <button class="nl" onclick="show('positions')"><span class="nl-icon">◈</span> Positions</button>
       <button class="nl" onclick="show('add')"><span class="nl-icon">＋</span> New trade</button>
-      <button class="nl" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
+      <button class="nl nl-monthly" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
       <button class="nl" onclick="show('news')"><span class="nl-icon">◎</span> News</button>
       <button class="nl" onclick="show('crypto')"><span class="nl-icon">₿</span> Crypto</button>
       <button class="nl" onclick="show('friends')"><span class="nl-icon">👤</span> Friends</button>
@@ -184,13 +184,27 @@
         <span class="account-email" id="accountEmail"></span>
         <button class="lock-link" onclick="signOut()">Sign out</button>
       </div>
-      <div id="sideStat" style="margin-top:8px">Local only · no cloud</div>
+      <div id="sideStat" style="margin-top:8px">✓ Encrypted</div>
     </div>
   </aside>
 
   <main class="main">
 
     <div id="home" class="page active">
+      <!-- Welcome banner for new users with no data. Shown by home.js when the account is empty. -->
+      <div id="welcomeBanner" class="welcome-banner" hidden>
+        <button class="welcome-close" onclick="dismissWelcome()" aria-label="Dismiss">✕</button>
+        <div class="welcome-title">Welcome to Riskbook</div>
+        <div class="welcome-steps">
+          <div class="welcome-step"><span class="welcome-num">1</span><div><strong>Log your first trade</strong> — use "+ New trade" in the top right, or import your broker statement below.</div></div>
+          <div class="welcome-step"><span class="welcome-num">2</span><div><strong>Watch your portfolio build</strong> — P&amp;L, allocation, and your returns vs. the S&amp;P 500 all update live.</div></div>
+          <div class="welcome-step"><span class="welcome-num">3</span><div><strong>Explore market data</strong> — Fed odds, options exposure, crypto flows, and earnings are in News and Crypto.</div></div>
+        </div>
+        <div class="welcome-actions">
+          <button class="btn btn-blue" onclick="show('add')">+ Log your first trade</button>
+          <button class="btn" onclick="openSettings()">Import broker statement</button>
+        </div>
+      </div>
       <div class="topbar">
         <div class="bench">
           <div class="bench-row"><span class="bench-name" id="benchName">S&amp;P 500</span><span class="bench-val" id="benchVal">—</span></div>
@@ -264,6 +278,7 @@
         <div class="kpi"><div class="kpi-lbl">Realised P&L</div><div class="kpi-val" id="kRealised">+$0</div><div class="kpi-chg" id="kRealisedSub">0 closed positions</div></div>
         <div class="kpi"><div class="kpi-lbl"><span id="kRetLbl">3M</span> return</div><div class="kpi-val" id="kReturn">+0%</div><div class="kpi-chg">vs start of period</div></div>
         <div class="kpi"><div class="kpi-lbl">Win rate</div><div class="kpi-val" id="kWinRate">0%</div><div class="kpi-chg" id="kWinSub">0W · 0L closed</div></div>
+        <div class="kpi kpi-monthly-link" onclick="show('monthly')" title="Monthly P&amp;L"><div class="kpi-lbl">Monthly P&amp;L</div><div class="kpi-val" style="font-size:14px;color:var(--blue)">View →</div><div class="kpi-chg">by month</div></div>
       </div>
       <div class="card">
         <div class="card-lbl"><span>Open positions</span><span class="green" style="text-transform:none;letter-spacing:0">● updating live</span></div>
@@ -290,9 +305,9 @@
         <div class="sum"><div class="sum-lbl">Open P&L</div><div class="sum-val" id="sOpenPnl">+$0</div></div>
         <div class="sum"><div class="sum-lbl">Open positions</div><div class="sum-val" id="sOpenCount">0</div></div>
         <div class="sum"><div class="sum-lbl">Deployed</div><div class="sum-val" id="sDeployed">$0</div></div>
-        <div class="sum sum-beta"><div class="sum-lbl">Portfolio β</div><div class="sum-val amber" id="sBeta">—</div><div class="sum-sub">size-weighted</div></div>
+        <div class="sum sum-beta" title="How your portfolio moves relative to the market. 1.0 = moves exactly with the S&amp;P 500"><div class="sum-lbl">Portfolio β</div><div class="sum-val amber" id="sBeta">—</div><div class="sum-sub">size-weighted</div></div>
       </div>
-      <div class="section-title">Open — tap a row to expand</div>
+      <div class="section-title">Open positions</div>
       <div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">
         <button class="sort-btn active" id="psort-pnl" onclick="setPosSort('pnl')">P&L ↕</button>
         <button class="sort-btn" id="psort-size" onclick="setPosSort('size')">Size ↓</button>
@@ -412,7 +427,7 @@
            Crypto money has a page of its own, under News in the menu. -->
       <div class="subtabs" id="newsTabs">
         <button class="subtab active" data-tab="market">Markets</button>
-        <button class="subtab" data-tab="gamble">Gamble</button>
+        <button class="subtab" data-tab="gamble">Prediction Markets</button>
       </div>
 
       <div id="newsMarket">
@@ -490,7 +505,7 @@
 
       <!-- Shown only while there is nothing to show, so the page is never bare. -->
       <div class="card" id="newsEmpty">
-        <div class="empty">Waiting on the rate futures — nothing quoting just now.</div>
+        <div class="empty">Rate futures are not quoting right now. Data updates when markets open on the next trading day.</div>
       </div>
 
       </div><!-- /newsMarket -->

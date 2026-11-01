@@ -76,7 +76,7 @@ export function renderPositions() {
     keepOpenPanels(openEl, () => {
       openEl.innerHTML = open.length
         ? sortPositions(open, ui.posSort, dayPctOnScreen).map((p) => positionCard(p, true, state.positions)).join('')
-        : '<div class="empty">No open positions. Add one from New trade.</div>';
+        : '<div class="pos-empty-state"><div class="pos-empty-title">No open positions yet</div><div class="pos-empty-sub">Log a trade to start tracking your portfolio</div><button class="btn btn-blue pos-empty-cta" onclick="show(\'add\')">+ Log your first trade</button></div>';
     });
   }
 

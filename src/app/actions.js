@@ -31,7 +31,7 @@ import {
 import { baseQtyOf, todayStr } from '../core/portfolio.js';
 import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
-import { renderHome, toggleAmounts, drawCurve } from '../ui/views/home.js';
+import { renderHome, toggleAmounts, drawCurve, dismissWelcome } from '../ui/views/home.js';
 import { toggleDailyLog } from '../ui/views/dailyLog.js';
 import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
@@ -846,7 +846,7 @@ export function installActions(extra = {}) {
     // sub-accounts
     toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
-    show, toggleTools, toggleTheme, toggleVoice, toggleAmounts, toggleDailyLog, setCurveMode,
+    show, toggleTools, toggleTheme, toggleVoice, toggleAmounts, toggleDailyLog, setCurveMode, dismissWelcome,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
     openFavorites, closeFavorites,

@@ -197,7 +197,7 @@ function describeStorage() {
 /** The sidebar line under the account. */
 export function describeStorageMode() {
   const stat = document.getElementById('sideStat');
-  if (stat) stat.textContent = cloudMode() ? 'Synced · encrypted' : 'Local only · no cloud';
+  if (stat) stat.textContent = cloudMode() ? '✓ Synced · encrypted' : '✓ Encrypted';
 }
 
 export function closeSettings() {

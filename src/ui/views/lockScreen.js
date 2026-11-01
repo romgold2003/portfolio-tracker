@@ -78,6 +78,7 @@ function signinBlurb() {
 function signinForm() {
   const accounts = listProfiles();
   return `
+    <div class="lock-brand">Riskbook</div>
     <h1 class="lock-title">Sign in</h1>
     <p class="lock-sub">${signinBlurb()}</p>
     <div class="lock-field">
@@ -325,7 +326,7 @@ function copyKey() {
 }
 
 function downloadKey() {
-  const text = `Portfolio Tracker recovery key\nAccount: ${pendingEmail}\nKey: ${issuedRecoveryKey}\n\n`
+  const text = `Riskbook recovery key\nAccount: ${pendingEmail}\nKey: ${issuedRecoveryKey}\n\n`
     + 'Keep this somewhere safe. Without it, a forgotten password cannot be recovered.\n';
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
   const link = document.createElement('a');

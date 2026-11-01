@@ -70,9 +70,10 @@
   .acct-switch{margin-top:0;flex:1;min-width:0}
   .tools-btn{display:flex}
 
-  /* The seven sections, always all visible, along the bottom — one row. */
+  /* Six sections along the bottom — Monthly moves to desktop-only. */
+  .nl-monthly{display:none}
   .nav-links{position:fixed;left:0;right:0;bottom:0;z-index:60;display:grid;
-    grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;
+    grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;
     padding:5px 4px calc(5px + env(safe-area-inset-bottom));
     background:var(--panel);border-top:0.5px solid var(--border)}
   .nl{flex-direction:column;justify-content:center;gap:3px;width:auto;min-height:52px;
