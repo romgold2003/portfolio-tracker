@@ -1075,7 +1075,6 @@ a.gam-title:hover{color:var(--text);text-decoration:underline}
    this year at the top down to 1980. Imported years are green, this year is
    outlined, and the square just pressed is highlighted while its file is read. */
 .years-bg{z-index:110}
-.years-modal{width:460px}
 .years-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .years-close{padding:4px 11px;font-size:16px;line-height:1}
 .years-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;max-height:260px;overflow-y:auto;padding:2px;margin-bottom:10px}
@@ -1099,6 +1098,63 @@ a.gam-title:hover{color:var(--text);text-decoration:underline}
 /* A year with a file picked and waiting for Add to journal. */
 .year-tile.is-pending{border-color:var(--border-blue);background:var(--blue-bg);color:var(--blue)}
 .year-tile.is-pending .year-tag{color:var(--blue)}
+.years-more{background:none;border:0;padding:2px 0;color:var(--blue);font:inherit;font-size:12px;cursor:pointer}
+.years-more:hover{text-decoration:underline}
+
+/* ───────── Import from your broker: the broker, its steps, then the years (views/brokerPicker.js) ───────── */
+.years-modal{width:560px}
+.modal .imp-lead{font-size:12.5px;color:var(--text2);margin:4px 0 12px}
+.imp-search{margin-bottom:14px;padding:10px 12px;border-radius:8px}
+.brk-group{margin-bottom:14px}
+.brk-title{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+.brk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:6px}
+.brk{display:flex;align-items:center;gap:10px;min-height:50px;padding:8px 10px;border-radius:9px;border:0.5px solid var(--border2);
+  background:var(--input);color:var(--text);font:inherit;font-size:12.5px;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
+.brk:hover{background:var(--hover2);border-color:var(--border-blue)}
+.brk:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.brk-mark{flex:none;width:30px;height:30px;border-radius:8px;background:var(--brk);color:#fff;display:grid;place-items:center;
+  font-size:11px;font-weight:700;letter-spacing:-0.02em}
+.brk-name{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.3}
+.brk-name small{font-size:11px;color:var(--text3)}
+.modal .brk-none{font-size:12px;color:var(--text2);margin:0 0 12px}
+.imp-broker{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--input);border:0.5px solid var(--border2);margin:4px 0 16px}
+.imp-broker-name{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;font-size:13.5px;line-height:1.3}
+.imp-broker-name small{font-size:11px;color:var(--text3)}
+.imp-change{flex:none;padding:6px 12px;font-size:12px}
+.imp-step-title{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--text);margin:0 0 8px}
+.imp-num{flex:none;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+.imp-steps{margin:0 0 12px;padding:0 0 0 52px;font-size:12.5px;color:var(--text2);line-height:1.65}
+.imp-steps li::marker{color:var(--text3);font-variant-numeric:tabular-nums}
+.modal .imp-tip{font-size:12px;color:var(--text2);background:var(--blue-bg);border:0.5px solid var(--border-blue);border-radius:8px;padding:8px 11px;margin:0 0 18px}
+.imp-tip::before{content:'Tip · ';font-weight:600;color:var(--blue)}
+.imp-add{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.imp-add .years-grid{margin-bottom:6px}
+/* One file for everything is the usual way for most brokers: it comes first, as the main button. */
+.imp-whole-first .years-whole{order:-1;background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600;padding:11px 12px;font-size:13px}
+
+/* ───────── Settings: one card per job ───────── */
+.settings-modal{width:520px}
+.set-card{border:0.5px solid var(--border2);border-radius:10px;padding:14px 16px;margin-top:12px}
+.set-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px}
+.set-sub{font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:12px}
+.set-import{display:flex;align-items:center;gap:12px;background:var(--blue-bg);border-color:var(--border-blue)}
+.set-import .set-sub{margin-bottom:0}
+.set-import .btn{flex:none;white-space:nowrap}
+.set-ico{flex:none;width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:16px;font-weight:700}
+.set-body{flex:1;min-width:0}
+.set-actions{display:flex;gap:8px;flex-wrap:wrap}
+.set-card.danger-zone{margin-top:12px;padding:12px 16px}
+.danger-zone summary{cursor:pointer;list-style:none;font-size:12px;font-weight:600;color:var(--red)}
+.danger-zone summary::-webkit-details-marker{display:none}
+.danger-zone summary::before{content:'▸ ';color:var(--text3)}
+.danger-zone[open] summary::before{content:'▾ '}
+.set-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+.set-foot .build-stamp{margin:0;text-align:left}
+@media (max-width:540px){
+  .set-import{flex-wrap:wrap}
+  .set-import .btn{width:100%}
+  .brk-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 
 /* Designer mode */
 .designer-modal{width:420px}

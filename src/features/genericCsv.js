@@ -357,9 +357,11 @@ const MONTHS = {
  * Whether numeric dates are day-first or month-first.
  *
  * A day above 12 settles it; failing any, the separator is the best evidence
- * there is — dots and dashes are European, slashes mostly American.
+ * there is — dots and dashes are European, slashes mostly American — unless
+ * the file is known to come from somewhere that writes the day first: Israeli
+ * banks write 05/03/2026 for the fifth of March, slashes and all.
  */
-export function detectDateOrder(values) {
+export function detectDateOrder(values, { dayFirst = false } = {}) {
   let dmy = 0;
   let mdy = 0;
   let slash = 0;
@@ -372,6 +374,7 @@ export function detectDateOrder(values) {
     else if (Number(m[3]) > 12) mdy++;
   }
   if (dmy || mdy) return dmy >= mdy ? 'dmy' : 'mdy';
+  if (dayFirst) return 'dmy';
   return slash > other ? 'mdy' : 'dmy';
 }
 
@@ -488,7 +491,10 @@ function columnValues(table, header) {
 /** Formats read from the file itself, before anyone chooses. */
 export function detectFormats(table, mapping) {
   return {
-    dateOrder: detectDateOrder(columnValues(table, mapping.date)),
+    // Columns named in Hebrew: an Israeli file, so day first.
+    dateOrder: detectDateOrder(columnValues(table, mapping.date), {
+      dayFirst: (table.headers ?? []).some((h) => /[\u0590-\u05ff]/.test(h)),
+    }),
     numberStyle: detectNumberStyle(['quantity', 'price', 'amount', 'fees']
       .flatMap((k) => (mapping[k] ? columnValues(table, mapping[k]) : []))),
   };

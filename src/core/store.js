@@ -94,7 +94,20 @@ export const state = {
    * with the sign-in, so it does not open again on another device.
    */
   tourSeen: false,
+  /**
+   * The broker chosen in the import window (config/brokers.js), so it opens
+   * straight on that broker's steps next time. Kept with the sign-in.
+   */
+  broker: null,
 };
+
+/** The broker this person imports from; null to choose again. */
+export function setBroker(id) {
+  const next = typeof id === 'string' && id ? id : null;
+  if (state.broker === next) return;
+  state.broker = next;
+  scheduleFlush();
+}
 
 /** The tutorial has been seen; it will not open by itself again. */
 export function setTourSeen() {
@@ -848,6 +861,7 @@ export function loadState(journal) {
     state.earningsForecasts = cleanForecasts(source.earningsForecasts, state.earningsWatch);
     state.layoutHidden = cleanLayout(source.layoutHidden);
     state.tourSeen = source.tourSeen === true;
+    state.broker = typeof source.broker === 'string' ? source.broker : null;
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -871,6 +885,7 @@ export function journalSnapshot() {
     earningsForecasts: state.earningsForecasts,
     layoutHidden: state.layoutHidden,
     tourSeen: state.tourSeen,
+    broker: state.broker,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -897,6 +912,7 @@ export function clearState() {
   state.earningsForecasts = {};
   state.layoutHidden = [];
   state.tourSeen = false;
+  state.broker = null;
   announceJournal();
 }
 

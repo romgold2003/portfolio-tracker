@@ -84,9 +84,14 @@ const SHOTS = [
   },
   {
     name: 'import',
-    // On its own, not over the settings window, so the picture is clear.
-    setup: () => { window.closeSettings?.(); window.openYearsPanel(); },
-    targets: { years: { sel: '#yearsGrid' }, firstYear: { sel: '#yearsGrid > *' }, whole: { sel: '.years-whole' } },
+    // On its own, not over the settings window, so the picture is clear; the broker list first.
+    setup: () => { window.closeSettings?.(); window.openYearsPanel(); window.changeBroker(); },
+    targets: { search: { sel: '#brokerSearch' }, brokerTile: { sel: '.brk[data-broker="ibkr"]' } },
+  },
+  {
+    name: 'guide',
+    setup: () => { window.chooseBroker('ibkr'); document.getElementById('brokerSearch')?.blur(); },
+    targets: { steps: { sel: '.imp-steps' }, firstYear: { sel: '#yearsGrid > *' }, whole: { sel: '.years-whole' } },
   },
   {
     name: 'positions',

@@ -28,10 +28,11 @@ describe('the slides', () => {
     }
   });
 
-  test('importing from the broker is shown early, with the IBKR steps', () => {
+  test('importing from the broker is shown early: the broker, then its steps and the years', () => {
     const at = SLIDES.findIndex((s) => s.shot === 'import');
     assert.ok(at > 0 && at <= 2);
-    assert.match(SLIDES[at].text, /Performance & Reports → Statements → Activity/);
+    assert.equal(SLIDES[at + 1].shot, 'guide');
+    assert.deepEqual(SLIDES[at + 1].marks.map(([k]) => k), ['steps', 'firstYear', 'whole']);
     assert.ok(SLIDES.some((s) => s.marks.some(([k]) => k === 'withdraw')));
     assert.ok(SLIDES.some((s) => s.marks.some(([k]) => k === 'newTrade')));
   });

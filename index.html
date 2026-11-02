@@ -727,52 +727,55 @@
 </div>
 
 <div class="modal-bg" id="settingsModal">
-  <div class="modal">
-    <h3>Settings</h3>
+  <div class="modal settings-modal">
+    <div class="years-head">
+      <h3>Settings</h3>
+      <button class="btn years-close" onclick="closeSettings()" aria-label="Close">×</button>
+    </div>
 
     <!-- First, because it is the first thing a new account needs. -->
-    <div class="modal-field import-first">
-      <label>Import from your broker</label>
-      <p style="margin-bottom:10px">Bring in your trades, positions and cash from the statement your broker gives you — CSV or Excel. <strong>Interactive Brokers:</strong> Performance &amp; Reports → Statements → Activity → choose the period → format <strong>CSV</strong> → Download.</p>
-      <button class="btn btn-blue" id="importBrokerBtn" onclick="openYearsPanel()">↑ Import broker statement</button>
-    </div>
-
-    <div class="modal-field">
-      <label>Live prices</label>
-    </div>
-    <p>Crypto updates automatically with no key. For stocks and gold ETFs, paste your free Finnhub API key. It is stored only on this device and never sent anywhere except Finnhub.</p>
-    <div class="modal-field">
-      <label>Finnhub API key (for stocks / ETFs)</label>
-      <input type="text" id="apiKeyInput" placeholder="Paste your key here">
-    </div>
-    <div class="modal-field">
-      <label>Alpha Vantage key — for the S&amp;P 500 comparison</label>
-      <input type="text" id="benchKeyInput" placeholder="Optional. Free at alphavantage.co">
-    </div>
-    <div class="btn-row">
-      <button class="btn" onclick="closeSettings()">Cancel</button>
-      <button class="btn btn-blue" onclick="saveApiKey()">Save key</button>
-    </div>
-
-    <div class="modal-section">
-      <label>Your journal</label>
-      <p style="margin-bottom:10px" id="journalBlurb">Everything is stored in this browser only. Export a backup before clearing browser data, or to move the journal to another machine.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" onclick="exportPortfolioCsv()">↓ Export CSV</button>
-        <button class="btn" onclick="exportBackup()">↓ Backup file (for restoring)</button>
-        <button class="btn" onclick="openImport()">↑ Import backup</button>
+    <section class="set-card set-import">
+      <span class="set-ico" aria-hidden="true">↑</span>
+      <div class="set-body">
+        <div class="set-title">Import from your broker</div>
+        <div class="set-sub" id="importStatus">Your trades, positions and cash, from the file your broker gives you.</div>
       </div>
-    </div>
+      <button class="btn btn-blue" id="importBrokerBtn" onclick="openYearsPanel()">Import my broker file</button>
+    </section>
 
-    <div class="modal-field danger-zone">
-      <label>Delete this account</label>
-      <p id="deleteBlurb" style="margin-bottom:10px">Removes the account and everything in it. This cannot be undone.</p>
+    <section class="set-card">
+      <div class="set-title">Live prices</div>
+      <div class="set-sub">Crypto updates by itself. For stocks and ETFs, paste a free Finnhub key — it stays on this device and goes only to Finnhub.</div>
+      <div class="modal-field">
+        <label for="apiKeyInput">Finnhub key — stocks and ETFs</label>
+        <input type="text" id="apiKeyInput" placeholder="Paste your key here" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-field" style="margin-bottom:0">
+        <label for="benchKeyInput">Alpha Vantage key — the S&amp;P 500 comparison (optional)</label>
+        <input type="text" id="benchKeyInput" placeholder="Free at alphavantage.co" autocomplete="off" spellcheck="false">
+      </div>
+    </section>
+
+    <section class="set-card">
+      <div class="set-title">Your journal</div>
+      <div class="set-sub" id="journalBlurb">Everything is stored in this browser only. Export a backup before clearing browser data, or to move the journal to another machine.</div>
+      <div class="set-actions">
+        <button class="btn" onclick="exportPortfolioCsv()">↓ Export CSV</button>
+        <button class="btn" onclick="exportBackup()">↓ Backup file</button>
+        <button class="btn" onclick="openImport()">↑ Restore a backup</button>
+      </div>
+    </section>
+
+    <!-- Folded, so deleting is never one stray click away. -->
+    <details class="set-card danger-zone">
+      <summary>Delete or erase this account</summary>
+      <p id="deleteBlurb" style="margin:10px 0">Removes the account and everything in it. This cannot be undone.</p>
       <!-- Erase keeps the account and empties it; delete removes the account itself. -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="set-actions">
         <button class="btn btn-danger" id="deleteAccountBtn" onclick="beginDeleteAccount()">Delete account</button>
         <button class="btn btn-warn" id="eraseJournalBtn" onclick="eraseJournal()">Erase journal</button>
       </div>
-      <p style="margin-top:8px;color:var(--text3)"><strong>Erase journal</strong> empties this account instead: every position, trade, deposit and imported file goes, and the account, its password and your settings stay.</p>
+      <p style="margin:8px 0 0;color:var(--text3)"><strong>Erase journal</strong> empties this account instead: every position, trade, deposit and imported file goes, and the account, its password and your settings stay.</p>
 
       <div id="deleteConfirm" style="display:none;margin-top:12px">
         <p style="margin-bottom:10px"><strong>Export a backup first if you might want this journal again.</strong> Nobody can restore it afterwards — the journal is encrypted with a key derived from your password, and no readable copy exists anywhere.</p>
@@ -784,44 +787,60 @@
           <button class="btn btn-danger" id="deleteConfirmBtn" onclick="confirmDeleteAccount()">Delete it permanently</button>
         </div>
       </div>
-    </div>
+    </details>
 
     <!-- Which build is actually running. Stamped by scripts/build-standalone.mjs
          at deploy; left as a dash when the page is served straight from source.
          It is here because "I fixed that" and "it still does it" have crossed
          more than once, and the difference was a tab that had never reloaded. -->
-    <!-- Save and quit: keeps the keys, adds the files waiting in the import
+    <!-- Save and close: keeps the keys, adds the files waiting in the import
          preview, and closes settings so the result shows at once. -->
-    <div style="display:flex;justify-content:flex-end;margin-top:16px">
-      <button class="btn btn-blue" onclick="saveAndQuit()">Save and quit</button>
+    <div class="set-foot">
+      <p class="build-stamp">Build <span id="buildStamp">—</span></p>
+      <button class="btn btn-blue" onclick="saveAndQuit()">Save and close</button>
     </div>
-    <p class="build-stamp">Build <span id="buildStamp">—</span></p>
   </div>
 </div>
 
-<!-- Import from your broker: opened from Settings, one square per year. -->
+<!-- Import from your broker: opened from Settings. First the broker
+     (src/ui/views/brokerPicker.js), then its steps and one square per year. -->
 <div class="modal-bg years-bg" id="yearsModal">
   <div class="modal years-modal">
     <div class="years-head">
       <h3>Import from your broker</h3>
       <button class="btn years-close" onclick="closeYearsPanel()" aria-label="Close">×</button>
     </div>
-    <p>Click a year and choose its file — CSV, Excel, or an Interactive Brokers statement. <strong>This year's</strong> file sets today's positions, cash and account value; earlier years add history.</p>
     <div class="hint years-account" id="yearsAccount"></div>
-    <div class="years-grid" id="yearsGrid"></div>
-    <button class="btn years-whole" onclick="chooseWholeHistory()">One file with my whole history</button>
-    <select id="ibkrYear" hidden aria-hidden="true"></select>
-    <input type="file" id="ibkrFile" multiple hidden accept=".csv,.xlsx,.htm,.html,.zip,text/csv,text/html,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="readIbkrFile()">
-    <div class="hint" id="yearsChosen" style="font-style:normal"></div>
-    <div id="ibkrPreview" style="display:none;margin-top:12px">
-      <div class="hint" id="ibkrSummary" style="margin:0 0 10px"></div>
-      <div class="hint" id="ibkrWarning" style="margin:0 0 10px;color:var(--red)"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" onclick="cancelIbkrImport()">Cancel</button>
-        <button class="btn btn-blue" id="ibkrConfirm" onclick="confirmIbkrImport()">Add to journal</button>      </div>
+
+    <div id="importPick">
+      <p class="imp-lead">Where do you invest? Pick your broker, and Riskbook shows you exactly how to get your file.</p>
+      <input type="search" class="imp-search" id="brokerSearch" placeholder="Search — Robinhood, eToro, לאומי…" autocomplete="off" spellcheck="false" aria-label="Search brokers" oninput="filterBrokers(this.value)">
+      <div id="brokerList"></div>
     </div>
-    <div id="ibkrError" class="lock-error" style="margin-top:10px"></div>
-    <div id="ibkrYears" style="margin-top:14px"></div>
+
+    <div id="importGuide" hidden>
+      <div id="brokerSteps"></div>
+      <div class="imp-add">
+        <div class="imp-years">
+          <div class="years-grid" id="yearsGrid"></div>
+          <button type="button" class="years-more" id="yearsMore" onclick="toggleEarlierYears()">Earlier years ▾</button>
+        </div>
+        <button class="btn years-whole" onclick="chooseWholeHistory()">One file with my whole history</button>
+      </div>
+      <select id="ibkrYear" hidden aria-hidden="true"></select>
+      <input type="file" id="ibkrFile" multiple hidden accept=".csv,.xls,.xlsx,.htm,.html,.zip,text/csv,text/html,application/zip,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="readIbkrFile()">
+      <div class="hint" id="yearsChosen" style="font-style:normal"></div>
+      <div id="ibkrPreview" style="display:none;margin-top:12px">
+        <div class="hint" id="ibkrSummary" style="margin:0 0 10px"></div>
+        <div class="hint" id="ibkrWarning" style="margin:0 0 10px;color:var(--red)"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="cancelIbkrImport()">Cancel</button>
+          <button class="btn btn-blue" id="ibkrConfirm" onclick="confirmIbkrImport()">Add to journal</button>
+        </div>
+      </div>
+      <div id="ibkrError" class="lock-error" style="margin-top:10px"></div>
+      <div id="ibkrYears" style="margin-top:14px"></div>
+    </div>
   </div>
 </div>
 

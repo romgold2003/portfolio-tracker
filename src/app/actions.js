@@ -40,7 +40,12 @@ import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
 import {
   openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears, setChosenYear, setPendingYears,
+  toggleEarlierYears,
 } from '../ui/views/settings.js';
+import {
+  showImportStep, chooseBroker, changeBroker, filterBrokers,
+} from '../ui/views/brokerPicker.js';
+import { decodeText, sheetsFromMarkup } from '../features/sheetText.js';
 import {
   statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn, sourceOf,
 } from '../features/statementLibrary.js';
@@ -163,15 +168,6 @@ export async function saveAndQuit() {
   }
   closeSettings();
   refreshPrices();
-  renderAll();
-}
-
-export function saveApiKey() {
-  persistApiKey(readApiKeyInput());
-  saveBenchmarkKey(readBenchKeyInput());
-  closeSettings();
-  refreshPrices();
-  // A new market-data key can change the benchmark line.
   renderAll();
 }
 
@@ -782,8 +778,9 @@ export function installActions(extra = {}) {
     openCustomize, closeCustomize, openTour, closeTour,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
     openFavorites, closeFavorites,
-    openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
+    openSettings: openSettingsFresh, closeSettings, saveAndQuit,
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
+    chooseBroker, changeBroker, filterBrokers, toggleEarlierYears,
     // trades
     addPos, clearForm, setDir, updateSizeHint,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
@@ -1220,7 +1217,7 @@ export async function readIbkrFile() {
   for (const file of items) {
     const { bytes } = file;
     if (isOldExcel(bytes)) {
-      problems.push(`${file.name}: an old Excel file (.xls). Open it and save it as .xlsx or CSV, then upload that.`);
+      problems.push(`${file.name}: an old-style Excel file (.xls). Open it in Excel, choose Save As → Excel Workbook (.xlsx), and choose that file instead.`);
       continue;
     }
 
@@ -1239,7 +1236,12 @@ export async function readIbkrFile() {
         continue;
       }
     } else {
-      text = new TextDecoder().decode(bytes);
+      text = decodeText(bytes);
+      // "Export to Excel" from many banks is a web page or an Excel 2003 sheet named .xls.
+      if (!isIbkrStatement(text)) {
+        const sheets = sheetsFromMarkup(text);
+        if (sheets) table = tableFromSheets(sheets);
+      }
     }
 
     /**
@@ -1384,6 +1386,8 @@ function openYearsPanel() {
   cancelIbkrImport();
   setChosenYear(null);
   renderStatementYears();
+  // Which broker first; once chosen, it opens straight on its steps.
+  showImportStep();
   el('yearsModal')?.classList.add('show');
 }
 

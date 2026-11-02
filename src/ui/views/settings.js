@@ -1,9 +1,10 @@
-/** The live-price settings modal (Finnhub API key). */
+/** The Settings window: importing from the broker, live prices, the journal and the account. */
 import { state } from '../../core/store.js';
 import { benchmarkKey } from '../../services/benchmark.js';
 import { cloudMode } from '../../core/profiles.js';
 import { chainReport, historyGaps } from '../../features/statementLibrary.js';
 import { activeAccountName } from './accounts.js';
+import { brokerById } from '../../config/brokers.js';
 
 const modal = () => document.getElementById('settingsModal');
 
@@ -13,8 +14,24 @@ export function openSettings() {
   const bench = document.getElementById('benchKeyInput');
   if (bench) bench.value = benchmarkKey();
   describeStorage();
+  describeImport();
   renderStatementYears();
   modal()?.classList.add('show');
+}
+
+/** The import card says where things stand: which broker, which years are in. */
+function describeImport() {
+  const years = (state.statements ?? []).map((r) => r.year).sort((a, b) => a - b);
+  const broker = brokerById(state.broker);
+  const status = document.getElementById('importStatus');
+  if (status) {
+    const span = years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : String(years[0] ?? '');
+    status.textContent = years.length
+      ? `${broker ? `${broker.name} · ` : ''}${span} imported. Add a newer file to bring it up to date.`
+      : 'Your trades, positions and cash, from the file your broker gives you. About two minutes.';
+  }
+  const button = document.getElementById('importBrokerBtn');
+  if (button) button.textContent = years.length ? 'Add a file' : 'Import my broker file';
 }
 
 /** The earliest year the picker offers. */
@@ -48,8 +65,20 @@ let pendingYears = new Set();
 
 export function setPendingYears(years) { pendingYears = new Set(years ?? []); }
 
+/** How many recent years show before "Earlier years" opens the rest. */
+const RECENT_YEARS = 6;
+
+/** Whether the years before the recent ones are open. */
+let showAllYears = false;
+
+export function toggleEarlierYears() {
+  showAllYears = !showAllYears;
+  renderYearGrid();
+}
+
 /**
- * One square per year, this year at the top down to 1980 at the bottom.
+ * One square per year, this year first. The last six show, with any year
+ * already imported or waiting; "Earlier years" opens the rest, back to 1980.
  *
  * An imported year is marked, this year is outlined because its file is the one
  * that sets today's book, and the square just pressed stays highlighted while
@@ -60,8 +89,10 @@ function renderYearGrid() {
   if (!grid) return;
   const imported = new Set((state.statements ?? []).map((r) => r.year));
   const thisYear = new Date().getFullYear();
+  const recent = (year) => year > thisYear - RECENT_YEARS;
   grid.replaceChildren();
   for (let year = thisYear; year >= FIRST_STATEMENT_YEAR; year--) {
+    if (!showAllYears && !recent(year) && !imported.has(year) && !pendingYears.has(year) && chosenYear !== year) continue;
     const tile = document.createElement('div');
     tile.className = 'year-tile'
       + (imported.has(year) ? ' is-imported' : '')
@@ -101,6 +132,8 @@ function renderYearGrid() {
     }
     grid.append(tile);
   }
+  const more = document.getElementById('yearsMore');
+  if (more) more.textContent = showAllYears ? 'Fewer years ▴' : 'Earlier years ▾';
 
   const chosen = document.getElementById('yearsChosen');
   if (chosen) {

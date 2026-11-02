@@ -32,16 +32,26 @@ export const SLIDES = [
     text: 'The fastest way to start: bring in the statement your broker gives you. Every trade, position and deposit comes with it.',
     marks: [
       ['settings', 'Settings & import', 'Open it from the menu on the left.'],
-      ['importButton', 'Import broker statement', 'Press it to choose your file.'],
+      ['importButton', 'Import my broker file', 'Press it, then pick your broker.'],
     ],
   },
   {
     shot: 'import',
-    title: 'Choose the year, then your file',
-    text: 'Interactive Brokers: Performance & Reports → Statements → Activity → choose the year → format CSV → Download.',
-    note: 'Another broker? Export your trades as CSV or Excel. Riskbook finds the columns for you and asks only about what it cannot tell.',
+    title: 'Pick your broker',
+    text: 'Interactive Brokers, Robinhood, Schwab, eToro, the Israeli banks and more.',
+    note: 'Not in the list? Choose Another broker: any CSV or Excel file works, in any language.',
     marks: [
-      ['firstYear', 'A year', 'Click this year and choose its file. Add earlier years the same way for your full history.'],
+      ['search', 'Find it', 'Type its name, in English or Hebrew.'],
+      ['brokerTile', 'Pick it', 'Riskbook shows the exact steps to get your file.'],
+    ],
+  },
+  {
+    shot: 'guide',
+    title: 'Follow the steps, then add the file',
+    text: 'Your broker is remembered, so next time it opens straight here.',
+    marks: [
+      ['steps', 'Get your file', 'The steps for your broker, one by one.'],
+      ['firstYear', 'A year', 'Click the year your file covers. Add earlier years the same way.'],
       ['whole', 'Whole history', 'Or one file that covers every year at once.'],
     ],
   },
