@@ -1052,23 +1052,6 @@ export function renderHome() {
   loadWindowStartPrices();
 
   updateLivePill();
-  updateWelcomeBanner(totals);
-}
-
-const WELCOME_KEY = 'rb_welcome_dismissed';
-
-function updateWelcomeBanner(totals) {
-  const banner = document.getElementById('welcomeBanner');
-  if (!banner) return;
-  const dismissed = (() => { try { return localStorage.getItem(WELCOME_KEY); } catch { return null; } })();
-  const isEmpty = totals.open.length === 0 && totals.realised === 0 && state.cash === 0;
-  banner.hidden = dismissed || !isEmpty;
-}
-
-export function dismissWelcome() {
-  try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* */ }
-  const banner = document.getElementById('welcomeBanner');
-  if (banner) banner.hidden = true;
 }
 
 /**

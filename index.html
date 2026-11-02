@@ -177,10 +177,11 @@
       <button class="nl" onclick="show('friends')"><span class="nl-icon">👤</span> Friends</button>
     </nav>
     <div class="sidebar-bot" id="sidebarBot">
-      <button class="settings-btn" onclick="openSettings()">⚙ Live price settings</button>
+      <button class="settings-btn" id="settingsBtn" onclick="openSettings()">⚙ Settings &amp; import</button>
       <button class="settings-btn" id="themeBtn" onclick="openDesigner()" style="margin-top:6px">🎨 Designer mode</button>
       <!-- Choose the pages and panels shown: src/ui/views/customize.js. -->
       <button class="settings-btn" id="customizeBtn" onclick="openCustomize()" style="margin-top:6px">⊞ Customize</button>
+      <button class="settings-btn" onclick="openTour()" style="margin-top:6px">❔ Help &amp; tutorial</button>
       <div class="account-row" id="accountRow" style="margin-top:10px;display:none">
         <span class="account-email" id="accountEmail"></span>
         <button class="lock-link" onclick="signOut()">Sign out</button>
@@ -192,20 +193,6 @@
   <main class="main">
 
     <div id="home" class="page active">
-      <!-- Welcome banner for new users with no data. Shown by home.js when the account is empty. -->
-      <div id="welcomeBanner" class="welcome-banner" hidden>
-        <button class="welcome-close" onclick="dismissWelcome()" aria-label="Dismiss">✕</button>
-        <div class="welcome-title">Welcome to Riskbook</div>
-        <div class="welcome-steps">
-          <div class="welcome-step"><span class="welcome-num">1</span><div><strong>Log your first trade</strong> — use "+ New trade" in the top right, or import your broker statement below.</div></div>
-          <div class="welcome-step"><span class="welcome-num">2</span><div><strong>Watch your portfolio build</strong> — P&amp;L, allocation, and your returns vs. the S&amp;P 500 all update live.</div></div>
-          <div class="welcome-step"><span class="welcome-num">3</span><div><strong>Explore market data</strong> — Fed odds, options exposure, crypto flows, and earnings are in News and Crypto.</div></div>
-        </div>
-        <div class="welcome-actions">
-          <button class="btn btn-blue" onclick="show('add')">+ Log your first trade</button>
-          <button class="btn" onclick="openSettings()">Import broker statement</button>
-        </div>
-      </div>
       <div class="topbar">
         <div class="bench">
           <div class="bench-row"><span class="bench-name" id="benchName">S&amp;P 500</span><span class="bench-val" id="benchVal">—</span></div>
@@ -220,6 +207,8 @@
           <!-- Money out of the broker: lowers the account, never the returns. -->
           <button class="topbar-btn topbar-btn-warn" onclick="withdrawMoney()" title="Record money taken out of your broker">↓ Withdraw</button>
           <button class="topbar-btn topbar-newtrade" onclick="show('add')">+ New trade</button>
+          <!-- The tutorial, again, any time: src/ui/views/tour.js. -->
+          <button class="topbar-btn topbar-help" id="helpBtn" onclick="openTour()" title="How Riskbook works">❔ Help</button>
         </div>
       </div>
       <div class="hero">
@@ -687,6 +676,9 @@
   </main>
 </div>
 
+<!-- The tutorial: opens at the first sign-in, and from ❔ Help (src/ui/views/tour.js). -->
+<div class="tour" id="tour" role="dialog" aria-modal="true" aria-label="How Riskbook works" hidden><div class="tour-card" id="tourCard"></div></div>
+
 <!-- Customize: what Riskbook shows (src/ui/views/customize.js). -->
 <div class="modal-bg" id="customizeModal" role="dialog" aria-modal="true" aria-label="Customize Riskbook"><div class="modal cz-modal"></div></div>
 
@@ -739,7 +731,18 @@
 
 <div class="modal-bg" id="settingsModal">
   <div class="modal">
-    <h3>Live price settings</h3>
+    <h3>Settings</h3>
+
+    <!-- First, because it is the first thing a new account needs. -->
+    <div class="modal-field import-first">
+      <label>Import from your broker</label>
+      <p style="margin-bottom:10px">Bring in your trades, positions and cash from the statement your broker gives you — CSV or Excel. <strong>Interactive Brokers:</strong> Performance &amp; Reports → Statements → Activity → choose the period → format <strong>CSV</strong> → Download.</p>
+      <button class="btn btn-blue" id="importBrokerBtn" onclick="openYearsPanel()">↑ Import broker statement</button>
+    </div>
+
+    <div class="modal-field">
+      <label>Live prices</label>
+    </div>
     <p>Crypto updates automatically with no key. For stocks and gold ETFs, paste your free Finnhub API key. It is stored only on this device and never sent anywhere except Finnhub.</p>
     <div class="modal-field">
       <label>Finnhub API key (for stocks / ETFs)</label>
@@ -762,12 +765,6 @@
         <button class="btn" onclick="exportBackup()">↓ Backup file (for restoring)</button>
         <button class="btn" onclick="openImport()">↑ Import backup</button>
       </div>
-    </div>
-
-    <div class="modal-field">
-      <label>Your broker's files</label>
-      <p style="margin-bottom:10px"><strong>This year's file</strong> sets your open positions, cash and account value. <strong>Earlier years</strong> add their history — closed trades, win rate, monthly and cumulative returns.</p>
-      <button class="btn" onclick="openYearsPanel()">Years performance</button>
     </div>
 
     <div class="modal-field danger-zone">
@@ -805,11 +802,11 @@
   </div>
 </div>
 
-<!-- Years performance: opened from live price settings, one square per year. -->
+<!-- Import from your broker: opened from Settings, one square per year. -->
 <div class="modal-bg years-bg" id="yearsModal">
   <div class="modal years-modal">
     <div class="years-head">
-      <h3>Years performance</h3>
+      <h3>Import from your broker</h3>
       <button class="btn years-close" onclick="closeYearsPanel()" aria-label="Close">×</button>
     </div>
     <p>Click a year and choose its file — CSV, Excel, or an Interactive Brokers statement. <strong>This year's</strong> file sets today's positions, cash and account value; earlier years add history.</p>

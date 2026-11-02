@@ -31,9 +31,10 @@ import {
 import { baseQtyOf, todayStr } from '../core/portfolio.js';
 import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
-import { renderHome, toggleAmounts, drawCurve, dismissWelcome } from '../ui/views/home.js';
+import { renderHome, toggleAmounts, drawCurve } from '../ui/views/home.js';
 import { toggleDailyLog } from '../ui/views/dailyLog.js';
 import { openCustomize, closeCustomize } from '../ui/views/customize.js';
+import { openTour, closeTour } from '../ui/views/tour.js';
 import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
@@ -778,9 +779,9 @@ export function installActions(extra = {}) {
     // sub-accounts
     toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
-    show, toggleTools, toggleTheme, toggleAmounts, toggleDailyLog, setCurveMode, dismissWelcome,
+    show, toggleTools, toggleTheme, toggleAmounts, toggleDailyLog, setCurveMode,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
-    openCustomize, closeCustomize,
+    openCustomize, closeCustomize, openTour, closeTour,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
     openFavorites, closeFavorites,
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
@@ -1376,7 +1377,7 @@ function openSettingsFresh() {
 }
 
 /**
- * The Years performance window, opened from live price settings.
+ * The Import from your broker window, opened from Settings.
  *
  * One square per year replaced a long form: pick the year, choose its file, and
  * the preview appears right there. It always opens on a clean import.

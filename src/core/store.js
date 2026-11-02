@@ -88,7 +88,20 @@ export const state = {
    * device.
    */
   layoutHidden: [],
+  /**
+   * Whether this person has seen the tutorial (ui/views/tour.js). It opens by
+   * itself once, at the first sign-in; Help opens it again any time. Kept
+   * with the sign-in, so it does not open again on another device.
+   */
+  tourSeen: false,
 };
+
+/** The tutorial has been seen; it will not open by itself again. */
+export function setTourSeen() {
+  if (state.tourSeen) return;
+  state.tourSeen = true;
+  scheduleFlush();
+}
 
 const layoutListeners = new Set();
 /** Called with nothing whenever the layout changes, so the screen can follow. */
@@ -834,6 +847,7 @@ export function loadState(journal) {
     state.earningsWatch = cleanWatch(source.earningsWatch);
     state.earningsForecasts = cleanForecasts(source.earningsForecasts, state.earningsWatch);
     state.layoutHidden = cleanLayout(source.layoutHidden);
+    state.tourSeen = source.tourSeen === true;
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -856,6 +870,7 @@ export function journalSnapshot() {
     earningsWatch: state.earningsWatch,
     earningsForecasts: state.earningsForecasts,
     layoutHidden: state.layoutHidden,
+    tourSeen: state.tourSeen,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -881,6 +896,7 @@ export function clearState() {
   state.earningsWatch = [];
   state.earningsForecasts = {};
   state.layoutHidden = [];
+  state.tourSeen = false;
   announceJournal();
 }
 
@@ -946,7 +962,7 @@ function reportFailure(err) {
       + 'Changes you make now may be lost when you reload. This usually means '
       + 'no connection, private browsing, blocked site data, or a full storage '
       + 'quota.\n\n'
-      + 'Export a backup from Live price settings before closing this tab.');
+      + 'Export a backup from Settings & import before closing this tab.');
 }
 
 /** Force an immediate write. Safe to call when nothing is pending. */
