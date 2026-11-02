@@ -1507,3 +1507,35 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
 .card.folded > .fr-head{margin-bottom:0}
 #frDetail .fr-title{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--text)}
 #frChats .fr-head .fr-back + .fr-title{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--text)}
+
+/* ───────── Customize (views/customize.js) ───────── */
+/* Switched off is gone: no space kept, whatever else tries to show it. */
+.lay-off{display:none!important}
+.cz-modal{width:560px}
+.cz-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px}
+.cz-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:18px}
+@media (max-width:640px){.cz-presets{grid-template-columns:minmax(0,1fr)}}
+.cz-preset{display:flex;flex-direction:column;gap:4px;text-align:left;padding:11px 12px;border-radius:10px;cursor:pointer;
+  border:0.5px solid var(--border2);background:var(--input);color:var(--text3);font:inherit;font-size:11px;line-height:1.4}
+.cz-preset b{font-size:13px;color:var(--text)}
+.cz-preset:hover{border-color:var(--border-blue)}
+.cz-preset.on{border-color:var(--blue);background:var(--blue-bg)}
+.cz-preset:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.cz-group{border-top:0.5px solid var(--input);padding:14px 0 6px}
+.cz-gtitle{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
+.cz-gnote{font-size:11px;color:var(--text4);margin-bottom:6px}
+.cz-group.muted .cz-gtitle{color:var(--text4)}
+.cz-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 2px;cursor:pointer;border-radius:8px}
+.cz-item:hover{background:var(--input)}
+.cz-text{display:flex;flex-direction:column;min-width:0}
+.cz-text b{font-size:13px;font-weight:600;color:var(--text)}
+.cz-text span{font-size:11px;color:var(--text3);line-height:1.4}
+.cz-switch{position:relative;flex:none;width:36px;height:20px}
+.cz-switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1}
+.cz-switch span{position:absolute;inset:0;border-radius:20px;background:var(--input);border:0.5px solid var(--border2);transition:background .15s,border-color .15s;pointer-events:none}
+.cz-switch span::before{content:'';position:absolute;width:14px;height:14px;left:2px;top:2px;border-radius:50%;background:var(--text3);transition:transform .15s,background .15s}
+.cz-switch input:checked+span{background:var(--green-bg);border-color:var(--green)}
+.cz-switch input:checked+span::before{transform:translateX(16px);background:var(--green)}
+.cz-switch input:focus-visible+span{outline:2px solid var(--blue);outline-offset:2px}
+.cz-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:0.5px solid var(--input);padding-top:14px;margin-top:6px}
+.cz-done{padding:8px 22px}

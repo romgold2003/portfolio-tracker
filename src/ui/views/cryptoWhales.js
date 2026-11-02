@@ -16,6 +16,7 @@
  */
 import { renderCryptoJournal } from './cryptoJournal.js';
 import { redrawFlows } from './exposure.js';
+import { isShown } from '../../core/store.js';
 import {
   BANDS, SPOT_BANDS, bandOf, filterRows, summarise, groupFills, hyperliquidMarkets,
   hyperliquidAction, filterLeveraged, buildPositions, positionSummary, positionMoves,
@@ -580,7 +581,9 @@ let cryptoView = 'whales';
 
 /** Draw whichever Crypto view is open — on arrival at the tab, or on a switch. */
 export function showCryptoView(wanted = cryptoView) {
-  cryptoView = CRYPTO_VIEWS[wanted] ? wanted : 'whales';
+  // A view switched off in Customize is not shown; the first one still on is.
+  const on = Object.keys(CRYPTO_VIEWS).filter((v) => isShown(`crypto.${v}`));
+  cryptoView = on.includes(wanted) ? wanted : on[0] ?? 'whales';
   for (const [id, pane] of Object.entries(CRYPTO_VIEWS)) {
     if (el(pane)) el(pane).hidden = id !== cryptoView;
   }

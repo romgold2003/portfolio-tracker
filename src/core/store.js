@@ -7,6 +7,7 @@
  *
  * This module never touches the DOM.
  */
+import { cleanLayout, shownIn } from './layout.js';
 import { cleanTrades } from './cryptoJournal.js';
 import { STORAGE_KEYS, ASSET_CLASSES } from '../config/constants.js';
 import { SECTOR_NAMES } from '../config/sectors.js';
@@ -81,7 +82,27 @@ export const state = {
    * sign-in, for the panel to set the actual figures beside for a week.
    */
   earningsForecasts: {},
+  /**
+   * What this person switched off in Customize (core/layout.js): pages and
+   * panels, by id. Kept with the sign-in, so the layout is the same on every
+   * device.
+   */
+  layoutHidden: [],
 };
+
+const layoutListeners = new Set();
+/** Called with nothing whenever the layout changes, so the screen can follow. */
+export function onLayoutChange(fn) { layoutListeners.add(fn); return () => layoutListeners.delete(fn); }
+
+/** Replace what is switched off, save it with the sign-in, and redraw. */
+export function setLayoutHidden(list) {
+  state.layoutHidden = cleanLayout(list);
+  scheduleFlush();
+  for (const fn of layoutListeners) fn();
+}
+
+/** Whether a page or panel is on screen (core/layout.js ids). */
+export function isShown(id) { return shownIn(state.layoutHidden, id); }
 
 /** At most this many companies followed, which is one request's worth (api/_panels/earnings.js). */
 export const EARNINGS_WATCH_MAX = 40;
@@ -812,6 +833,7 @@ export function loadState(journal) {
     state.cryptoTrades = cleanTrades(source.cryptoTrades);
     state.earningsWatch = cleanWatch(source.earningsWatch);
     state.earningsForecasts = cleanForecasts(source.earningsForecasts, state.earningsWatch);
+    state.layoutHidden = cleanLayout(source.layoutHidden);
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -833,6 +855,7 @@ export function journalSnapshot() {
     cryptoTrades: state.cryptoTrades,
     earningsWatch: state.earningsWatch,
     earningsForecasts: state.earningsForecasts,
+    layoutHidden: state.layoutHidden,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -857,6 +880,7 @@ export function clearState() {
   state.cryptoTrades = [];
   state.earningsWatch = [];
   state.earningsForecasts = {};
+  state.layoutHidden = [];
   announceJournal();
 }
 

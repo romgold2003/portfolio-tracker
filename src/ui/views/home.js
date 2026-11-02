@@ -1,5 +1,5 @@
 /** The overview page: account value, today's move, KPIs and a compact watchlist. */
-import { state } from '../../core/store.js';
+import { state, isShown } from '../../core/store.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr, dailyPercent,
@@ -282,6 +282,8 @@ function renderAllocation() {
  * invested for.
  */
 async function renderBenchmark(totals) {
+  // Switched off in Customize: no fetch for the S&P 500 at all.
+  if (!isShown('home.benchmark')) return;
   const valEl = document.getElementById('benchVal');
   const mineEl = document.getElementById('benchMine');
   const noteEl = document.getElementById('benchNote');

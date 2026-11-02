@@ -10,12 +10,15 @@
 import { etfFlows } from '../../services/options.js';
 import { renderEtfFlows, redrawFlows } from './exposure.js';
 import { installCryptoTabs, showCryptoView, startCryptoWhales } from './cryptoWhales.js';
+import { isShown } from '../../core/store.js';
 
 /** Draw the page on arrival. Each panel keeps its own refresh clock after that. */
 export async function renderCrypto() {
   installCryptoTabs();
   showCryptoView();
-  startCryptoWhales();
+  // Only what is switched on in Customize is fetched.
+  if (isShown('crypto.whales')) startCryptoWhales();
+  if (!isShown('crypto.etf')) return;
   // ETF flows are a separate source; one being down must not hold the others.
   renderEtfFlows(await etfFlows().catch(() => null));
   // Drawn while the page was settling; draw again now that widths are real.

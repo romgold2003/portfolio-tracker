@@ -77,10 +77,12 @@ describe('no table leaves a slot for a cell it hides', () => {
 describe('a phone looks like a phone app', () => {
   const phone = css.slice(css.indexOf('/* ── Phones'));
 
-  test('the seven sections sit in one bar along the bottom, clear of the home indicator', () => {
+  test('the sections sit in one bar along the bottom, clear of the home indicator', () => {
     assert.match(phone, /\.nav-links\{position:fixed;left:0;right:0;bottom:0/);
-    // Friends made seven (October 2026); one row, so none wraps under the rest.
-    assert.match(phone, /grid-template-columns:repeat\(7,minmax\(0,1fr\)\)/);
+    // Six on a phone (Monthly is desktop-only there, November 2026), fewer once
+    // pages are switched off in Customize; always one row, so none wraps.
+    assert.match(phone, /\.nl-monthly\{display:none\}/);
+    assert.match(phone, /grid-template-columns:repeat\(var\(--nav-n,6\),minmax\(0,1fr\)\)/);
     assert.match(phone, /env\(safe-area-inset-bottom\)/);
     assert.match(html, /viewport-fit=cover/, 'without it the safe-area insets are zero');
   });

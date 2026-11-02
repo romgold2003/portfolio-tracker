@@ -10,6 +10,7 @@
  * The readings come from marketSentiment(), which holds its answer for half an
  * hour — calling this on every page change costs no extra requests.
  */
+import { isShown } from '../../core/store.js';
 import { marketSentiment } from '../../services/sentiment.js';
 import { gaugeSvg } from './gauge.js';
 import { escapeHtml } from '../format.js';
@@ -45,6 +46,8 @@ export function drawGauges(sentiment) {
 
 /** Fetch (or reuse) the reading and draw it. Never throws: the dials are extra. */
 export async function showGauges() {
+  // Switched off in Customize: no dials, and the sentiment is not asked for.
+  if (!isShown('gauges')) return;
   try {
     drawGauges(await marketSentiment());
   } catch {

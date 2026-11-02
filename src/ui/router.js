@@ -5,7 +5,12 @@
  * The order matters: it is matched positionally against the nav buttons, so a
  * page added here has to be added there in the same place.
  */
+import { isShown } from '../core/store.js';
+
 const PAGES = ['home', 'positions', 'add', 'monthly', 'news', 'crypto', 'friends'];
+
+/** Pages that can be switched off in Customize (core/layout.js); one switched off is not opened. */
+const SWITCHABLE = { monthly: 'page.monthly', news: 'page.news', crypto: 'page.crypto', friends: 'page.friends' };
 
 /** Set at boot so the router can trigger a page's lazy re-render. */
 let onEnter = () => {};
@@ -16,6 +21,8 @@ let current = 'home';
 export function currentPage() { return current; }
 
 export function show(name) {
+  // Voice control, a link or an old bookmark asking for a page switched off lands on Home.
+  if (SWITCHABLE[name] && !isShown(SWITCHABLE[name])) name = 'home';
   if (PAGES.includes(name)) current = name;
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   const page = document.getElementById(name);

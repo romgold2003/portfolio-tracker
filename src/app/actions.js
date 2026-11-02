@@ -33,6 +33,7 @@ import { fetchPrice, refreshOpenPositions } from '../services/prices.js';
 import { renderAll, updateLivePill } from '../ui/render.js';
 import { renderHome, toggleAmounts, drawCurve, dismissWelcome } from '../ui/views/home.js';
 import { toggleDailyLog } from '../ui/views/dailyLog.js';
+import { openCustomize, closeCustomize } from '../ui/views/customize.js';
 import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
@@ -848,6 +849,7 @@ export function installActions(extra = {}) {
     // navigation & chrome
     show, toggleTools, toggleTheme, toggleVoice, toggleAmounts, toggleDailyLog, setCurveMode, dismissWelcome,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
+    openCustomize, closeCustomize,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,
     openFavorites, closeFavorites,
     openSettings: openSettingsFresh, closeSettings, saveApiKey, saveAndQuit,
@@ -882,6 +884,7 @@ export function installActions(extra = {}) {
   initEscapeToClose([
     { id: 'favsModal', close: closeFavorites },
     { id: 'designerModal', close: closeDesigner },
+    { id: 'customizeModal', close: closeCustomize },
     { id: 'yearsModal', close: closeYearsPanel },
     { id: 'settingsModal', close: closeSettings },
     { id: 'importModal', close: closeImport },

@@ -17,6 +17,8 @@ import { renderAccountSwitcher } from './views/accounts.js';
 import { currentPage } from './router.js';
 import { renderFriends } from './views/friends.js';
 import { syncShare } from '../services/social.js';
+import { applyLayout } from './views/customize.js';
+import { onLayoutChange } from '../core/store.js';
 
 export { updateLivePill };
 
@@ -31,6 +33,8 @@ export { updateLivePill };
  * had left. That was most of why the app grew slow and froze (October 2026).
  */
 export function renderAll() {
+  // What is switched off in Customize stays off, whatever is redrawn.
+  applyLayout();
   renderAccountSwitcher();
   const page = currentPage();
   if (page === 'home') renderHome();
@@ -57,9 +61,19 @@ export function renderOnPageEnter(page) {
   if (page === 'crypto') renderCrypto();
   // The live whale feed is only worth its cost while it is on screen.
   else pauseHyperliquid();
-  // Fear and greed on every page but New trade; see sentimentGauges.js.
+  // Fear and greed on every page but New trade (unless switched off in Customize); see sentimentGauges.js.
   if (page !== 'add') showGauges();
+  applyLayout();
 }
+
+/**
+ * A switch flipped in Customize shows at once: the layout is applied, and the
+ * page on screen is drawn again so a panel switched back on loads its data.
+ */
+onLayoutChange(() => {
+  applyLayout();
+  renderOnPageEnter(currentPage());
+});
 
 /** After a theme change every chart must be rebuilt with the new palette. */
 export function renderOnThemeChange() {

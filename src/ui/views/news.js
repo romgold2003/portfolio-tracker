@@ -17,6 +17,7 @@ import { renderExposure, currentMarket, setMarket } from './exposure.js';
 import { renderGamble, startGamble, installNewsTabs } from './gamble.js';
 import { renderEarnings, startEarningsRefresh } from './earnings.js';
 import { cloudEnabled } from '../../services/cloud.js';
+import { isShown } from '../../core/store.js';
 // The Crypto half of the Gamble tab. Its own source and its own cadence.
 import { escapeHtml } from '../format.js';
 
@@ -295,7 +296,8 @@ function startFedRefresh() {
     const card = el('fedCard');
     const onScreen = card && card.offsetParent !== null
       && document.visibilityState === 'visible';
-    if (!onScreen) return;
+    // The card also holds Earnings: the odds are asked for only while they are switched on.
+    if (!onScreen || !isShown('news.fed')) return;
     const fresh = await fedDecision();
     if (fresh) renderFedPanel(fresh);
   }, FED_EVERY_MS);
@@ -333,28 +335,45 @@ async function refreshLive() {
  * not take the other four with it.
  */
 export async function renderNews() {
+  /**
+   * Only what is switched on in Customize is asked for: a panel switched off
+   * is gone from the page and costs nothing — no request, no timer.
+   */
+  const on = {
+    fed: isShown('news.fed'),
+    econ: isShown('news.econ'),
+    mood: isShown('gauges'),
+    opts: isShown('news.options'),
+    earnings: isShown('news.earnings'),
+    gamble: isShown('news.gamble'),
+  };
   // Independent of each other: one source being down must not blank the others.
   const [fed, econ, mood, opts] = await Promise.allSettled([
-    fedDecision(), econReleases(), marketSentiment(), optionsProfile(currentMarket()),
+    on.fed ? fedDecision() : null,
+    on.econ ? econReleases() : null,
+    on.mood ? marketSentiment() : null,
+    on.opts ? optionsProfile(currentMarket()) : null,
   ]);
   const value = (r) => (r.status === 'fulfilled' ? r.value : null);
 
   renderFedPanel(value(fed));
-  renderEarnings();
-  renderEconPanel(value(econ));
-  drawGauges(value(mood));
-  renderExposure(value(opts), pickMarket);
-  scheduleLive(value(opts));
+  if (on.earnings) renderEarnings();
+  if (on.econ) renderEconPanel(value(econ));
+  if (on.mood) drawGauges(value(mood));
+  if (on.opts) {
+    renderExposure(value(opts), pickMarket);
+    scheduleLive(value(opts));
+  }
 
   // Its own source and its own cadence, so it neither waits on the five above
   // nor blocks them.
   installNewsTabs();
   // Only when its tab is open: the tab has its own thirty-second timer, and
   // this ran on every price refresh besides, Polymarket and all, unseen.
-  if (document.getElementById('newsGamble')?.hidden === false) renderGamble();
-  startGamble();
-  startFedRefresh();
-  startEarningsRefresh();
+  if (on.gamble && document.getElementById('newsGamble')?.hidden === false) renderGamble();
+  if (on.gamble) startGamble();
+  if (on.fed) startFedRefresh();
+  if (on.earnings) startEarningsRefresh();
 
   const anything = value(fed) || value(econ) || value(mood) || value(opts);
   const empty = el('newsEmpty');

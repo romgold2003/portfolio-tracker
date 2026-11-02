@@ -180,6 +180,8 @@
       <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" style="margin-bottom:0"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
       <button class="settings-btn" onclick="openSettings()" style="margin-top:8px">⚙ Live price settings</button>
       <button class="settings-btn" id="themeBtn" onclick="openDesigner()" style="margin-top:6px">🎨 Designer mode</button>
+      <!-- Choose the pages and panels shown: src/ui/views/customize.js. -->
+      <button class="settings-btn" id="customizeBtn" onclick="openCustomize()" style="margin-top:6px">⊞ Customize</button>
       <div class="account-row" id="accountRow" style="margin-top:10px;display:none">
         <span class="account-email" id="accountEmail"></span>
         <button class="lock-link" onclick="signOut()">Sign out</button>
@@ -280,7 +282,7 @@
         <div class="kpi"><div class="kpi-lbl">Win rate</div><div class="kpi-val" id="kWinRate">0%</div><div class="kpi-chg" id="kWinSub">0W · 0L closed</div></div>
         <div class="kpi kpi-monthly-link" onclick="show('monthly')" title="Monthly P&amp;L"><div class="kpi-lbl">Monthly P&amp;L</div><div class="kpi-val" style="font-size:14px;color:var(--blue)">View →</div><div class="kpi-chg">by month</div></div>
       </div>
-      <div class="card">
+      <div class="card" id="homeHoldings">
         <div class="card-lbl"><span>Open positions</span><span class="green" style="text-transform:none;letter-spacing:0">● updating live</span></div>
         <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">
           <button class="sort-btn active" id="sort-pnl" onclick="setSort('pnl')">P&L ↕</button>
@@ -685,6 +687,9 @@
 
   </main>
 </div>
+
+<!-- Customize: what Riskbook shows (src/ui/views/customize.js). -->
+<div class="modal-bg" id="customizeModal" role="dialog" aria-modal="true" aria-label="Customize Riskbook"><div class="modal cz-modal"></div></div>
 
 <div class="modal-bg" id="designerModal" onclick="if(event.target===this)closeDesigner()">
   <div class="modal designer-modal">

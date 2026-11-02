@@ -67,9 +67,9 @@ describe('the Crypto page', () => {
 });
 
 describe('the News page', () => {
-  test('is back to Markets and Gamble', () => {
+  test('is back to Markets and Prediction Markets (Gamble, renamed in November 2026)', () => {
     const tabs = [...page('news').matchAll(/data-tab="(\w+)">([^<]+)</g)].map((m) => m[2]);
-    assert.deepEqual(tabs, ['Markets', 'Gamble']);
+    assert.deepEqual(tabs, ['Markets', 'Prediction Markets']);
     assert.doesNotMatch(html, /id="newsCrypto"/);
   });
 
