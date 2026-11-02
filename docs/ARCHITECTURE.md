@@ -51,8 +51,7 @@ Two places genuinely need to call "upward":
 
 Rather than import the render layer (which would close a cycle), each exposes a
 setter — `setPageEnterHandler`, `setThemeChangeHandler` — that `main.js` wires at
-boot. The same pattern gives the voice module its `app` object, so the grammar
-in `features/voice.js` never imports actions.
+boot.
 
 ## Domain rules that are easy to get wrong
 

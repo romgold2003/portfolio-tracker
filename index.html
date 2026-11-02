@@ -162,7 +162,7 @@
         </button>
         <div class="acct-menu" id="acctMenu" role="menu" hidden></div>
       </div>
-      <!-- Phones only: voice, live-price settings, designer and sign-out sit
+      <!-- Phones only: live-price settings, designer, customize and sign-out sit
            behind this instead of taking a third of the screen. -->
       <button class="tools-btn" id="toolsBtn" type="button" onclick="toggleTools()"
               aria-expanded="false" aria-controls="sidebarBot" title="Settings and tools">⚙</button>
@@ -177,8 +177,7 @@
       <button class="nl" onclick="show('friends')"><span class="nl-icon">👤</span> Friends</button>
     </nav>
     <div class="sidebar-bot" id="sidebarBot">
-      <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" style="margin-bottom:0"><span class="voice-icon">🎙</span><span id="voiceBtnTxt">Voice control</span></button>
-      <button class="settings-btn" onclick="openSettings()" style="margin-top:8px">⚙ Live price settings</button>
+      <button class="settings-btn" onclick="openSettings()">⚙ Live price settings</button>
       <button class="settings-btn" id="themeBtn" onclick="openDesigner()" style="margin-top:6px">🎨 Designer mode</button>
       <!-- Choose the pages and panels shown: src/ui/views/customize.js. -->
       <button class="settings-btn" id="customizeBtn" onclick="openCustomize()" style="margin-top:6px">⊞ Customize</button>
@@ -873,7 +872,7 @@
 </div>
 
 
-<div class="voice-toast" id="voiceToast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- The app boots from one ES module; everything else is imported from there.
      `defer` on Chart.js above guarantees it is defined before this runs. -->

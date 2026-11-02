@@ -69,7 +69,6 @@ import {
 import { initEscapeToClose } from '../ui/escape.js';
 import { closeAllocation } from '../ui/views/allocationOverlay.js';
 import { money as $u, signedMoney as $s, pctText as fp, fmtPrice } from '../ui/format.js';
-import { toggleVoice } from '../features/voice.js';
 import {
   exportBackup, exportPortfolioCsv, restoreBackup, describeBackup,
 } from '../features/backup.js';
@@ -704,74 +703,6 @@ export function setDir(direction) { setDirection(direction); }
 export function clearForm() { clearTradeForm(); }
 export function updateSizeHint() { refreshSizeHint(); }
 
-// ─── Voice helpers ───────────────────────────────────────────────
-// Small wrappers so the voice grammar can talk in intents rather than DOM ids.
-
-/** Expand a ticker's card, optionally opening its close panel. False if unknown. */
-function focusTicker(ticker, openClosePanel) {
-  const p = state.positions.find((x) => x.ticker === ticker);
-  if (!p) return false;
-  show('positions');
-  if (openClosePanel && p.status === 'Open') {
-    ui.expandedId = p.id;
-    renderPositions();
-    setTimeout(() => toggleClose(p.id), 50);
-  } else {
-    ui.expandedId = ui.expandedId === p.id ? null : p.id;
-    renderPositions();
-  }
-  return true;
-}
-
-function collapseAll() {
-  ui.expandedId = null;
-  renderPositions();
-}
-
-function setFormTicker(ticker) {
-  el('f-ticker').value = ticker;
-  checkTicker();
-}
-
-function setAssetClass(cls) {
-  el('f-class').value = cls;
-}
-
-function setChartYear(year) {
-  const select = el('chartYear');
-  if (!select) return;
-  select.value = year;
-  renderMonthly();
-}
-
-function showMonth(key) {
-  const yearPicker = el('pickYear');
-  if (yearPicker) yearPicker.value = key.slice(0, 4);
-  populateMonthPicker();
-  const monthPicker = el('pickMonth');
-  if (monthPicker) monthPicker.value = key;
-  renderMonthDetail();
-  el('monthDetail')?.scrollIntoView({ behavior: 'smooth' });
-}
-
-/** The intent surface handed to the voice module. */
-export const voiceActions = {
-  show,
-  setTimeframe,
-  editCash,
-  refreshPrices,
-  focusTicker,
-  collapseAll,
-  openSettings: openSettingsFresh,
-  setFormTicker,
-  setDirection,
-  setAssetClass,
-  clearForm,
-  addTrade: addPos,
-  setChartYear,
-  showMonth,
-};
-
 /**
  * Publish the names the inline `onclick` attributes in index.html reference.
  * If you add an inline handler to the markup, add it here too.
@@ -847,7 +778,7 @@ export function installActions(extra = {}) {
     // sub-accounts
     toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
-    show, toggleTools, toggleTheme, toggleVoice, toggleAmounts, toggleDailyLog, setCurveMode, dismissWelcome,
+    show, toggleTools, toggleTheme, toggleAmounts, toggleDailyLog, setCurveMode, dismissWelcome,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
     openCustomize, closeCustomize,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,

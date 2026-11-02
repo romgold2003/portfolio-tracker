@@ -387,18 +387,14 @@
 .drr-k{font-size:10px;color:var(--text3);text-transform:uppercase}
 .drr-v{font-size:15px;font-weight:600;color:var(--text);margin-top:3px}
 
-/* Sidebar action buttons, sort chips, voice toast */
-.voice-btn{width:100%;background:var(--input);border:0.5px solid var(--border2);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--text2);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px;margin-bottom:8px;transition:all 0.15s}
-.voice-btn:hover{background:var(--hover2);color:var(--text)}
+/* Sidebar action buttons, sort chips, the floating message */
 .sort-btn{background:var(--input);border:0.5px solid var(--border2);border-radius:5px;padding:4px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap}
 .sort-btn:hover{background:var(--hover2);color:var(--text)}
 .sort-btn.active{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue)}
-@keyframes voicepulse{0%,100%{opacity:1}50%{opacity:0.6}}
-.voice-icon{font-size:14px}
-.voice-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:10px 18px;font-size:13px;color:var(--text);z-index:200;display:none;max-width:320px;text-align:center;box-shadow:0 4px 20px var(--shadow)}
-.voice-toast.show{display:block}
-.voice-toast.heard{border-color:var(--green-br);color:var(--green)}
-.voice-toast.error{border-color:var(--red-br);color:var(--red)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:10px 18px;font-size:13px;color:var(--text);z-index:200;display:none;max-width:320px;text-align:center;box-shadow:0 4px 20px var(--shadow)}
+.toast.show{display:block}
+.toast.heard{border-color:var(--green-br);color:var(--green)}
+.toast.error{border-color:var(--red-br);color:var(--red)}
 
 /* New-trade form */
 .form-card{max-width:640px}
@@ -432,10 +428,6 @@
 .modal-field{margin-bottom:14px}
 .modal-field label{font-size:11px;color:var(--text3);display:block;margin-bottom:6px}
 
-/* Active listening state — wires up the voicepulse keyframe above, which the
-   original single-file version declared but never applied. */
-.voice-btn.listening{background:var(--listen-bg);border-color:var(--red-br);color:var(--red)}
-.voice-btn.listening .voice-icon{animation:voicepulse 1.2s infinite}
 
 /* A divider-led block inside a modal, for a secondary group of controls. */
 .modal-section{margin-top:18px;padding-top:16px;border-top:0.5px solid var(--border2)}

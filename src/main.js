@@ -35,9 +35,8 @@ import { showLockScreen } from './ui/views/lockScreen.js';
 import { initAllocationOverlay } from './ui/views/allocationOverlay.js';
 import { initParticleWave } from './features/particleWave.js';
 import { describeStorageMode } from './ui/views/settings.js';
-import { initVoice } from './features/voice.js';
 import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
-import { installActions, voiceActions, refreshPrices, setTimeframe } from './app/actions.js';
+import { installActions, refreshPrices, setTimeframe } from './app/actions.js';
 
 /** Background loops, so they can be stopped on sign out. */
 let timers = [];
@@ -149,7 +148,6 @@ async function boot() {
   initTheme();
 
   installActions({ signOut });
-  initVoice(voiceActions);
   setPageEnterHandler(renderOnPageEnter);
   setThemeChangeHandler(renderOnThemeChange);
   setRecoveryImportHandler(renderAll);

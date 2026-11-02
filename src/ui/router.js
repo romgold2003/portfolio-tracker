@@ -21,7 +21,7 @@ let current = 'home';
 export function currentPage() { return current; }
 
 export function show(name) {
-  // Voice control, a link or an old bookmark asking for a page switched off lands on Home.
+  // A link or an old bookmark asking for a page switched off lands on Home.
   if (SWITCHABLE[name] && !isShown(SWITCHABLE[name])) name = 'home';
   if (PAGES.includes(name)) current = name;
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
@@ -41,7 +41,7 @@ export function show(name) {
 }
 
 /**
- * The tools row — voice, live-price settings, designer, sign-out — sits behind
+ * The tools row — live-price settings, designer, customize, sign-out — sits behind
  * a ⚙ button on a phone, where it otherwise took a third of the screen before
  * any of the page. On a wider screen the button is not shown and this does
  * nothing visible. Pass a boolean to set it rather than flip it.

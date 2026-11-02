@@ -25,8 +25,6 @@ sent. See [docs/CLOUD.md](docs/CLOUD.md).
 - **Monthly P&L** — a twelve-bar year chart, a month-by-month table, and a
   drill-down showing exactly how each position was closed.
 - **Portfolio beta** — size-weighted, with shorts contributing negatively.
-- **Voice control** — hands-free navigation in Chrome ("go home", "expand BTC",
-  "show March 2026").
 - **Light and dark themes**, following your OS by default.
 - **Accounts** — email and password, with the journal encrypted under a key
   derived from the password. Optionally cloud-backed, in which case the same
@@ -92,7 +90,7 @@ src/
     snapshots.js      the daily account-value curve
     migrations.js     one-way upgrades of stored data
   services/           the outside world: price feeds, rolling price log
-  features/           self-contained extras: voice control, backup/restore
+  features/           self-contained extras: statement import, backup/restore
   ui/                 rendering only — views return HTML strings
     views/            one module per screen
     render.js         the single entry point for redrawing
@@ -131,8 +129,7 @@ safe, just in a different origin — see
 
 ## Browser support
 
-Any modern browser. Voice control needs the Web Speech API, which today means
-Chrome or Edge.
+Any modern browser.
 
 ## License
 
