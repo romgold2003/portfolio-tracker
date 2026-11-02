@@ -756,6 +756,17 @@
       </div>
     </section>
 
+    <!-- Time- or money-weighted, as the person's broker measures it (config/brokers.js). -->
+    <section class="set-card">
+      <div class="set-title">How your return is measured</div>
+      <div class="set-sub" id="returnHint">The same way your broker measures it, so the % reads like their app.</div>
+      <div class="set-seg" role="radiogroup" aria-label="How your return is measured">
+        <button type="button" role="radio" data-method="" onclick="chooseReturnMethod('')">Like my broker</button>
+        <button type="button" role="radio" data-method="twr" onclick="chooseReturnMethod('twr')">Time-weighted</button>
+        <button type="button" role="radio" data-method="mwr" onclick="chooseReturnMethod('mwr')">Money-weighted</button>
+      </div>
+    </section>
+
     <section class="set-card">
       <div class="set-title">Your journal</div>
       <div class="set-sub" id="journalBlurb">Everything is stored in this browser only. Export a backup before clearing browser data, or to move the journal to another machine.</div>

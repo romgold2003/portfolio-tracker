@@ -69,7 +69,7 @@ describe('the buttons', () => {
   test('% is the account since it began: it shows All, and a shorter window goes back to $', () => {
     assert.match(actions, /if \(ui\.curveMode === '%' && ui\.timeframe !== 'All'\) setTimeframe\('All'\)/);
     assert.match(actions, /if \(tf !== 'All'\) ui\.curveMode = '\$';/);
-    assert.match(readFileSync(new URL('../src/core/snapshots.js', import.meta.url), 'utf8'), /export function percentSeries\(\) \{\s*const points = returnCurve\(forward\);/);
+    assert.match(readFileSync(new URL('../src/core/snapshots.js', import.meta.url), 'utf8'), /const points = returnMethod\(\) === 'mwr' \? moneyWeightedCurve\(forward\) : returnCurve\(forward\);/);
   });
 });
 

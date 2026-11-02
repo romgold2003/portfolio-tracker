@@ -1,5 +1,5 @@
 /** The overview page: account value, today's move, KPIs and a compact watchlist. */
-import { state, isShown } from '../../core/store.js';
+import { state, isShown, returnMethod } from '../../core/store.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr, dailyPercent,
@@ -42,6 +42,7 @@ import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
+import { moneyWeightedReturn } from '../../core/moneyWeighted.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, fmtShares, escapeHtml,
@@ -1132,6 +1133,21 @@ function timeframePerformance(totals) {
 
   // A window over the missing part of a year has no trades or values there: no figure rather than a wrong one.
   if (gapInWindow(historyGaps(state.statements), from, to)) return null;
+
+  /**
+   * Measured the way this person's broker measures it (config/brokers.js):
+   * Fidelity, Vanguard and Trading 212 weight the return by the money in the
+   * account, so a figure here reads like theirs. Every window, all time
+   * included, is then the account valued day by day; the broker's own
+   * time-weighted figures below would be the other method.
+   */
+  if (returnMethod() === 'mwr') {
+    if (ui.timeframe === 'All' && historyGaps(state.statements).length) return null;
+    const history = authoritativeHistory();
+    if (!history.length) return null;
+    const measured = moneyWeightedReturn(history, from, to);
+    return measured ? { ...measured, method: 'history' } : (ytd ? null : fromTrades());
+  }
 
   /**
    * Year to date keeps the broker's own chained figure when a statement gave

@@ -1,10 +1,10 @@
 /** The Settings window: importing from the broker, live prices, the journal and the account. */
-import { state } from '../../core/store.js';
+import { state, returnMethod, setReturnMethod } from '../../core/store.js';
 import { benchmarkKey } from '../../services/benchmark.js';
 import { cloudMode } from '../../core/profiles.js';
 import { chainReport, historyGaps } from '../../features/statementLibrary.js';
 import { activeAccountName } from './accounts.js';
-import { brokerById } from '../../config/brokers.js';
+import { brokerById, RETURN_METHODS } from '../../config/brokers.js';
 
 const modal = () => document.getElementById('settingsModal');
 
@@ -15,8 +15,33 @@ export function openSettings() {
   if (bench) bench.value = benchmarkKey();
   describeStorage();
   describeImport();
+  describeReturns();
   renderStatementYears();
   modal()?.classList.add('show');
+}
+
+/**
+ * Which way returns are measured, and why: by default the broker's own way, so
+ * Riskbook's % moves with the broker's app; either can be chosen by hand.
+ */
+export function describeReturns() {
+  const method = returnMethod();
+  const chosen = state.returnMethod ?? '';
+  for (const button of document.querySelectorAll('.set-seg [data-method]')) {
+    const on = button.dataset.method === chosen;
+    button.classList.toggle('on', on);
+    button.setAttribute('aria-checked', String(on));
+  }
+  const hint = document.getElementById('returnHint');
+  if (!hint) return;
+  const broker = brokerById(state.broker);
+  const why = method === 'mwr'
+    ? 'when you added money counts (Fidelity, Vanguard, Trading 212).'
+    : 'deposits and withdrawals change nothing (Interactive Brokers, and the S&P 500 comparison).';
+  const lead = chosen ? `${RETURN_METHODS[method].label}, your choice —`
+    : broker && broker.id !== 'other' ? `${RETURN_METHODS[method].label}, as ${broker.name} measures it —`
+      : `${RETURN_METHODS[method].label} —`;
+  hint.textContent = `${lead} ${why} When no money moved, both give the same number.`;
 }
 
 /** The import card says where things stand: which broker, which years are in. */

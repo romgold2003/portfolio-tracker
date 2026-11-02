@@ -2,12 +2,13 @@
  * The account-value curve: a daily point of net liquidation value, and the
  * series the chart draws from it.
  */
-import { state, saveSnapshots } from './store.js';
+import { state, saveSnapshots, returnMethod } from './store.js';
 import { spliceHistory } from './rebuild.js';
 import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
 import { lastClosedSession } from '../config/marketCalendar.js';
 import { returnCurve } from './returnCurve.js';
+import { moneyWeightedCurve } from './moneyWeighted.js';
 import { dayGrowth } from './portfolioHistory.js';
 
 /**
@@ -416,7 +417,7 @@ export function curveSeries(timeframe) {
 }
 
 /**
- * The % view of the chart: the account's time-weighted return since it began,
+ * The % view of the chart: the account's return since it began,
  * one point a day (core/returnCurve.js). Always the whole life of the account —
  * Romy's choice, so the % view is only ever All. Drawn from the forward-walked
  * history only — the one checked against the broker's statements — since a
@@ -424,7 +425,8 @@ export function curveSeries(timeframe) {
  * there is no such history to draw.
  */
 export function percentSeries() {
-  const points = returnCurve(forward);
+  // Weighted the way the broker weights it, like the figure over the chart.
+  const points = returnMethod() === 'mwr' ? moneyWeightedCurve(forward) : returnCurve(forward);
   if (points.length < 2) return null;
   const dates = points.map((p) => p.date);
   return {

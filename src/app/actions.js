@@ -14,6 +14,7 @@
 import {
   state, saveCash, saveApiKey as persistApiKey, findPosition, savePositions,
   loadState, flushNow, saveCashFlows, isCombined, switchAccount, addSubAccount, renameSubAccount, removeSubAccount, subAccounts,
+  setReturnMethod, returnMethod,
 } from '../core/store.js';
 import {
   renderAccountSwitcher, toggleAccountMenu, setAccountMenuOpen, activeAccountName,
@@ -40,10 +41,10 @@ import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
 import {
   openSettings, closeSettings, readApiKeyInput, readBenchKeyInput, renderStatementYears, setChosenYear, setPendingYears,
-  toggleEarlierYears,
+  toggleEarlierYears, describeReturns,
 } from '../ui/views/settings.js';
 import {
-  showImportStep, chooseBroker, changeBroker, filterBrokers,
+  showImportStep, chooseBroker as pickBroker, changeBroker as unpickBroker, filterBrokers,
 } from '../ui/views/brokerPicker.js';
 import { decodeText, sheetsFromMarkup } from '../features/sheetText.js';
 import {
@@ -780,7 +781,7 @@ export function installActions(extra = {}) {
     openFavorites, closeFavorites,
     openSettings: openSettingsFresh, closeSettings, saveAndQuit,
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
-    chooseBroker, changeBroker, filterBrokers, toggleEarlierYears,
+    chooseBroker, changeBroker, filterBrokers, toggleEarlierYears, chooseReturnMethod,
     // trades
     addPos, clearForm, setDir, updateSizeHint,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
@@ -1374,6 +1375,26 @@ function describeTransactions({ name, record }) {
 function openSettingsFresh() {
   cancelIbkrImport();
   openSettings();
+}
+
+/**
+ * A broker chosen or changed in the import window. The broker decides how
+ * returns are measured, so when that changes every figure is redrawn.
+ */
+function redrawIfMethodChanges(change) {
+  const before = returnMethod();
+  change();
+  describeReturns();
+  if (returnMethod() !== before) renderAll();
+}
+const chooseBroker = (id) => redrawIfMethodChanges(() => pickBroker(id));
+const changeBroker = () => redrawIfMethodChanges(() => unpickBroker());
+
+/** Time- or money-weighted, or '' to follow the broker; every figure is redrawn at once. */
+function chooseReturnMethod(method) {
+  setReturnMethod(method || null);
+  describeReturns();
+  renderAll();
 }
 
 /**

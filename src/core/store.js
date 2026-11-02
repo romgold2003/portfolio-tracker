@@ -11,6 +11,7 @@ import { cleanLayout, shownIn } from './layout.js';
 import { cleanTrades } from './cryptoJournal.js';
 import { STORAGE_KEYS, ASSET_CLASSES } from '../config/constants.js';
 import { SECTOR_NAMES } from '../config/sectors.js';
+import { returnMethodOf } from '../config/brokers.js';
 
 export const state = {
   /** @type {Position[]} every trade, open and closed */
@@ -99,6 +100,11 @@ export const state = {
    * straight on that broker's steps next time. Kept with the sign-in.
    */
   broker: null,
+  /**
+   * How returns are measured, when chosen by hand in Settings: 'twr' or
+   * 'mwr'. Null follows the broker (config/brokers.js, returnMethodOf).
+   */
+  returnMethod: null,
 };
 
 /** The broker this person imports from; null to choose again. */
@@ -106,6 +112,19 @@ export function setBroker(id) {
   const next = typeof id === 'string' && id ? id : null;
   if (state.broker === next) return;
   state.broker = next;
+  scheduleFlush();
+}
+
+/** How returns are measured right now: 'twr' or 'mwr'. */
+export function returnMethod() {
+  return returnMethodOf(state.returnMethod, state.broker);
+}
+
+/** Measure returns time- or money-weighted; null to follow the broker. */
+export function setReturnMethod(method) {
+  const next = method === 'twr' || method === 'mwr' ? method : null;
+  if (state.returnMethod === next) return;
+  state.returnMethod = next;
   scheduleFlush();
 }
 
@@ -862,6 +881,7 @@ export function loadState(journal) {
     state.layoutHidden = cleanLayout(source.layoutHidden);
     state.tourSeen = source.tourSeen === true;
     state.broker = typeof source.broker === 'string' ? source.broker : null;
+    state.returnMethod = source.returnMethod === 'twr' || source.returnMethod === 'mwr' ? source.returnMethod : null;
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -886,6 +906,7 @@ export function journalSnapshot() {
     layoutHidden: state.layoutHidden,
     tourSeen: state.tourSeen,
     broker: state.broker,
+    returnMethod: state.returnMethod,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -913,6 +934,7 @@ export function clearState() {
   state.layoutHidden = [];
   state.tourSeen = false;
   state.broker = null;
+  state.returnMethod = null;
   announceJournal();
 }
 

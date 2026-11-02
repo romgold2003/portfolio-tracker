@@ -73,6 +73,7 @@ export const BROKERS = [
       'Press Download (CSV).',
     ],
     tip: 'Fidelity gives 90 days per download. Download each stretch, then choose all the files together.',
+    returns: 'mwr',
   },
   {
     id: 'etrade', name: 'E*TRADE', mark: 'E*', color: '#6b2fbf', region: 'world',
@@ -90,6 +91,7 @@ export const BROKERS = [
       'Choose the account and the dates.',
       'Press Download, and choose CSV.',
     ],
+    returns: 'mwr',
   },
   {
     id: 'webull', name: 'Webull', mark: 'W', color: '#1a6cff', region: 'world',
@@ -120,6 +122,7 @@ export const BROKERS = [
     ],
     tip: 'Trading 212 allows a year at most per file: one file for each year.',
     perYear: true,
+    returns: 'mwr',
   },
   {
     id: 'degiro', name: 'DEGIRO', mark: 'DG', color: '#0099dd', region: 'world',
@@ -166,6 +169,33 @@ export const OTHER_BROKER = {
   ],
   tip: 'Riskbook finds the columns by itself, in any language, and asks only about what it cannot tell.',
 };
+
+/**
+ * How each broker measures an account's return, so Riskbook's % reads like the
+ * broker's own app (core/moneyWeighted.js).
+ *
+ *   time-weighted    each day's return compounded; deposits and withdrawals
+ *                    change nothing. Interactive Brokers' statements and
+ *                    PortfolioAnalyst, and the industry's standard.
+ *   money-weighted   the internal rate of return on the money as it went in
+ *                    and out. Fidelity's and Vanguard's "personal rate of
+ *                    return", by their own disclosures, and Trading 212's
+ *                    "Rate of return" since its 2025 portfolio screen.
+ *
+ * A broker not marked is time-weighted: the ones that publish nothing either
+ * way show a single figure that the two methods agree on whenever no money
+ * moved, and time-weighted is the one comparable with the S&P 500 beside it.
+ */
+export const RETURN_METHODS = {
+  twr: { label: 'Time-weighted', short: 'time-weighted' },
+  mwr: { label: 'Money-weighted', short: 'money-weighted' },
+};
+
+/** The method in force: the one chosen in Settings, else the broker's, else time-weighted. */
+export function returnMethodOf(chosen, brokerId) {
+  if (chosen === 'twr' || chosen === 'mwr') return chosen;
+  return BROKERS.find((b) => b.id === brokerId)?.returns ?? 'twr';
+}
 
 export const REGIONS = [
   { id: 'world', title: 'Around the world' },
