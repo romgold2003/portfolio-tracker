@@ -181,7 +181,7 @@
       <button class="settings-btn" id="themeBtn" onclick="openDesigner()" style="margin-top:6px">🎨 Designer mode</button>
       <!-- Choose the pages and panels shown: src/ui/views/customize.js. -->
       <button class="settings-btn" id="customizeBtn" onclick="openCustomize()" style="margin-top:6px">⊞ Customize</button>
-      <button class="settings-btn" onclick="openTour()" style="margin-top:6px">❔ Help &amp; tutorial</button>
+      <button class="settings-btn" id="tourBtn" onclick="openTour()" style="margin-top:6px">❔ Help &amp; tutorial</button>
       <div class="account-row" id="accountRow" style="margin-top:10px;display:none">
         <span class="account-email" id="accountEmail"></span>
         <button class="lock-link" onclick="signOut()">Sign out</button>
@@ -207,8 +207,6 @@
           <!-- Money out of the broker: lowers the account, never the returns. -->
           <button class="topbar-btn topbar-btn-warn" onclick="withdrawMoney()" title="Record money taken out of your broker">↓ Withdraw</button>
           <button class="topbar-btn topbar-newtrade" onclick="show('add')">+ New trade</button>
-          <!-- The tutorial, again, any time: src/ui/views/tour.js. -->
-          <button class="topbar-btn topbar-help" id="helpBtn" onclick="openTour()" title="How Riskbook works">❔ Help</button>
         </div>
       </div>
       <div class="hero">
@@ -295,7 +293,6 @@
         <div class="sum"><div class="sum-lbl">Open P&L</div><div class="sum-val" id="sOpenPnl">+$0</div></div>
         <div class="sum"><div class="sum-lbl">Open positions</div><div class="sum-val" id="sOpenCount">0</div></div>
         <div class="sum"><div class="sum-lbl">Deployed</div><div class="sum-val" id="sDeployed">$0</div></div>
-        <div class="sum sum-beta" title="How your portfolio moves relative to the market. 1.0 = moves exactly with the S&amp;P 500"><div class="sum-lbl">Portfolio β</div><div class="sum-val amber" id="sBeta">—</div><div class="sum-sub">size-weighted</div></div>
       </div>
       <div class="section-title">Open positions</div>
       <div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">
@@ -749,7 +746,7 @@
       <input type="text" id="apiKeyInput" placeholder="Paste your key here">
     </div>
     <div class="modal-field">
-      <label>Alpha Vantage key — for the S&amp;P 500 comparison and measured beta</label>
+      <label>Alpha Vantage key — for the S&amp;P 500 comparison</label>
       <input type="text" id="benchKeyInput" placeholder="Optional. Free at alphavantage.co">
     </div>
     <div class="btn-row">

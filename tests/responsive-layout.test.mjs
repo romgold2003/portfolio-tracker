@@ -106,8 +106,9 @@ describe('a phone looks like a phone app', () => {
     assert.match(read('src/ui/router.js'), /window\.scrollTo\?\.\(0, 0\)/);
   });
 
-  test('the four summary figures go two by two', () => {
+  test('the summary figures: open P&L across the top, the other two side by side', () => {
     assert.match(css, /\.summary-row\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+    assert.match(css, /\.summary-row \.sum:first-child\{grid-column:1\/-1\}/);
   });
 });
 

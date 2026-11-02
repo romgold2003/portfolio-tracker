@@ -29,7 +29,6 @@ import { initTheme, setThemeChangeHandler } from './ui/theme.js';
 import { setPageEnterHandler, show } from './ui/router.js';
 import { renderAll, renderOnPageEnter, renderOnThemeChange } from './ui/render.js';
 import { showGauges } from './ui/views/sentimentGauges.js';
-import { refreshMeasuredBetas } from './ui/views/positions.js';
 import { initFormDefaults } from './ui/views/addTrade.js';
 import { showLockScreen } from './ui/views/lockScreen.js';
 import { initAllocationOverlay } from './ui/views/allocationOverlay.js';
@@ -103,8 +102,6 @@ async function startSession() {
   showGauges();
   recordDailySnapshot();
   checkForRecoveredJournal();
-  // Needs the network, so it lands after the first paint and re-renders.
-  refreshMeasuredBetas();
 
   refreshPrices();
   timers = [

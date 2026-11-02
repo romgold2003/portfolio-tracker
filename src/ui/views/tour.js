@@ -2,7 +2,8 @@
  * The tutorial (November 2026): a few slides, each a real screen of Riskbook
  * with red circles and arrows on the buttons that matter, and a line or two on
  * what they do. It opens by itself the first time someone signs in, and from
- * ❔ Help any time after. Swipe, the arrows or the keyboard move through it.
+ * ❔ Help & tutorial in the menu any time after. Swipe, the arrows or the
+ * keyboard move through it.
  *
  * The pictures are assets/tour-*.webp and where their buttons sit is
  * tourShots.js, both written by scripts/tour-shots.mjs from the same screens.
@@ -89,7 +90,7 @@ export const SLIDES = [
     text: 'Show only what you use, and find this guide again any time.',
     marks: [
       ['customize', 'Customize', 'Switch off any page or panel you do not need. Switch it back on whenever you like.'],
-      ['help', 'Help', 'Opens this tutorial again.'],
+      ['help', 'Help & tutorial', 'Opens this guide again, from the menu. On a phone it is under ⚙.'],
     ],
   },
 ];

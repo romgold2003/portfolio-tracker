@@ -67,7 +67,7 @@ const SHOTS = [
       daily: { sel: '#dailyLogBtn' },
       withdraw: { sel: '.topbar-btn-warn' },
       newTrade: { sel: '.topbar-newtrade' },
-      help: { sel: '#helpBtn' },
+      help: { sel: '#tourBtn' },
       settings: { sel: '#settingsBtn' },
       customize: { sel: '#customizeBtn' },
       navPositions: { sel: '.nl', text: '◈' },

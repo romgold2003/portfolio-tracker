@@ -1,10 +1,9 @@
 /** The Positions page: summary tiles, then open and closed position cards. */
 import { state } from '../../core/store.js';
 import {
-  unreal, costOf, portfolioBeta, sortPositions, realized, accountTotals, dailyPercent,
+  unreal, costOf, sortPositions, realized, dailyPercent,
 } from '../../core/portfolio.js';
 import { dayStillRunning } from '../dayReset.js';
-import { measuredBetas } from '../../services/benchmark.js';
 import { ui } from '../uiState.js';
 import { positionCard } from './positionCard.js';
 import { money as $u, signedMoney as $s, pnlColor as clr } from '../format.js';
@@ -21,55 +20,18 @@ const setText = (id, text) => { const el = document.getElementById(id); if (el) 
  */
 const dayPctOnScreen = (p) => (dayStillRunning(p) ? dailyPercent(p) : 0);
 
-/**
- * Betas measured from real returns, refreshed in the background.
- *
- * Rendering is synchronous but the index history is not, so the page draws with
- * whatever is known and improves once the fetch lands. Empty means every beta
- * falls back to its published assumption, which is the state until enough
- * history has been collected.
- */
-let measuredBetaCache = new Map();
-
-export async function refreshMeasuredBetas() {
-  const open = state.positions.filter((p) => p.status === 'Open');
-  if (!open.length) return;
-  const next = await measuredBetas(open.map((p) => p.ticker));
-  if (!next.size) return;
-  measuredBetaCache = next;
-  renderPositions();
-}
-
 export function renderPositions() {
   const open = state.positions.filter((p) => p.status === 'Open');
   const closed = state.positions.filter((p) => p.status === 'Closed');
 
   const openPnl = open.reduce((sum, p) => sum + unreal(p), 0);
   const deployed = open.reduce((sum, p) => sum + costOf(p), 0);
-  // Beta is measured against total equity, so cash has to come with it.
-  const account = accountTotals(state.positions, state.cash).account;
-  const beta = portfolioBeta(open, measuredBetaCache, account);
 
   setText('sOpenPnl', $s(openPnl));
   const pnlEl = document.getElementById('sOpenPnl');
   if (pnlEl) pnlEl.style.color = clr(openPnl);
   setText('sOpenCount', open.length);
   setText('sDeployed', $u(deployed).replace('.00', ''));
-  setText('sBeta', beta == null ? '—' : beta.beta.toFixed(2));
-
-  // Say plainly whether this was measured from returns or assumed. They are
-  // very different claims, and the number alone cannot tell them apart.
-  const betaNote = document.querySelector('.sum-beta .sum-sub');
-  if (betaNote) {
-    if (beta == null) betaNote.textContent = 'size-weighted';
-    else {
-      const source = beta.measuredPct >= 99 ? 'measured vs S&P 500'
-        : beta.measuredPct < 1 ? 'estimated · not yet measured'
-          : `${Math.round(beta.measuredPct)}% measured`;
-      const drag = beta.cashDragPct >= 1 ? ` · ${Math.round(beta.cashDragPct)}% cash` : '';
-      betaNote.textContent = source + drag;
-    }
-  }
 
   const openEl = document.getElementById('openPositions');
   if (openEl) {

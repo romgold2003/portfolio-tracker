@@ -35,7 +35,7 @@ import { renderHome, toggleAmounts, drawCurve } from '../ui/views/home.js';
 import { toggleDailyLog } from '../ui/views/dailyLog.js';
 import { openCustomize, closeCustomize } from '../ui/views/customize.js';
 import { openTour, closeTour } from '../ui/views/tour.js';
-import { renderPositions, refreshMeasuredBetas } from '../ui/views/positions.js';
+import { renderPositions } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
 import {
@@ -164,7 +164,6 @@ export async function saveAndQuit() {
   closeSettings();
   refreshPrices();
   renderAll();
-  refreshMeasuredBetas();
 }
 
 export function saveApiKey() {
@@ -172,9 +171,8 @@ export function saveApiKey() {
   saveBenchmarkKey(readBenchKeyInput());
   closeSettings();
   refreshPrices();
-  // A new market-data key can change both the benchmark line and beta.
+  // A new market-data key can change the benchmark line.
   renderAll();
-  refreshMeasuredBetas();
 }
 
 // ─── Creating and editing trades ─────────────────────────────────
@@ -1539,7 +1537,6 @@ export async function confirmIbkrImport(replace = false) {
   closeSettings();
   renderAll();
   refreshPrices();
-  refreshMeasuredBetas();
   show('positions');
 
   /**

@@ -1,7 +1,7 @@
 /**
  * The tutorial (November 2026): slides of real Riskbook screens with red
  * circles and arrows on the buttons that matter. It opens by itself once, at
- * the first sign-in, and from ❔ Help any time after. It replaced the welcome
+ * the first sign-in, and from ❔ Help & tutorial in the menu any time after. It replaced the welcome
  * banner.
  */
 import { test, describe } from 'node:test';
@@ -63,10 +63,10 @@ describe('the slides', () => {
 
 describe('where it lives', () => {
   const html = read('index.html');
-  test('❔ Help next to + New trade, and Help & tutorial in the menu', () => {
-    assert.match(html, /id="helpBtn"[^>]*onclick="openTour\(\)"|onclick="openTour\(\)"[^>]*id="helpBtn"/);
-    assert.ok(html.indexOf('topbar-newtrade') < html.indexOf('id="helpBtn"'));
-    assert.match(html, /Help &amp; tutorial/);
+  test('Help & tutorial in the menu only, not a second button at the top', () => {
+    assert.match(html, /id="tourBtn" onclick="openTour\(\)"[^>]*>❔ Help &amp; tutorial/);
+    assert.equal((html.match(/onclick="openTour\(\)"/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /id="helpBtn"/);
     assert.match(html, /id="tour"[^>]*hidden/);
   });
 
