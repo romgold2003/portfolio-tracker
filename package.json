@@ -14,7 +14,8 @@
     "seed:demo": "node scripts/seed-demo.mjs",
     "check:live": "node scripts/live-check.mjs",
     "check:functions": "node scripts/check-functions.mjs",
-    "refresh:listings": "node scripts/refresh-listings.mjs"
+    "refresh:listings": "node scripts/refresh-listings.mjs",
+    "check:sources": "node scripts/check-sources.mjs"
   },
   "engines": {
     "node": ">=18"
