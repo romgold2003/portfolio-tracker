@@ -12,6 +12,8 @@ async function api(action, { body, query = '' } = {}) {
     ? { credentials: 'same-origin' }
     : { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const json = await res.json().catch(() => ({}));
+  // Said plainly rather than as "Not signed in.": the app is still open, and nothing was lost.
+  if (res.status === 401) throw new Error('Your sign-in has ended on the server. Sign out and sign in again — nothing is lost.');
   if (!res.ok) throw new Error(json?.error || `The server answered ${res.status}.`);
   return json;
 }

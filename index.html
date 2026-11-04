@@ -648,8 +648,12 @@
           <!-- Every box folds shut and opens again from its title (views/friends.js). -->
           <div class="card" id="frAddCard">
             <div class="card-lbl fr-head"><button class="fr-fold" data-fold aria-expanded="true" aria-label="Close or open Add a friend"></button><span class="fr-title">Add a friend</span></div>
-            <form class="fr-add" id="frAdd">
-              <input class="fr-input" id="frEmail" type="email" placeholder="Their Riskbook email" autocomplete="off" spellcheck="false">
+            <!-- Plain text, not type="email", and a form that can never load a page: Safari on a
+                 Mac took an email box in a form for a sign-in form, and a friend there was sent
+                 back to the sign-in screen (November 2026). The address is checked on the server. -->
+            <form class="fr-add" id="frAdd" onsubmit="return false" autocomplete="off" data-lpignore="true">
+              <input class="fr-input" id="frEmail" type="text" inputmode="email" placeholder="Their Riskbook email" aria-label="Their Riskbook email"
+                     autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true">
               <button class="fr-btn fr-ok" type="submit">Add</button>
             </form>
             <div class="fr-note" id="frNote" role="status"></div>

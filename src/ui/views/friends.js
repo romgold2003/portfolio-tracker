@@ -195,7 +195,7 @@ function chatsHtml() {
     ? `${c.members.length} member${c.members.length === 1 ? '' : 's'}: ${c.members.map((m) => escapeHtml(nameOf(m.email))).join(', ')}${c.owner ? ' · you made this group' : ''}`
     : escapeHtml(c.with?.email ?? '')}</div>
       <div class="fr-msgs" id="frMsgs">${messagesHtml(view.messages, group)}</div>
-      <form class="fr-send" id="frSend"><textarea id="frText" rows="1" maxlength="2000" placeholder="Message ${escapeHtml(chatTitle(c))}"></textarea>
+      <form class="fr-send" id="frSend" onsubmit="return false"><textarea id="frText" rows="1" maxlength="2000" placeholder="Message ${escapeHtml(chatTitle(c))}"></textarea>
         <button class="fr-btn fr-ok" type="submit">Send</button></form>`;
   }
   return `${head('Messages', '<button class="fr-btn fr-ok" data-modal="groupName">+ Create group</button>')}
