@@ -25,7 +25,9 @@ export const ABOUT_CHOICES = {
 };
 /** Questions that take several answers, stored as their ids joined by commas in the list's order. */
 export const MULTI = new Set(['goal', 'style', 'heard', 'occupation']);
-const FIELDS = [...Object.keys(ABOUT_CHOICES), 'country'];
+/** The two answers typed rather than chosen: the name, as the person wants to be addressed. */
+export const NAME_FIELDS = ['first_name', 'last_name'];
+const FIELDS = [...Object.keys(ABOUT_CHOICES), 'country', ...NAME_FIELDS];
 
 const TABLE = `CREATE TABLE IF NOT EXISTS about_you (
    user_id    TEXT PRIMARY KEY,
@@ -37,6 +39,8 @@ const TABLE = `CREATE TABLE IF NOT EXISTS about_you (
    country    TEXT,
    heard      TEXT,
    occupation TEXT,
+   first_name TEXT,
+   last_name  TEXT,
    created_at TEXT NOT NULL,
    updated_at TEXT NOT NULL
  )`;
@@ -45,6 +49,8 @@ let readyFor = null;
 async function ensureTable() {
   if (readyFor === driverGeneration()) return;
   await query(TABLE, []);
+  // A table made before the name was asked gets its two columns; one that has them refuses, which is fine.
+  for (const column of NAME_FIELDS) await query(`ALTER TABLE about_you ADD COLUMN ${column} TEXT`, []).catch(() => {});
   readyFor = driverGeneration();
 }
 /** For the Admin page, which reads the table before anyone may have answered. */
@@ -69,7 +75,19 @@ export function cleanAnswers(body) {
   }
   const country = typeof body?.country === 'string' ? body.country.toUpperCase() : '';
   out.country = /^[A-Z]{2}$/.test(country) ? country : null;
+  out.first_name = cleanName(body?.firstName);
+  out.last_name = cleanName(body?.lastName);
   return out;
+}
+
+/**
+ * A name as typed: letters in any alphabet (Hebrew included), spaces, hyphens,
+ * apostrophes and dots, at most 50 characters; anything else is taken out.
+ */
+export function cleanName(value) {
+  if (typeof value !== 'string') return null;
+  const name = value.normalize('NFC').replace(/[^\p{L}\p{M}\s'’.-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 50).trim();
+  return name || null;
 }
 
 /** Save this user's answers, replacing any earlier ones. */

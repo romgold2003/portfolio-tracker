@@ -198,7 +198,7 @@ export async function adminStats({ now = new Date() } = {}) {
       dau: activeWithin(1),
       wau: activeWithin(7),
       mau: activeWithin(30),
-      profiles: about.filter((a) => ['sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation'].some((f) => a[f])).length,
+      profiles: about.filter((a) => ['first_name', 'last_name', 'sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation'].some((f) => a[f])).length,
     },
     days,
     retention,
@@ -219,7 +219,10 @@ export async function adminStats({ now = new Date() } = {}) {
         joined: u.created_at,
         lastActive: lastActive(u.id),
         daysActive: Number(seenOf.get(u.id)?.days ?? 0),
-        answers: Object.fromEntries(['sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation'].map((f) => [f, a[f] ?? null])),
+        answers: {
+          name: [a.first_name, a.last_name].filter(Boolean).join(' ') || null,
+          ...Object.fromEntries(['sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation'].map((f) => [f, a[f] ?? null])),
+        },
       };
     }),
   };

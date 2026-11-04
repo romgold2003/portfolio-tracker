@@ -13,7 +13,7 @@ import { makeClient } from './support/http.mjs';
 import signup from '../api/_auth/signup.js';
 import deleteAccount from '../api/account.js';
 import social from '../api/social/[action].js';
-import { ABOUT_CHOICES, MULTI, cleanAnswers } from '../api/_lib/about.js';
+import { ABOUT_CHOICES, MULTI, cleanAnswers, cleanName } from '../api/_lib/about.js';
 import { ABOUT_QUESTIONS, COUNTRY_CODES, COMMON_COUNTRIES, countryName } from '../src/config/aboutYou.js';
 import {
   generateDataKey, wrapDataKey, encryptJson, generateRecoveryKey, normalizeRecoveryKey,
@@ -52,12 +52,32 @@ async function person(email, password = 'correct horse battery') {
 beforeEach(() => { useDriver(sqliteDriver()); });
 
 describe('the questions', () => {
-  test('the eight Romy chose, in her order', () => {
-    assert.deepEqual(ABOUT_QUESTIONS.map((q) => q.id), ['sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation']);
+  test('the ones Romy chose, in her order: the name first', () => {
+    assert.deepEqual(ABOUT_QUESTIONS.map((q) => q.id), ['name', 'sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation']);
+  });
+
+  test('the name: two boxes the browser can fill, and Enter moves on', async () => {
+    const { slideHtml } = await import('../src/ui/views/aboutYou.js');
+    const html = slideHtml(1, { firstName: 'Romy', lastName: '' });
+    assert.match(html, /id="aboutFirst"[^>]*autocomplete="given-name"[^>]*value="Romy"/);
+    assert.match(html, /id="aboutLast"[^>]*autocomplete="family-name"/);
+    assert.match(html, />Continue</, 'a first name alone is an answer');
+    assert.match(slideHtml(1, {}), />Skip</);
+    assert.match(slideHtml(1, { firstName: '<b>' }), /value="&lt;b&gt;"/);
+  });
+
+  test('a name is kept as typed, in any alphabet, and nothing else', () => {
+    assert.equal(cleanName('  Romy  '), 'Romy');
+    assert.equal(cleanName('רומי'), 'רומי');
+    assert.equal(cleanName("O'Neil-Smith"), "O'Neil-Smith");
+    assert.equal(cleanName('<script>'), 'script');
+    assert.equal(cleanName('   '), null);
+    assert.equal(cleanName(42), null);
+    assert.equal(cleanName('a'.repeat(80)).length, 50);
   });
 
   test('the app offers exactly the answers the server accepts', () => {
-    for (const q of ABOUT_QUESTIONS.filter((x) => !x.country)) {
+    for (const q of ABOUT_QUESTIONS.filter((x) => !x.country && !x.name)) {
       assert.deepEqual(q.options.map(([id]) => id), ABOUT_CHOICES[q.id], q.id);
     }
   });
@@ -96,7 +116,7 @@ describe('the questions', () => {
       assert.match(html, />Skip</, 'every question can be skipped');
       if (q.options) assert.match(html, q.multi ? /role="checkbox"/ : /role="radio"/, q.id);
     });
-    const chosen = slideHtml(1, { sex: 'female' });
+    const chosen = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.id === 'sex') + 1, { sex: 'female' });
     assert.match(chosen, /data-q="sex" data-v="female" role="radio" aria-checked="true"/);
     assert.match(chosen, />Continue</);
     const goal = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.id === 'goal') + 1, { goal: ['wealth', 'learn'] });
@@ -130,6 +150,13 @@ describe('on the server', () => {
     assert.equal(rows[0].country, 'IL');
     assert.equal(rows[0].occupation, 'student');
     assert.equal(rows[0].goal, null, 'a later answer replaces the whole set');
+  });
+
+  test('the name is stored in two columns', async () => {
+    const ana = await person('ana@example.com');
+    await ana.about({ firstName: ' Ana ', lastName: 'Lévy-Cohen', sex: 'female' });
+    const { rows } = await query('SELECT first_name, last_name FROM about_you WHERE user_id = $1', [ana.id]);
+    assert.deepEqual({ ...rows[0] }, { first_name: 'Ana', last_name: 'Lévy-Cohen' });
   });
 
   test('several answers are stored together, in the list\'s order, each once', async () => {

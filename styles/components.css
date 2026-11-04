@@ -1698,6 +1698,12 @@ body.tour-open{overflow:hidden}
 .about-opt.on .about-radio::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--a-navy)}
 .about-opt.on .about-checkbox{background:var(--a-navy)}
 .about-opt.on .about-checkbox::after{content:'';position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+/* The name: two labelled boxes, as on any account form. */
+.about-names{display:flex;flex-direction:column;gap:16px}
+.about-field{display:flex;flex-direction:column;gap:6px}
+.about-field > span{font-size:12.5px;font-weight:600;color:var(--a-text)}
+.about-input{width:100%;font-size:15px;padding:12px 13px;border-radius:4px;background:#fff;color:var(--a-text);border:1px solid #b9c2d0;user-select:text;-webkit-user-select:text}
+.about-input:focus{border-color:var(--a-navy);box-shadow:0 0 0 3px rgba(27,54,93,0.12)}
 .about-suggest{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
 .about-opt-c{padding:11px 12px;font-size:13.5px;gap:10px}
 .about-flag{font-size:17px;line-height:1;flex:none}

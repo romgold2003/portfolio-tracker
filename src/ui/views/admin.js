@@ -31,6 +31,7 @@ const day = (iso) => (iso ? new Date(`${String(iso).slice(0, 10)}T00:00:00Z`).to
 export function answerLabel(field, value) {
   if (!value) return '';
   if (field === 'country') return `${flagOf(value)} ${countryName(value)}`;
+  if (field === 'name') return String(value);
   const q = ABOUT_QUESTIONS.find((x) => x.id === field);
   return String(value).split(',').map((id) => q?.options?.find(([o]) => o === id)?.[1] ?? id).join(', ');
 }
@@ -54,7 +55,8 @@ function columns(days, key, label) {
 
 function questionsHtml(d) {
   const answered = d.totals.profiles;
-  return ABOUT_QUESTIONS.map((q) => {
+  // A name is a person, not a statistic: it is in the list below, not a chart.
+  return ABOUT_QUESTIONS.filter((q) => !q.name).map((q) => {
     const tally = d.questions[q.id] ?? {};
     const entries = q.country
       ? Object.entries(tally).map(([code, n]) => [`${flagOf(code)} ${countryName(code)}`, n])

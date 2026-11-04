@@ -1,5 +1,5 @@
 /**
- * "About you" (November 2026): eight quick questions — gender, age,
+ * "About you" (November 2026): nine quick questions — name, gender, age,
  * objectives, experience, approach, country, how they heard of Riskbook, and
  * employment — so Romy can see who uses it. Every account is asked once per
  * round (ABOUT_VERSION in config/aboutYou.js): a new one right after signing
@@ -26,14 +26,16 @@ import { escapeHtml } from '../format.js';
 import { openTour } from './tour.js';
 
 const el = (id) => document.getElementById(id);
-/** Steps: 0 the introduction, 1…8 the questions, 9 the confirmation. */
+/** Steps: 0 the introduction, then one per question, then the confirmation. */
 const LAST = ABOUT_QUESTIONS.length + 1;
 let answers = {};
 let at = 0;
 let saving = false;
 
 const picked = (v) => (Array.isArray(v) ? v.length > 0 : Boolean(v));
-const countAnswered = (given) => ABOUT_QUESTIONS.filter((q) => picked(given[q.id])).length;
+/** Whether a step has an answer: the name either part of it, the rest a choice. */
+const answeredQ = (q, given) => (q.name ? Boolean(given.firstName?.trim() || given.lastName?.trim()) : picked(given[q.id]));
+const countAnswered = (given) => ABOUT_QUESTIONS.filter((q) => answeredQ(q, given)).length;
 const isOn = (q, given, id) => (q.multi ? (given[q.id] ?? []).includes(id) : given[q.id] === id);
 
 /** The country list: every country A to Z, narrowed by the search. Exported for the tests. */
@@ -63,7 +65,19 @@ function introHtml() {
     </div>`;
 }
 
+/** The name, typed: two boxes the browser can fill from the person's own details. */
+function nameHtml(given) {
+  const field = (id, label, auto, value) => `<label class="about-field"><span>${label}</span>
+      <input type="text" id="${id}" class="about-input" autocomplete="${auto}" maxlength="50" spellcheck="false" value="${escapeHtml(value ?? '')}"></label>`;
+  return `<div class="about-names">${field('aboutFirst', 'First name', 'given-name', given.firstName)}${field('aboutLast', 'Last name', 'family-name', given.lastName)}</div>`;
+}
+
 function questionHtml(q, given) {
+  if (q.name) {
+    return `<h3 class="about-ask" id="aboutTitle">${escapeHtml(q.ask)}</h3>
+    <p class="about-lead">${escapeHtml(q.hint)}</p>
+    ${nameHtml(given)}`;
+  }
   const choice = given[q.id];
   const control = q.multi ? 'checkbox' : 'radio';
   const body = q.country
@@ -97,7 +111,7 @@ export function slideHtml(i, given = answers) {
       </div>
       <div class="about-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${ABOUT_QUESTIONS.length}" aria-valuenow="${i - 1}"><span style="width:${((i - 1) / ABOUT_QUESTIONS.length) * 100}%"></span></div>`
     : '';
-  const answered = inQuestions && picked(given[q.id]);
+  const answered = inQuestions && answeredQ(q, given);
   const foot = inQuestions
     ? `<div class="about-foot">
         <button type="button" class="about-secondary" data-about-back>Back</button>
@@ -115,7 +129,7 @@ function draw(direction = 0) {
   const stage = card.querySelector('.about-stage');
   if (direction) stage.classList.add(direction > 0 ? 'from-right' : 'from-left');
   // Keyboard users land on the first answer; on a phone the keyboard would cover the step.
-  if (window.matchMedia?.('(pointer:fine)').matches) card.querySelector('.about-opt.on, .about-opt, .about-primary')?.focus({ preventScroll: true });
+  if (window.matchMedia?.('(pointer:fine)').matches) card.querySelector('#aboutFirst, .about-opt.on, .about-opt, .about-primary')?.focus({ preventScroll: true });
 }
 
 function go(to) {
@@ -131,7 +145,7 @@ function refreshFoot() {
   const q = ABOUT_QUESTIONS[at - 1];
   const next = el('aboutCard').querySelector('.about-foot [data-about-next]');
   if (!q || !next) return;
-  const answered = picked(answers[q.id]);
+  const answered = answeredQ(q, answers);
   next.textContent = answered ? 'Continue' : 'Skip';
   next.className = answered ? 'about-primary' : 'about-secondary';
 }
@@ -204,9 +218,15 @@ function bind(box) {
   });
   box.addEventListener('input', (e) => {
     if (e.target.id === 'aboutSearch') el('aboutClist').innerHTML = countryListHtml(e.target.value, answers.country);
+    if (e.target.id === 'aboutFirst') { answers.firstName = e.target.value; refreshFoot(); }
+    if (e.target.id === 'aboutLast') { answers.lastName = e.target.value; refreshFoot(); }
   });
   box.addEventListener('keydown', (e) => {
-    if (e.target.id === 'aboutSearch') return;
+    // Enter in a name box moves on: to the last name, then to the next step.
+    if (e.key === 'Enter' && e.target.id === 'aboutFirst') { e.preventDefault(); el('aboutLast')?.focus(); return; }
+    if (e.key === 'Enter' && e.target.id === 'aboutLast') { e.preventDefault(); go(at + 1); return; }
+    // Arrow keys move the cursor in a text box, not the step.
+    if (e.target.matches?.('input')) return;
     if (e.key === 'ArrowRight' && at < LAST) go(at + 1);
     else if (e.key === 'ArrowLeft' && at > 0 && at < LAST) go(at - 1);
   });
@@ -214,7 +234,7 @@ function bind(box) {
   let startX = null;
   let startY = null;
   box.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.about-clist, .about-search')) return;
+    if (e.target.closest('.about-clist, .about-search, .about-names')) return;
     startX = e.clientX;
     startY = e.clientY;
   });

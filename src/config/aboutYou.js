@@ -16,11 +16,14 @@
  * Which round of the questions this is. Every account whose last answered (or
  * skipped) round is lower is asked again at its next sign-in — raise it to ask
  * everyone again, as when the questions change. 2: the swipe redesign; 3: the
- * broker-style form with multiple answers (both November 2026).
+ * broker-style form with multiple answers; 4: the name asked first (all
+ * November 2026).
  */
-export const ABOUT_VERSION = 3;
+export const ABOUT_VERSION = 4;
 
 export const ABOUT_QUESTIONS = [
+  // Typed, not chosen: first and last name, stored as first_name and last_name.
+  { id: 'name', title: 'Name', ask: 'Your name', hint: 'As you would like us to address you.', name: true },
   {
     id: 'sex', title: 'Gender', ask: 'Gender', hint: 'Used only for anonymous statistics.',
     options: [['male', 'Male'], ['female', 'Female'], ['other', 'Other'], ['na', 'Prefer not to say']],
