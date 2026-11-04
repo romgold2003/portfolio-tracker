@@ -110,6 +110,39 @@ describe('each topic, from its own open markets', () => {
     asked.length = 0;
     await whaleTrades();
     assert.ok(!asked.some((u) => u.pathname === '/events'));
-    assert.ok(asked.some((u) => u.pathname === '/trades'));
+    assert.ok(asked.some((u) => u.pathname === '/v2/trades'));
+  });
+});
+
+/**
+ * November 2026: Polymarket retired version 1 of its trades feed (410 Gone)
+ * and the panel went blank. Version 2 wraps the rows in `data`, names fields in
+ * snake_case, takes at most twenty events per ask, and times out on the
+ * busiest events — so the whole recent feed is asked as well.
+ */
+describe('version 2 of the feed', () => {
+  const v2 = (t) => ({
+    proxy_wallet: t.proxyWallet, condition_id: t.conditionId, event_slug: t.eventSlug, transaction_hash: t.transactionHash,
+    title: t.title, side: t.side, outcome: t.outcome, size: t.size, price: t.price, timestamp: t.timestamp,
+  });
+
+  test('rows in `data`, snake_case names, and a busy event the recent feed still covers', async () => {
+    globalThis.fetch = async (url) => {
+      const u = new URL(String(url));
+      asked.push(u);
+      if (u.pathname === '/events') return { ok: true, json: async () => EVENTS[u.searchParams.get('tag_slug')] ?? [] };
+      const ids = (u.searchParams.get('eventId') ?? '').split(',').filter(Boolean);
+      if (ids.length > 20) return { ok: false, status: 400, json: async () => ({}) };
+      // The Brazil election times out when asked for by event; the recent feed has it.
+      if (ids.includes('e-br') || ids.includes('e-bad')) return { ok: false, status: 503, json: async () => ({}) };
+      const floor = Number(u.searchParams.get('filterAmount'));
+      const pool = ids.length ? ids.flatMap((id) => TRADES[id] ?? []) : Object.values(TRADES).flat();
+      return { ok: true, json: async () => ({ data: pool.filter((t) => t.size * t.price >= floor).map(v2), pagination: { next_cursor: null } }) };
+    };
+    const rows = await whaleTrades();
+    assert.deepEqual(selectTrades(rows, { band: 'all', topic: 'polit' }).map((t) => t.usd), [180_000]);
+    assert.deepEqual(selectTrades(rows, { band: 'k100', topic: 'fed' }).map((t) => t.usd).sort(), [120_000, 160_000]);
+    assert.ok(rows.every((t) => t.proxyWallet && t.conditionId), 'read under the old names');
+    assert.ok(asked.some((u) => u.pathname === '/v2/trades' && !u.searchParams.get('eventId')), 'the recent feed is asked');
   });
 });

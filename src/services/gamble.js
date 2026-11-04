@@ -22,7 +22,31 @@
  *     has no market on a Fed cut or on Iran.
  */
 
-const ENDPOINT = 'https://data-api.polymarket.com/trades';
+/**
+ * Version 2 of the feed since November 2026: version 1 answers 410 Gone, which
+ * left the panel empty. Version 2 wraps the rows in `data`, names their fields
+ * in snake_case, and takes at most twenty events per ask.
+ */
+const ENDPOINT = 'https://data-api.polymarket.com/v2/trades';
+const MAX_EVENTS_PER_ASK = 20;
+
+/** A version 2 row with the field names the rest of this file reads. */
+const V2_NAMES = {
+  proxy_wallet: 'proxyWallet',
+  condition_id: 'conditionId',
+  event_slug: 'eventSlug',
+  transaction_hash: 'transactionHash',
+  outcome_index: 'outcomeIndex',
+  profile_image: 'profileImage',
+  profile_image_optimized: 'profileImageOptimized',
+  token_id: 'asset',
+};
+export function fromV2(row) {
+  if (!row || typeof row !== 'object') return row;
+  const out = { ...row };
+  for (const [from, to] of Object.entries(V2_NAMES)) if (from in row && !(to in row)) out[to] = row[from];
+  return out;
+}
 
 /** Nothing below this is worth a row, and it is the feed's own filter. */
 export const FLOOR_USD = 250_000;
@@ -324,9 +348,36 @@ function running(m, now = Date.now()) {
 async function tradesFor(query, { signal } = {}) {
   const res = await fetch(`${ENDPOINT}?${query}`, { signal });
   if (!res.ok) throw new Error(`Polymarket answered ${res.status}`);
-  const rows = await res.json();
+  const json = await res.json();
+  // Version 2 sends { data: [...] }, and null for a feed with nothing in it.
+  const rows = Array.isArray(json) ? json : json && 'data' in json ? (json.data ?? []) : null;
   if (!Array.isArray(rows)) throw new Error('Polymarket sent something else');
-  return rows;
+  return rows.map(fromV2);
+}
+
+/**
+ * Every trade on all of Polymarket above `floor`, for the current and the
+ * previous month — what version 2 keeps in its open feed — page after page.
+ * 819 bets over $100k back to 1 October, in about a second, on 4 November
+ * 2026. It covers the events the per-event asks time out on (the midterms,
+ * the Fed decision), so no topic goes empty when they do.
+ */
+async function recentFeed(floor, { signal } = {}) {
+  const out = [];
+  let cursor = null;
+  for (let page = 0; page < 5; page++) {
+    const res = await fetch(`${ENDPOINT}?limit=1000&filterType=CASH&filterAmount=${floor}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { signal });
+    if (!res.ok) {
+      if (out.length) break;
+      throw new Error(`Polymarket answered ${res.status}`);
+    }
+    const json = await res.json();
+    const rows = Array.isArray(json) ? json : json && 'data' in json ? (json.data ?? []) : [];
+    out.push(...rows.map(fromV2));
+    cursor = json?.pagination?.next_cursor ?? null;
+    if (!cursor || !rows.length) break;
+  }
+  return out;
 }
 
 /**
@@ -340,7 +391,17 @@ async function tradesFor(query, { signal } = {}) {
  */
 const brokenEvents = new Set();
 
+/** Events asked for in twenties, the most the feed takes at once. */
 async function topicTrades(ids, floor, { signal } = {}) {
+  if (ids.length <= MAX_EVENTS_PER_ASK) return askEvents(ids, floor, { signal });
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += MAX_EVENTS_PER_ASK) chunks.push(ids.slice(i, i + MAX_EVENTS_PER_ASK));
+  const each = await Promise.allSettled(chunks.map((list) => askEvents(list, floor, { signal })));
+  if (each.every((r) => r.status === 'rejected')) throw each[0].reason;
+  return each.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+}
+
+async function askEvents(ids, floor, { signal } = {}) {
   const query = (list) => `eventId=${list.join(',')}&limit=500&filterType=CASH&filterAmount=${floor}`;
   try {
     return await tradesFor(query(ids), { signal });
@@ -355,9 +416,10 @@ async function topicTrades(ids, floor, { signal } = {}) {
 
 /**
  * The recent big bets on each topic's open markets, each row marked with its
- * topic: one ask per topic at the lowest band's floor, and one at $250k across
+ * topic: one ask per topic at the lowest band's floor, one at $250k across
  * every topic's events together, so the largest bets reach further back than a
- * busy week of small ones would let them.
+ * busy week of small ones would let them, and the whole recent feed, which
+ * answers for the events those asks cannot.
  *
  * A bet on a market that has closed or passed its end leaves the table on the
  * next refresh, every thirty seconds while the tab is open.
@@ -371,6 +433,7 @@ export async function whaleTrades({ signal } = {}) {
     .map((ids) => topicTrades(ids, BANDS[0].min, { signal }));
   const everyId = [...topics.values()].flatMap(usable);
   asks.push(topicTrades(everyId, FLOOR_USD, { signal }));
+  asks.push(recentFeed(BANDS[0].min, { signal }));
 
   const answers = await Promise.allSettled(asks);
   if (answers.every((x) => x.status === 'rejected')) return null;
@@ -395,8 +458,8 @@ export async function whaleTrades({ signal } = {}) {
  * sorted into topics by title. Kept for when the events list cannot be had.
  */
 async function allMarketTrades({ signal } = {}) {
-  const answers = await Promise.allSettled(FLOORS.map((floor) =>
-    tradesFor(`limit=500&filterType=CASH&filterAmount=${floor}`, { signal })));
+  const answers = await Promise.allSettled([recentFeed(BANDS[0].min, { signal }), ...FLOORS.map((floor) =>
+    tradesFor(`limit=500&filterType=CASH&filterAmount=${floor}`, { signal }))]);
 
   const merged = new Map();
   for (const answer of answers) {
