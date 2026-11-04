@@ -1,48 +1,81 @@
 /**
- * The questions asked once, right after sign-up (November 2026), so Romy can
- * see who uses Riskbook. Every one is optional. The answers are kept on the
+ * The questions every account is asked once (November 2026), so Romy can see
+ * who uses Riskbook. Every one is optional. The answers are kept on the
  * server apart from the journal (api/_lib/about.js) — the journal stays
  * encrypted and unreadable to anyone but its owner; these are not.
  *
+ * Written as a friendly conversation, one question a slide, each answer a big
+ * tap with its own emoji: the point is that a new user feels welcome and
+ * relaxed, not interrogated.
+ *
  * The option ids are what is stored; the server accepts exactly these
- * (tests/about-you.test.mjs keeps the two lists the same).
+ * (tests/about-you.test.mjs keeps the two lists the same). Each option is
+ * [id, label, emoji].
  */
 export const ABOUT_QUESTIONS = [
   {
     id: 'sex',
     title: 'Sex',
-    options: [['male', 'Male'], ['female', 'Female'], ['other', 'Other'], ['na', 'Prefer not to say']],
+    ask: 'First, how do you identify?',
+    hint: 'So we can speak to you the right way.',
+    emoji: '👋',
+    options: [['male', 'Male', '👨'], ['female', 'Female', '👩'], ['other', 'Other', '🌈'], ['na', 'Prefer not to say', '🤐']],
   },
   {
     id: 'age',
     title: 'Age',
-    options: [['u18', 'Under 18'], ['18-24', '18–24'], ['25-34', '25–34'], ['35-44', '35–44'], ['45-54', '45–54'], ['55-64', '55–64'], ['65+', '65+']],
+    ask: 'How old are you?',
+    hint: 'Just a range — no birthdays needed.',
+    emoji: '🎂',
+    options: [['u18', 'Under 18', '🧒'], ['18-24', '18–24', '🎓'], ['25-34', '25–34', '💼'], ['35-44', '35–44', '🏡'], ['45-54', '45–54', '🌳'], ['55-64', '55–64', '⛵'], ['65+', '65+', '🌅']],
   },
   {
     id: 'goal',
     title: 'Your main goal',
-    options: [['wealth', 'Grow my wealth long term'], ['trading', 'Earn from active trading'], ['retire', 'Save for retirement'], ['learn', 'Learn to invest'], ['track', 'Track everything in one place']],
+    ask: 'What brings you to Riskbook?',
+    hint: 'Pick the one that matters most. You can do it all here.',
+    emoji: '🎯',
+    options: [['wealth', 'Grow my wealth long term', '📈'], ['trading', 'Earn from active trading', '⚡'], ['retire', 'Save for retirement', '🏖️'], ['learn', 'Learn to invest', '📚'], ['track', 'Track everything in one place', '🗂️']],
   },
   {
     id: 'experience',
     title: 'How long have you been investing?',
-    options: [['lt1', 'Under 1 year'], ['1-3', '1–3 years'], ['3-10', '3–10 years'], ['10+', '10+ years']],
+    ask: 'How long have you been investing?',
+    hint: 'Beginners are very welcome here.',
+    emoji: '🌱',
+    options: [['lt1', 'Under 1 year', '🌱'], ['1-3', '1–3 years', '🌿'], ['3-10', '3–10 years', '🌳'], ['10+', '10+ years', '🏔️']],
   },
   {
     id: 'style',
     title: 'Your style',
-    options: [['long', 'Long-term investor'], ['swing', 'Swing trader (days to weeks)'], ['day', 'Day trader'], ['mix', 'A bit of everything']],
+    ask: 'How do you like to invest?',
+    hint: 'There is no wrong answer.',
+    emoji: '🧭',
+    options: [['long', 'Long-term investor', '🐢'], ['swing', 'Swing trader (days to weeks)', '🌊'], ['day', 'Day trader', '🏃'], ['mix', 'A bit of everything', '🎲']],
   },
-  { id: 'country', title: 'Where do you live?', country: true },
+  {
+    id: 'country',
+    title: 'Where do you live?',
+    ask: 'Where do you live?',
+    hint: 'So we show the markets and brokers that fit you.',
+    emoji: '🌍',
+    country: true,
+  },
   {
     id: 'heard',
     title: 'How did you hear about Riskbook?',
-    options: [['friend', 'Friend or family'], ['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['youtube', 'YouTube'], ['google', 'Google'], ['university', 'University'], ['other', 'Other']],
+    ask: 'How did you find us?',
+    hint: 'It helps us thank the right people 😉',
+    emoji: '🔎',
+    options: [['friend', 'Friend or family', '👯'], ['instagram', 'Instagram', '📸'], ['tiktok', 'TikTok', '🎵'], ['youtube', 'YouTube', '▶️'], ['google', 'Google', '🔎'], ['university', 'University', '🎓'], ['other', 'Other', '✨']],
   },
   {
     id: 'occupation',
     title: 'What do you do?',
-    options: [['student', 'Student'], ['employed', 'Employed'], ['self', 'Self-employed'], ['retired', 'Retired'], ['other', 'Other']],
+    ask: 'And last — what do you do?',
+    hint: 'Almost done!',
+    emoji: '💼',
+    options: [['student', 'Student', '🎓'], ['employed', 'Employed', '💼'], ['self', 'Self-employed', '🚀'], ['retired', 'Retired', '🌴'], ['other', 'Other', '✨']],
   },
 ];
 
@@ -57,7 +90,7 @@ export const COUNTRY_CODES = (
   + 'UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'
 ).split(' ');
 
-/** Shown first in the country window: where most people using Riskbook are. */
+/** Shown first among the countries: where most people using Riskbook are. */
 export const COMMON_COUNTRIES = ['IL', 'US', 'GB', 'FR', 'DE', 'CA'];
 
 let names = null;

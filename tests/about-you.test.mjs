@@ -76,20 +76,34 @@ describe('the questions', () => {
     assert.match(fr, /data-country="FR"/);
     assert.doesNotMatch(fr, /data-country="IL"/);
     const all = countryListHtml('');
-    assert.match(all, /Suggested/);
-    assert.equal((all.match(/data-country="/g) ?? []).length, COUNTRY_CODES.length + COMMON_COUNTRIES.length);
+    assert.equal((all.match(/data-country="/g) ?? []).length, COUNTRY_CODES.length);
+    assert.ok(all.indexOf('Afghanistan') < all.indexOf('Zimbabwe'));
     assert.match(countryListHtml('zzzz'), /No country called/);
   });
 
-  test('the window has every question, and Skip and Continue', async () => {
-    const { aboutHtml } = await import('../src/ui/views/aboutYou.js');
-    const html = aboutHtml({ sex: 'female', country: 'IL' });
-    for (const q of ABOUT_QUESTIONS) assert.ok(html.includes(q.title.replace(/'/g, '&#39;')) || html.includes(q.title), q.id);
-    assert.match(html, /data-q="sex" data-v="female" aria-pressed="true"/);
-    assert.match(html, /Israel/);
-    assert.match(html, /2 of 8 answered/);
-    assert.match(html, /data-about-skip/);
-    assert.match(html, /data-about-save/);
+  test('one question a slide: a welcome that reassures, the eight questions, a thank-you', async () => {
+    const { slideHtml } = await import('../src/ui/views/aboutYou.js');
+    const welcome = slideHtml(0, {});
+    assert.match(welcome, /Let’s get to know you/);
+    assert.match(welcome, /portfolio stays encrypted/);
+    assert.match(welcome, /answers stay private/);
+    assert.match(welcome, /data-about-skipall/);
+    ABOUT_QUESTIONS.forEach((q, n) => {
+      const html = slideHtml(n + 1, {});
+      assert.match(html, new RegExp(`Question ${n + 1} of ${ABOUT_QUESTIONS.length}`), q.id);
+      assert.ok(html.includes(q.ask.replace(/'/g, '&#39;')), q.id);
+      assert.match(html, /data-about-back/);
+      assert.match(html, /Skip ›/, 'every question can be skipped');
+      for (const [, , emoji] of q.options ?? []) assert.ok(html.includes(emoji), `${q.id} ${emoji}`);
+    });
+    const chosen = slideHtml(1, { sex: 'female' });
+    assert.match(chosen, /data-q="sex" data-v="female" aria-pressed="true"/);
+    assert.match(chosen, /Next ›/);
+    const country = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.country) + 1, { country: 'IL' });
+    for (const c of COMMON_COUNTRIES) assert.match(country, new RegExp(`data-country="${c}"`));
+    assert.match(country, /id="aboutSearch"/);
+    assert.match(slideHtml(ABOUT_QUESTIONS.length + 1, { sex: 'female' }), /Thank you/);
+    assert.match(slideHtml(ABOUT_QUESTIONS.length + 1, {}), /data-about-finish/);
   });
 });
 
@@ -145,8 +159,8 @@ describe('when it is asked', () => {
     assert.match(read('src/ui/views/aboutYou.js'), /if \(state\.aboutDone \|\| !isUnlocked\(\)\) return;/);
     assert.match(read('src/ui/views/tour.js'), /\(!state\.aboutDone && cloudEnabled\(\)\)/);
     // Only the eight questions: an existing account is never asked for its email or password again.
-    const { aboutHtml } = await import('../src/ui/views/aboutYou.js');
-    assert.doesNotMatch(aboutHtml({}), /email|password/i);
+    const { slideHtml } = await import('../src/ui/views/aboutYou.js');
+    for (let i = 0; i <= ABOUT_QUESTIONS.length + 1; i++) assert.doesNotMatch(slideHtml(i, {}), /email|password/i, `slide ${i}`);
     const view = read('src/ui/views/aboutYou.js');
     assert.match(view, /if \(!state\.tourSeen\) setTimeout\(openTour/);
     assert.match(read('src/app/actions.js'), /import '\.\.\/ui\/views\/aboutYou\.js';/);
