@@ -38,6 +38,8 @@ import { openCustomize, closeCustomize } from '../ui/views/customize.js';
 import { openTour, closeTour } from '../ui/views/tour.js';
 // Registers the "About you" questions for a new account (asked once, before the tutorial).
 import '../ui/views/aboutYou.js';
+// And the guest notice and bar, for a visit without an account.
+import '../ui/views/guest.js';
 import { renderPositions } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';

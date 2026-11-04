@@ -71,6 +71,9 @@ export async function signOut() {
   clearState();
   setPersistHandler(null);
   document.getElementById('accountRow')?.style.setProperty('display', 'none');
+  // A guest visit's bar goes with it.
+  document.getElementById('guestBar')?.setAttribute('hidden', '');
+  document.body.classList.remove('is-guest');
   show('home');
   showLockScreen({ onUnlock: startSession });
 }

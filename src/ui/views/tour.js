@@ -9,7 +9,7 @@
  * tourShots.js, both written by scripts/tour-shots.mjs from the same screens.
  */
 import { state, setTourSeen, aboutDue, onJournalLoaded } from '../../core/store.js';
-import { isUnlocked } from '../../core/profiles.js';
+import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { notePage } from '../../services/usage.js';
 import { SHOTS } from './tourShots.js';
@@ -279,7 +279,8 @@ function bind() {
  */
 onJournalLoaded(() => {
   // "About you" comes first where it is asked; that window opens the tutorial when it closes.
-  if (state.tourSeen || !isUnlocked() || (aboutDue() && cloudEnabled())) return;
+  // A guest's tutorial follows the guest notice instead (ui/views/guest.js).
+  if (state.tourSeen || !isUnlocked() || isGuest() || (aboutDue() && cloudEnabled())) return;
   setTimeout(() => {
     if (!state.tourSeen && isUnlocked() && el('tour')?.hidden) openTour();
   }, 900);

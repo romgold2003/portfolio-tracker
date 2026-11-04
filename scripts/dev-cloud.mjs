@@ -100,6 +100,7 @@ const ROUTES = {
   '/api/auth/begin': '../api/_auth/begin.js',
   '/api/auth/signup': '../api/_auth/signup.js',
   '/api/auth/login': '../api/_auth/login.js',
+  '/api/auth/guest': '../api/_auth/guest.js',
   '/api/auth/logout': '../api/_auth/logout.js',
   '/api/auth/session': '../api/_auth/session.js',
   '/api/auth/recover': '../api/_auth/recover.js',

@@ -460,12 +460,30 @@ export function isUnlocked() {
 }
 
 /**
+ * Enter as a guest (November 2026): a sample journal held in memory, a pass
+ * from the server for the market data, and nothing saved anywhere — no account,
+ * no vault, nothing in this browser. Reloading or leaving ends it.
+ */
+export async function startGuest(journal) {
+  if (inCloud()) await cloud.guestPass();
+  session = { guest: true, profile: { id: 'guest', email: 'Guest' }, dataKey: null, journal };
+  return session;
+}
+
+/** Whether this is a guest visit rather than an account. */
+export function isGuest() {
+  return session?.guest === true;
+}
+
+/**
  * Drop the data key. Everything stored stays encrypted.
  *
  * In cloud mode the server session is ended too, and the cached key goes first
  * — if the network call fails, the key must still be gone from this browser.
  */
 export function lock() {
+  // A guest has no account to sign out of; leaving simply drops the sample journal.
+  if (session?.guest) { session = null; return; }
   const wasCloud = inCloud() && session;
   session = null;
   dropCachedDataKey();
@@ -475,6 +493,7 @@ export function lock() {
 /** Decrypt this profile's journal. Null means the vault is missing or corrupt. */
 export async function readVault() {
   if (!session) return null;
+  if (session.guest) return session.journal ?? emptyJournal();
   if (inCloud()) {
     if (!session.blob) return emptyJournal();
     return decryptJson(session.blob, session.dataKey);
@@ -492,6 +511,8 @@ async function writeVault(profileId, dataKey, journal) {
 /** Encrypt and persist the whole journal for the unlocked profile. */
 export async function saveVault(journal) {
   if (!session) return false;
+  // A guest saves nothing: the journal lives only in memory, as the app tells them.
+  if (session.guest) return true;
   if (inCloud()) return saveVaultToCloud(journal);
   await writeVault(session.profile.id, session.dataKey, journal);
   return true;

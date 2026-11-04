@@ -11,8 +11,9 @@
 import {
   listProfiles, findByEmail, createProfile, unlockWithPassword,
   unlockWithRecoveryKey, setPassword, looksLikeEmail, cloudMode,
-  requestPasswordReset, completePasswordReset, resetTokenInUrl,
+  requestPasswordReset, completePasswordReset, resetTokenInUrl, startGuest,
 } from '../../core/profiles.js';
+import { buildDemoJournal, FALLBACK_PRICES } from '../../features/demoJournal.js';
 import { cryptoAvailable } from '../../core/crypto.js';
 import { emailResetEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
@@ -94,7 +95,11 @@ function signinForm() {
     <div class="lock-links">
       <button class="lock-link" data-mode="create">Create an account</button>
       ${forgotLink(accounts.length)}
-    </div>`;
+    </div>
+    ${cloudMode() ? `<div class="lock-guest">
+      <button type="button" class="lock-guest-btn" id="lockGuest">Continue as a guest</button>
+      <p>Look around with a sample portfolio. Nothing you do is saved.</p>
+    </div>` : ''}`;
 }
 
 /**
@@ -307,6 +312,7 @@ function wire() {
 
   const submit = el('lockSubmit');
   if (submit) submit.addEventListener('click', handleSubmit);
+  el('lockGuest')?.addEventListener('click', enterAsGuest);
 
   // Enter should submit from any field, which is what people expect from a login.
   host().querySelectorAll('input').forEach((input) => {
@@ -350,6 +356,31 @@ async function handleSubmit() {
     setError(err.message || String(err));
     return undefined;
   }
+}
+
+/**
+ * In as a guest: the sample portfolio, in memory only (core/profiles.js,
+ * startGuest). The app says straight away that nothing is saved
+ * (ui/views/guest.js).
+ */
+async function enterAsGuest() {
+  setError('');
+  const button = el('lockGuest');
+  if (button) { button.disabled = true; button.textContent = 'Opening…'; }
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await startGuest({ ...buildDemoJournal({ prices: FALLBACK_PRICES, today }), tourSeen: false });
+    await finish();
+  } catch (err) {
+    if (button) { button.disabled = false; button.textContent = 'Continue as a guest'; }
+    setError(err.message || String(err));
+  }
+}
+
+/** Straight to "Create an account" — from a guest's "Create a free account". */
+export function openCreateAccount() {
+  mode = 'create';
+  render();
 }
 
 async function doSignin() {

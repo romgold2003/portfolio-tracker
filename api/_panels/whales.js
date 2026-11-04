@@ -16,6 +16,7 @@
  */
 import { fail, methodIs, readCookies, readJson, send, timingSafeEqual } from '../_lib/http.js';
 import { userForToken } from '../_lib/accounts.js';
+import { guestFor } from '../_lib/guest.js';
 import { topCoins, priceMap, watchContracts } from '../_lib/topcoins.js';
 import { fetchTransfers, feedConfigured } from '../_lib/whalealert.js';
 import { collect, FLOOR_USD as CHAIN_FLOOR } from '../_lib/chainfeeds.js';
@@ -771,8 +772,9 @@ export default async function handler(req, res) {
     });
   }
 
-  const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
-  if (!user) return fail(res, 401, 'Not signed in.');
+  // Signed in, or a guest's pass (api/_lib/guest.js): market data is open to both.
+  const viewer = (await userForToken(readCookies(req)[SESSION_COOKIE])) ?? guestFor(req);
+  if (!viewer) return fail(res, 401, 'Not signed in.');
 
   /**
    * Leveraged whale trades held by the server: GMX, a week of them.

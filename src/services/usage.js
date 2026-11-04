@@ -10,7 +10,7 @@
  * click (Neon bills the time it is awake).
  */
 import { cloudEnabled } from './cloud.js';
-import { isUnlocked } from '../core/profiles.js';
+import { isUnlocked, isGuest } from '../core/profiles.js';
 import { onJournalLoaded } from '../core/store.js';
 
 const FIRST_MS = 15_000;
@@ -21,7 +21,8 @@ let timer = null;
 let sending = false;
 
 const empty = () => !pending.open && !Object.keys(pending.pages).length && !Object.keys(pending.imports).length;
-const counting = () => cloudEnabled() && isUnlocked();
+// A guest is not an account: their visit is not counted against anyone.
+const counting = () => cloudEnabled() && isUnlocked() && !isGuest();
 
 function schedule(ms) {
   if (timer) return;

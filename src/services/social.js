@@ -3,6 +3,7 @@
  * what friends see up to date while the app is open.
  */
 import { cloudEnabled } from './cloud.js';
+import { isGuest } from '../core/profiles.js';
 import { wholeBook } from '../core/store.js';
 import { shareSummary } from '../core/shareSummary.js';
 
@@ -76,7 +77,7 @@ export function knowShowing(mode) { showing = mode ?? 'none'; }
 
 /** Send the summary again if anything is shown and it has moved. Never throws. */
 export async function syncShare() {
-  if (!cloudEnabled()) return;
+  if (!cloudEnabled() || isGuest()) return;
   try {
     if (showing === null) showing = (await social.friends()).share?.mode ?? 'none';
     if (showing === 'none' || Date.now() - lastAt < EVERY_MS) return;

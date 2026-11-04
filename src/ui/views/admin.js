@@ -8,7 +8,7 @@
  * journal — portfolios stay encrypted.
  */
 import { onJournalLoaded } from '../../core/store.js';
-import { isUnlocked } from '../../core/profiles.js';
+import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { social } from '../../services/social.js';
 import { ABOUT_QUESTIONS, countryName, flagOf } from '../../config/aboutYou.js';
@@ -172,7 +172,7 @@ onJournalLoaded(async () => {
   const button = el('adminBtn');
   if (!button) return;
   button.hidden = true;
-  if (!cloudEnabled() || !isUnlocked()) return;
+  if (!cloudEnabled() || !isUnlocked() || isGuest()) return;
   try {
     button.hidden = !(await social.role()).admin;
   } catch {

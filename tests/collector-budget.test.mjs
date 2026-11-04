@@ -174,7 +174,7 @@ describe('the server\'s half of the spot split', () => {
 
 describe('the poll itself', () => {
   const src = readFileSync(new URL('../api/_panels/whales.js', import.meta.url), 'utf8');
-  const poll = src.slice(src.indexOf("if (resource === 'poll')"), src.indexOf('const user = await userForToken'));
+  const poll = src.slice(src.indexOf("if (resource === 'poll')"), src.indexOf('const viewer = (await userForToken'));
 
   test('holds each of its three jobs to a budget', () => {
     for (const job of [/withBudget\(topUp\(/, /withBudget\(enrichNextCoin\(/, /withBudget\(gmxlev\.collectGmx\(/]) {

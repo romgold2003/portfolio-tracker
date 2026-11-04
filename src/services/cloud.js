@@ -151,6 +151,11 @@ export function logout() {
   return request('/auth/logout', { method: 'POST' });
 }
 
+/** A guest's pass for the market data (api/_auth/guest.js); no account is made. */
+export function guestPass() {
+  return request('/auth/guest', { method: 'POST' });
+}
+
 /**
  * Save the journal.
  *

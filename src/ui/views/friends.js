@@ -19,7 +19,7 @@ import { cloudEnabled } from '../../services/cloud.js';
 import { social, setShowing, knowShowing } from '../../services/social.js';
 import { shareSummary } from '../../core/shareSummary.js';
 import { wholeBook } from '../../core/store.js';
-import { currentProfile } from '../../core/profiles.js';
+import { currentProfile, isGuest } from '../../core/profiles.js';
 import { escapeHtml } from '../format.js';
 
 const el = (id) => document.getElementById(id);
@@ -532,7 +532,12 @@ function bind() {
 /** Draw the page; called each time it comes on screen. */
 export async function renderFriends() {
   if (!el('friends')) return;
-  const online = cloudEnabled();
+  // A guest has no account for friends to find: the page says so instead.
+  const online = cloudEnabled() && !isGuest();
+  const offline = el('frOffline');
+  if (offline) offline.textContent = isGuest()
+    ? 'Friends need a Riskbook account. Create a free account to add friends, see what they share and chat.'
+    : 'Friends need a Riskbook account: sign in on the cloud version to add them.';
   el('frOffline').hidden = online;
   el('frBody').hidden = !online;
   if (!online) return;

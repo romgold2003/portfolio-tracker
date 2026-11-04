@@ -17,6 +17,7 @@
  */
 import { fail, methodIs, readCookies } from './_lib/http.js';
 import { userForToken } from './_lib/accounts.js';
+import { guestFor } from './_lib/guest.js';
 
 const SESSION_COOKIE = 'pt_session';
 const SOURCE = 'https://query1.finance.yahoo.com/v8/finance/chart';
@@ -109,8 +110,9 @@ async function quoteFor(symbol) {
 export default async function handler(req, res) {
   if (!methodIs(req, res, 'GET')) return;
 
-  const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
-  if (!user) return fail(res, 401, 'Not signed in.');
+  // Signed in, or a guest's pass (api/_lib/guest.js): market data is open to both.
+  const viewer = (await userForToken(readCookies(req)[SESSION_COOKIE])) ?? guestFor(req);
+  if (!viewer) return fail(res, 401, 'Not signed in.');
 
   const url = new URL(req.url, 'http://localhost');
   const symbols = (url.searchParams.get('symbols') || '')

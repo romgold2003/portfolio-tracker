@@ -7,6 +7,7 @@
  */
 import { fail, methodIs, readCookies, collectorKeyMatches } from '../_lib/http.js';
 import { userForToken } from '../_lib/accounts.js';
+import { guestFor } from '../_lib/guest.js';
 import { fromCboe, fromDeribit } from '../_lib/options.js';
 import { trackExposure } from '../_lib/exposureHistory.js';
 
@@ -49,8 +50,9 @@ export default async function handler(req, res) {
    */
   const collector = collectorKeyMatches(url.searchParams.get('key'));
   if (!collector) {
-    const user = await userForToken(readCookies(req)[SESSION_COOKIE]);
-    if (!user) return fail(res, 401, 'Not signed in.');
+    // Signed in, or a guest's pass (api/_lib/guest.js): market data is open to both.
+    const viewer = (await userForToken(readCookies(req)[SESSION_COOKIE])) ?? guestFor(req);
+    if (!viewer) return fail(res, 401, 'Not signed in.');
   }
 
   const id = String(url.searchParams.get('market') || 'BTC').toUpperCase();

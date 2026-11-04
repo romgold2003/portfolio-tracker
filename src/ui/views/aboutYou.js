@@ -17,7 +17,7 @@
  * the encrypted journal, and never to anyone but Romy.
  */
 import { state, setAboutDone, aboutDue, onJournalLoaded } from '../../core/store.js';
-import { isUnlocked } from '../../core/profiles.js';
+import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { social } from '../../services/social.js';
 import {
@@ -267,7 +267,8 @@ export function openAboutYou() {
  * the answers.
  */
 onJournalLoaded(() => {
-  if (!aboutDue() || !isUnlocked()) return;
+  // A guest has no account to keep answers with.
+  if (!aboutDue() || !isUnlocked() || isGuest()) return;
   if (!cloudEnabled()) { setAboutDone(); return; }
   setTimeout(() => {
     if (aboutDue() && isUnlocked() && el('aboutYou')?.hidden) openAboutYou();

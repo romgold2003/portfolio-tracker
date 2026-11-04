@@ -99,7 +99,7 @@ describe('the collector records exposure every run', () => {
 
   test('the options endpoint accepts the collector key in place of a session', () => {
     assert.match(options, /collectorKeyMatches\(url\.searchParams\.get\('key'\)\)/);
-    assert.match(options, /if \(!collector\) \{\s*const user = await userForToken/);
+    assert.match(options, /if \(!collector\) \{\s*(\/\/[^\n]*\n\s*)?const viewer = \(await userForToken/);
   });
 
   test('and never answers the collector from a cache, or nothing would be recorded', () => {

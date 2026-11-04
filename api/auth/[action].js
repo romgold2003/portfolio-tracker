@@ -28,6 +28,7 @@ const ACTIONS = {
   forgot: () => import('../_auth/forgot.js'),
   reset: () => import('../_auth/reset.js'),
   escrow: () => import('../_auth/escrow.js'),
+  guest: () => import('../_auth/guest.js'),
 };
 
 /**
