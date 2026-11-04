@@ -1,7 +1,9 @@
 /**
- * "About you" (November 2026): eight quick questions a new account is asked
- * once, right after signing up — sex, age, goal, experience, style, country,
- * how they heard of Riskbook, and what they do — so Romy can see who uses it.
+ * "About you" (November 2026): eight quick questions every account is asked
+ * once — sex, age, goal, experience, style, country, how they heard of
+ * Riskbook, and what they do — so Romy can see who uses it. A new account is
+ * asked right after signing up; one made before the questions existed, the
+ * next time it opens the app. The email and password are never asked again.
  *
  * Every question is optional and one tap each; the country opens a small
  * window of every country, searchable. Skip asks nothing. Either way the
@@ -34,8 +36,8 @@ export function aboutHtml(given = answers) {
     return `<fieldset class="about-q"><legend>${escapeHtml(q.title)}</legend>${body}</fieldset>`;
   }).join('');
   return `<div class="about-head">
-      <h3 id="aboutTitle">Welcome to Riskbook! A little about you</h3>
-      <p>${ABOUT_QUESTIONS.length} quick questions, all optional. They help us build Riskbook for people like you. Nobody else sees your answers, and your portfolio stays encrypted.</p>
+      <h3 id="aboutTitle">A little about you</h3>
+      <p>${ABOUT_QUESTIONS.length} quick questions, all optional, asked only once. They help us build Riskbook for people like you. Nobody else sees your answers, and your portfolio stays encrypted.</p>
     </div>
     <div class="about-body">${questions}</div>
     <div class="about-err" id="aboutErr" role="alert"></div>
@@ -154,11 +156,11 @@ export function openAboutYou() {
   document.body.classList.add('tour-open');
 }
 
-/** A new account is asked once, after its journal loads; with no server there is nowhere to keep the answers. */
+/** Every account is asked once, after its journal loads; with no server there is nowhere to keep the answers. */
 onJournalLoaded(() => {
-  if (!state.aboutPending || !isUnlocked()) return;
+  if (state.aboutDone || !isUnlocked()) return;
   if (!cloudEnabled()) { setAboutDone(); return; }
   setTimeout(() => {
-    if (state.aboutPending && isUnlocked() && el('aboutYou')?.hidden) openAboutYou();
+    if (!state.aboutDone && isUnlocked() && el('aboutYou')?.hidden) openAboutYou();
   }, 600);
 });

@@ -90,6 +90,6 @@ describe('where it lives', () => {
     const tour = read('src/ui/views/tour.js');
     assert.match(tour, /closeTour[\s\S]*setTourSeen\(\)/);
     // A new account answers "About you" first; that window opens the tutorial after.
-    assert.match(tour, /if \(state\.tourSeen \|\| !isUnlocked\(\) \|\| state\.aboutPending\) return/);
+    assert.match(tour, /if \(state\.tourSeen \|\| !isUnlocked\(\) \|\| \(!state\.aboutDone && cloudEnabled\(\)\)\) return/);
   });
 });

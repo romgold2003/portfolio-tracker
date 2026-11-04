@@ -10,6 +10,7 @@
  */
 import { state, setTourSeen, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked } from '../../core/profiles.js';
+import { cloudEnabled } from '../../services/cloud.js';
 import { SHOTS } from './tourShots.js';
 import { escapeHtml } from '../format.js';
 
@@ -275,8 +276,8 @@ function bind() {
  * closing it marks it seen with the sign-in.
  */
 onJournalLoaded(() => {
-  // A new account answers "About you" first; that window opens the tutorial when it closes.
-  if (state.tourSeen || !isUnlocked() || state.aboutPending) return;
+  // "About you" comes first where it is asked; that window opens the tutorial when it closes.
+  if (state.tourSeen || !isUnlocked() || (!state.aboutDone && cloudEnabled())) return;
   setTimeout(() => {
     if (!state.tourSeen && isUnlocked() && el('tour')?.hidden) openTour();
   }, 900);

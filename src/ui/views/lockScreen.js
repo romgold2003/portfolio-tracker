@@ -11,7 +11,7 @@
 import {
   listProfiles, findByEmail, createProfile, unlockWithPassword,
   unlockWithRecoveryKey, setPassword, looksLikeEmail, cloudMode,
-  requestPasswordReset, completePasswordReset, resetTokenInUrl, emptyJournal,
+  requestPasswordReset, completePasswordReset, resetTokenInUrl,
 } from '../../core/profiles.js';
 import { cryptoAvailable } from '../../core/crypto.js';
 import { emailResetEnabled } from '../../services/cloud.js';
@@ -376,10 +376,9 @@ async function doCreate() {
   if (password !== confirm) throw new Error('The two passwords do not match.');
 
   busy(true, 'Creating…');
-  // A new account is asked the "About you" questions once (ui/views/aboutYou.js).
   const journal = legacyJournal
-    ? { ...legacyJournal, priceLog: {}, aboutPending: true }
-    : { ...emptyJournal(), aboutPending: true };
+    ? { ...legacyJournal, priceLog: {} }
+    : null;
   const { recoveryKey } = await createProfile(email, password, journal);
   pendingEmail = email;
 

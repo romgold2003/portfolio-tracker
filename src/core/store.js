@@ -96,11 +96,11 @@ export const state = {
    */
   tourSeen: false,
   /**
-   * True for an account just made, until its "About you" questions are
-   * answered or skipped (ui/views/aboutYou.js). Accounts made before them
-   * never have it, so they are not asked.
+   * The "About you" questions (ui/views/aboutYou.js) were answered or
+   * skipped. Every account is asked once — new ones right after signing up,
+   * ones made before the questions existed the next time they open the app.
    */
-  aboutPending: false,
+  aboutDone: false,
   /**
    * The broker chosen in the import window (config/brokers.js), so it opens
    * straight on that broker's steps next time. Kept with the sign-in.
@@ -134,10 +134,10 @@ export function setReturnMethod(method) {
   scheduleFlush();
 }
 
-/** The questions after sign-up were answered or skipped: not asked again. */
+/** The "About you" questions were answered or skipped: not asked again. */
 export function setAboutDone() {
-  if (!state.aboutPending) return;
-  state.aboutPending = false;
+  if (state.aboutDone) return;
+  state.aboutDone = true;
   scheduleFlush();
 }
 
@@ -893,7 +893,7 @@ export function loadState(journal) {
     state.earningsForecasts = cleanForecasts(source.earningsForecasts, state.earningsWatch);
     state.layoutHidden = cleanLayout(source.layoutHidden);
     state.tourSeen = source.tourSeen === true;
-    state.aboutPending = source.aboutPending === true;
+    state.aboutDone = source.aboutDone === true;
     state.broker = typeof source.broker === 'string' ? source.broker : null;
     state.returnMethod = source.returnMethod === 'twr' || source.returnMethod === 'mwr' ? source.returnMethod : null;
   } else {
@@ -919,7 +919,7 @@ export function journalSnapshot() {
     earningsForecasts: state.earningsForecasts,
     layoutHidden: state.layoutHidden,
     tourSeen: state.tourSeen,
-    aboutPending: state.aboutPending,
+    aboutDone: state.aboutDone,
     broker: state.broker,
     returnMethod: state.returnMethod,
     homeId: book.homeId,
@@ -948,7 +948,7 @@ export function clearState() {
   state.earningsForecasts = {};
   state.layoutHidden = [];
   state.tourSeen = false;
-  state.aboutPending = false;
+  state.aboutDone = false;
   state.broker = null;
   state.returnMethod = null;
   announceJournal();

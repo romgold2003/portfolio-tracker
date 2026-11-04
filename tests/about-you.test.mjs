@@ -136,13 +136,17 @@ describe('on the server', () => {
 });
 
 describe('when it is asked', () => {
-  test('a new account only — and before the tutorial, which follows it', () => {
-    assert.match(read('src/ui/views/lockScreen.js'), /\{ \.\.\.emptyJournal\(\), aboutPending: true \}/);
+  test('every account once, new or made before the questions — and before the tutorial, which follows it', async () => {
     const store = read('src/core/store.js');
-    assert.match(store, /aboutPending: false,/);
-    assert.match(store, /state\.aboutPending = source\.aboutPending === true/);
-    assert.match(store, /aboutPending: state\.aboutPending/);
-    assert.match(read('src/ui/views/tour.js'), /state\.tourSeen \|\| !isUnlocked\(\) \|\| state\.aboutPending/);
+    // Accounts made before the questions have no flag, so they are asked too.
+    assert.match(store, /aboutDone: false,/);
+    assert.match(store, /state\.aboutDone = source\.aboutDone === true/);
+    assert.match(store, /aboutDone: state\.aboutDone/);
+    assert.match(read('src/ui/views/aboutYou.js'), /if \(state\.aboutDone \|\| !isUnlocked\(\)\) return;/);
+    assert.match(read('src/ui/views/tour.js'), /\(!state\.aboutDone && cloudEnabled\(\)\)/);
+    // Only the eight questions: an existing account is never asked for its email or password again.
+    const { aboutHtml } = await import('../src/ui/views/aboutYou.js');
+    assert.doesNotMatch(aboutHtml({}), /email|password/i);
     const view = read('src/ui/views/aboutYou.js');
     assert.match(view, /if \(!state\.tourSeen\) setTimeout\(openTour/);
     assert.match(read('src/app/actions.js'), /import '\.\.\/ui\/views\/aboutYou\.js';/);
