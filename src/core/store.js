@@ -12,7 +12,7 @@ import { cleanTrades } from './cryptoJournal.js';
 import { STORAGE_KEYS, ASSET_CLASSES } from '../config/constants.js';
 import { SECTOR_NAMES } from '../config/sectors.js';
 import { returnMethodOf } from '../config/brokers.js';
-import { ABOUT_VERSION } from '../config/aboutYou.js';
+import { ABOUT_VERSION, ABOUT_ASK_BELOW } from '../config/aboutYou.js';
 
 export const state = {
   /** @type {Position[]} every trade, open and closed */
@@ -138,7 +138,8 @@ export function setReturnMethod(method) {
 
 /** Whether this account is due the current round of the "About you" questions. */
 export function aboutDue() {
-  return state.aboutVersion < ABOUT_VERSION;
+  // Any round answered or skipped counts: only accounts never asked are asked.
+  return state.aboutVersion < ABOUT_ASK_BELOW;
 }
 
 /** This round of the "About you" questions was answered or skipped: not asked again until the next. */

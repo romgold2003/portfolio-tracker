@@ -1,9 +1,10 @@
 /**
  * "About you" (November 2026): nine quick questions — name, gender, age,
  * objectives, experience, approach, country, how they heard of Riskbook, and
- * employment — so Romy can see who uses it. Every account is asked once per
- * round (ABOUT_VERSION in config/aboutYou.js): a new one right after signing
- * up, any other at its next sign-in. The email and password are never asked
+ * employment — so Romy can see who uses it. Every account is asked once: a
+ * new one right after signing up, one never asked at its next sign-in. One
+ * that answered or skipped any earlier round is not asked again
+ * (ABOUT_ASK_BELOW in config/aboutYou.js). The email and password are never asked
  * again.
  *
  * Laid out like a broker's own investor profile: a plain white form, a serif
@@ -261,7 +262,7 @@ export function openAboutYou() {
 }
 
 /**
- * Every account behind the current round (ABOUT_VERSION) is asked at its next
+ * An account never asked (aboutDue, ABOUT_ASK_BELOW) is asked at its next
  * sign-in, after its journal loads; with no server there is nowhere to keep
  * the answers.
  */

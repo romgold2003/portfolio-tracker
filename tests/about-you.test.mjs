@@ -212,7 +212,7 @@ describe('when it is asked', () => {
     assert.match(read('src/app/actions.js'), /import '\.\.\/ui\/views\/aboutYou\.js';/);
   });
 
-  test('everyone is asked this round at their next sign-in — new, never asked, or answered the first round', async () => {
+  test('asked once: new accounts and accounts never asked — not those who answered or skipped any round', async () => {
     const { loadState, clearState, aboutDue, setAboutDone, state } = await import('../src/core/store.js');
     const { ABOUT_VERSION } = await import('../src/config/aboutYou.js');
     assert.ok(ABOUT_VERSION >= 2);
@@ -220,7 +220,8 @@ describe('when it is asked', () => {
     for (const [label, extra, due] of [
       ['a new account', {}, true],
       ['an account from before the questions', { tourSeen: true }, true],
-      ['an account that answered the first, darker round', { aboutDone: true }, true],
+      ['an account that answered the first, darker round', { aboutDone: true }, false],
+      ['an account that answered the broker-style round', { aboutVersion: 3 }, false],
       ['an account that answered this round', { aboutVersion: ABOUT_VERSION }, false],
     ]) {
       clearState();
@@ -228,7 +229,7 @@ describe('when it is asked', () => {
       assert.equal(aboutDue(), due, label);
     }
     clearState();
-    loadState(journal({ aboutDone: true }));
+    loadState(journal({}));
     setAboutDone();
     assert.equal(state.aboutVersion, ABOUT_VERSION);
     assert.equal(aboutDue(), false, 'answered or skipped: not asked again this round');

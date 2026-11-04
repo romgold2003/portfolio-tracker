@@ -21,6 +21,14 @@
  */
 export const ABOUT_VERSION = 4;
 
+/**
+ * The oldest round that still counts as answered. An account that answered or
+ * skipped any round from this one on is not asked again — Romy, November 2026:
+ * people who already answered should not see it pop up again. 1 means only
+ * accounts never asked at all are asked. Raise it to ask everyone again.
+ */
+export const ABOUT_ASK_BELOW = 1;
+
 export const ABOUT_QUESTIONS = [
   // Typed, not chosen: first and last name, stored as first_name and last_name.
   { id: 'name', title: 'Name', ask: 'Your name', hint: 'As you would like us to address you.', name: true },
