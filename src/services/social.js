@@ -33,6 +33,8 @@ export const social = {
   send: (chat, text) => api('send', { body: { chat, body: text } }),
   leave: (chat) => api('leave', { body: { chat } }),
   about: (answers) => api('about', { body: answers }),
+  role: () => api('role'),
+  adminStats: () => api('admin'),
 };
 
 /**

@@ -123,6 +123,9 @@ const ROUTES = {
   '/api/social/direct': '../api/social/[action].js',
   '/api/social/members': '../api/social/[action].js',
   '/api/social/about': '../api/social/[action].js',
+  '/api/social/role': '../api/social/[action].js',
+  '/api/social/admin': '../api/social/[action].js',
+  '/api/social/ping': '../api/social/[action].js',
 };
 
 const handlers = new Map();

@@ -290,6 +290,9 @@ export async function deleteUser(userId) {
   // And the answers to the questions after sign-up.
   const { forgetAbout } = await import('./about.js');
   await forgetAbout(userId);
+  // And the counts of their use (the Admin page).
+  const { forgetActivity } = await import('./admin.js');
+  await forgetActivity(userId);
   forgetAllSessions();
   await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   await query('DELETE FROM resets WHERE user_id = $1', [userId]);

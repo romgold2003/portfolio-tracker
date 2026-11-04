@@ -1727,3 +1727,38 @@ body.tour-open{overflow:hidden}
 @keyframes about-in-right{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
 @keyframes about-in-left{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.about-stage{animation:none}.about-bar span{transition:none}}
+
+/* ───────── Admin (views/admin.js) — Romy only ───────── */
+.admin-btn{color:var(--amber)}
+.adm-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+.adm-kpis-sm{margin-top:14px}
+.adm-tile{background:var(--panel);border:0.5px solid var(--border);border-radius:10px;padding:13px 16px}
+.adm-tl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
+.adm-tv{font-size:22px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.adm-ts{font-size:11.5px;color:var(--text3);margin-top:4px}
+.adm-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+@media (max-width:900px){.adm-two{grid-template-columns:minmax(0,1fr)}}
+.adm-section{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px}
+.adm-qs{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.adm-bars{display:flex;flex-direction:column;gap:7px;margin-top:6px}
+.adm-bar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.6fr) 34px 40px;align-items:center;gap:8px;font-size:12.5px}
+.adm-bl{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-bt{height:8px;border-radius:4px;background:var(--input);overflow:hidden}
+.adm-bt span{display:block;height:100%;border-radius:4px;background:var(--blue)}
+.adm-bn{text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
+.adm-bp{text-align:right;color:var(--text3);font-variant-numeric:tabular-nums}
+.adm-cols{display:flex;align-items:flex-end;gap:2px;height:110px;margin-top:10px}
+.adm-col{flex:1;height:100%;display:flex;align-items:flex-end;background:var(--input);border-radius:2px}
+.adm-col span{display:block;width:100%;background:var(--blue);border-radius:2px;min-height:0}
+.adm-axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text3);margin-top:6px}
+.adm-userhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.adm-search{flex:1;min-width:180px;max-width:320px;padding:7px 10px;font-size:12.5px;text-transform:none;letter-spacing:0}
+.adm-csv{padding:7px 14px;font-size:12px;text-transform:none;letter-spacing:0}
+.adm-tablewrap{overflow-x:auto;border:0.5px solid var(--border);border-radius:10px;background:var(--panel)}
+.adm-table{border-collapse:collapse;width:100%;font-size:12px;min-width:1100px}
+.adm-table th{text-align:left;font-weight:600;color:var(--text3);padding:9px 10px;border-bottom:0.5px solid var(--border2);white-space:nowrap;position:sticky;top:0;background:var(--panel)}
+.adm-table td{padding:8px 10px;border-bottom:0.5px solid var(--border);color:var(--text2);vertical-align:top}
+.adm-table td:first-child{color:var(--text);white-space:nowrap}
+.adm-foot{font-size:11.5px;color:var(--text3);margin-top:6px}
+.adm-empty{font-size:12.5px;color:var(--text3);margin:8px 0}
+.adm-note{font-size:11.5px;color:var(--text3);margin-top:16px;line-height:1.5}

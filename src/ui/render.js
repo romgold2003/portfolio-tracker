@@ -5,6 +5,7 @@
  * is the only place that knows the full set of things a state change can
  * affect. Actions mutate, then call renderAll().
  */
+import { notePage } from '../services/usage.js';
 import { renderHome, updateLivePill } from './views/home.js';
 import { setOrbitBackdrop } from '../features/orbitBackdrop.js';
 import { renderPositions } from './views/positions.js';
@@ -16,6 +17,7 @@ import { showGauges } from './views/sentimentGauges.js';
 import { renderAccountSwitcher } from './views/accounts.js';
 import { currentPage } from './router.js';
 import { renderFriends } from './views/friends.js';
+import { renderAdmin } from './views/admin.js';
 import { syncShare } from '../services/social.js';
 import { applyLayout } from './views/customize.js';
 import { onLayoutChange } from '../core/store.js';
@@ -51,6 +53,7 @@ export function renderAll() {
  * when it last rendered needs one redraw after it becomes active.
  */
 export function renderOnPageEnter(page) {
+  notePage(page);
   // The orbit scene belongs to New trade and runs only while it is on screen.
   setOrbitBackdrop(page === 'add');
   if (page === 'home') setTimeout(renderHome, 50);
@@ -58,6 +61,7 @@ export function renderOnPageEnter(page) {
   if (page === 'monthly') setTimeout(renderMonthly, 50);
   if (page === 'news') renderNews();
   if (page === 'friends') renderFriends();
+  if (page === 'admin') renderAdmin();
   if (page === 'crypto') renderCrypto();
   // The live whale feed is only worth its cost while it is on screen.
   else pauseHyperliquid();

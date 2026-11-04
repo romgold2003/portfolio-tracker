@@ -11,6 +11,7 @@
 import { state, setTourSeen, aboutDue, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
+import { notePage } from '../../services/usage.js';
 import { SHOTS } from './tourShots.js';
 import { escapeHtml } from '../format.js';
 
@@ -217,6 +218,7 @@ function go(to) {
 }
 
 export function openTour() {
+  notePage('tutorial');
   const tour = el('tour');
   if (!tour) return;
   bind();

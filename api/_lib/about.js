@@ -47,6 +47,8 @@ async function ensureTable() {
   await query(TABLE, []);
   readyFor = driverGeneration();
 }
+/** For the Admin page, which reads the table before anyone may have answered. */
+export const ensureAboutTable = ensureTable;
 
 /**
  * Only the listed choices, and a two-letter country code; anything else is

@@ -38,7 +38,9 @@ describe('the menu', () => {
     // agree or the wrong button lights up.
     const buttons = [...html.matchAll(/class="nl[^"]*" onclick="show\('(\w+)'\)"/g)].map((m) => m[1]);
     const listed = router.match(/const PAGES = \[([^\]]+)\]/)[1].match(/'(\w+)'/g).map((q) => q.slice(1, -1));
-    assert.deepEqual(listed, buttons);
+    // Admin comes last with no tab: its button is in the menu, for the admin account only.
+    assert.deepEqual(listed.filter((p) => p !== 'admin'), buttons);
+    assert.equal(listed.at(-1), 'admin');
   });
 
   test('arriving on the page draws it', () => {

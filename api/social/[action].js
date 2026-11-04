@@ -17,6 +17,9 @@
  *   POST /api/social/direct     {friendId}  the chat with one friend
  *   POST /api/social/members    {chat, add, remove}  a group's maker only
  *   POST /api/social/about      {sex, age, goal, …}  the questions after sign-up (_lib/about.js)
+ *   GET  /api/social/role                   whether this account is admin (_lib/admin.js)
+ *   GET  /api/social/admin                  the Admin page's figures — admin only
+ *   POST /api/social/ping       {open, pages, imports}  a batch of use, counted per day
  *
  * One function for all of them, as with auth and the News panels: a Hobby
  * deployment allows twelve, and this is the eighth.
@@ -27,6 +30,7 @@ import {
 import { userForToken } from '../_lib/accounts.js';
 import * as social from '../_lib/social.js';
 import { saveAbout } from '../_lib/about.js';
+import { isAdmin, adminStats, recordActivity } from '../_lib/admin.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -35,6 +39,12 @@ const GETS = {
   friends: async (user) => ({ ...await social.friendsOf(user), share: await social.ownShare(user) }),
   portfolio: (user, url) => social.friendShare(user, url.searchParams.get('friend') ?? ''),
   chats: async (user) => ({ chats: await social.chatsOf(user) }),
+  role: (user) => ({ admin: isAdmin(user) }),
+  // Checked here, on the server: the page's button is only a convenience.
+  admin: (user) => {
+    if (!isAdmin(user)) throw new social.SocialError(403, 'Not allowed.');
+    return adminStats();
+  },
   messages: async (user, url) => ({
     messages: await social.messagesIn(user, url.searchParams.get('chat') ?? '', url.searchParams.get('after') || null),
   }),
@@ -53,6 +63,7 @@ const POSTS = {
   direct: { limit: [120, 60], run: (user, b) => social.directChat(user, b.friendId) },
   members: { limit: [60, 60], run: (user, b) => social.setMembers(user, b.chat, b.add, b.remove) },
   about: { limit: [20, 60], run: (user, b) => saveAbout(user, b) },
+  ping: { limit: [120, 60], run: (user, b) => recordActivity(user, b) },
 };
 
 function actionFrom(url) {

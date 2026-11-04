@@ -49,6 +49,7 @@ import {
   showImportStep, chooseBroker as pickBroker, changeBroker as unpickBroker, filterBrokers,
 } from '../ui/views/brokerPicker.js';
 import { decodeText, sheetsFromMarkup } from '../features/sheetText.js';
+import { notePage, noteImport } from '../services/usage.js';
 import {
   statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn, sourceOf,
 } from '../features/statementLibrary.js';
@@ -1377,6 +1378,7 @@ function describeTransactions({ name, record }) {
 function openSettingsFresh() {
   cancelIbkrImport();
   openSettings();
+  notePage('settings');
 }
 
 /**
@@ -1411,6 +1413,7 @@ function openYearsPanel() {
   renderStatementYears();
   // Which broker first; once chosen, it opens straight on its steps.
   showImportStep();
+  notePage('import');
   el('yearsModal')?.classList.add('show');
 }
 
@@ -1553,6 +1556,8 @@ export async function confirmIbkrImport(replace = false) {
 
   loadState(journal);
   await flushNow();
+  // Counted for the Admin page: an import, against the broker it came from.
+  noteImport(state.broker);
 
   const count = journal.positions.filter((p) => p.status === 'Open').length;
   const closedCount = journal.positions.length - count;

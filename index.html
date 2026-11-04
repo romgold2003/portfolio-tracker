@@ -182,6 +182,8 @@
       <!-- Choose the pages and panels shown: src/ui/views/customize.js. -->
       <button class="settings-btn" id="customizeBtn" onclick="openCustomize()" style="margin-top:6px">⊞ Customize</button>
       <button class="settings-btn" id="tourBtn" onclick="openTour()" style="margin-top:6px">❔ Help &amp; tutorial</button>
+      <!-- Shown only once the server says this account is admin. -->
+      <button class="settings-btn admin-btn" id="adminBtn" onclick="show('admin')" style="margin-top:6px" hidden>🛡 Admin</button>
       <div class="account-row" id="accountRow" style="margin-top:10px;display:none">
         <span class="account-email" id="accountEmail"></span>
         <button class="lock-link" onclick="signOut()">Sign out</button>
@@ -672,6 +674,15 @@
       </div>
       <!-- Profile, Create group and Members open here, over the page. -->
       <div class="fr-modal" id="frModal" hidden><div class="fr-dialog" role="dialog" aria-modal="true"></div></div>
+    </div>
+
+    <!-- Admin: Romy only, decided on the server (src/ui/views/admin.js, api/_lib/admin.js). -->
+    <div id="admin" class="page">
+      <div class="topbar">
+        <div class="greeting">Admin</div>
+        <div class="topbar-right"><div class="gauges" data-gauges style="display:none"></div><button type="button" class="topbar-btn" data-adm-refresh>↻ Refresh</button></div>
+      </div>
+      <div id="adminBody"></div>
     </div>
 
   </main>
