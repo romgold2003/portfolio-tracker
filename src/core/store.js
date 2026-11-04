@@ -12,6 +12,7 @@ import { cleanTrades } from './cryptoJournal.js';
 import { STORAGE_KEYS, ASSET_CLASSES } from '../config/constants.js';
 import { SECTOR_NAMES } from '../config/sectors.js';
 import { returnMethodOf } from '../config/brokers.js';
+import { ABOUT_VERSION } from '../config/aboutYou.js';
 
 export const state = {
   /** @type {Position[]} every trade, open and closed */
@@ -96,11 +97,12 @@ export const state = {
    */
   tourSeen: false,
   /**
-   * The "About you" questions (ui/views/aboutYou.js) were answered or
-   * skipped. Every account is asked once — new ones right after signing up,
-   * ones made before the questions existed the next time they open the app.
+   * The last round of the "About you" questions (ui/views/aboutYou.js,
+   * ABOUT_VERSION) this account answered or skipped; 0 for none. An account
+   * behind the current round is asked at its next sign-in — new ones right
+   * after signing up. A journal from round 1 carried only aboutDone: true.
    */
-  aboutDone: false,
+  aboutVersion: 0,
   /**
    * The broker chosen in the import window (config/brokers.js), so it opens
    * straight on that broker's steps next time. Kept with the sign-in.
@@ -134,10 +136,15 @@ export function setReturnMethod(method) {
   scheduleFlush();
 }
 
-/** The "About you" questions were answered or skipped: not asked again. */
+/** Whether this account is due the current round of the "About you" questions. */
+export function aboutDue() {
+  return state.aboutVersion < ABOUT_VERSION;
+}
+
+/** This round of the "About you" questions was answered or skipped: not asked again until the next. */
 export function setAboutDone() {
-  if (state.aboutDone) return;
-  state.aboutDone = true;
+  if (!aboutDue()) return;
+  state.aboutVersion = ABOUT_VERSION;
   scheduleFlush();
 }
 
@@ -893,7 +900,7 @@ export function loadState(journal) {
     state.earningsForecasts = cleanForecasts(source.earningsForecasts, state.earningsWatch);
     state.layoutHidden = cleanLayout(source.layoutHidden);
     state.tourSeen = source.tourSeen === true;
-    state.aboutDone = source.aboutDone === true;
+    state.aboutVersion = Number.isInteger(source.aboutVersion) ? source.aboutVersion : (source.aboutDone === true ? 1 : 0);
     state.broker = typeof source.broker === 'string' ? source.broker : null;
     state.returnMethod = source.returnMethod === 'twr' || source.returnMethod === 'mwr' ? source.returnMethod : null;
   } else {
@@ -919,7 +926,7 @@ export function journalSnapshot() {
     earningsForecasts: state.earningsForecasts,
     layoutHidden: state.layoutHidden,
     tourSeen: state.tourSeen,
-    aboutDone: state.aboutDone,
+    aboutVersion: state.aboutVersion,
     broker: state.broker,
     returnMethod: state.returnMethod,
     homeId: book.homeId,
@@ -948,7 +955,7 @@ export function clearState() {
   state.earningsForecasts = {};
   state.layoutHidden = [];
   state.tourSeen = false;
-  state.aboutDone = false;
+  state.aboutVersion = 0;
   state.broker = null;
   state.returnMethod = null;
   announceJournal();

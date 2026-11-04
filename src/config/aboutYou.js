@@ -12,6 +12,14 @@
  * (tests/about-you.test.mjs keeps the two lists the same). Each option is
  * [id, label, emoji].
  */
+/**
+ * Which round of the questions this is. Every account whose last answered (or
+ * skipped) round is lower is asked again at its next sign-in — raise it to ask
+ * everyone again, as when the questions change. 2: the swipe redesign of
+ * November 2026, asked of every account, including those that saw round 1.
+ */
+export const ABOUT_VERSION = 2;
+
 export const ABOUT_QUESTIONS = [
   {
     id: 'sex',

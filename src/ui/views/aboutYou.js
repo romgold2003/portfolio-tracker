@@ -1,9 +1,9 @@
 /**
- * "About you" (November 2026): eight quick questions every account is asked
- * once — sex, age, goal, experience, style, country, how they heard of
- * Riskbook, and what they do — so Romy can see who uses it. A new account is
- * asked right after signing up; one made before the questions existed, the
- * next time it opens the app. The email and password are never asked again.
+ * "About you" (November 2026): eight quick questions — sex, age, goal,
+ * experience, style, country, how they heard of Riskbook, and what they do —
+ * so Romy can see who uses it. Every account is asked once per round
+ * (ABOUT_VERSION in config/aboutYou.js): a new one right after signing up,
+ * any other at its next sign-in. The email and password are never asked again.
  *
  * Built to feel like a friendly hello rather than a form: a bright card, one
  * big question a slide, each answer a large tap with its own emoji that moves
@@ -14,7 +14,7 @@
  * The answers go to the server on their own (api/_lib/about.js), never into
  * the encrypted journal, and never to anyone but Romy.
  */
-import { state, setAboutDone, onJournalLoaded } from '../../core/store.js';
+import { state, setAboutDone, aboutDue, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { social } from '../../services/social.js';
@@ -207,11 +207,15 @@ export function openAboutYou() {
   document.body.classList.add('tour-open');
 }
 
-/** Every account is asked once, after its journal loads; with no server there is nowhere to keep the answers. */
+/**
+ * Every account behind the current round (ABOUT_VERSION) is asked at its next
+ * sign-in, after its journal loads; with no server there is nowhere to keep
+ * the answers.
+ */
 onJournalLoaded(() => {
-  if (state.aboutDone || !isUnlocked()) return;
+  if (!aboutDue() || !isUnlocked()) return;
   if (!cloudEnabled()) { setAboutDone(); return; }
   setTimeout(() => {
-    if (!state.aboutDone && isUnlocked() && el('aboutYou')?.hidden) openAboutYou();
+    if (aboutDue() && isUnlocked() && el('aboutYou')?.hidden) openAboutYou();
   }, 600);
 });

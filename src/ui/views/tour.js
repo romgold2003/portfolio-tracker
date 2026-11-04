@@ -8,7 +8,7 @@
  * The pictures are assets/tour-*.webp and where their buttons sit is
  * tourShots.js, both written by scripts/tour-shots.mjs from the same screens.
  */
-import { state, setTourSeen, onJournalLoaded } from '../../core/store.js';
+import { state, setTourSeen, aboutDue, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { SHOTS } from './tourShots.js';
@@ -277,7 +277,7 @@ function bind() {
  */
 onJournalLoaded(() => {
   // "About you" comes first where it is asked; that window opens the tutorial when it closes.
-  if (state.tourSeen || !isUnlocked() || (!state.aboutDone && cloudEnabled())) return;
+  if (state.tourSeen || !isUnlocked() || (aboutDue() && cloudEnabled())) return;
   setTimeout(() => {
     if (!state.tourSeen && isUnlocked() && el('tour')?.hidden) openTour();
   }, 900);

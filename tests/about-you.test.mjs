@@ -153,17 +153,39 @@ describe('when it is asked', () => {
   test('every account once, new or made before the questions — and before the tutorial, which follows it', async () => {
     const store = read('src/core/store.js');
     // Accounts made before the questions have no flag, so they are asked too.
-    assert.match(store, /aboutDone: false,/);
-    assert.match(store, /state\.aboutDone = source\.aboutDone === true/);
-    assert.match(store, /aboutDone: state\.aboutDone/);
-    assert.match(read('src/ui/views/aboutYou.js'), /if \(state\.aboutDone \|\| !isUnlocked\(\)\) return;/);
-    assert.match(read('src/ui/views/tour.js'), /\(!state\.aboutDone && cloudEnabled\(\)\)/);
+    assert.match(store, /aboutVersion: 0,/);
+    assert.match(store, /aboutVersion: state\.aboutVersion/);
+    assert.match(read('src/ui/views/aboutYou.js'), /if \(!aboutDue\(\) \|\| !isUnlocked\(\)\) return;/);
+    assert.match(read('src/ui/views/tour.js'), /\(aboutDue\(\) && cloudEnabled\(\)\)/);
     // Only the eight questions: an existing account is never asked for its email or password again.
     const { slideHtml } = await import('../src/ui/views/aboutYou.js');
     for (let i = 0; i <= ABOUT_QUESTIONS.length + 1; i++) assert.doesNotMatch(slideHtml(i, {}), /email|password/i, `slide ${i}`);
     const view = read('src/ui/views/aboutYou.js');
     assert.match(view, /if \(!state\.tourSeen\) setTimeout\(openTour/);
     assert.match(read('src/app/actions.js'), /import '\.\.\/ui\/views\/aboutYou\.js';/);
+  });
+
+  test('everyone is asked this round at their next sign-in — new, never asked, or answered the first round', async () => {
+    const { loadState, clearState, aboutDue, setAboutDone, state } = await import('../src/core/store.js');
+    const { ABOUT_VERSION } = await import('../src/config/aboutYou.js');
+    assert.ok(ABOUT_VERSION >= 2);
+    const journal = (extra) => ({ positions: [], cash: 0, snapshots: [], priceLog: {}, apiKey: '', ...extra });
+    for (const [label, extra, due] of [
+      ['a new account', {}, true],
+      ['an account from before the questions', { tourSeen: true }, true],
+      ['an account that answered the first, darker round', { aboutDone: true }, true],
+      ['an account that answered this round', { aboutVersion: ABOUT_VERSION }, false],
+    ]) {
+      clearState();
+      loadState(journal(extra));
+      assert.equal(aboutDue(), due, label);
+    }
+    clearState();
+    loadState(journal({ aboutDone: true }));
+    setAboutDone();
+    assert.equal(state.aboutVersion, ABOUT_VERSION);
+    assert.equal(aboutDue(), false, 'answered or skipped: not asked again this round');
+    clearState();
   });
 
   test('a new cloud account opens the journal it was made with, not an empty one', () => {
