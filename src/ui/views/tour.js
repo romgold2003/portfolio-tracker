@@ -275,7 +275,8 @@ function bind() {
  * closing it marks it seen with the sign-in.
  */
 onJournalLoaded(() => {
-  if (state.tourSeen || !isUnlocked()) return;
+  // A new account answers "About you" first; that window opens the tutorial when it closes.
+  if (state.tourSeen || !isUnlocked() || state.aboutPending) return;
   setTimeout(() => {
     if (!state.tourSeen && isUnlocked() && el('tour')?.hidden) openTour();
   }, 900);

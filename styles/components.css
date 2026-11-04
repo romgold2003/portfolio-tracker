@@ -1646,3 +1646,41 @@ body.tour-open{overflow:hidden}
 @keyframes tour-in-left{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
 @keyframes tour-pulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:0.55}}
 @media (prefers-reduced-motion:reduce){.tour,.tour-pic,.tour-ring{animation:none}}
+
+/* ───────── About you, after sign-up (views/aboutYou.js) ───────── */
+.tour-card.about-card{width:min(640px,100%);height:auto;position:relative;gap:12px}
+.about-head h3{font-size:18px;font-weight:700;color:var(--text);margin:0 0 4px;letter-spacing:-0.01em}
+.about-head p{font-size:12.5px;color:var(--text3);line-height:1.5;margin:0}
+.about-body{display:flex;flex-direction:column;gap:12px;overflow-y:auto;min-height:0;padding-right:2px}
+.about-q{border:0;margin:0;padding:0;min-width:0}
+.about-q legend{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;padding:0}
+.about-chips{display:flex;flex-wrap:wrap;gap:6px}
+.about-chip,.about-country{font:inherit;font-size:12.5px;padding:7px 12px;border-radius:999px;border:0.5px solid var(--border2);
+  background:var(--input);color:var(--text2);cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+.about-chip:hover,.about-country:hover{color:var(--text);border-color:var(--border-blue)}
+.about-chip.on,.about-country.on{background:var(--blue-bg);border-color:var(--border-blue);color:var(--blue);font-weight:600}
+.about-country{display:inline-flex;align-items:center;gap:8px;border-radius:9px;padding:8px 12px}
+.about-chip:focus-visible,.about-country:focus-visible,.about-crow:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.about-err{font-size:12px;color:var(--red);min-height:0}
+.about-err:empty{display:none}
+.about-foot{display:flex;align-items:center;gap:10px;border-top:0.5px solid var(--input);padding-top:12px}
+.about-count{flex:1;font-size:11.5px;color:var(--text3)}
+.about-skip{font:inherit;font-size:13px;padding:9px 16px;border-radius:9px;border:0.5px solid var(--border2);background:var(--input);color:var(--text2);cursor:pointer}
+.about-done{font:inherit;font-size:13px;font-weight:600;padding:9px 22px;border-radius:9px;border:0.5px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer}
+.about-done[disabled]{opacity:0.6;cursor:default}
+/* The country window, over the questions. */
+.about-pick{position:absolute;inset:0;border-radius:inherit;background:rgba(0,0,0,0.55);display:grid;place-items:center;padding:14px;z-index:2}
+.about-pick[hidden]{display:none}
+.about-pcard{width:min(380px,100%);max-height:100%;display:flex;flex-direction:column;gap:8px;background:var(--panel);
+  border:0.5px solid var(--border2);border-radius:12px;padding:12px;box-shadow:0 16px 40px rgba(0,0,0,0.5)}
+.about-phead{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text)}
+.about-pclose{background:none;border:0;color:var(--text3);font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
+.about-pclose:hover{color:var(--text);background:var(--input)}
+.about-search{padding:9px 11px;border-radius:8px}
+.about-clist{overflow-y:auto;min-height:120px;max-height:52vh;display:flex;flex-direction:column}
+.about-ctitle{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;padding:8px 6px 4px}
+.about-crow{display:flex;align-items:center;gap:10px;text-align:left;font:inherit;font-size:13px;padding:8px 8px;border:0;border-radius:7px;background:none;color:var(--text2);cursor:pointer}
+.about-crow:hover{background:var(--input);color:var(--text)}
+.about-crow.on{background:var(--blue-bg);color:var(--blue);font-weight:600}
+.about-flag{font-size:17px;line-height:1}
+.about-none{font-size:12.5px;color:var(--text3);padding:10px 6px;margin:0}

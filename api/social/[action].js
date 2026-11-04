@@ -16,6 +16,7 @@
  *   POST /api/social/leave      {chat}
  *   POST /api/social/direct     {friendId}  the chat with one friend
  *   POST /api/social/members    {chat, add, remove}  a group's maker only
+ *   POST /api/social/about      {sex, age, goal, …}  the questions after sign-up (_lib/about.js)
  *
  * One function for all of them, as with auth and the News panels: a Hobby
  * deployment allows twelve, and this is the eighth.
@@ -25,6 +26,7 @@ import {
 } from '../_lib/http.js';
 import { userForToken } from '../_lib/accounts.js';
 import * as social from '../_lib/social.js';
+import { saveAbout } from '../_lib/about.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -50,6 +52,7 @@ const POSTS = {
   leave: { limit: [60, 60], run: (user, b) => social.leaveChat(user, b.chat) },
   direct: { limit: [120, 60], run: (user, b) => social.directChat(user, b.friendId) },
   members: { limit: [60, 60], run: (user, b) => social.setMembers(user, b.chat, b.add, b.remove) },
+  about: { limit: [20, 60], run: (user, b) => saveAbout(user, b) },
 };
 
 function actionFrom(url) {

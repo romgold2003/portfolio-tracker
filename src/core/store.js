@@ -96,6 +96,12 @@ export const state = {
    */
   tourSeen: false,
   /**
+   * True for an account just made, until its "About you" questions are
+   * answered or skipped (ui/views/aboutYou.js). Accounts made before them
+   * never have it, so they are not asked.
+   */
+  aboutPending: false,
+  /**
    * The broker chosen in the import window (config/brokers.js), so it opens
    * straight on that broker's steps next time. Kept with the sign-in.
    */
@@ -125,6 +131,13 @@ export function setReturnMethod(method) {
   const next = method === 'twr' || method === 'mwr' ? method : null;
   if (state.returnMethod === next) return;
   state.returnMethod = next;
+  scheduleFlush();
+}
+
+/** The questions after sign-up were answered or skipped: not asked again. */
+export function setAboutDone() {
+  if (!state.aboutPending) return;
+  state.aboutPending = false;
   scheduleFlush();
 }
 
@@ -880,6 +893,7 @@ export function loadState(journal) {
     state.earningsForecasts = cleanForecasts(source.earningsForecasts, state.earningsWatch);
     state.layoutHidden = cleanLayout(source.layoutHidden);
     state.tourSeen = source.tourSeen === true;
+    state.aboutPending = source.aboutPending === true;
     state.broker = typeof source.broker === 'string' ? source.broker : null;
     state.returnMethod = source.returnMethod === 'twr' || source.returnMethod === 'mwr' ? source.returnMethod : null;
   } else {
@@ -905,6 +919,7 @@ export function journalSnapshot() {
     earningsForecasts: state.earningsForecasts,
     layoutHidden: state.layoutHidden,
     tourSeen: state.tourSeen,
+    aboutPending: state.aboutPending,
     broker: state.broker,
     returnMethod: state.returnMethod,
     homeId: book.homeId,
@@ -933,6 +948,7 @@ export function clearState() {
   state.earningsForecasts = {};
   state.layoutHidden = [];
   state.tourSeen = false;
+  state.aboutPending = false;
   state.broker = null;
   state.returnMethod = null;
   announceJournal();

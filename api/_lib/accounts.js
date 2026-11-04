@@ -287,6 +287,9 @@ export async function deleteUser(userId) {
   const user = await findUserById(userId);
   const { forgetUser } = await import('./social.js');
   await forgetUser(userId, user?.email);
+  // And the answers to the questions after sign-up.
+  const { forgetAbout } = await import('./about.js');
+  await forgetAbout(userId);
   forgetAllSessions();
   await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   await query('DELETE FROM resets WHERE user_id = $1', [userId]);

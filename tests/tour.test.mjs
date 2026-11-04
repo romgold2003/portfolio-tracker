@@ -89,6 +89,7 @@ describe('where it lives', () => {
     assert.match(store, /tourSeen: state\.tourSeen/);
     const tour = read('src/ui/views/tour.js');
     assert.match(tour, /closeTour[\s\S]*setTourSeen\(\)/);
-    assert.match(tour, /if \(state\.tourSeen \|\| !isUnlocked\(\)\) return/);
+    // A new account answers "About you" first; that window opens the tutorial after.
+    assert.match(tour, /if \(state\.tourSeen \|\| !isUnlocked\(\) \|\| state\.aboutPending\) return/);
   });
 });

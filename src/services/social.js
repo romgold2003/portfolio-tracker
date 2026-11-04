@@ -32,6 +32,7 @@ export const social = {
   messages: (chat, after = null) => api('messages', { query: `?chat=${encodeURIComponent(chat)}${after ? `&after=${encodeURIComponent(after)}` : ''}` }),
   send: (chat, text) => api('send', { body: { chat, body: text } }),
   leave: (chat) => api('leave', { body: { chat } }),
+  about: (answers) => api('about', { body: answers }),
 };
 
 /**

@@ -122,6 +122,7 @@ const ROUTES = {
   '/api/social/leave': '../api/social/[action].js',
   '/api/social/direct': '../api/social/[action].js',
   '/api/social/members': '../api/social/[action].js',
+  '/api/social/about': '../api/social/[action].js',
 };
 
 const handlers = new Map();

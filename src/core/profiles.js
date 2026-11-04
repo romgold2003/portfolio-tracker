@@ -191,6 +191,7 @@ async function createCloudProfile(address, password, initialJournal) {
    * later — the key can be reissued from Settings while the user is signed in.
    */
   const escrowDataKey = cloud.emailResetEnabled() ? toBase64(dataKey) : undefined;
+  const vault = await encryptJson(initialJournal ?? emptyJournal(), dataKey);
 
   let response;
   try {
@@ -202,7 +203,7 @@ async function createCloudProfile(address, password, initialJournal) {
       recoverySecret: await deriveAuthSecret(normalizedRecovery, recoverySalt),
       passwordWrapper: await wrapDataKey(dataKey, password),
       recoveryWrapper: await wrapDataKey(dataKey, normalizedRecovery),
-      vault: await encryptJson(initialJournal ?? emptyJournal(), dataKey),
+      vault,
       escrowDataKey,
     });
   } catch (err) {
@@ -211,7 +212,9 @@ async function createCloudProfile(address, password, initialJournal) {
       : err.message);
   }
 
-  session = { profile: response.user, dataKey, version: response.vaultVersion };
+  // The journal it was made with opens first: without the blob the new account read as
+  // empty until reloaded, and whatever the sign-up put in it (the About you flag) was lost.
+  session = { profile: response.user, dataKey, version: response.vaultVersion, blob: vault };
   cacheDataKey(dataKey);
   return { profile: response.user, recoveryKey };
 }
