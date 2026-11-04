@@ -13,7 +13,7 @@ import { makeClient } from './support/http.mjs';
 import signup from '../api/_auth/signup.js';
 import deleteAccount from '../api/account.js';
 import social from '../api/social/[action].js';
-import { ABOUT_CHOICES, cleanAnswers } from '../api/_lib/about.js';
+import { ABOUT_CHOICES, MULTI, cleanAnswers } from '../api/_lib/about.js';
 import { ABOUT_QUESTIONS, COUNTRY_CODES, COMMON_COUNTRIES, countryName } from '../src/config/aboutYou.js';
 import {
   generateDataKey, wrapDataKey, encryptJson, generateRecoveryKey, normalizeRecoveryKey,
@@ -78,32 +78,41 @@ describe('the questions', () => {
     const all = countryListHtml('');
     assert.equal((all.match(/data-country="/g) ?? []).length, COUNTRY_CODES.length);
     assert.ok(all.indexOf('Afghanistan') < all.indexOf('Zimbabwe'));
-    assert.match(countryListHtml('zzzz'), /No country called/);
+    assert.match(countryListHtml('zzzz'), /No country matches/);
   });
 
-  test('one question a slide: a welcome that reassures, the eight questions, a thank-you', async () => {
+  test('one question a step, like a broker profile: an introduction that reassures, the eight questions, a confirmation', async () => {
     const { slideHtml } = await import('../src/ui/views/aboutYou.js');
-    const welcome = slideHtml(0, {});
-    assert.match(welcome, /Let’s get to know you/);
-    assert.match(welcome, /portfolio stays encrypted/);
-    assert.match(welcome, /answers stay private/);
-    assert.match(welcome, /data-about-skipall/);
+    const intro = slideHtml(0, {});
+    assert.match(intro, /Complete your investor profile/);
+    assert.match(intro, /Confidential\./);
+    assert.match(intro, /end-to-end encrypted/);
+    assert.match(intro, /data-about-skipall/);
     ABOUT_QUESTIONS.forEach((q, n) => {
       const html = slideHtml(n + 1, {});
-      assert.match(html, new RegExp(`Question ${n + 1} of ${ABOUT_QUESTIONS.length}`), q.id);
+      assert.match(html, new RegExp(`Step ${n + 1} of ${ABOUT_QUESTIONS.length}`), q.id);
       assert.ok(html.includes(q.ask.replace(/'/g, '&#39;')), q.id);
       assert.match(html, /data-about-back/);
-      assert.match(html, /Skip ›/, 'every question can be skipped');
-      for (const [, , emoji] of q.options ?? []) assert.ok(html.includes(emoji), `${q.id} ${emoji}`);
+      assert.match(html, />Skip</, 'every question can be skipped');
+      if (q.options) assert.match(html, q.multi ? /role="checkbox"/ : /role="radio"/, q.id);
     });
     const chosen = slideHtml(1, { sex: 'female' });
-    assert.match(chosen, /data-q="sex" data-v="female" aria-pressed="true"/);
-    assert.match(chosen, /Next ›/);
+    assert.match(chosen, /data-q="sex" data-v="female" role="radio" aria-checked="true"/);
+    assert.match(chosen, />Continue</);
+    const goal = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.id === 'goal') + 1, { goal: ['wealth', 'learn'] });
+    assert.match(goal, /data-v="wealth" role="checkbox" aria-checked="true"/);
+    assert.match(goal, /data-v="learn" role="checkbox" aria-checked="true"/);
+    assert.match(goal, /data-v="trading" role="checkbox" aria-checked="false"/);
     const country = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.country) + 1, { country: 'IL' });
     for (const c of COMMON_COUNTRIES) assert.match(country, new RegExp(`data-country="${c}"`));
     assert.match(country, /id="aboutSearch"/);
-    assert.match(slideHtml(ABOUT_QUESTIONS.length + 1, { sex: 'female' }), /Thank you/);
+    assert.match(slideHtml(ABOUT_QUESTIONS.length + 1, { sex: 'female' }), /Your profile is complete/);
     assert.match(slideHtml(ABOUT_QUESTIONS.length + 1, {}), /data-about-finish/);
+  });
+
+  test('goals, approach, how they heard and employment take several answers; the rest one', () => {
+    assert.deepEqual(ABOUT_QUESTIONS.filter((q) => q.multi).map((q) => q.id), ['goal', 'style', 'heard', 'occupation']);
+    assert.deepEqual([...MULTI], ['goal', 'style', 'heard', 'occupation']);
   });
 });
 
@@ -121,6 +130,17 @@ describe('on the server', () => {
     assert.equal(rows[0].country, 'IL');
     assert.equal(rows[0].occupation, 'student');
     assert.equal(rows[0].goal, null, 'a later answer replaces the whole set');
+  });
+
+  test('several answers are stored together, in the list\'s order, each once', async () => {
+    const dana = await person('dana@example.com');
+    const res = await dana.about({ goal: ['learn', 'wealth', 'learn', 'bogus'], heard: ['google'], occupation: 'student', style: [] });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const { rows } = await query('SELECT goal, heard, occupation, style FROM about_you WHERE user_id = $1', [dana.id]);
+    assert.equal(rows[0].goal, 'wealth,learn');
+    assert.equal(rows[0].heard, 'google');
+    assert.equal(rows[0].occupation, 'student', 'a single answer to a several-answer question still counts');
+    assert.equal(rows[0].style, null);
   });
 
   test('only the listed choices are kept: anything else is left empty', () => {

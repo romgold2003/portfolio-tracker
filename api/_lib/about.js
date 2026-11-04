@@ -19,10 +19,12 @@ export const ABOUT_CHOICES = {
   age: ['u18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+'],
   goal: ['wealth', 'trading', 'retire', 'learn', 'track'],
   experience: ['lt1', '1-3', '3-10', '10+'],
-  style: ['long', 'swing', 'day', 'mix'],
+  style: ['long', 'swing', 'day'],
   heard: ['friend', 'instagram', 'tiktok', 'youtube', 'google', 'university', 'other'],
   occupation: ['student', 'employed', 'self', 'retired', 'other'],
 };
+/** Questions that take several answers, stored as their ids joined by commas in the list's order. */
+export const MULTI = new Set(['goal', 'style', 'heard', 'occupation']);
 const FIELDS = [...Object.keys(ABOUT_CHOICES), 'country'];
 
 const TABLE = `CREATE TABLE IF NOT EXISTS about_you (
@@ -46,12 +48,22 @@ async function ensureTable() {
   readyFor = driverGeneration();
 }
 
-/** Only the listed choices, and a two-letter country code; anything else is left empty. */
+/**
+ * Only the listed choices, and a two-letter country code; anything else is
+ * left empty. A question with several answers takes a list (or one answer),
+ * keeps the listed ones, each once, and is stored as "wealth,learn".
+ */
 export function cleanAnswers(body) {
   const out = {};
   for (const [field, allowed] of Object.entries(ABOUT_CHOICES)) {
     const v = body?.[field];
-    out[field] = typeof v === 'string' && allowed.includes(v) ? v : null;
+    if (MULTI.has(field)) {
+      const given = new Set((Array.isArray(v) ? v : [v]).filter((x) => typeof x === 'string'));
+      const kept = allowed.filter((id) => given.has(id));
+      out[field] = kept.length ? kept.join(',') : null;
+    } else {
+      out[field] = typeof v === 'string' && allowed.includes(v) ? v : null;
+    }
   }
   const country = typeof body?.country === 'string' ? body.country.toUpperCase() : '';
   out.country = /^[A-Z]{2}$/.test(country) ? country : null;
