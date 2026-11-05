@@ -500,6 +500,8 @@ function sanitizePosition(raw) {
   // A sector chosen by hand overrides the ticker lookup, so it is carried
   // through, but only when it names a sector the app actually knows.
   if (raw.sector && SECTOR_NAMES.includes(raw.sector)) clean.sector = raw.sector;
+  // State of mind at entry (core/mind.js): a whole number from 1 to 10, or left off.
+  if (Number.isInteger(raw.mind) && raw.mind >= 1 && raw.mind <= 10) clean.mind = raw.mind;
 
   // Entered from a statement as a result rather than as prices. Carried through
   // because the card reads it: without it a reload would start presenting the

@@ -6,6 +6,7 @@
  * which resolve against the global bridge in src/app/actions.js.
  */
 import { ASSET_CLASSES, MONTHS_LONG } from '../../config/constants.js';
+import { cleanMind, mindLabel } from '../../core/mind.js';
 import {
   unreal, realized, pctD, costOf, marketValueOf,
   dailyDollarExits, dailyDollarTotal,
@@ -19,10 +20,18 @@ import {
   fmtPrice, fmtQty, fmtShares, escapeHtml,
 } from '../format.js';
 
+/** State of mind at entry (core/mind.js), shown with the entry reason when it was rated. */
+function mindBlock(p) {
+  const score = cleanMind(p.mind);
+  if (score == null) return '';
+  const band = score <= 4 ? 'low' : score <= 6 ? 'mid' : 'high';
+  return `<div class="mind-chip" data-band="${band}"><span class="mind-dot" aria-hidden="true"></span>State of mind at entry <b>${score}/10</b> · ${escapeHtml(mindLabel(score))}</div>`;
+}
+
 /** Entry-reason note, shown on both open and closed cards. */
 function reasonBlock(p) {
-  if (!p.reason) return '';
-  return `<div style="background:var(--panel2);border:0.5px solid var(--border2);border-radius:7px;padding:10px 13px;margin-bottom:14px;font-size:12px;color:var(--textmid);line-height:1.5"><span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:4px">Entry reason</span>${escapeHtml(p.reason)}</div>`;
+  if (!p.reason) return mindBlock(p);
+  return `<div style="background:var(--panel2);border:0.5px solid var(--border2);border-radius:7px;padding:10px 13px;margin-bottom:14px;font-size:12px;color:var(--textmid);line-height:1.5"><span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:4px">Entry reason</span>${escapeHtml(p.reason)}</div>${mindBlock(p)}`;
 }
 
 /** The exit ledger — every partial sale, with a running total. */
@@ -147,6 +156,9 @@ function editFields(p, { includeExit }) {
     <div class="dca-field"><label>Entry price ($)</label><input type="number" step="any" id="ed-entry-${p.id}" value="${p.entry}"></div>
     ${includeExit ? `<div class="dca-field"><label>Exit price ($)</label><input type="number" step="any" id="ed-exit-${p.id}" value="${p.cur}"></div>` : ''}
     <div class="dca-field"><label>Shares / units</label><input type="number" step="any" id="ed-qty-${p.id}" value="${Number(Math.abs(p.qty).toFixed(8))}"></div>
+    <div class="dca-field"><label>State of mind at entry</label>
+      <select id="ed-mind-${p.id}"><option value="">Not rated</option>${Array.from({ length: 10 }, (_, i) => i + 1).map((n) => `<option value="${n}"${cleanMind(p.mind) === n ? ' selected' : ''}>${n} · ${escapeHtml(mindLabel(n))}</option>`).join('')}</select>
+    </div>
     <div class="dca-field" style="grid-column:1/-1"><label>Reason for entry</label>
       <textarea id="ed-reason-${p.id}" style="min-height:60px;resize:vertical;font-size:13px;padding:8px 10px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);font-family:inherit;width:100%;outline:none">${escapeHtml(p.reason || '')}</textarea>
     </div>

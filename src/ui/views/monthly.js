@@ -12,6 +12,7 @@ import {
 } from '../../core/portfolio.js';
 import { MONTHS_SHORT, MONTHS_LONG, YEAR_PICKER } from '../../config/constants.js';
 import { renderMonthlyChart } from '../charts.js';
+import { mindStats } from '../../core/mind.js';
 import { ui } from '../uiState.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
@@ -368,8 +369,37 @@ export function renderMonthly() {
   const year = renderYearSelect();
   renderMonthlyChart(yearTotals(year));
   renderSummaryTable();
+  renderMindStats();
   populateYearPicker();
   populateMonthPicker();
+}
+
+/**
+ * Closed trades grouped by the state of mind they were taken in: does the
+ * trader do better calm and confident than emotional? Every trade, every year.
+ * Exported for the tests.
+ */
+export function mindStatsHtml(positions) {
+  const { groups, unrated } = mindStats(positions);
+  const rated = groups.reduce((n, g) => n + g.trades, 0);
+  if (!rated) {
+    return `<p class="mind-empty">Rate your state of mind when you enter a trade (New trade → State of mind at entry). Once a few rated trades have closed, this shows whether you do better confident or emotional.${unrated ? ` ${unrated} closed trade${unrated === 1 ? ' has' : 's have'} no rating yet — you can add one from Edit on the trade.` : ''}</p>`;
+  }
+  const best = groups.filter((g) => g.trades).sort((a, b) => b.avgReturn - a.avgReturn)[0];
+  const cell = (v, f) => (v == null ? '—' : f(v));
+  return `<div class="mind-grid">${groups.map((g) => `<div class="mind-col${g === best && groups.filter((x) => x.trades).length > 1 ? ' best' : ''}" data-group="${g.id}">
+      <div class="mind-gl">${g.label}</div>
+      <div class="mind-gv"><span>Trades</span><b>${g.trades}</b></div>
+      <div class="mind-gv"><span>Win rate</span><b>${cell(g.winRate, (v) => `${Math.round(v)}%`)}</b></div>
+      <div class="mind-gv"><span>Avg return</span><b style="color:${g.avgReturn == null ? 'inherit' : clr(g.avgReturn)}">${cell(g.avgReturn, fp)}</b></div>
+      <div class="mind-gv"><span>Total P&amp;L</span><b style="color:${clr(g.pnl)}">${g.trades ? $s(g.pnl) : '—'}</b></div>
+    </div>`).join('')}</div>
+    <p class="mind-foot">${rated} rated closed trade${rated === 1 ? '' : 's'}${unrated ? ` · ${unrated} not rated` : ''}. Rate each trade at entry to make this sharper.</p>`;
+}
+
+function renderMindStats() {
+  const box = el('mindStats');
+  if (box) box.innerHTML = mindStatsHtml(state.positions);
 }
 
 /** Clicking a summary row jumps the detail picker to that month. */

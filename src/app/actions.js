@@ -68,7 +68,7 @@ import { reconcileStatement, reconciliationLines } from '../features/reconcile.j
 import { deleteCurrentAccount } from '../core/profiles.js';
 import { saveBenchmarkKey } from '../services/benchmark.js';
 import {
-  setDirection, readTradeForm, clearTradeForm, setTickerStatus, applyTickerLookup,
+  setDirection, readTradeForm, clearTradeForm, setTickerStatus, applyTickerLookup, setMind,
   updateSizeHint as refreshSizeHint,
   toggleClosedTrade,
 } from '../ui/views/addTrade.js';
@@ -282,6 +282,7 @@ export function saveEdit(id) {
     entry: parseFloat(value('entry')),
     qty: parseFloat(value('qty')),
     reason: value('reason')?.trim(),
+    mind: value('mind') ? Number(value('mind')) : null,
     exit: value('exit') ? parseFloat(value('exit')) : null,
     close: value('close') || null,
   };
@@ -788,7 +789,7 @@ export function installActions(extra = {}) {
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
     chooseBroker, changeBroker, filterBrokers, toggleEarlierYears, chooseReturnMethod,
     // trades
-    addPos, clearForm, setDir, updateSizeHint,
+    addPos, clearForm, setDir, updateSizeHint, setMind,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
     // panels
     toggleExpand, toggleEdit, toggleDca, toggleClose,

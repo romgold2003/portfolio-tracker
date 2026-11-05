@@ -3,6 +3,26 @@ import { ui } from '../uiState.js';
 import { fmtPrice } from '../format.js';
 import { todayStr } from '../../core/portfolio.js';
 import { SECTOR_NAMES } from '../../config/sectors.js';
+import { cleanMind, mindLabel } from '../../core/mind.js';
+
+/** The state of mind chosen on the form, 1 to 10, or null for not rated. */
+let formMind = null;
+
+/** Choose a score; choosing the same one again clears it. */
+export function setMind(score) {
+  const next = cleanMind(score);
+  formMind = next === formMind ? null : next;
+  for (const b of document.querySelectorAll('#f-mind [data-mind]')) {
+    const on = Number(b.dataset.mind) === formMind;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+  const now = document.getElementById('f-mindNow');
+  if (now) {
+    now.textContent = formMind == null ? 'Not rated — how calm and sure of your plan are you?' : `${formMind}/10 · ${mindLabel(formMind)}`;
+    now.dataset.band = formMind == null ? '' : formMind <= 4 ? 'low' : formMind <= 6 ? 'mid' : 'high';
+  }
+}
 
 const field = (id) => document.getElementById(id);
 
@@ -73,6 +93,7 @@ export function readTradeForm() {
     amount,
     qty,
     reason: field('f-reason').value.trim(),
+    mind: formMind,
     // Empty means "work it out from the ticker".
     sector: field('f-sector')?.value || null,
     alreadyClosed,
@@ -115,6 +136,7 @@ export function clearTradeForm() {
     if (el) el.value = '';
   });
   setTickerStatus('', 'muted');
+  if (formMind != null) setMind(formMind);
   if (field('f-date')) field('f-date').value = todayStr();
   if (field('f-sector')) field('f-sector').value = '';
   updateSizeHint();

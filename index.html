@@ -356,6 +356,13 @@
           <div class="fg" id="f-closedNote" style="grid-column:1/-1;display:none">
             <div class="hint" style="margin:0">Just what it made and the percentage — the amount you staked is worked out from those, so you do not need the entry and exit prices. Your cash is left alone, since that money is already in your balance, and the trade is filed under the month you closed it.</div>
           </div>
+          <!-- How the trader felt taking it, 1 emotional to 10 confident (src/core/mind.js). Optional. -->
+          <div class="fg mind-fg" style="grid-column:1/-1">
+            <label>State of mind at entry <span class="mind-opt">optional</span></label>
+            <div class="mind-scale" id="f-mind" role="radiogroup" aria-label="State of mind at entry, from 1 emotional to 10 confident"><button type="button" class="mind-pick" data-mind="1" role="radio" aria-checked="false" onclick="setMind(1)">1</button><button type="button" class="mind-pick" data-mind="2" role="radio" aria-checked="false" onclick="setMind(2)">2</button><button type="button" class="mind-pick" data-mind="3" role="radio" aria-checked="false" onclick="setMind(3)">3</button><button type="button" class="mind-pick" data-mind="4" role="radio" aria-checked="false" onclick="setMind(4)">4</button><button type="button" class="mind-pick" data-mind="5" role="radio" aria-checked="false" onclick="setMind(5)">5</button><button type="button" class="mind-pick" data-mind="6" role="radio" aria-checked="false" onclick="setMind(6)">6</button><button type="button" class="mind-pick" data-mind="7" role="radio" aria-checked="false" onclick="setMind(7)">7</button><button type="button" class="mind-pick" data-mind="8" role="radio" aria-checked="false" onclick="setMind(8)">8</button><button type="button" class="mind-pick" data-mind="9" role="radio" aria-checked="false" onclick="setMind(9)">9</button><button type="button" class="mind-pick" data-mind="10" role="radio" aria-checked="false" onclick="setMind(10)">10</button></div>
+            <div class="mind-ends"><span>1 · Emotional / greedy</span><span>Hesitant</span><span>Confident · 10</span></div>
+            <div class="mind-now" id="f-mindNow">Not rated — how calm and sure of your plan are you?</div>
+          </div>
           <div class="fg" style="grid-column:1/-1">
             <label>Reason for entry</label>
             <textarea id="f-reason" placeholder="Why are you entering this trade? Setup, thesis, key levels…" style="min-height:80px;resize:vertical;font-size:13px;padding:9px 11px;border-radius:6px;border:0.5px solid var(--border2);background:var(--input);color:var(--text);font-family:inherit;width:100%;outline:none"></textarea>
@@ -387,6 +394,12 @@
           <thead><tr><th>Month</th><th>Realised</th><th>Unrealised</th><th>Total P&L</th><th title="Equal-weight average return of the trades closed this month">Avg trade %</th><th title="Profit from trades closed this month, as a percentage of what the account was worth at the start of the month">Portfolio %</th><th>Trades</th></tr></thead>
           <tbody id="monthTable"></tbody>
         </table>
+      </div>
+
+      <!-- State of mind at entry against results (src/core/mind.js). -->
+      <div class="card mind-card" id="mindCard">
+        <div class="card-lbl"><span>State of mind vs. results</span><span class="mind-sub">closed trades, by how you felt taking them</span></div>
+        <div id="mindStats"></div>
       </div>
 
       <!-- History detail picker -->

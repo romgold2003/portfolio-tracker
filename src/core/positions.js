@@ -8,6 +8,7 @@
  */
 import { state, savePositions, saveCash, findPosition } from './store.js';
 import { closeMath, costOf, baseQtyOf, bookedPnl, todayStr, prevCloseOf } from './portfolio.js';
+import { cleanMind } from './mind.js';
 
 /**
  * Strictly increasing id, so two trades on the same ticker created in the same
@@ -71,7 +72,7 @@ function moveOpeningCash(dir, amount) {
  * from the amount regardless would quietly round a stated "3 shares" into
  * 2.99999 the moment the amount was itself derived from it.
  */
-export function addPosition({ ticker, cls, dir, open, entry, amount, qty, reason, sector }) {
+export function addPosition({ ticker, cls, dir, open, entry, amount, qty, reason, sector, mind }) {
   const position = {
     id: newId(),
     ticker,
@@ -88,6 +89,8 @@ export function addPosition({ ticker, cls, dir, open, entry, amount, qty, reason
   };
   // Absent means the ticker lookup decides, so an unset sector is not stored.
   if (sector) position.sector = sector;
+  // State of mind at entry, 1 to 10 (core/mind.js); left off when not rated.
+  if (cleanMind(mind) != null) position.mind = cleanMind(mind);
   state.positions.unshift(position);
   moveOpeningCash(dir, amount);
   savePositions();
@@ -118,6 +121,8 @@ export function updatePosition(id, fields) {
   p.qty = fields.qty;
   p.amount = amount;
   p.reason = fields.reason || null;
+  if (cleanMind(fields.mind) != null) p.mind = cleanMind(fields.mind);
+  else delete p.mind;
   if (fields.exit != null) p.cur = fields.exit;
   if (fields.close) p.close = fields.close;
 
@@ -204,7 +209,7 @@ export function setCurrentPrice(id, price) {
  * what the ticker does now has nothing to do with what it made.
  */
 export function addClosedPosition({
-  ticker, cls, dir, open, close, pnl, pct, reason, sector,
+  ticker, cls, dir, open, close, pnl, pct, reason, sector, mind,
 }) {
   /**
    * What was staked, worked out from the result.
@@ -258,6 +263,7 @@ export function addClosedPosition({
     }],
   };
   if (sector) position.sector = sector;
+  if (cleanMind(mind) != null) position.mind = cleanMind(mind);
 
   state.positions.unshift(position);
   savePositions();
