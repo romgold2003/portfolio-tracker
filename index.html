@@ -374,6 +374,13 @@
     <div id="monthly" class="page">
       <div class="topbar"><div class="greeting">Monthly P&L</div><div class="gauges" data-gauges style="display:none"></div></div>
 
+      <!-- Two halves (src/ui/views/monthly.js): what was sold, and what is still held. -->
+      <div class="month-tabs" role="tablist" aria-label="Monthly P&L">
+        <button type="button" role="tab" class="on" aria-selected="true" aria-controls="monthRealised" data-month-mode="realised">Monthly realised<span>what you sold</span></button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="monthUnrealised" data-month-mode="unrealised">Monthly unrealised<span>what you still hold</span></button>
+      </div>
+
+      <section id="monthRealised" role="tabpanel">
       <!-- Chart card with year selector -->
       <div class="card chart-card">
         <div class="card-lbl">
@@ -386,7 +393,7 @@
       <!-- Summary table -->
       <div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
         <table>
-          <thead><tr><th>Month</th><th title="Profit or loss of the trades closed this month">Trades P&L</th><th title="Equal-weight average return of the trades closed this month">Avg trade %</th><th>Trades</th><th title="What the account made this month: the change in value less deposits and withdrawals, open positions included">Account P&L</th><th title="The account's time-weighted return for the month, as a broker measures it">Account %</th></tr></thead>
+          <thead><tr><th>Month</th><th title="Profit or loss of the trades closed this month">Realised P&L</th><th title="Equal-weight average return of the trades closed this month">Avg trade %</th><th>Trades</th><th title="Trades closed with a profit, and with a loss">Won · lost</th></tr></thead>
           <tbody id="monthTable"></tbody>
         </table>
       </div>
@@ -411,6 +418,24 @@
         </div>
         <div id="monthDetail"><div class="empty">Select a year and month above to see its trades</div></div>
       </div>
+      </section>
+
+      <section id="monthUnrealised" role="tabpanel" hidden>
+        <div class="card chart-card">
+          <div class="card-lbl">
+            <span>Unrealised P&L — all 12 months</span>
+            <select id="chartYearU" onchange="renderMonthly()" style="width:auto;font-size:12px;padding:5px 8px;background:var(--input);border:0.5px solid var(--border2);border-radius:5px;color:var(--text)"></select>
+          </div>
+          <div class="chart-wrap2"><canvas id="monthChartU" role="img" aria-label="Monthly unrealised profit and loss">Monthly unrealised P&L.</canvas></div>
+        </div>
+        <p class="month-note">What the positions you still held gained or lost over each month, before anything was sold. Together with the realised side it makes the account's whole result for the month.</p>
+        <div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
+          <table>
+            <thead><tr><th>Month</th><th title="How much the open positions gained or lost during the month, dividends, interest and fees included">Unrealised P&L</th><th title="Unrealised P&L over what the account was worth when the month began">Unrealised %</th><th title="What closed trades banked this month">Realised P&L</th><th title="Realised plus unrealised: what the whole account made, deposits and withdrawals left out">Account P&L</th><th title="The account's time-weighted return for the month, as a broker measures it">Account %</th></tr></thead>
+            <tbody id="monthTableU"></tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <div id="news" class="page">

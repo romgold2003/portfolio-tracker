@@ -118,7 +118,7 @@ const SHOTS = [
   {
     name: 'monthly',
     setup: () => { window.show('monthly'); },
-    targets: { chart: { sel: '#monthChart' }, months: { sel: '#monthTable' } },
+    targets: { tabs: { sel: '.month-tabs' }, chart: { sel: '#monthChart' }, months: { sel: '#monthTable' } },
   },
   {
     name: 'news',

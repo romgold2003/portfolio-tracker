@@ -46,14 +46,17 @@ function closedByMonth() {
     const bucket = (months[p.close.slice(0, 7)] ??= { real: 0, closed: 0, trades: [] });
     bucket.real += realized(p);
     bucket.closed++;
+    const outcome = outcomeOf(realized(p));
+    if (outcome === 'win') bucket.won = (bucket.won ?? 0) + 1;
+    if (outcome === 'loss') bucket.lost = (bucket.lost ?? 0) + 1;
     // Kept individually: the average return is per trade, not per dollar.
     bucket.trades.push(p);
   });
   return months;
 }
 
-function renderYearSelect() {
-  const select = el('chartYear');
+function renderYearSelect(id = 'chartYear') {
+  const select = el(id);
   if (!select) return new Date().getFullYear();
   const selected = select.value ? parseInt(select.value, 10) : new Date().getFullYear();
   select.innerHTML = pickerYears()
@@ -137,29 +140,105 @@ function accountCells(month) {
       <td style="color:${clr(month.returnPct)};font-weight:600" title="${note}. The days of the month compounded, as a broker measures it.">${fp(month.returnPct)}${month.partial ? '*' : ''}</td>`;
 }
 
+const monthLabel = (key) => new Date(`${key}-02`).toLocaleString('default', { month: 'long', year: 'numeric' });
+
+/** Monthly realised: what the trades closed each month banked. */
 function renderSummaryTable() {
   const body = el('monthTable');
   if (!body) return;
   const trades = closedByMonth();
-  const account = accountMonths();
-  const keys = [...new Set([...Object.keys(trades), ...account.keys()])].sort().reverse();
+  const keys = Object.keys(trades).sort().reverse();
 
   if (!keys.length) {
-    body.innerHTML = '<tr><td colspan="6"><div class="empty">No closed trades yet</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="5"><div class="empty">No closed trades yet</div></td></tr>';
     return;
   }
 
   body.innerHTML = keys.map((key) => {
-    const m = trades[key] ?? { real: 0, closed: 0, trades: [] };
-    const label = new Date(`${key}-02`).toLocaleString('default', { month: 'long', year: 'numeric' });
+    const m = trades[key];
     return `<tr style="cursor:pointer" onclick="selectMonth('${key}')">
-      <td class="mo">${label}</td>
-      ${m.closed ? `<td style="color:${clr(m.real)}">${$s(m.real)}</td>` : '<td class="muted" title="No trade closed this month">—</td>'}
+      <td class="mo">${monthLabel(key)}</td>
+      <td style="color:${clr(m.real)};font-weight:600">${$s(m.real)}</td>
       ${avgTradeCell(m)}
       <td class="muted">${m.closed}</td>
-      ${accountCells(account.get(key))}
+      <td class="muted">${m.won ?? 0} · ${m.lost ?? 0}</td>
     </tr>`;
   }).join('');
+}
+
+/**
+ * Monthly unrealised: what the positions still held gained or lost over each
+ * month, before anything was sold. The account's result for the month (its
+ * change in value, deposits and withdrawals left out) less what closed trades
+ * banked — so the two halves of the page add up to the whole. Dividends,
+ * interest and fees land on this side, since they are not a sale.
+ */
+export function unrealisedMonths(account, trades) {
+  const out = new Map();
+  for (const [key, month] of account) {
+    const realised = trades[key]?.real ?? 0;
+    const unrealised = month.pnl - realised;
+    out.set(key, {
+      ...month,
+      realised,
+      unrealised,
+      unrealisedPct: month.startValue > 0 ? (unrealised / month.startValue) * 100 : null,
+    });
+  }
+  return out;
+}
+
+function renderUnrealised(year) {
+  const months = unrealisedMonths(accountMonths(), closedByMonth());
+  renderMonthlyChart(MONTHS_SHORT.map((_, i) => {
+    const m = months.get(`${year}-${String(i + 1).padStart(2, '0')}`);
+    return m ? +m.unrealised.toFixed(2) : 0;
+  }), { canvasId: 'monthChartU', slot: 'monthU' });
+
+  const body = el('monthTableU');
+  if (!body) return;
+  const keys = [...months.keys()].sort().reverse();
+  if (!keys.length) {
+    body.innerHTML = '<tr><td colspan="6"><div class="empty">No daily account values yet — they appear once prices for your holdings have loaded</div></td></tr>';
+    return;
+  }
+  body.innerHTML = keys.map((key) => {
+    const m = months.get(key);
+    return `<tr>
+      <td class="mo">${monthLabel(key)}</td>
+      <td style="color:${clr(m.unrealised)};font-weight:600">${$s(m.unrealised)}</td>
+      <td style="color:${m.unrealisedPct == null ? 'inherit' : clr(m.unrealisedPct)}">${m.unrealisedPct == null ? '—' : fp(m.unrealisedPct)}</td>
+      <td style="color:${clr(m.realised)}">${m.realised ? $s(m.realised) : '—'}</td>
+      ${accountCells(m)}
+    </tr>`;
+  }).join('');
+}
+
+/** Which half of the page is showing: what was sold, or what is still held. */
+let mode = 'realised';
+
+function bindTabs() {
+  const page = el('monthly');
+  if (!page || page.dataset.tabsBound === '1') return;
+  page.dataset.tabsBound = '1';
+  page.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-month-mode]');
+    if (!tab || tab.dataset.monthMode === mode) return;
+    mode = tab.dataset.monthMode;
+    renderMonthly();
+  });
+}
+
+function showMode() {
+  for (const tab of document.querySelectorAll('[data-month-mode]')) {
+    const on = tab.dataset.monthMode === mode;
+    tab.classList.toggle('on', on);
+    tab.setAttribute('aria-selected', String(on));
+  }
+  const realised = el('monthRealised');
+  const unrealised = el('monthUnrealised');
+  if (realised) realised.hidden = mode !== 'realised';
+  if (unrealised) unrealised.hidden = mode !== 'unrealised';
 }
 
 /**
@@ -338,6 +417,13 @@ export function renderMonthDetail() {
 }
 
 export function renderMonthly() {
+  bindTabs();
+  showMode();
+  // Only the half on screen is drawn: a chart drawn while hidden has no size.
+  if (mode === 'unrealised') {
+    renderUnrealised(renderYearSelect('chartYearU'));
+    return;
+  }
   const year = renderYearSelect();
   renderMonthlyChart(yearTotals(year));
   renderSummaryTable();

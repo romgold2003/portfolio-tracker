@@ -111,13 +111,32 @@ describe('the portfolio return, month by month', () => {
   });
 });
 
-describe('the page keeps the two apart', () => {
-  test('trades P&L and the average trade beside the account P&L and its return, never one number for both', () => {
-    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-    assert.match(html, /<th[^>]*>Trades P&L<\/th><th[^>]*>Avg trade %<\/th><th>Trades<\/th><th[^>]*>Account P&L<\/th><th[^>]*>Account %<\/th>/);
-    const view = readFileSync(new URL('../src/ui/views/monthly.js', import.meta.url), 'utf8');
-    assert.match(view, /monthlyReturns\(forward\.length \? forward : portfolioHistory\(\)\)/);
-    assert.doesNotMatch(view, /monthlyAccountReturns|unreal\(/);
+// November 2026: the page has two halves, what was sold and what is still held.
+describe('monthly realised and monthly unrealised', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  test('two tabs, realised showing first', () => {
+    assert.match(html, /data-month-mode="realised">Monthly realised/);
+    assert.match(html, /data-month-mode="unrealised">Monthly unrealised/);
+    assert.match(html, /<section id="monthRealised" role="tabpanel">/);
+    assert.match(html, /<section id="monthUnrealised" role="tabpanel" hidden>/);
+  });
+
+  test('realised is the trades only; unrealised carries the account beside it', () => {
+    assert.match(html, /<th[^>]*>Realised P&L<\/th><th[^>]*>Avg trade %<\/th><th>Trades<\/th><th[^>]*>Won · lost<\/th>/);
+    assert.match(html, /<th[^>]*>Unrealised P&L<\/th><th[^>]*>Unrealised %<\/th><th[^>]*>Realised P&L<\/th><th[^>]*>Account P&L<\/th><th[^>]*>Account %<\/th>/);
+  });
+
+  test('the two halves add up to the account: unrealised is the month less what was sold', async () => {
+    globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+    const { unrealisedMonths } = await import('../src/ui/views/monthly.js');
+    const account = new Map([['2026-03', { pnl: 500, returnPct: 5, startValue: 10_000, endValue: 10_500, paidIn: 0 }]]);
+    const m = unrealisedMonths(account, { '2026-03': { real: 800 } }).get('2026-03');
+    assert.equal(m.realised, 800);
+    assert.equal(m.unrealised, -300, 'sold 800 of profit while what was still held fell 300');
+    assert.equal(m.realised + m.unrealised, m.pnl);
+    assert.equal(m.unrealisedPct, -3);
+    assert.equal(unrealisedMonths(account, {}).get('2026-03').unrealised, 500, 'nothing sold: all of it is unrealised');
   });
 });
 

@@ -84,7 +84,8 @@ export const SLIDES = [
     text: 'See what you actually made.',
     marks: [
       ['chart', 'The year', 'What the trades closed each month made, in green and red.'],
-      ['months', 'Every month', 'What your trades made, and what the whole account did. Open a month for its trades.'],
+      ['tabs', 'Realised or unrealised', 'What you sold, or what the positions you still hold did, month by month.'],
+      ['months', 'Every month', 'What your trades banked. Open a month for its trades.'],
     ],
   },
   {

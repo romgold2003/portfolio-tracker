@@ -1918,3 +1918,13 @@ body.is-guest{padding-top:36px}
   .hc-cards .hc-row > .hc-cell:nth-child(n+5),.hc-cards .hc-header > .hc-head:nth-child(n+5){display:none}
   .hc-cards .hc-header{padding:0 14px 6px}
 }
+
+/* ───────── Monthly: realised and unrealised (views/monthly.js) ───────── */
+.month-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;margin-bottom:16px;border-radius:12px;background:var(--input);border:0.5px solid var(--border2);max-width:520px}
+.month-tabs button{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;border-radius:9px;padding:9px 10px;background:none;color:var(--text2);font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+.month-tabs button span{font-size:11px;font-weight:400;color:var(--text3)}
+.month-tabs button:hover{color:var(--text)}
+.month-tabs button.on{background:var(--panel);color:var(--text);box-shadow:inset 0 0 0 0.5px var(--border-blue),0 1px 3px rgba(0,0,0,0.25)}
+.month-tabs button.on span{color:var(--blue)}
+.month-tabs button:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.month-note{font-size:12.5px;color:var(--text3);line-height:1.5;margin:-4px 2px 12px}
