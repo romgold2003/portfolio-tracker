@@ -82,7 +82,7 @@ describe('the other timeframes follow the calendar, from the last market close',
     // not opened, so the figures run to Friday's close.
     const now = new Date('2026-09-14T13:00:00Z');
     const expected = {
-      '1W': '2026-09-04', '1M': '2026-08-11', '3M': '2026-06-11', '6M': '2026-03-11', '1Y': '2025-09-11',
+      '1M': '2026-08-11', '3M': '2026-06-11', '6M': '2026-03-11', '1Y': '2025-09-11',
     };
     for (const [tf, date] of Object.entries(expected)) {
       assert.equal(iso(cutoffFor(tf, now)), date, tf);
@@ -107,7 +107,21 @@ describe('the other timeframes follow the calendar, from the last market close',
 
   test('over a holiday the window ends on the last day that traded', () => {
     // Saturday 26 December 2026: Christmas was a Friday, the 24th closed early.
-    assert.equal(windowEnd('1W', new Date('2026-12-26T15:00:00Z')), '2026-12-24');
+    assert.equal(windowEnd('1M', new Date('2026-12-26T15:00:00Z')), '2026-12-24');
+  });
+
+  // Romy, November 2026: the week is this calendar week — on a Thursday, Monday to now; on a Monday, Monday alone.
+  test('1W is this week so far, from Monday, to this moment', () => {
+    const at = (when) => iso(cutoffFor('1W', new Date(when)));
+    assert.equal(at('2026-11-05T15:00:00Z'), '2026-11-02', 'Thursday: since Monday');
+    assert.equal(at('2026-11-02T15:00:00Z'), '2026-11-02', 'Monday: Monday alone');
+    assert.equal(at('2026-11-02T13:00:00Z'), '2026-11-02', 'Monday before the open');
+    assert.equal(at('2026-11-07T15:00:00Z'), '2026-11-02', 'Saturday: the week just finished');
+    assert.equal(at('2026-11-08T15:00:00Z'), '2026-11-02', 'Sunday too');
+    assert.equal(at('2026-11-09T15:00:00Z'), '2026-11-09', 'the next Monday starts again');
+    // New York's Monday: 1 am Monday in Israel is still Sunday there.
+    assert.equal(at('2026-11-08T23:00:00Z'), '2026-11-02');
+    assert.equal(windowEnd('1W', new Date('2026-11-05T15:00:00Z')), null, 'runs to now, with the move today included');
   });
 
   test('year to date and all time are not windows of this kind', () => {

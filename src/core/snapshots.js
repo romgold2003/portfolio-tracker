@@ -6,7 +6,7 @@ import { state, saveSnapshots, returnMethod } from './store.js';
 import { spliceHistory } from './rebuild.js';
 import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
-import { lastClosedSession } from '../config/marketCalendar.js';
+import { lastClosedSession, newYorkNow } from '../config/marketCalendar.js';
 import { returnCurve } from './returnCurve.js';
 import { moneyWeightedCurve } from './moneyWeighted.js';
 import { dayGrowth } from './portfolioHistory.js';
@@ -74,6 +74,7 @@ export function cutoffFor(timeframe, now = new Date()) {
   if (timeframe === 'YTD') {
     return new Date(Date.UTC(now.getFullYear(), 0, 1));
   }
+  if (timeframe === '1W') return new Date(`${weekStart(now)}T00:00:00Z`);
   const span = WINDOW_SPANS[timeframe];
   if (span) return new Date(`${spanStart(span, lastClosedSession(now))}T00:00:00Z`);
   const cutoff = new Date(now);
@@ -90,12 +91,27 @@ export function cutoffFor(timeframe, now = new Date()) {
  * per cent, and reported +13.4% for three months the broker put at +25.65%.
  */
 const WINDOW_SPANS = {
-  '1W': { days: 7 },
   '1M': { months: 1 },
   '3M': { months: 3 },
   '6M': { months: 6 },
   '1Y': { months: 12 },
 };
+
+/**
+ * The week so far (Romy, November 2026): 1W is this calendar week, not the
+ * last seven days. It starts on this week's Monday, measured from the close
+ * before it — on a Thursday, Monday to now; on a Monday, Monday alone. On
+ * Saturday and Sunday it is the week just finished. The Monday is New York's,
+ * the market's own calendar, and the window runs to this moment like year to
+ * date (windowEnd).
+ */
+export function weekStart(now = new Date()) {
+  const [y, m, d] = newYorkNow(now).date.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d));
+  const sinceMonday = (day.getUTCDay() + 6) % 7;
+  day.setUTCDate(day.getUTCDate() - sinceMonday);
+  return day.toISOString().slice(0, 10);
+}
 
 /** The first day of a window ending on `anchor`. The 31st of a short month clamps to its last day. */
 function spanStart(span, anchor) {
@@ -110,8 +126,8 @@ function spanStart(span, anchor) {
 }
 
 /**
- * The day a window's figures run to: the last market close for 1W to 1Y, or
- * null for a window that runs to this moment.
+ * The day a window's figures run to: the last market close for 1M to 1Y, or
+ * null for a window that runs to this moment (this week, year to date, all time).
  */
 export function windowEnd(timeframe, now = new Date()) {
   return WINDOW_SPANS[timeframe] ? lastClosedSession(now) : null;
@@ -292,6 +308,11 @@ export function curveSeries(timeframe) {
 
   const history = accountHistory();
   let points = history.filter((s) => new Date(s.date) >= cutoff);
+  // The week starts from the close before Monday, the base its return is measured from — and on a Monday that is all there is besides today.
+  if (timeframe === '1W') {
+    const before = history.filter((s) => new Date(s.date) < cutoff).at(-1);
+    if (before) points = [before, ...points];
+  }
   // All starts the day the account first held money, not on 1 January of its first year at $0.
   if (timeframe === 'All') {
     const opened = points.findIndex((s) => Number(s.totalAccountValue ?? s.value) > 0);
