@@ -42,7 +42,9 @@ export function describeReturns() {
   const broker = brokerById(state.broker);
   const why = method === 'mwr'
     ? 'when you added money counts (Fidelity, Vanguard, Trading 212).'
-    : 'deposits and withdrawals change nothing (Interactive Brokers, and the S&P 500 comparison).';
+    : method === 'md'
+      ? 'profit over the average money in the account, as the Robinhood chart shows it.'
+      : 'deposits and withdrawals change nothing (Interactive Brokers, and the S&P 500 comparison).';
   const lead = chosen ? `${RETURN_METHODS[method].label}, your choice —`
     : broker && broker.id !== 'other' ? `${RETURN_METHODS[method].label}, as ${broker.name} measures it —`
       : `${RETURN_METHODS[method].label} —`;

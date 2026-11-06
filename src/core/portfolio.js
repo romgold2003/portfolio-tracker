@@ -3,7 +3,6 @@
  * here is a plain input/output calculation, which is what makes the P&L rules
  * below readable and testable.
  */
-import { BETA } from '../config/constants.js';
 import { sectorOf, sectorColour, CASH_COLOUR } from '../config/sectors.js';
 import { tradingDay, newYorkNow } from '../config/marketCalendar.js';
 
@@ -208,101 +207,6 @@ export function hasDailyFigure(p, today = dayOf(p)) {
   return dailyDollar(p, today) != null || dailyDollarExits(p, today) !== 0;
 }
 
-function betaOf(ticker, cls) {
-  const t = (ticker || '').toUpperCase();
-  if (BETA[t] != null) return BETA[t];
-  if (cls === 'Crypto') return BETA.DEFAULT_CRYPTO;
-  if (cls === 'Commodities') return BETA.DEFAULT_COMMOD;
-  return BETA.DEFAULT_STOCK;
-}
-
-/**
- * Beta of one return series against the market.
- *
- *   beta = Cov(asset, market) / Var(market)
- *
- * This is the slope of a regression of the asset's returns on the market's,
- * which is what beta means: when the market moves 1%, this moves beta%.
- *
- * The other textbook form, rho * sigma_asset / sigma_market, is the same number
- * — substitute rho = Cov / (sigma_a * sigma_m) and it reduces to this one. It
- * is written this way because it needs one pass and no correlation term.
- *
- * Returns null below `minPoints` pairs: a beta from a handful of days is noise
- * wearing a number's clothes, and reporting it would be worse than admitting
- * there is not enough history.
- */
-export function betaFromReturns(assetReturns, marketReturns, minPoints = 30) {
-  const n = Math.min(assetReturns.length, marketReturns.length);
-  if (n < minPoints) return null;
-
-  const a = assetReturns.slice(-n);
-  const m = marketReturns.slice(-n);
-  const meanA = a.reduce((s, x) => s + x, 0) / n;
-  const meanM = m.reduce((s, x) => s + x, 0) / n;
-
-  let cov = 0;
-  let varM = 0;
-  for (let i = 0; i < n; i++) {
-    cov += (a[i] - meanA) * (m[i] - meanM);
-    varM += (m[i] - meanM) ** 2;
-  }
-  // A market that never moved has no slope to measure against.
-  if (varM === 0) return null;
-  return cov / varM;
-}
-
-/**
- * Portfolio beta: the weighted average of each holding's beta, over equity.
- *
- *   beta_p = SUM( w_i * beta_i ),   w_i = signed market value / total equity
- *
- * Two things about that denominator are easy to get wrong, and both change the
- * answer materially.
- *
- * It is *equity*, not the sum of the positions. Cash has a beta of zero, and
- * holding it genuinely dampens how much the account moves with the market — a
- * book that is half cash and half index has a beta of 0.5, not 1.0. Dividing by
- * invested capital instead quietly reports the beta of the invested part and
- * calls it the portfolio's. On a book holding 16% cash that overstated beta by
- * a fifth, which is the difference between market-neutral-ish and not.
- *
- * And the weights are *signed*. Being short a high-beta name reduces the book's
- * sensitivity, so it contributes negatively; summing absolute exposures would
- * make a hedged book look like a leveraged one.
- *
- * `measured` maps a ticker to a beta computed from real returns. Anything
- * missing falls back to the published assumption, so the figure degrades from
- * measured to estimated one position at a time rather than all at once.
- */
-export function portfolioBeta(open, measured = new Map(), equity = null) {
-  let weighted = 0;
-  let gross = 0;
-  let measuredWeight = 0;
-
-  open.forEach((p) => {
-    const w = Math.abs(curValOf(p));
-    const sign = p.dir === 'Long' ? 1 : -1;
-    const real = measured.get(p.ticker.toUpperCase());
-    const beta = Number.isFinite(real) ? real : betaOf(p.ticker, p.cls);
-    if (Number.isFinite(real)) measuredWeight += w;
-    weighted += beta * w * sign;
-    gross += w;
-  });
-
-  if (!gross) return null;
-  // Falls back to gross exposure only when equity was not supplied, which is
-  // the same number for a fully invested long book.
-  const base = equity != null && equity > 0 ? equity : gross;
-  return {
-    beta: weighted / base,
-    /** Share of the invested book whose beta was measured rather than assumed. */
-    measuredPct: (measuredWeight / gross) * 100,
-    /** How much of the account is not in the market at all. */
-    cashDragPct: equity != null && equity > 0 ? Math.max(0, (1 - gross / equity)) * 100 : 0,
-  };
-}
-
 /** The original position size, before any partial exits. */
 export function baseQtyOf(p) { return p.origQty != null ? p.origQty : p.qty; }
 
@@ -353,6 +257,13 @@ export function realisedSoFar(p, positions = []) {
   return own + sold.reduce((sum, q) => sum + realized(q), 0);
 }
 
+/** Win, loss or breakeven: less than half a cent either way is flat. */
+export function outcomeOf(pnl) {
+  if (pnl >= 0.005) return 'win';
+  if (pnl <= -0.005) return 'loss';
+  return 'even';
+}
+
 export function pctD(pnl, base) { return base ? (pnl / base) * 100 : 0; }
 
 /**
@@ -377,221 +288,6 @@ export function avgTradeReturn(trades) {
   }
   if (!returns.length) return null;
   return returns.reduce((sum, r) => sum + r, 0) / returns.length;
-}
-
-/** First and last calendar day of a YYYY-MM key. */
-function monthBounds(key) {
-  const year = Number(key.slice(0, 4));
-  const month = Number(key.slice(5, 7));
-  const iso = (d) => d.toISOString().slice(0, 10);
-  return {
-    first: `${key}-01`,
-    last: iso(new Date(Date.UTC(year, month, 0))),
-    before: iso(new Date(Date.UTC(year, month - 1, 0))),
-  };
-}
-
-/**
- * Every month from the first one with anything in it to this one, oldest first.
- *
- * Months where nothing happened are included on purpose. The account value is
- * chained backwards month by month, and a quiet month is a link in that chain —
- * skipping it would hand its deposits to whichever month came next.
- */
-export function monthRange(first, last) {
-  const out = [];
-  let year = Number(first.slice(0, 4));
-  let month = Number(first.slice(5, 7));
-  const lastYear = Number(last.slice(0, 4));
-  const lastMonth = Number(last.slice(5, 7));
-  if (!(year > 0) || !(lastYear > 0)) return out;
-
-  while ((year < lastYear || (year === lastYear && month <= lastMonth)) && out.length < 1200) {
-    out.push(`${year}-${String(month).padStart(2, '0')}`);
-    month += 1;
-    if (month > 12) { month = 1; year += 1; }
-  }
-  return out;
-}
-
-/**
- * What each month earned, attributed to the month that did the work.
- *
- *   closed in the month  ->  what it banked
- *   opened in the month  ->  what it is up or down by, if still open
- *
- * Those two together add up to realised plus unrealised across the whole book,
- * exactly once each, which is what makes the chain in monthlyAccountReturns
- * arrive back at the real starting capital instead of drifting.
- *
- * The second rule is an approximation with a sharp edge, and it is named rather
- * than hidden: a position opened in January and still held is marked at today's
- * price, so all of its gain lands in January even though most of it happened
- * later. A journal has no month-by-month valuation of a holding, so there is no
- * honest way to spread it — `marked` counts the positions this applies to, and
- * the month says so on hover.
- */
-export function monthPnl(positions) {
-  const byMonth = new Map();
-  const bucket = (key) => {
-    if (!byMonth.has(key)) byMonth.set(key, { pnl: 0, realised: 0, marked: 0 });
-    return byMonth.get(key);
-  };
-
-  for (const position of positions) {
-    if (position.status === 'Closed') {
-      if (position.close) {
-        const month = bucket(position.close.slice(0, 7));
-        const banked = realized(position);
-        month.pnl += banked;
-        // Kept apart as well: it is what the month's percentage is made of.
-        month.realised += banked;
-      }
-      continue;
-    }
-    if (!position.open) continue;
-    const held = bucket(position.open.slice(0, 7));
-    held.pnl += unreal(position);
-    held.marked += 1;
-  }
-  return byMonth;
-}
-
-/**
- * The percentage the whole account moved in each month of its life.
- *
- * Worked backwards from what the account is worth today rather than forwards
- * from a recording of it, because the recording does not exist. Daily account
- * values are only written on days the app is open, so they begin the day it was
- * installed — every month before that had no answer at all, and the first weeks
- * of the recording are the install settling rather than the market: positions
- * still being entered and prices still arriving read as a 22% month.
- *
- * The trades have no such gap. They know when every position was taken and what
- * it did, so the account value at the start of any month is simply what it is
- * worth now, less everything earned since, less everything paid in since:
- *
- *   value(start of month) = value(end of month) - P&L(month) - deposits(month)
- *
- * Chained month by month back to the beginning. Subtracting the deposits is
- * what keeps them out of the return in both directions — they neither count as
- * profit nor quietly enlarge the base of the months before they arrived.
- *
- * The return is then the month's profit over what it opened with. Not Modified
- * Dietz, which weights a deposit by how much of the month it was present: that
- * lets paying money in move a percentage with no trade behind it, and a deposit
- * is capital to work with rather than a result.
- *
- * Returns a Map keyed YYYY-MM. A month whose starting value works out to zero
- * or less carries a null percentage: there was no capital to measure against,
- * and a number there would be arithmetic rather than a return.
- */
-export function monthlyAccountReturns(positions, account, flows = [], today = todayStr()) {
-  const dates = [];
-  for (const position of positions) {
-    if (position.open) dates.push(position.open);
-    if (position.close) dates.push(position.close);
-  }
-  for (const flow of flows) if (flow?.date) dates.push(flow.date);
-  const out = new Map();
-  if (!dates.length) return out;
-
-  const earliest = dates.reduce((a, b) => (a < b ? a : b)).slice(0, 7);
-  const keys = monthRange(earliest, today.slice(0, 7));
-  const pnlByMonth = monthPnl(positions);
-
-  /**
-   * The money the account was built from, which is not a deposit into it.
-   *
-   * The chain subtracts each month's flows to find what the account opened
-   * with, and for every month of a running account that is exactly right. It
-   * breaks on the month the account was founded: there was nothing before the
-   * founding transfer, so taking it out leaves whatever rounding residue
-   * happens to be there and the month divides by it. On the demo book, opened
-   * with $42,000 on 5 January against a first trade on the 6th, January opened
-   * at $289 and reported 2,548%.
-   *
-   * Money paid in before the first trade is starting capital and stays in the
-   * base. Everything after it is a contribution and comes out, which is the
-   * neutrality that matters — it is the only kind of deposit an account that is
-   * already running can receive. See periodPnl, which draws the same line.
-   */
-  const firstTrade = positions.reduce(
-    (soonest, p) => (p.open && (soonest == null || p.open < soonest) ? p.open : soonest),
-    null,
-  );
-  const isFounding = (f) => firstTrade != null && f.date <= firstTrade;
-
-  // Newest first, because the only value actually known is today's.
-  let closing = account;
-  for (let i = keys.length - 1; i >= 0; i--) {
-    const key = keys[i];
-    const { pnl, realised, marked } = pnlByMonth.get(key) ?? { pnl: 0, realised: 0, marked: 0 };
-    const inMonth = flows.filter((f) => f?.date?.slice(0, 7) === key);
-    const net = inMonth.reduce((sum, f) => sum + f.amount, 0);
-    const founding = inMonth.reduce((sum, f) => (isFounding(f) ? sum + f.amount : sum), 0);
-    /**
-     * Two numbers, because they answer two questions.
-     *
-     * `opening` is what the account was actually worth on the first of the
-     * month, and it is what the card says out loud — so it has every flow taken
-     * out of it, founding capital included. On the month an account is opened
-     * that is a near-nothing, and truthfully so.
-     *
-     * `base` is the capital the month's trading ran on, which is what a return
-     * is measured against. They are the same number for every month of a
-     * running account and differ only where the account was founded.
-     */
-    const opening = closing - pnl - net;
-    const base = opening + founding;
-    const { first, last } = monthBounds(key);
-    // The month still running is measured to today, not to a date in the future.
-    const to = last > today ? today : last;
-
-    out.set(key, {
-      /**
-       * What the month's closed trades banked, over what the account was worth
-       * when the month opened.
-       *
-       * Realised profit only. An open position's paper move is not a gain the
-       * month has made, and marking it at today's price would keep rewriting a
-       * month that is already over — a January holding still open in September
-       * would go on changing January's figure every day. The total P&L, open
-       * positions included, is still used below to work out what the account
-       * was worth at each month's start; it just is not what is divided.
-       *
-       * This was Modified Dietz, which weights each deposit by how much of the
-       * month it was present and so divides by the average capital at work.
-       * That is the right answer to "what did my money make" — and the wrong
-       * one here, because it means paying money in changes the percentage
-       * without a single trade changing. A $25,000 transfer moved a month from
-       * 1.79% to 1.47% on the demo book.
-       *
-       * A deposit is capital to work with, not a result, so it is kept out of
-       * the base entirely: the same trades report the same percentage whether
-       * money arrived that month or not. `net` is still returned, and the card
-       * still says what moved, so nothing is hidden — only kept out of the
-       * number it would otherwise distort.
-       */
-      pct: base > 0 ? (realised / base) * 100 : null,
-      pnl,
-      /** Profit booked by trades closed in the month. */
-      realised,
-      opening,
-      /** What the percentage was measured against; differs from `opening` only where the account was founded. */
-      base,
-      /** Capital the account was opened with, rather than paid into a running one. */
-      founding,
-      closing,
-      net,
-      /** Positions opened this month and still held, marked at today's price. */
-      marked,
-      from: first,
-      to,
-    });
-    closing = opening;
-  }
-  return out;
 }
 
 /**
@@ -652,7 +348,9 @@ export function accountTotals(positions, cash) {
   const invested = open.reduce((sum, p) => sum + costOf(p), 0);
   const positionsValue = open.reduce((sum, p) => sum + posValue(p), 0);
   const account = positionsValue + cash;
-  const wins = closed.filter((p) => realized(p) > 0).length;
+  // A trade closed flat is neither: it does not count against the win rate (November 2026 audit).
+  const wins = closed.filter((p) => outcomeOf(realized(p)) === 'win').length;
+  const losses = closed.filter((p) => outcomeOf(realized(p)) === 'loss').length;
   return {
     open,
     closed,
@@ -663,8 +361,8 @@ export function accountTotals(positions, cash) {
     positionsValue,
     account,
     wins,
-    losses: closed.length - wins,
-    winRate: closed.length ? Math.round((wins / closed.length) * 100) : 0,
+    losses,
+    winRate: wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0,
   };
 }
 
@@ -916,11 +614,6 @@ export function accountPerformance({
   // Flows go through so the deposit can be taken back out of the opening
   // balance; without them the return is divided by a base that never existed.
   return { ...periodPnl(positions, account, from, startPrices, flows), method: 'trades' };
-}
-
-/** The calendar year, which is the window the overview reports against. */
-export function yearToDatePnl(positions, account, startPrices = new Map(), now = new Date(), flows = []) {
-  return periodPnl(positions, account, `${now.getFullYear()}-01-01`, startPrices, flows);
 }
 
 export function sectorBreakdown(positions, cash = 0) {

@@ -11,6 +11,8 @@
  */
 import { writeFileSync } from 'node:fs';
 import { buildDemoJournal, FALLBACK_PRICES } from './demo-journal.mjs';
+import { LEGAL_VERSION } from '../src/config/legal.js';
+import { ABOUT_VERSION } from '../src/config/aboutYou.js';
 
 const { default: puppeteer } = await import(process.env.PUPPETEER ?? 'puppeteer-core');
 const BASE = process.env.BASE ?? 'http://localhost:4173';
@@ -28,9 +30,11 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 const settle = (ms = 1500) => new Promise((r) => { setTimeout(r, ms); });
 
-// A fresh demo account, signed in, with the tutorial marked seen so it does not cover the shots.
+// A fresh demo account, signed in, with the tutorial seen, the Terms accepted and the profile answered, so nothing covers the shots.
 await page.goto(BASE, { waitUntil: 'load' });
-const journal = { ...buildDemoJournal({ prices: FALLBACK_PRICES, today }), tourSeen: true };
+const journal = {
+  ...buildDemoJournal({ prices: FALLBACK_PRICES, today }), tourSeen: true, legalVersion: LEGAL_VERSION, aboutVersion: ABOUT_VERSION,
+};
 await page.evaluate(async (j) => {
   const profiles = await import('/src/core/profiles.js');
   await profiles.createProfile(`tour-${Date.now()}@riskbook.test`, crypto.randomUUID(), j);

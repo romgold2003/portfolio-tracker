@@ -112,18 +112,33 @@ function solveGrowth({ startValue, endValue, days, flows }) {
 export function moneyWeightedReturn(rows, from = null, to = null) {
   const w = windowOf(rows, from, to);
   if (!w) return null;
-  const pnl = w.endValue - w.startValue - w.paidIn;
   const growth = solveGrowth(w);
-  let returnPct;
-  if (growth != null) returnPct = (growth - 1) * 100;
-  else {
-    const average = w.startValue + w.flows.reduce((sum, [day, amount]) => sum + (amount * (w.days - day)) / w.days, 0);
-    if (!(average > 0)) return null;
-    returnPct = (pnl / average) * 100;
-  }
+  if (growth == null) return dietzOf(w);
   return {
-    returnPct, pnl, startValue: w.startValue, endValue: w.endValue, paidIn: w.paidIn,
+    returnPct: (growth - 1) * 100, pnl: w.endValue - w.startValue - w.paidIn, startValue: w.startValue, endValue: w.endValue, paidIn: w.paidIn,
   };
+}
+
+/** Profit over the average money in the account, each flow weighted by the share of the window it was there for. */
+function dietzOf(w) {
+  const pnl = w.endValue - w.startValue - w.paidIn;
+  const average = w.startValue + w.flows.reduce((sum, [day, amount]) => sum + (amount * (w.days - day)) / w.days, 0);
+  if (!(average > 0)) return null;
+  return {
+    returnPct: (pnl / average) * 100, pnl, startValue: w.startValue, endValue: w.endValue, paidIn: w.paidIn,
+  };
+}
+
+/**
+ * The window's Modified Dietz return (November 2026 audit): what Robinhood's
+ * account chart shows ("overall portfolio return", transfers excluded), and
+ * what IBKR's money-weighted toggle computes. Same shape as moneyWeightedReturn.
+ *
+ *   return = (V_end − V_start − ΣF) ÷ (V_start + Σ F_i × (T − t_i) ÷ T)
+ */
+export function modifiedDietzReturn(rows, from = null, to = null) {
+  const w = windowOf(rows, from, to);
+  return w ? dietzOf(w) : null;
 }
 
 /**
@@ -131,14 +146,14 @@ export function moneyWeightedReturn(rows, from = null, to = null) {
  * account's first day to that one, as a broker using this method would show
  * it on that day. Same shape as returnCurve's points.
  */
-export function moneyWeightedCurve(rows) {
+export function moneyWeightedCurve(rows, measure = moneyWeightedReturn) {
   const list = rows ?? [];
   const start = list.findIndex((r) => r.totalAccountValue > 0);
   if (start < 0) return [];
   const out = [{ date: list[start].date, pct: 0, value: list[start].totalAccountValue }];
   const tail = list.slice(start);
   for (let i = 1; i < tail.length; i++) {
-    const measured = moneyWeightedReturn(tail.slice(0, i + 1));
+    const measured = measure(tail.slice(0, i + 1));
     const last = out[out.length - 1].pct;
     out.push({ date: tail[i].date, pct: measured ? measured.returnPct : last, value: tail[i].totalAccountValue });
   }

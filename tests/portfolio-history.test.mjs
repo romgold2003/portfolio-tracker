@@ -9,7 +9,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPortfolioHistory, eachDay, cashFlowMarkers } from '../src/core/portfolioHistory.js';
+import { buildPortfolioHistory, eachDay } from '../src/core/portfolioHistory.js';
 
 const near = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
 /** A price book: ticker -> { day -> close }, answered on or before the day. */
@@ -158,22 +158,7 @@ describe('deposits', () => {
     });
     assert.equal(h[1].deposit, 3000);
     assert.equal(h[1].withdrawal, -1000);
-    const markers = cashFlowMarkers(h);
-    assert.equal(markers.length, 1);
-    assert.equal(markers[0].amount, 2000);
-  });
-
-  test('a day with no flow carries no marker', () => {
-    const h = buildPortfolioHistory({ opening, events: [], priceOn, to: '2026-01-05' });
-    assert.deepEqual(cashFlowMarkers(h), []);
-  });
-
-  test('markers know the account value they sit on', () => {
-    const h = buildPortfolioHistory({
-      opening, events: [{ date: '2026-01-02', kind: 'flow', cash: 5000 }], priceOn, to: '2026-01-02',
-    });
-    assert.equal(cashFlowMarkers(h)[0].value, 6500);
-    assert.equal(cashFlowMarkers(h)[0].deposit, true);
+    assert.equal(h[1].externalCashFlow, 2000);
   });
 });
 

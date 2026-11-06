@@ -100,14 +100,34 @@ describe('money-weighted', () => {
 describe('which method, for whom', () => {
   test('each broker’s own way; time-weighted when it publishes none', () => {
     for (const id of ['fidelity', 'vanguard', 't212']) assert.equal(returnMethodOf(null, id), 'mwr', id);
-    for (const id of ['ibkr', 'interactive-israel', 'schwab', 'robinhood', 'leumi', 'other']) assert.equal(returnMethodOf(null, id), 'twr', id);
+    for (const id of ['ibkr', 'interactive-israel', 'schwab', 'leumi', 'other']) assert.equal(returnMethodOf(null, id), 'twr', id);
+    // Robinhood's chart is Modified Dietz (its support article, checked November 2026).
+    assert.equal(returnMethodOf(null, 'robinhood'), 'md');
     assert.equal(returnMethodOf(null, null), 'twr');
-    assert.ok(BROKERS.every((b) => b.returns == null || b.returns === 'mwr' || b.returns === 'twr'));
+    assert.ok(BROKERS.every((b) => b.returns == null || ['mwr', 'twr', 'md'].includes(b.returns)));
   });
 
   test('a choice made in Settings wins over the broker', () => {
     assert.equal(returnMethodOf('twr', 'fidelity'), 'twr');
     assert.equal(returnMethodOf('mwr', 'ibkr'), 'mwr');
     assert.equal(returnMethodOf('junk', 'fidelity'), 'mwr');
+  });
+});
+
+describe('Modified Dietz (Robinhood, and IBKR’s money-weighted toggle)', () => {
+  test('profit over the average money in the account, each deposit weighted by the time it was there', async () => {
+    const { modifiedDietzReturn } = await import('../src/core/moneyWeighted.js');
+    // 10,000 for ten days; 10,000 more on day 5 (mid-day, so 5.5 of 10 days remain); ends at 21,000.
+    const rows = Array.from({ length: 11 }, (_, i) => ({
+      date: `2026-03-${String(i + 1).padStart(2, '0')}`,
+      totalAccountValue: i < 5 ? 10_000 : i < 10 ? 20_000 : 21_000,
+      externalCashFlow: i === 5 ? 10_000 : 0,
+    }));
+    const r = modifiedDietzReturn(rows);
+    assert.ok(Math.abs(r.pnl - 1000) < 1e-9);
+    assert.ok(Math.abs(r.returnPct - (1000 / (10_000 + 10_000 * 5.5 / 10)) * 100) < 1e-9, `${r.returnPct}`);
+    // Without money moving it equals every other method.
+    const flat = rows.map((x) => ({ ...x, externalCashFlow: 0, totalAccountValue: x.totalAccountValue === 21_000 ? 10_500 : 10_000 }));
+    assert.ok(Math.abs(modifiedDietzReturn(flat).returnPct - 5) < 1e-9);
   });
 });

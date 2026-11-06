@@ -52,10 +52,15 @@ describe('a window measured from the account valued every day', () => {
     assert.ok(near(r.pnl, 0));
   });
 
-  test('days before the account held anything are not a base to divide by', () => {
-    // 2 January divides by the 0 of 1 January, which would be infinite.
+  test('the day an empty account is funded is measured from the deposit, never from the 0 before it', () => {
+    // 2 January would divide by the 0 of 1 January; the deposit is that day's base instead.
     const r = periodReturnFromHistory(rows, '2025-01-01', '2025-01-02');
-    assert.equal(r, null);
+    assert.ok(near(r.returnPct, 0));
+    assert.equal(r.startValue, 10_000);
+    assert.equal(r.paidIn, 0);
+    // Funded in the morning and up 2% by the close: 2%, not the 4% half a base would give.
+    const funded = periodReturnFromHistory([day('2025-03-02', 0), day('2025-03-03', 10_200, 10_000)], null, null);
+    assert.ok(near(funded.returnPct, 2), `${funded.returnPct}`);
   });
 
   test('a window after the last day holds nothing to measure', () => {

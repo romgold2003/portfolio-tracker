@@ -1,5 +1,6 @@
 /** The overview page: account value, today's move, KPIs and a compact watchlist. */
 import { state, isShown, returnMethod } from '../../core/store.js';
+import { RETURN_METHODS } from '../../config/brokers.js';
 import {
   accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
   dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr, dailyPercent,
@@ -20,13 +21,13 @@ import { ui } from '../uiState.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
-  benchmarkSpot, benchmarkYearToDate,
+  benchmarkSpot, benchmarkYearToDate, withDividends,
 } from '../../services/benchmark.js';
 import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
 } from '../../services/history.js';
 import {
-  periodStart, cutoffFor, setBackfill, authoritativeHistory, windowEnd,
+  periodStart, cutoffFor, setBackfill, authoritativeHistory, portfolioHistory, windowEnd,
 } from '../../core/snapshots.js';
 import {
   yearToDateReturn as measuredYearToDate, asTradedClose, allTimeFromDeposits,
@@ -42,7 +43,7 @@ import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
 import { rebuildDailyValue } from '../../core/rebuild.js';
 import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from '../../core/portfolioHistory.js';
-import { moneyWeightedReturn } from '../../core/moneyWeighted.js';
+import { moneyWeightedReturn, modifiedDietzReturn } from '../../core/moneyWeighted.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
   fmtPrice, fmtShares, escapeHtml,
@@ -324,7 +325,7 @@ async function renderBenchmark(totals) {
 
   valEl.textContent = fp(marketReturn);
   valEl.style.color = clr(marketReturn);
-  valEl.title = `S&P 500 since 1 January ${new Date().getFullYear()}`;
+  valEl.title = `S&P 500 since 1 January ${new Date().getFullYear()}${withDividends(rows) ? ', dividends reinvested — as your own return counts the dividends you received' : ' (price only)'}`;
   clear();
 }
 
@@ -584,14 +585,30 @@ async function loadBackfill() {
       }
       setBackfill(forward, { authoritative: true });
     } else {
-      setBackfill(rebuildDailyValue({
+      /**
+       * Each day carries the money paid in or out that day, so a deposit is
+       * never read as a gain (November 2026 audit: without it every window of
+       * a journal with no statement counted deposits as profit), and today is
+       * the live value, as in the walk above.
+       */
+      const live = accountTotals(state.positions, state.cash).account;
+      const today = todayStr();
+      const rebuilt = rebuildDailyValue({
         positions: state.positions,
         cash: state.cash,
         flows: state.cashFlows,
         priceOn: pastPrice,
         from: earliest,
-        to: todayStr(),
-      }).map((r) => ({ date: r.date, totalAccountValue: r.value })));
+        to: today,
+      });
+      // A day the rebuild could not price is left out; its money moves with the next day kept, never into profit.
+      setBackfill(rebuilt.map((r, i) => ({
+        date: r.date,
+        totalAccountValue: r.date === today && live > 0 ? round2(live) : r.value,
+        externalCashFlow: (state.cashFlows ?? []).reduce((sum, f) => (
+          f?.date && Number.isFinite(f.amount) && f.date <= r.date && (i === 0 || f.date > rebuilt[i - 1].date) ? sum + f.amount : sum
+        ), 0),
+      })));
     }
     /**
      * Histories still missing: build with what arrived, and come back for the
@@ -816,22 +833,8 @@ function splitsAppliedByJournal() {
  * than a figure that credits the year's deposits with their profit.
  */
 function yearToDateReturn(totals) {
-  const from = `${new Date().getFullYear()}-01-01`;
-  const to = todayStr();
-  const trades = accountPerformance({
-    positions: state.positions,
-    account: totals.account,
-    from,
-    to,
-    flows: state.cashFlows,
-    openingNav: state.openingNav,
-    startPrices,
-  });
-  if (trades.method === 'broker' || (!state.ledger?.events?.length && !state.combined)) return trades;
-  const history = authoritativeHistory();
-  if (!history.length) return { ...trades, returnPct: null };
-  const measured = measuredYearToDate(trades, history, from, to);
-  return measured ? { ...trades, ...measured } : { ...trades, returnPct: null };
+  // The YTD figure itself, by the same path, so the two can never disagree (November 2026).
+  return timeframePerformance(totals, 'YTD') ?? { returnPct: null };
 }
 
 /**
@@ -881,8 +884,8 @@ function describeOwnYear(performance) {
       longDate(performance.brokerThrough)}, compounded with this account's move since.`;
   }
   if (performance?.method === 'history') {
-    return `Time-weighted return since 1 January ${year}: your account valued every day from your `
-      + 'imported history, with deposits and withdrawals taken out, so money you paid in never counts as profit.';
+    return `${RETURN_METHODS[returnMethod()]?.label ?? 'Time-weighted'} return since 1 January ${year}: your account valued `
+      + 'every day, with deposits and withdrawals taken out, so money you paid in never counts as profit.';
   }
   if (performance?.method === 'statement') {
     return `Your return since 1 January ${year}: the year's profit over what the account `
@@ -1062,9 +1065,9 @@ export function renderHome() {
  * P&L necessarily equals realised plus unrealised, so the figure under the
  * account value and the two tiles below it finally agree.
  */
-function windowStart() {
-  if (ui.timeframe === 'All') return null;
-  return cutoffFor(ui.timeframe).toISOString().slice(0, 10);
+function windowStart(timeframe = ui.timeframe) {
+  if (timeframe === 'All') return null;
+  return cutoffFor(timeframe).toISOString().slice(0, 10);
 }
 
 /**
@@ -1108,15 +1111,29 @@ function allTimeFromBroker(totals) {
   return chainedBrokerReturn(state.statements, thisYear.method === 'broker' ? thisYear.returnPct : null, year);
 }
 
-function timeframePerformance(totals) {
-  const from = windowStart();
+/**
+ * A window measured from daily account values, the way this person's broker
+ * measures it: time-weighted by default, money-weighted (Fidelity, Vanguard,
+ * Trading 212) or Modified Dietz (Robinhood).
+ */
+function measureWindow(history, from, to) {
+  if (!history?.length) return null;
+  const method = returnMethod();
+  const measured = method === 'mwr' ? moneyWeightedReturn(history, from, to)
+    : method === 'md' ? modifiedDietzReturn(history, from, to)
+      : periodReturnFromHistory(history, from, to);
+  return measured ? { ...measured, method: 'history' } : null;
+}
+
+function timeframePerformance(totals, timeframe = ui.timeframe) {
+  const from = windowStart(timeframe);
   /**
    * 1W to 1Y run to the last market close rather than to this minute. That is
    * the day a broker's own figures run to, and ending mid-session measured a
    * different three months from the three months IBKR reports.
    */
-  const to = windowEnd(ui.timeframe) ?? todayStr();
-  const ytd = ui.timeframe === 'YTD';
+  const to = windowEnd(timeframe) ?? todayStr();
+  const ytd = timeframe === 'YTD';
   const fromTrades = () => accountPerformance({
     positions: state.positions,
     account: totals.account,
@@ -1129,7 +1146,19 @@ function timeframePerformance(totals) {
     startPrices: ytd ? startPrices : new Map(),
   });
 
-  if (!state.ledger?.events?.length && !state.combined) return fromTrades();
+  /**
+   * No statement walk: the account rebuilt day by day from the trades, the
+   * deposits and past closes. Measuring from trades alone left positions held
+   * through the window at +0.00% outside year to date, gave a trade closed in
+   * the window its whole gain from before it, and ignored when money came in
+   * (November 2026 audit). Trades remain the answer only until the rebuilt
+   * days arrive, or when a statement's opening value anchors the window.
+   */
+  if (!state.ledger?.events?.length && !state.combined) {
+    const trades = fromTrades();
+    if (trades.method !== 'trades') return trades;
+    return measureWindow(portfolioHistory(), from, to) ?? trades;
+  }
 
   // A window over the missing part of a year has no trades or values there: no figure rather than a wrong one.
   if (gapInWindow(historyGaps(state.statements), from, to)) return null;
@@ -1141,12 +1170,11 @@ function timeframePerformance(totals) {
    * included, is then the account valued day by day; the broker's own
    * time-weighted figures below would be the other method.
    */
-  if (returnMethod() === 'mwr') {
-    if (ui.timeframe === 'All' && historyGaps(state.statements).length) return null;
+  if (returnMethod() !== 'twr') {
+    if (timeframe === 'All' && historyGaps(state.statements).length) return null;
     const history = authoritativeHistory();
     if (!history.length) return null;
-    const measured = moneyWeightedReturn(history, from, to);
-    return measured ? { ...measured, method: 'history' } : (ytd ? null : fromTrades());
+    return measureWindow(history, from, to) ?? (ytd ? null : fromTrades());
   }
 
   /**
@@ -1173,7 +1201,7 @@ function timeframePerformance(totals) {
    * measure below.
    */
   // All accounts is measured from the combined daily balance below, like every other window.
-  if (ui.timeframe === 'All' && !state.combined) {
+  if (timeframe === 'All' && !state.combined) {
     // A year covered only in part is missing its deposits, which the figure would then count as profit.
     if (historyGaps(state.statements).length) return null;
     const sinceDeposits = allTimeFromDeposits(state.cashFlows, totals.account);
@@ -1185,6 +1213,14 @@ function timeframePerformance(totals) {
      */
     const brokerAllTime = allTimeFromBroker(totals);
     if (brokerAllTime != null) return { ...(sinceDeposits ?? {}), returnPct: brokerAllTime, method: 'broker' };
+    /**
+     * Otherwise the account valued day by day since it began, like every other
+     * window. Gain over everything paid in is a multiple, not a rate: it fell
+     * with every deposit and rose with every withdrawal (November 2026 audit,
+     * GIPS's TVPI). It is kept only for a journal with no daily values yet.
+     */
+    const sinceStart = measureWindow(authoritativeHistory(), null, to);
+    if (sinceStart) return { ...sinceStart, pnl: sinceDeposits?.pnl ?? sinceStart.pnl };
     if (sinceDeposits) return sinceDeposits;
   }
 

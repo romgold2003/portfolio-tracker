@@ -18,8 +18,10 @@ import { buildDemoJournal, FALLBACK_PRICES } from '../scripts/demo-journal.mjs';
 import { state, loadState } from '../src/core/store.js';
 import {
   accountTotals, accountPerformance, dailyPortfolioMove, periodPnl,
-  monthlyAccountReturns, avgTradeReturn, realized, unreal,
+  avgTradeReturn, realized, unreal,
 } from '../src/core/portfolio.js';
+import { rebuildDailyValue } from '../src/core/rebuild.js';
+import { monthlyReturns } from '../src/core/portfolioHistory.js';
 
 const TODAY = '2026-09-06';
 const journal = () => buildDemoJournal({ prices: FALLBACK_PRICES, today: TODAY });
@@ -44,9 +46,15 @@ function figures({ extraCash = 0, flows = [] } = {}) {
     startPrices: new Map(),
   });
 
-  const month = monthlyAccountReturns(
-    state.positions, totals.account, state.cashFlows, TODAY,
-  ).get('2026-08');
+  // The account rebuilt day by day with each day's deposits, as the Monthly page measures it.
+  const paidOn = new Map();
+  for (const f of state.cashFlows ?? []) paidOn.set(f.date, (paidOn.get(f.date) ?? 0) + f.amount);
+  const price = new Map(state.positions.map((p) => [p.ticker, p.cur]));
+  const rows = rebuildDailyValue({
+    positions: state.positions, cash: state.cash, flows: state.cashFlows,
+    priceOn: (ticker) => price.get(ticker), from: '2026-01-01', to: TODAY,
+  }).map((r) => ({ date: r.date, totalAccountValue: r.value, externalCashFlow: paidOn.get(r.date) ?? 0 }));
+  const month = monthlyReturns(rows).get('2026-08');
 
   return {
     account: totals.account,
@@ -60,7 +68,10 @@ function figures({ extraCash = 0, flows = [] } = {}) {
     periodReturnPct: period.returnPct,
     dailyPct: dailyPortfolioMove(state.positions, totals.account, TODAY).percent,
     dailyDollars: dailyPortfolioMove(state.positions, totals.account, TODAY).dollars,
-    monthPct: month?.pct ?? null,
+    // The month's profit in dollars: a deposit must never be part of it. (Its % is time-weighted,
+    // so the same dollars on a bigger balance are rightly a smaller %; monthly-returns.test.mjs
+    // checks that a deposit moves no % when prices do.)
+    monthPnl: month?.pnl ?? null,
     avgTrade: avgTradeReturn(state.positions.filter((p) => p.status === 'Closed')),
   };
 }
@@ -111,8 +122,8 @@ describe('paying money in', () => {
   test('does not change the month it landed in', () => {
     const before = figures();
     const after = figures({ extraCash: DEPOSIT, flows: flow });
-    assert.ok(near(before.monthPct ?? 0, after.monthPct ?? 0, 0.02),
-      `${before.monthPct}% -> ${after.monthPct}%`);
+    assert.ok(near(before.monthPnl ?? 0, after.monthPnl ?? 0, 0.02),
+      `${before.monthPnl} -> ${after.monthPnl}`);
   });
 
   test("does not change today's move", () => {

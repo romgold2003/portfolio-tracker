@@ -54,7 +54,7 @@ export default async function handler(req, res) {
 
   try {
     const upstream = await fetch(
-      `${SOURCE}/${encodeURIComponent(symbol)}?period1=${from}&period2=${to}&interval=1d&events=split`,
+      `${SOURCE}/${encodeURIComponent(symbol)}?period1=${from}&period2=${to}&interval=1d&events=split%7Cdiv`,
       { headers: { 'User-Agent': 'portfolio-tracker', Accept: 'application/json' } },
     );
     if (!upstream.ok) return fail(res, 502, `Price history unavailable (${upstream.status}).`);
@@ -102,6 +102,12 @@ export default async function handler(req, res) {
      * half the book, and the 14th's −3.5% turned up on the 15th instead, a day
      * that was up. An answer missing its own last day is kept five minutes.
      */
+    // Dividends by ex-date: the S&P 500 comparison reinvests them, as a total-return index does.
+    const dividends = Object.values(result?.events?.dividends ?? {})
+      .map((d) => ({ date: new Date(Number(d?.date) * 1000).toISOString().slice(0, 10), amount: Number(d?.amount) }))
+      .filter((d) => d.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && (!cutAt || d.date <= cutAt))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
     const complete = rows[rows.length - 1].date === cutAt;
     res.setHeader('Cache-Control', !cutAt
       ? 'public, s-maxage=3600, stale-while-revalidate=86400'
@@ -110,7 +116,7 @@ export default async function handler(req, res) {
         : 'public, s-maxage=300');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ symbol, rows, splits }));
+    res.end(JSON.stringify({ symbol, rows, splits, dividends }));
   } catch (err) {
     fail(res, 502, `Could not reach the price history service (${err.message}).`);
   }

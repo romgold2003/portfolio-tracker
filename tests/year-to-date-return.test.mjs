@@ -12,7 +12,11 @@ import assert from 'node:assert/strict';
 
 import { state } from '../src/core/store.js';
 import { addClosedPosition } from '../src/core/positions.js';
-import { yearToDatePnl, periodPnl, accountTotals } from '../src/core/portfolio.js';
+import { periodPnl, accountTotals } from '../src/core/portfolio.js';
+
+/** The calendar year, through the general window. */
+const yearToDatePnl = (positions, account, startPrices = new Map(), now = new Date(), flows = []) => (
+  periodPnl(positions, account, `${now.getFullYear()}-01-01`, startPrices, flows));
 
 const NOW = new Date(2026, 7, 30, 12, 0);
 const YEAR_START = '2026-01-01';

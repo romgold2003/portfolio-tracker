@@ -8,7 +8,7 @@ import { posValue, realized, costOf, unreal, todayStr } from './portfolio.js';
 import { TIMEFRAME_DAYS } from '../config/constants.js';
 import { lastClosedSession, newYorkNow } from '../config/marketCalendar.js';
 import { returnCurve } from './returnCurve.js';
-import { moneyWeightedCurve } from './moneyWeighted.js';
+import { moneyWeightedCurve, modifiedDietzReturn } from './moneyWeighted.js';
 import { dayGrowth } from './portfolioHistory.js';
 
 /**
@@ -447,7 +447,10 @@ export function curveSeries(timeframe) {
  */
 export function percentSeries() {
   // Weighted the way the broker weights it, like the figure over the chart.
-  const points = returnMethod() === 'mwr' ? moneyWeightedCurve(forward) : returnCurve(forward);
+  const method = returnMethod();
+  const points = method === 'mwr' ? moneyWeightedCurve(forward)
+    : method === 'md' ? moneyWeightedCurve(forward, modifiedDietzReturn)
+      : returnCurve(forward);
   if (points.length < 2) return null;
   const dates = points.map((p) => p.date);
   return {

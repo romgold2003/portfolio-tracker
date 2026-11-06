@@ -20,8 +20,6 @@
 import { API, STORAGE_KEYS } from '../config/constants.js';
 import { state } from '../core/store.js';
 import { cloudEnabled } from './cloud.js';
-import { priceHistory } from './priceLog.js';
-import { betaFromReturns } from '../core/portfolio.js';
 
 // The ETF the comparison actually tracks. VOO over SPY because its live price
 // is usually already on screen — anyone benchmarking against the index tends to
@@ -40,7 +38,8 @@ function readCache() {
     const raw = localStorage.getItem(STORAGE_KEYS.benchmark);
     if (!raw) return null;
     const cached = JSON.parse(raw);
-    if (!cached?.fetchedAt || !Array.isArray(cached.series)) return null;
+    // Version 2 carries the dividends; a price-only series from before is fetched again.
+    if (!cached?.fetchedAt || !Array.isArray(cached.series) || cached.v !== 2) return null;
     if (Date.now() - cached.fetchedAt > CACHE_TTL_MS) return null;
     return cached.series;
   } catch {
@@ -51,7 +50,7 @@ function readCache() {
 function writeCache(rows) {
   try {
     localStorage.setItem(STORAGE_KEYS.benchmark,
-      JSON.stringify({ fetchedAt: Date.now(), series: rows }));
+      JSON.stringify({ fetchedAt: Date.now(), series: rows, v: 2 }));
   } catch { /* the series simply will not persist */ }
 }
 
@@ -178,7 +177,10 @@ async function seriesFromServer() {
     });
     if (!res.ok) return null;
     const json = await res.json();
-    return Array.isArray(json?.rows) && json.rows.length >= 2 ? json.rows : null;
+    if (!(Array.isArray(json?.rows) && json.rows.length >= 2)) return null;
+    // Each dividend on its ex-date's row, for the total return.
+    const paid = new Map((json.dividends ?? []).map((d) => [d.date, Number(d.amount)]));
+    return json.rows.map((r) => (paid.get(r.date) > 0 ? { ...r, div: paid.get(r.date) } : r));
   } catch {
     return null;
   }
@@ -293,64 +295,29 @@ export function closeOnOrBefore(rows, date) {
  * market's own number, which is a useful thing to know even when your account
  * is three weeks old.
  */
-export function benchmarkYearToDate(rows, spot = null) {
-  if (!rows?.length) return null;
-  const janFirst = `${new Date().getFullYear()}-01-01`;
-  const start = closeOnOrBefore(rows, janFirst);
-  if (!start) return null;
-  const end = spot ?? rows[rows.length - 1].close;
-  return ((end - start) / start) * 100;
-}
-
-/** Day-over-day returns as decimals, keyed by date, for the beta calculation. */
-export function benchmarkDailyReturns(rows) {
-  const out = new Map();
-  if (!rows) return out;
-  for (let i = 1; i < rows.length; i++) {
-    const prev = rows[i - 1].close;
-    if (prev > 0) out.set(rows[i].date, (rows[i].close - prev) / prev);
-  }
-  return out;
-}
-
 /**
- * A measured beta for every holding with enough overlapping history.
- *
- * Only days where both the holding and the index have a return can be used, so
- * the pairs are built by matching dates rather than by lining up two arrays and
- * hoping. A holding quoted on a day the index was not, or the reverse, is
- * skipped instead of silently shifting every later pair by one.
- *
- * Tickers without enough overlap are simply absent, and the caller falls back
- * to the published assumption for those.
+ * The S&P 500's year to date with its dividends reinvested, the way a
+ * total-return index is built: each day's close over the one before, the
+ * dividend added back on its ex-date. The account's own return includes the
+ * dividends it received, so comparing it with the price alone flattered it by
+ * the index's yield, about 1.2 points a year (November 2026 audit; GIPS asks
+ * for total-return benchmarks). A series with no dividends known (the local
+ * Alpha Vantage fallback) is the price alone.
  */
-export async function measuredBetas(tickers, minDays = 30) {
-  const rows = await benchmarkSeries();
-  if (!rows) return new Map();
-
-  const marketByDate = benchmarkDailyReturns(rows);
-  const out = new Map();
-
-  tickers.forEach((rawTicker) => {
-    const ticker = String(rawTicker).toUpperCase();
-    const history = priceHistory(ticker);
-    if (history.length < minDays + 1) return;
-
-    const asset = [];
-    const market = [];
-    for (let i = 1; i < history.length; i++) {
-      const prev = history[i - 1].p;
-      if (!(prev > 0)) continue;
-      const marketReturn = marketByDate.get(history[i].d);
-      // No index return for that date means the pair cannot be formed.
-      if (marketReturn === undefined) continue;
-      asset.push((history[i].p - prev) / prev);
-      market.push(marketReturn);
-    }
-
-    const beta = betaFromReturns(asset, market, minDays);
-    if (beta != null) out.set(ticker, beta);
-  });
-
-  return out;
+export function benchmarkYearToDate(rows, spot = null, year = new Date().getFullYear()) {
+  if (!rows?.length) return null;
+  const janFirst = `${year}-01-01`;
+  let start = -1;
+  for (let i = 0; i < rows.length && rows[i].date <= janFirst; i++) start = i;
+  if (start < 0 || !(rows[start].close > 0)) return null;
+  let growth = 1;
+  for (let i = start + 1; i < rows.length; i++) {
+    if (rows[i - 1].close > 0) growth *= (rows[i].close + (Number(rows[i].div) || 0)) / rows[i - 1].close;
+  }
+  const last = rows[rows.length - 1].close;
+  if (spot > 0 && last > 0) growth *= spot / last;
+  return (growth - 1) * 100;
 }
+
+/** Whether the series knows its dividends, so the label can say what the figure is. */
+export const withDividends = (rows) => Boolean(rows?.some((r) => r.div > 0));

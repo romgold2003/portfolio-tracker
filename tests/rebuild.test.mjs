@@ -15,7 +15,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   daysBetween, carriedIn, heldOn, valueOn, cashOn,
-  rebuildDailyValue, rebuildFromLedger, spliceHistory,
+  rebuildDailyValue, spliceHistory,
 } from '../src/core/rebuild.js';
 
 const near = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
@@ -144,61 +144,6 @@ describe('cash walked backwards', () => {
   test('a withdrawal is added back, not subtracted twice', () => {
     const flows = [{ date: '2026-04-01', amount: -1000 }];
     assert.ok(near(cashOn(positions, 9000, flows, '2026-03-15'), 3500));
-  });
-});
-
-describe('rebuilding from the broker ledger', () => {
-  /** 100 shares at the start, 20 sold in March, 30 bought in June. */
-  const ledger = {
-    holdings: { AAA: 110 },
-    trades: [
-      { date: '2026-03-10', ticker: 'AAA', qty: -20, price: 50, cash: 1000 },
-      { date: '2026-06-10', ticker: 'AAA', qty: 30, price: 60, cash: -1800 },
-    ],
-  };
-  const priceOn = () => 50;
-
-  test('undoes the year to get a past quantity', () => {
-    const rows = rebuildFromLedger({
-      ledger, cash: 1000, flows: [], priceOn, from: '2026-01-01', to: '2026-01-01',
-    });
-    // 110 today, less 30 bought since, plus 20 sold since = 100 shares.
-    // Cash 1000 today, less the 1000 that came in and plus the 1800 that went out.
-    assert.ok(near(rows[0].value, 100 * 50 + 1800), `${rows[0].value}`);
-  });
-
-  test('selling at the mark moves the total by nothing', () => {
-    // Twenty shares leave the holding and their proceeds arrive in cash. If the
-    // two do not cancel, the walk-back has the sign or the date wrong somewhere.
-    const rows = rebuildFromLedger({
-      ledger, cash: 1000, flows: [], priceOn, from: '2026-03-09', to: '2026-03-10',
-    });
-    assert.ok(near(rows[0].value, rows[1].value), `${rows[0].value} vs ${rows[1].value}`);
-  });
-
-  test('a deposit made later was not there earlier', () => {
-    const flows = [{ date: '2026-07-01', amount: 5000 }];
-    const withFlow = rebuildFromLedger({
-      ledger, cash: 6000, flows, priceOn, from: '2026-01-01', to: '2026-01-01',
-    });
-    const without = rebuildFromLedger({
-      ledger, cash: 1000, flows: [], priceOn, from: '2026-01-01', to: '2026-01-01',
-    });
-    assert.ok(near(withFlow[0].value, without[0].value), 'the deposit leaked into January');
-  });
-
-  test('no ledger is no series rather than a guess', () => {
-    assert.deepEqual(rebuildFromLedger({ ledger: null, priceOn, from: '2026-01-01', to: '2026-01-02' }), []);
-    assert.deepEqual(rebuildFromLedger({ ledger: { trades: [] }, priceOn, from: '2026-01-01', to: '2026-01-02' }), []);
-  });
-
-  test('a book that cannot be priced at all is dropped, not drawn at cash', () => {
-    // Falling back to the last traded price is fine for a stub; when it is the
-    // whole book the day is a guess and is left out.
-    const rows = rebuildFromLedger({
-      ledger, cash: 1000, flows: [], priceOn: () => null, from: '2026-01-01', to: '2026-01-01',
-    });
-    assert.equal(rows.length, 0);
   });
 });
 

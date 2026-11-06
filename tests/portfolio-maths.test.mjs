@@ -12,72 +12,12 @@ import assert from 'node:assert/strict';
 
 import {
   costOf, curValOf, unreal, realized, posValue, accountTotals,
-  portfolioBeta, betaFromReturns, closeMath, pctD, bookedPnl,
+  closeMath, pctD, bookedPnl,
 } from '../src/core/portfolio.js';
 
 const long = (over = {}) => ({
   ticker: 'AAA', cls: 'Stocks', dir: 'Long', status: 'Open',
   entry: 100, cur: 100, qty: 10, ...over,
-});
-
-describe('beta', () => {
-  test('cash belongs in the denominator', () => {
-    // 80,000 of index at beta 1, 20,000 in cash. The account moves 0.8% when
-    // the market moves 1%, because a fifth of it is not in the market.
-    const open = [long({ ticker: 'SPY', entry: 100, cur: 100, qty: 800 })];
-    const withCash = portfolioBeta(open, new Map([['SPY', 1]]), 100000);
-    assert.ok(Math.abs(withCash.beta - 0.8) < 1e-9, `expected 0.8, got ${withCash.beta}`);
-  });
-
-  test('a fully invested book is unaffected by the change', () => {
-    const open = [long({ ticker: 'SPY', entry: 100, cur: 100, qty: 800 })];
-    const fully = portfolioBeta(open, new Map([['SPY', 1]]), 80000);
-    assert.ok(Math.abs(fully.beta - 1) < 1e-9);
-  });
-
-  test('an all-cash account has no market sensitivity', () => {
-    const open = [long({ ticker: 'SPY', entry: 100, cur: 100, qty: 1 })];
-    const mostlyCash = portfolioBeta(open, new Map([['SPY', 1]]), 1000000);
-    assert.ok(mostlyCash.beta < 0.001, 'an account that is 99.99% cash should be near zero beta');
-  });
-
-  test('a short reduces it, rather than adding to it', () => {
-    const book = [
-      long({ ticker: 'SPY', entry: 100, cur: 100, qty: 1000 }),
-      long({ ticker: 'QQQ', dir: 'Short', entry: 100, cur: 100, qty: 500 }),
-    ];
-    const betas = new Map([['SPY', 1], ['QQQ', 1]]);
-    const hedged = portfolioBeta(book, betas, 100000);
-    // +100,000 long and -50,000 short against 100,000 of equity.
-    assert.ok(Math.abs(hedged.beta - 0.5) < 1e-9, `expected 0.5, got ${hedged.beta}`);
-  });
-
-  test('a perfectly hedged book is beta zero, not beta two', () => {
-    const book = [
-      long({ ticker: 'SPY', entry: 100, cur: 100, qty: 1000 }),
-      long({ ticker: 'QQQ', dir: 'Short', entry: 100, cur: 100, qty: 1000 }),
-    ];
-    const hedged = portfolioBeta(book, new Map([['SPY', 1], ['QQQ', 1]]), 100000);
-    assert.ok(Math.abs(hedged.beta) < 1e-9, 'summing absolute exposures would have said 1.0');
-  });
-
-  test('reports how much of the account is sitting out', () => {
-    const open = [long({ ticker: 'SPY', entry: 100, cur: 100, qty: 800 })];
-    const { cashDragPct } = portfolioBeta(open, new Map([['SPY', 1]]), 100000);
-    assert.ok(Math.abs(cashDragPct - 20) < 1e-9);
-  });
-
-  test('the regression itself is the slope of asset on market', () => {
-    const market = Array.from({ length: 60 }, (_, i) => Math.sin(i) / 100);
-    assert.ok(Math.abs(betaFromReturns(market.map((x) => x * 2), market) - 2) < 1e-9);
-    assert.ok(Math.abs(betaFromReturns(market.map((x) => -x), market) + 1) < 1e-9);
-    assert.ok(Math.abs(betaFromReturns(market, market) - 1) < 1e-9);
-  });
-
-  test('and refuses to answer from too little history', () => {
-    const short = Array.from({ length: 10 }, (_, i) => i / 100);
-    assert.equal(betaFromReturns(short, short), null, 'a beta from ten days is noise');
-  });
 });
 
 describe('P&L, long and short', () => {

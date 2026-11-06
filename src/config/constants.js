@@ -26,14 +26,6 @@ export const CG_IDS = {
   WLD: 'worldcoin-wld', CRO: 'crypto-com-chain',
 };
 
-/** Rough betas vs. the broad market, used for the size-weighted portfolio beta. */
-export const BETA = {
-  BTC: 1.8, ETH: 1.6, SOL: 2.2, XRP: 1.5, DEFAULT_CRYPTO: 1.8,
-  GLD: 0.1, IAU: 0.1, SLV: 0.3, XAUUSD: 0.1, XAGUSD: 0.3,
-  MSFT: 0.9, AAPL: 1.2, IBM: 0.8, SPY: 1.0,
-  DEFAULT_STOCK: 1.0, DEFAULT_COMMOD: 0.15,
-};
-
 export const ASSET_CLASSES = ['Crypto', 'Stocks', 'Commodities'];
 
 /** Every localStorage key the app owns, in one place. */

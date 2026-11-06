@@ -1,4 +1,4 @@
-import { dayGrowth } from './portfolioHistory.js';
+import { dayGrowth, measurable } from './portfolioHistory.js';
 
 /**
  * The account's return, day by day, for the % view of the chart.
@@ -35,7 +35,7 @@ export function returnCurve(rows, from = null) {
     const prev = list[i - 1].totalAccountValue;
     const row = list[i];
     // A day the account held nothing has no return; the curve carries on flat.
-    if (prev > 0) growth *= dayGrowth(prev, row.totalAccountValue, row.externalCashFlow, row.joinedAtClose);
+    if (measurable(list[i - 1], row)) growth *= dayGrowth(prev, row.totalAccountValue, row.externalCashFlow, row.joinedAtClose);
     out.push({ date: row.date, pct: (growth - 1) * 100, value: row.totalAccountValue });
   }
   return out;

@@ -7,7 +7,7 @@
  *
  * Pure: no DOM, no storage.
  */
-import { realized, costOf } from './portfolio.js';
+import { realized, costOf, outcomeOf } from './portfolio.js';
 
 /** A score as stored: a whole number from 1 to 10, or null for not rated. */
 export function cleanMind(value) {
@@ -38,7 +38,7 @@ export const MIND_GROUPS = [
  * score are counted apart, so the comparison is only ever between rated ones.
  */
 export function mindStats(positions) {
-  const groups = MIND_GROUPS.map((g) => ({ ...g, trades: 0, wins: 0, pnl: 0, returnSum: 0 }));
+  const groups = MIND_GROUPS.map((g) => ({ ...g, trades: 0, wins: 0, losses: 0, pnl: 0, returnSum: 0 }));
   let unrated = 0;
   for (const p of positions ?? []) {
     if (p?.status !== 'Closed') continue;
@@ -48,7 +48,8 @@ export function mindStats(positions) {
     const pnl = realized(p);
     const staked = Math.abs(costOf(p));
     g.trades += 1;
-    if (pnl > 0) g.wins += 1;
+    if (outcomeOf(pnl) === 'win') g.wins += 1;
+    if (outcomeOf(pnl) === 'loss') g.losses += 1;
     g.pnl += pnl;
     if (staked > 0) g.returnSum += (pnl / staked) * 100;
   }
@@ -58,7 +59,7 @@ export function mindStats(positions) {
       id: g.id,
       label: g.label,
       trades: g.trades,
-      winRate: g.trades ? (g.wins / g.trades) * 100 : null,
+      winRate: g.wins + g.losses ? (g.wins / (g.wins + g.losses)) * 100 : null,
       avgReturn: g.trades ? g.returnSum / g.trades : null,
       pnl: g.pnl,
     })),

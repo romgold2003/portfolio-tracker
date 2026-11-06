@@ -17,7 +17,7 @@ export const SHOTS = {
       "today": [
         689,
         192,
-        85,
+        83,
         75
       ],
       "graph": [
@@ -118,7 +118,7 @@ export const SHOTS = {
     "rects": {
       "importButton": [
         694,
-        150,
+        112,
         164,
         39
       ],
@@ -222,7 +222,7 @@ export const SHOTS = {
         241,
         427,
         1008,
-        336
+        462
       ]
     }
   },
@@ -237,9 +237,9 @@ export const SHOTS = {
         219
       ],
       "earnings": [
-        765,
+        727,
         208,
-        466,
+        504,
         185
       ],
       "econ": [

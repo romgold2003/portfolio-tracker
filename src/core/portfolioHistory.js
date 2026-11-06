@@ -174,26 +174,6 @@ function lastKnownOn(marks, day) {
 }
 
 /**
- * The deposits and withdrawals in a history, one entry per day that had any.
- *
- * Two transfers on one day are one marker, because two triangles a pixel apart
- * are one smudge — the combined amount is what the day actually did.
- */
-export function cashFlowMarkers(history) {
-  const out = [];
-  for (const row of history ?? []) {
-    if (!row || !row.externalCashFlow) continue;
-    out.push({
-      date: row.date,
-      amount: row.externalCashFlow,
-      deposit: row.externalCashFlow > 0,
-      value: row.totalAccountValue,
-    });
-  }
-  return out;
-}
-
-/**
  * The return over a window, from the account valued every day.
  *
  *   r(d)  = ( value(d) − money paid in on d ) / value(d−1)
@@ -228,9 +208,20 @@ export function cashFlowMarkers(history) {
  */
 export function dayGrowth(before, value, flow = 0, atClose = 0) {
   const f = Number(flow) || 0;
-  const base = before + (f - (Number(atClose) || 0)) / 2;
+  const late = Number(atClose) || 0;
+  /**
+   * The day an empty account is funded: the money was there from the start of
+   * the day, so it is the whole base. Half of it would double the day's move
+   * (GIPS lets a firm pick its convention, not count half a balance that was
+   * all there).
+   */
+  if (!(before > 0)) return f - late > 0 ? (value - late) / (f - late) : 1;
+  const base = before + (f - late) / 2;
   return base > 0 ? 1 + (value - before - f) / base : (value - f) / before;
 }
+
+/** Whether a day can be measured: a balance the day before, or the day the account was funded. */
+export const measurable = (prev, row) => prev?.totalAccountValue > 0 || (Number(row?.externalCashFlow) || 0) > 0;
 
 export function periodReturnFromHistory(rows, from, to) {
   let growth = 1;
@@ -256,11 +247,15 @@ export function periodReturnFromHistory(rows, from, to) {
     const prev = rows[i - 1];
     if (from && row.date < from) continue;
     if (to && row.date > to) break;
-    if (!(prev.totalAccountValue > 0)) continue;
-    if (startValue == null) startValue = prev.totalAccountValue;
+    if (!measurable(prev, row)) continue;
     const flow = Number(row.externalCashFlow) || 0;
     growth *= dayGrowth(prev.totalAccountValue, row.totalAccountValue, flow, row.joinedAtClose);
-    paidIn += flow;
+    // The money that opened an empty account is its starting balance, not a deposit inside the window.
+    if (startValue == null && !(prev.totalAccountValue > 0)) startValue = flow;
+    else {
+      if (startValue == null) startValue = prev.totalAccountValue;
+      paidIn += flow;
+    }
     endValue = row.totalAccountValue;
   }
 
@@ -273,6 +268,38 @@ export function periodReturnFromHistory(rows, from, to) {
     endValue,
     paidIn,
   };
+}
+
+/**
+ * Each month's return, time-weighted from the account valued day by day
+ * (November 2026 audit): the days of the month compounded, deposits taken
+ * out, and everything the account did counted — closed trades, positions
+ * still open, dividends, fees. What it replaced was the profit of trades
+ * closed in the month over a month-start value worked backwards from today:
+ * not a recognised return (GIPS counts realised and unrealised alike), a
+ * multi-month trade's whole gain landed in the month it closed, and one wrong
+ * month corrupted every month before it.
+ *
+ * Keyed YYYY-MM: { returnPct, pnl, startValue, endValue, paidIn, partial }.
+ * The first month runs from the day the history begins, and says so.
+ */
+export function monthlyReturns(rows) {
+  const out = new Map();
+  if (!(rows?.length > 1)) return out;
+  const first = rows[0].date;
+  const last = rows[rows.length - 1].date;
+  let [y, m] = first.slice(0, 7).split('-').map(Number);
+  for (let guard = 0; guard < 1200; guard++) {
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    if (key > last.slice(0, 7)) break;
+    const start = `${key}-01`;
+    const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    const measured = periodReturnFromHistory(rows, start < first ? first : start, end);
+    if (measured) out.set(key, { ...measured, partial: start < first });
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
 }
 
 /**

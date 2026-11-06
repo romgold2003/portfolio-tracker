@@ -45,6 +45,7 @@ export const BROKERS = [
   },
   {
     id: 'robinhood', name: 'Robinhood', mark: 'RH', color: '#00c805', region: 'world',
+    returns: 'md',
     steps: [
       'Account (the person icon) → Reports and statements.',
       'Account activity report → Generate new report.',
@@ -189,11 +190,13 @@ export const OTHER_BROKER = {
 export const RETURN_METHODS = {
   twr: { label: 'Time-weighted', short: 'time-weighted' },
   mwr: { label: 'Money-weighted', short: 'money-weighted' },
+  // Robinhood's account chart (its support article, checked November 2026).
+  md: { label: 'Modified Dietz', short: 'Modified Dietz' },
 };
 
 /** The method in force: the one chosen in Settings, else the broker's, else time-weighted. */
 export function returnMethodOf(chosen, brokerId) {
-  if (chosen === 'twr' || chosen === 'mwr') return chosen;
+  if (chosen === 'twr' || chosen === 'mwr' || chosen === 'md') return chosen;
   return BROKERS.find((b) => b.id === brokerId)?.returns ?? 'twr';
 }
 

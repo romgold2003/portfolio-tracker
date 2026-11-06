@@ -7,9 +7,9 @@
  * to money actually taken off the table.
  */
 import { state } from '../../core/store.js';
-import {
-  realized, unreal, costOf, pctD, avgTradeReturn, monthlyAccountReturns, accountTotals,
-} from '../../core/portfolio.js';
+import { realized, costOf, pctD, avgTradeReturn, outcomeOf } from '../../core/portfolio.js';
+import { monthlyReturns } from '../../core/portfolioHistory.js';
+import { authoritativeHistory, portfolioHistory } from '../../core/snapshots.js';
 import { MONTHS_SHORT, MONTHS_LONG, YEAR_PICKER } from '../../config/constants.js';
 import { renderMonthlyChart } from '../charts.js';
 import { mindStats } from '../../core/mind.js';
@@ -38,34 +38,17 @@ function yearTotals(year) {
   });
 }
 
-/**
- * Every month that has activity, keyed YYYY-MM.
- * The current month also carries open unrealised P&L, so the table shows where
- * the book stands today rather than only what has been banked.
- */
-function monthsWithActivity() {
+/** Every month a trade was closed in, keyed YYYY-MM: what the trades did. */
+function closedByMonth() {
   const months = {};
-  const ensure = (key) => (months[key] ??= {
-    real: 0, unreal: 0, cost: 0, closed: 0, trades: [],
-  });
-
   state.positions.forEach((p) => {
     if (p.status !== 'Closed' || !p.close) return;
-    const bucket = ensure(p.close.slice(0, 7));
+    const bucket = (months[p.close.slice(0, 7)] ??= { real: 0, closed: 0, trades: [] });
     bucket.real += realized(p);
-    bucket.cost += costOf(p);
     bucket.closed++;
     // Kept individually: the average return is per trade, not per dollar.
     bucket.trades.push(p);
   });
-
-  const open = state.positions.filter((p) => p.status === 'Open');
-  const openUnreal = open.reduce((sum, p) => sum + unreal(p), 0);
-  if (openUnreal !== 0) {
-    const bucket = ensure(new Date().toISOString().slice(0, 7));
-    bucket.unreal += openUnreal;
-    bucket.cost += open.reduce((sum, p) => sum + costOf(p), 0);
-  }
   return months;
 }
 
@@ -105,7 +88,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
  * How the typical trade closed in this month did.
  *
  * Equal weight, so it answers "how good were the decisions" rather than "how
- * much money moved" — which is the Total P&L column two to the left, and the
+ * much money moved" — which is the Account P&L column, and the
  * two disagree whenever one position was much larger than the rest.
  *
  * Open positions are left out entirely. A trade that has not been closed has no
@@ -124,69 +107,57 @@ function avgTradeCell(m) {
 }
 
 /**
- * What the month's closed trades added to the account, as a share of it.
+ * Two kinds of number, kept apart (November 2026 audit):
  *
- * Realised profit from positions closed in the month, over what the account was
- * worth when the month opened. Open positions are left out on purpose: a paper
- * gain has not been made yet, and counting it at today's price would keep
- * rewriting months that are already over. Deposits stay out of the base, so
- * paying money in does not shrink the figure.
+ *  - Trade performance — what the trades closed in the month made: realised
+ *    P&L, the average trade, how many. A trade's whole result lands in the
+ *    month it closed.
+ *  - Portfolio performance — what the account did over the month: the change
+ *    in value less the money paid in or out, and the time-weighted return of
+ *    its days compounded (portfolioHistory.js, monthlyReturns). Open positions,
+ *    dividends and fees all count, the way a broker's monthly figure does.
  *
- * It is nearly always the smaller of the two percentages: a strong month on a
- * tenth of the capital is a large trade return and a modest portfolio one,
- * which is the reason both columns exist.
+ * The daily account values are the statement's walk when there is one, else
+ * the account rebuilt from the trades; none yet shows a dash.
  */
-function portfolioCell(key, returns, label) {
-  const month = returns.get(key);
-  if (!month || month.pct == null) {
-    return '<td class="muted" title="There was no capital in the account this month to measure a return against">—</td>';
-  }
-  const parts = [
-    `${$u(month.opening)} in the account at the start of ${label}`,
-    month.realised
-      ? `trades closed this month ${month.realised < 0 ? 'lost' : 'banked'} ${$u(Math.abs(month.realised))}`
-      : 'no trade was closed this month',
-    month.net
-      ? `${$u(Math.abs(month.net))} ${month.net > 0 ? 'deposited' : 'withdrawn'} during the month, not counted as profit or loss`
-      : null,
-    month.marked
-      ? `${plural(month.marked, 'position')} opened this month ${month.marked === 1 ? 'is' : 'are'} still open and not counted until closed`
-      : null,
-  ].filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1));
-  return `<td style="color:${clr(month.pct)};font-weight:600" title="${parts.join('. ')}">${fp(month.pct)}</td>`;
+function accountMonths() {
+  const forward = authoritativeHistory();
+  return monthlyReturns(forward.length ? forward : portfolioHistory());
+}
+
+function accountCells(month) {
+  if (!month) return '<td class="muted" title="No daily account values for this month yet">—</td><td class="muted">—</td>';
+  const note = [
+    `${$u(month.startValue)} at the start`,
+    month.paidIn ? `${$u(Math.abs(month.paidIn))} ${month.paidIn > 0 ? 'deposited' : 'withdrawn'}, not counted as profit or loss` : null,
+    `${$u(month.endValue)} at the end`,
+    month.partial ? 'measured from the day the history begins' : null,
+  ].filter(Boolean).join('. ');
+  return `<td style="color:${clr(month.pnl)}" title="${note}">${$s(month.pnl)}</td>
+      <td style="color:${clr(month.returnPct)};font-weight:600" title="${note}. The days of the month compounded, as a broker measures it.">${fp(month.returnPct)}${month.partial ? '*' : ''}</td>`;
 }
 
 function renderSummaryTable() {
   const body = el('monthTable');
   if (!body) return;
-  const months = monthsWithActivity();
-  const keys = Object.keys(months).sort().reverse();
+  const trades = closedByMonth();
+  const account = accountMonths();
+  const keys = [...new Set([...Object.keys(trades), ...account.keys()])].sort().reverse();
 
   if (!keys.length) {
-    body.innerHTML = '<tr><td colspan="7"><div class="empty">No closed trades yet</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="6"><div class="empty">No closed trades yet</div></td></tr>';
     return;
   }
 
-  // One chained walk back through every month, not a lookup per row: each
-  // month's opening value is the one before it closing.
-  const returns = monthlyAccountReturns(
-    state.positions,
-    accountTotals(state.positions, state.cash).account,
-    state.cashFlows,
-  );
-
   body.innerHTML = keys.map((key) => {
-    const m = months[key];
-    const total = m.real + m.unreal;
+    const m = trades[key] ?? { real: 0, closed: 0, trades: [] };
     const label = new Date(`${key}-02`).toLocaleString('default', { month: 'long', year: 'numeric' });
     return `<tr style="cursor:pointer" onclick="selectMonth('${key}')">
       <td class="mo">${label}</td>
-      <td style="color:${clr(m.real)}">${$s(m.real)}</td>
-      <td style="color:${clr(m.unreal)}">${m.unreal ? $s(m.unreal) : '—'}</td>
-      <td style="color:${clr(total)};font-weight:600">${$s(total)}</td>
+      ${m.closed ? `<td style="color:${clr(m.real)}">${$s(m.real)}</td>` : '<td class="muted" title="No trade closed this month">—</td>'}
       ${avgTradeCell(m)}
-      ${portfolioCell(key, returns, label)}
       <td class="muted">${m.closed}</td>
+      ${accountCells(account.get(key))}
     </tr>`;
   }).join('');
 }
@@ -348,14 +319,15 @@ export function renderMonthDetail() {
   }
 
   const total = trades.reduce((sum, p) => sum + realized(p), 0);
-  const wins = trades.filter((p) => realized(p) > 0).length;
+  const wins = trades.filter((p) => outcomeOf(realized(p)) === 'win').length;
+  const losses = trades.filter((p) => outcomeOf(realized(p)) === 'loss').length;
   const headers = ['Asset', 'Direction', 'Opened', 'Closed', 'Entry', 'Exit', 'Invested', 'Realised P&L', 'Return %', 'Reason'];
 
   detail.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div style="font-size:14px;font-weight:600;color:var(--text)">${title}</div>
       <div style="display:flex;gap:16px;font-size:12px">
-        <span style="color:var(--text3)">${trades.length} trade${trades.length !== 1 ? 's' : ''} · ${wins}W ${trades.length - wins}L</span>
+        <span style="color:var(--text3)">${trades.length} trade${trades.length !== 1 ? 's' : ''} · ${wins}W ${losses}L</span>
         <span style="color:${clr(total)};font-weight:600">${$s(total)}</span>
       </div>
     </div>
