@@ -18,7 +18,6 @@ import {
 } from '../../core/portfolio.js';
 import { cutoffFor } from '../../core/snapshots.js';
 import { sectorOf } from '../../config/sectors.js';
-import { cleanMind } from '../../core/mind.js';
 import { dayStillRunning } from '../dayReset.js';
 import {
   signedMoney as $s, money as $u, pctText as fp, pnlColor as clr, fmtPrice, fmtShares, escapeHtml,
@@ -108,8 +107,6 @@ export function columnValue(id, p, ctx) {
       const r = memo(ctx, p, 'range', () => yearRange(p));
       return r && p.cur > 0 ? ((p.cur - r.high) / r.high) * 100 : null;
     }
-    case 'mind': return cleanMind(p.mind);
-    case 'reason': return p.reason ?? '';
     default: return null;
   }
 }
@@ -136,8 +133,6 @@ export function columnCell(id, p, ctx) {
       case 'dayPct': body = coloured(v, fp(p.dir === 'Short' ? -v : v)); break;
       case 'weekPct': case 'monthPct': case 'quarterPct': case 'ytdPct': case 'unrealPct': case 'totalPct': case 'contrib': case 'fromHigh':
         body = coloured(v, fp(v)); break;
-      case 'mind': body = `${v}/10`; break;
-      case 'reason': body = `<span class="hc-text" title="${escapeHtml(v)}">${escapeHtml(v)}</span>`; break;
       default: body = escapeHtml(String(v));
     }
   }

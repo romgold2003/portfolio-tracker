@@ -14,7 +14,6 @@ export const COLUMN_GROUPS = [
   ['money', 'Profit and loss in $'],
   ['percent', 'Returns in %'],
   ['range', 'Price range'],
-  ['journal', 'Your journal'],
 ];
 
 /**
@@ -56,9 +55,6 @@ export const COLUMNS = {
   high52: { label: '52W high', group: 'range', help: 'Highest close in the last year' },
   low52: { label: '52W low', group: 'range', help: 'Lowest close in the last year' },
   fromHigh: { label: 'From high', group: 'range', help: 'How far below its 52-week high it is' },
-
-  mind: { label: 'Mind', group: 'journal', help: 'Your state of mind at entry, 1 to 10' },
-  reason: { label: 'Reason', group: 'journal', help: 'Why you took the trade', text: true },
 };
 
 /** Ready-made layouts. Simple is where everyone starts. */

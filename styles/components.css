@@ -1883,7 +1883,6 @@ body.is-guest{padding-top:36px}
 .hc-sym{display:flex;align-items:center;gap:6px;min-width:0}
 .hc-sym .ext-badge{margin-left:0}
 .hc-none{color:var(--text4)}
-.hc-text{color:var(--text2)}
 .mini-row.hc-row{padding:9px 2px}
 .pos-head.hc-row{display:grid}
 /* The symbol stays put while the rest scrolls sideways. */
