@@ -5,7 +5,7 @@
  * unreadable to anyone but its owner; these are not.
  *
  * Worded and laid out the way a broker's own account questionnaire is: plain,
- * formal, one question a step. Four take several answers (`multi`): goals,
+ * formal, on three pages (ABOUT_PAGES). Four take several answers (`multi`): goals,
  * approach, how they heard of Riskbook, and employment.
  *
  * The option ids are what is stored; the server accepts exactly these
@@ -63,6 +63,16 @@ export const ABOUT_QUESTIONS = [
     id: 'occupation', title: 'Employment status', ask: 'Employment status', hint: 'Select all that apply.', multi: true,
     options: [['student', 'Student'], ['employed', 'Employed'], ['self', 'Self-employed'], ['retired', 'Retired'], ['other', 'Other']],
   },
+];
+
+/**
+ * The questions on three pages (Romy, November 2026: eleven steps were too
+ * many): who you are, how you invest, and how you found Riskbook.
+ */
+export const ABOUT_PAGES = [
+  { title: 'About you', lead: 'Every question is optional. Your answers are confidential and never sold.', ids: ['name', 'sex', 'age', 'country'] },
+  { title: 'Your investing', lead: 'This helps us tailor Riskbook to how you invest.', ids: ['experience', 'style', 'goal', 'occupation'] },
+  { title: 'One last question', lead: 'Then you are ready to start.', ids: ['heard'] },
 ];
 
 /** Every country and territory with an ISO 3166-1 code; names come from the browser, in English. */

@@ -7,11 +7,12 @@
  * (ABOUT_ASK_BELOW in config/aboutYou.js). The email and password are never asked
  * again.
  *
- * Laid out like a broker's own investor profile: a plain white form, a serif
- * heading, one question a step with a thin progress line, answers as rows
- * with a radio button or, where several apply, a checkbox. A single answer
- * moves straight on; several are confirmed with Continue. Swipe or the arrow
- * keys move between steps, and every question can be skipped.
+ * Laid out like a broker's own investor profile, on three pages
+ * (ABOUT_PAGES): About you (name, gender, age, country), Your investing
+ * (experience, approach, objectives, employment) and how they heard of
+ * Riskbook. Answers are compact chips, a radio where one applies and a
+ * checkbox where several do; the country opens a searchable list in place.
+ * Every question is optional, and "Not now" leaves without answering.
  *
  * The answers go to the server on their own (api/_lib/about.js), never into
  * the encrypted journal, and never to anyone but Romy.
@@ -21,20 +22,20 @@ import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { social } from '../../services/social.js';
 import {
-  ABOUT_QUESTIONS, COUNTRY_CODES, COMMON_COUNTRIES, countryName, flagOf,
+  ABOUT_QUESTIONS, ABOUT_PAGES, COUNTRY_CODES, COMMON_COUNTRIES, countryName, flagOf,
 } from '../../config/aboutYou.js';
 import { escapeHtml } from '../format.js';
 import { openTour } from './tour.js';
 
 const el = (id) => document.getElementById(id);
-/** Steps: 0 the introduction, then one per question, then the confirmation. */
-const LAST = ABOUT_QUESTIONS.length + 1;
+const LAST = ABOUT_PAGES.length - 1;
+const byId = Object.fromEntries(ABOUT_QUESTIONS.map((q) => [q.id, q]));
 let answers = {};
 let at = 0;
 let saving = false;
 
 const picked = (v) => (Array.isArray(v) ? v.length > 0 : Boolean(v));
-/** Whether a step has an answer: the name either part of it, the rest a choice. */
+/** Whether a question has an answer: the name either part of it, the rest a choice. */
 const answeredQ = (q, given) => (q.name ? Boolean(given.firstName?.trim() || given.lastName?.trim()) : picked(given[q.id]));
 const countAnswered = (given) => ABOUT_QUESTIONS.filter((q) => answeredQ(q, given)).length;
 const isOn = (q, given, id) => (q.multi ? (given[q.id] ?? []).includes(id) : given[q.id] === id);
@@ -49,88 +50,68 @@ export function countryListHtml(query = '', chosen = null) {
   return found.map(({ code, name }) => `<button type="button" class="about-crow${code === chosen ? ' on' : ''}" data-country="${code}" role="option" aria-selected="${code === chosen}"><span class="about-flag" aria-hidden="true">${flagOf(code)}</span><span>${escapeHtml(name)}</span><span class="about-tick" aria-hidden="true"></span></button>`).join('');
 }
 
-const brand = '<div class="about-brand"><span class="about-mark">RISKBOOK</span><span class="about-sec">Investor profile</span></div>';
-
-function introHtml() {
-  return `${brand}
-    <h3 class="about-ask" id="aboutTitle">Complete your investor profile</h3>
-    <p class="about-lead">A few short questions help us tailor Riskbook to you. It takes about a minute, and every question is optional.</p>
-    <ul class="about-facts">
-      <li><span class="about-fi" aria-hidden="true">✓</span><span><b>Confidential.</b> Your answers are never sold, shared or shown to anyone.</span></li>
-      <li><span class="about-fi" aria-hidden="true">✓</span><span><b>Encrypted.</b> Your portfolio remains end-to-end encrypted. Only you can see it.</span></li>
-      <li><span class="about-fi" aria-hidden="true">✓</span><span><b>Optional.</b> Skip any question, or all of them.</span></li>
-    </ul>
-    <div class="about-actions">
-      <button type="button" class="about-primary" data-about-next>Begin</button>
-      <button type="button" class="about-link" data-about-skipall>Not now</button>
-    </div>`;
-}
-
-/** The name, typed: two boxes the browser can fill from the person's own details. */
+/** The name, typed: two boxes side by side the browser can fill from the person's own details. */
 function nameHtml(given) {
-  const field = (id, label, auto, value) => `<label class="about-field"><span>${label}</span>
+  const field = (id, label, auto, value) => `<label class="about-field"><span class="about-sub">${label}</span>
       <input type="text" id="${id}" class="about-input" autocomplete="${auto}" maxlength="50" spellcheck="false" value="${escapeHtml(value ?? '')}"></label>`;
   return `<div class="about-names">${field('aboutFirst', 'First name', 'given-name', given.firstName)}${field('aboutLast', 'Last name', 'family-name', given.lastName)}</div>`;
 }
 
-function questionHtml(q, given) {
-  if (q.name) {
-    return `<h3 class="about-ask" id="aboutTitle">${escapeHtml(q.ask)}</h3>
-    <p class="about-lead">${escapeHtml(q.hint)}</p>
-    ${nameHtml(given)}`;
-  }
-  const choice = given[q.id];
-  const control = q.multi ? 'checkbox' : 'radio';
-  const body = q.country
-    ? `<div class="about-suggest" role="radiogroup" aria-label="Common countries">${COMMON_COUNTRIES.map((code) => `<button type="button" class="about-opt about-opt-c${choice === code ? ' on' : ''}" data-country="${code}" role="radio" aria-checked="${choice === code}"><span class="about-flag" aria-hidden="true">${flagOf(code)}</span><span>${escapeHtml(countryName(code))}</span></button>`).join('')}</div>
+/** The country: one field showing the choice, opening a searchable list below it. */
+function countryHtml(given) {
+  const c = given.country;
+  return `<button type="button" class="about-select" data-country-toggle aria-expanded="false" aria-controls="aboutCpanel">
+      ${c ? `<span class="about-flag" aria-hidden="true">${flagOf(c)}</span><span>${escapeHtml(countryName(c))}</span>` : '<span class="about-ph">Select your country</span>'}
+    </button>
+    <div class="about-cpanel" id="aboutCpanel" hidden>
+      <div class="about-suggest" role="radiogroup" aria-label="Common countries">${COMMON_COUNTRIES.map((code) => `<button type="button" class="about-chip${c === code ? ' on' : ''}" data-country="${code}" role="radio" aria-checked="${c === code}"><span class="about-flag" aria-hidden="true">${flagOf(code)}</span>${escapeHtml(countryName(code))}</button>`).join('')}</div>
       <input type="text" class="about-search" id="aboutSearch" placeholder="Search all countries" autocomplete="off" spellcheck="false" aria-label="Search all countries">
-      <div class="about-clist" id="aboutClist" role="listbox" aria-label="All countries">${countryListHtml('', choice)}</div>`
-    : `<div class="about-opts" role="${q.multi ? 'group' : 'radiogroup'}" aria-labelledby="aboutTitle">${q.options.map(([id, label]) => `<button type="button" class="about-opt${isOn(q, given, id) ? ' on' : ''}" data-q="${q.id}" data-v="${escapeHtml(id)}" role="${control}" aria-checked="${isOn(q, given, id)}"><span class="about-ctl about-${control}" aria-hidden="true"></span><span>${escapeHtml(label)}</span></button>`).join('')}</div>`;
-  return `<h3 class="about-ask" id="aboutTitle">${escapeHtml(q.ask)}</h3>
-    <p class="about-lead">${escapeHtml(q.hint)}</p>
-    ${body}`;
+      <div class="about-clist" id="aboutClist" role="listbox" aria-label="All countries">${countryListHtml('', c)}</div>
+    </div>`;
 }
 
-function doneHtml(given) {
-  const n = countAnswered(given);
-  return `${brand}
-    <div class="about-check" aria-hidden="true"></div>
-    <h3 class="about-ask" id="aboutTitle">${n ? 'Thank you. Your profile is complete.' : 'You can complete your profile later.'}</h3>
-    <p class="about-lead">${n ? 'Your answers help us improve Riskbook for investors like you.' : 'Nothing was saved.'} Next, a short tour of the application.</p>
-    <div class="about-err" id="aboutErr" role="alert"></div>
-    <div class="about-actions"><button type="button" class="about-primary" data-about-finish>Continue to Riskbook</button></div>`;
+function questionHtml(q, given) {
+  const label = `<div class="about-q-head"><span class="about-q" id="aboutQ-${q.id}">${escapeHtml(q.ask)}</span>${q.multi ? '<span class="about-hint">Select all that apply</span>' : ''}</div>`;
+  if (q.name) return `<div class="about-qblock">${nameHtml(given)}</div>`;
+  if (q.country) return `<div class="about-qblock">${label}${countryHtml(given)}</div>`;
+  const role = q.multi ? 'checkbox' : 'radio';
+  return `<div class="about-qblock">${label}
+    <div class="about-chips" role="${q.multi ? 'group' : 'radiogroup'}" aria-labelledby="aboutQ-${q.id}">${q.options.map(([id, text]) => `<button type="button" class="about-chip${isOn(q, given, id) ? ' on' : ''}" data-q="${q.id}" data-v="${escapeHtml(id)}" role="${role}" aria-checked="${isOn(q, given, id)}">${escapeHtml(text)}</button>`).join('')}</div>
+  </div>`;
 }
 
-/** One step, its progress and its buttons. Exported for the tests. */
+/** One page, its progress and its buttons. Exported for the tests. */
 export function slideHtml(i, given = answers) {
-  const q = ABOUT_QUESTIONS[i - 1];
-  const inQuestions = i >= 1 && i <= ABOUT_QUESTIONS.length;
-  const head = inQuestions
-    ? `<div class="about-top">
-        <span class="about-step">Step ${i} of ${ABOUT_QUESTIONS.length}</span>
-        <button type="button" class="about-link" data-about-skipall>Skip all</button>
-      </div>
-      <div class="about-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${ABOUT_QUESTIONS.length}" aria-valuenow="${i - 1}"><span style="width:${((i - 1) / ABOUT_QUESTIONS.length) * 100}%"></span></div>`
-    : '';
-  const answered = inQuestions && answeredQ(q, given);
-  const foot = inQuestions
-    ? `<div class="about-foot">
-        <button type="button" class="about-secondary" data-about-back>Back</button>
-        <button type="button" class="${answered ? 'about-primary' : 'about-secondary'}" data-about-next>${answered ? 'Continue' : 'Skip'}</button>
-      </div>`
-    : '';
-  const body = i === 0 ? introHtml() : i === LAST ? doneHtml(given) : questionHtml(q, given);
-  return `${head}<div class="about-stage" data-about-stage>${body}</div>${foot}`;
+  const page = ABOUT_PAGES[i];
+  const n = ABOUT_PAGES.length;
+  return `<div class="about-top">
+      <span class="about-mark">RISKBOOK</span>
+      <span class="about-step">Step ${i + 1} of ${n}</span>
+      <button type="button" class="about-link" data-about-skipall>Not now</button>
+    </div>
+    <div class="about-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${i + 1}"><span style="width:${((i + 1) / n) * 100}%"></span></div>
+    <div class="about-stage" data-about-stage>
+      <h3 class="about-ask" id="aboutTitle">${escapeHtml(page.title)}</h3>
+      <p class="about-lead">${escapeHtml(page.lead)}</p>
+      ${page.ids.map((id) => questionHtml(byId[id], given)).join('')}
+    </div>
+    <div class="about-err" id="aboutErr" role="alert"></div>
+    <div class="about-foot">
+      <button type="button" class="about-secondary" data-about-back${i === 0 ? ' hidden' : ''}>Back</button>
+      ${i === LAST
+    ? '<button type="button" class="about-primary" data-about-finish>Finish</button>'
+    : '<button type="button" class="about-primary" data-about-next>Continue</button>'}
+    </div>`;
 }
 
 function draw(direction = 0) {
   const card = el('aboutCard');
   card.innerHTML = slideHtml(at);
-  card.dataset.slide = at === 0 ? 'intro' : at === LAST ? 'done' : 'question';
+  card.dataset.slide = `page${at + 1}`;
   const stage = card.querySelector('.about-stage');
   if (direction) stage.classList.add(direction > 0 ? 'from-right' : 'from-left');
-  // Keyboard users land on the first answer; on a phone the keyboard would cover the step.
-  if (window.matchMedia?.('(pointer:fine)').matches) card.querySelector('#aboutFirst, .about-opt.on, .about-opt, .about-primary')?.focus({ preventScroll: true });
+  // Keyboard users land on the first field; on a phone the keyboard would cover the page.
+  if (window.matchMedia?.('(pointer:fine)').matches) card.querySelector('#aboutFirst, .about-chip')?.focus({ preventScroll: true });
 }
 
 function go(to) {
@@ -141,22 +122,19 @@ function go(to) {
   draw(direction);
 }
 
-/** The step's buttons follow the answers: Continue once something is chosen, Skip until then. */
-function refreshFoot() {
-  const q = ABOUT_QUESTIONS[at - 1];
-  const next = el('aboutCard').querySelector('.about-foot [data-about-next]');
-  if (!q || !next) return;
-  const answered = answeredQ(q, answers);
-  next.textContent = answered ? 'Continue' : 'Skip';
-  next.className = answered ? 'about-primary' : 'about-secondary';
+function toggleCountries(open) {
+  const panel = el('aboutCpanel');
+  const button = el('aboutCard').querySelector('[data-country-toggle]');
+  if (!panel || !button) return;
+  const show = open ?? panel.hidden;
+  panel.hidden = !show;
+  button.setAttribute('aria-expanded', String(show));
+  if (show && window.matchMedia?.('(pointer:fine)').matches) el('aboutSearch')?.focus();
 }
 
-/**
- * One answer chosen: shown as chosen for a moment, then the next question.
- * Several: ticked and unticked in place, and Continue moves on.
- */
+/** An answer chosen or unchosen in place: one where one applies, several where several do. */
 function choose(id, value) {
-  const q = ABOUT_QUESTIONS.find((x) => x.id === id);
+  const q = byId[id];
   if (q?.multi) {
     const list = new Set(answers[id] ?? []);
     if (list.has(value)) list.delete(value); else list.add(value);
@@ -165,6 +143,13 @@ function choose(id, value) {
     answers[id] = answers[id] === value ? undefined : value;
   }
   const card = el('aboutCard');
+  if (id === 'country') {
+    // The field shows the choice, and the list folds away.
+    const field = card.querySelector('[data-country-toggle]');
+    const c = answers.country;
+    field.innerHTML = c ? `<span class="about-flag" aria-hidden="true">${flagOf(c)}</span><span>${escapeHtml(countryName(c))}</span>` : '<span class="about-ph">Select your country</span>';
+    if (c) toggleCountries(false);
+  }
   for (const b of card.querySelectorAll('[data-q], [data-country]')) {
     const field = b.dataset.q ?? 'country';
     if (field !== id) continue;
@@ -173,10 +158,6 @@ function choose(id, value) {
     b.classList.toggle('on', on);
     b.setAttribute(b.getAttribute('role') === 'option' ? 'aria-selected' : 'aria-checked', String(on));
   }
-  refreshFoot();
-  if (q?.multi || !answers[id]) return;
-  const here = at;
-  setTimeout(() => { if (at === here) go(at + 1); }, 320);
 }
 
 function close() {
@@ -210,32 +191,30 @@ function bind(box) {
   box.addEventListener('click', (e) => {
     const t = (sel) => e.target.closest(sel);
     if (t('[data-q]')) return choose(t('[data-q]').dataset.q, t('[data-q]').dataset.v);
+    if (t('[data-country-toggle]')) return toggleCountries();
     if (t('[data-country]')) return choose('country', t('[data-country]').dataset.country);
     if (t('[data-about-next]')) return go(at + 1);
     if (t('[data-about-back]')) return go(at - 1);
-    if (t('[data-about-skipall]')) { if (at === 0) answers = {}; return go(LAST); }
+    // Leaving early keeps what was given so far, if anything.
+    if (t('[data-about-skipall]')) return finish();
     if (t('[data-about-finish]')) return finish();
     return undefined;
   });
   box.addEventListener('input', (e) => {
     if (e.target.id === 'aboutSearch') el('aboutClist').innerHTML = countryListHtml(e.target.value, answers.country);
-    if (e.target.id === 'aboutFirst') { answers.firstName = e.target.value; refreshFoot(); }
-    if (e.target.id === 'aboutLast') { answers.lastName = e.target.value; refreshFoot(); }
+    if (e.target.id === 'aboutFirst') answers.firstName = e.target.value;
+    if (e.target.id === 'aboutLast') answers.lastName = e.target.value;
   });
   box.addEventListener('keydown', (e) => {
-    // Enter in a name box moves on: to the last name, then to the next step.
+    // Enter in a name box moves on to the last name.
     if (e.key === 'Enter' && e.target.id === 'aboutFirst') { e.preventDefault(); el('aboutLast')?.focus(); return; }
-    if (e.key === 'Enter' && e.target.id === 'aboutLast') { e.preventDefault(); go(at + 1); return; }
-    // Arrow keys move the cursor in a text box, not the step.
-    if (e.target.matches?.('input')) return;
-    if (e.key === 'ArrowRight' && at < LAST) go(at + 1);
-    else if (e.key === 'ArrowLeft' && at > 0 && at < LAST) go(at - 1);
+    if (e.key === 'Enter' && e.target.id === 'aboutLast') { e.preventDefault(); e.target.blur(); }
   });
-  // Swiped, on a phone or with a mouse dragged across the form: left for the next step, right for back.
+  // Swiped on a phone: left for the next page, right for back.
   let startX = null;
   let startY = null;
   box.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.about-clist, .about-search, .about-names')) return;
+    if (e.pointerType === 'mouse' || e.target.closest('.about-cpanel, .about-names')) return;
     startX = e.clientX;
     startY = e.clientY;
   });
@@ -244,9 +223,8 @@ function bind(box) {
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     startX = null;
-    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    if (dx < 0 && at < LAST) go(at + 1);
-    else if (dx > 0 && at > 0 && at < LAST) go(at - 1);
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    go(dx < 0 ? at + 1 : at - 1);
   });
 }
 

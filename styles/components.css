@@ -1649,33 +1649,27 @@ body.tour-open{overflow:hidden}
 
 /* ───────── About you (views/aboutYou.js) ─────────
    Laid out like a broker's investor profile: a plain white form on a dimmed
-   page, navy and grey, a serif heading, rows with radio buttons and
-   checkboxes. Light whatever the app's theme. */
+   page, navy and grey, a serif heading, three pages of questions answered
+   with chips. Light whatever the app's theme. */
 .tour.about{background:rgba(9,15,28,0.78);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .tour-card.about-card{--a-bg:#ffffff;--a-text:#0f1f38;--a-sub:#56627a;--a-line:#d7dce5;--a-soft:#f5f7fa;
   --a-navy:#1b365d;--a-navy-h:#142a4a;--a-sel:#eef2f8;
-  width:min(560px,100%);height:min(660px,calc(100dvh - 32px));position:relative;gap:0;padding:26px 30px 22px;
+  width:min(560px,100%);height:min(720px,calc(100dvh - 32px));position:relative;gap:0;padding:26px 30px 22px;
   background:var(--a-bg);color:var(--a-text);border:1px solid #c9d0dc;border-radius:8px;box-shadow:0 24px 60px rgba(0,0,0,0.35);color-scheme:light;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif}
-.about-brand{display:flex;align-items:baseline;gap:10px;padding-bottom:14px;margin-bottom:22px;border-bottom:1px solid var(--a-line);width:100%}
 .about-mark{font-size:12px;font-weight:700;letter-spacing:0.22em;color:var(--a-navy)}
 .about-sec{font-size:12px;color:var(--a-sub);letter-spacing:0.02em}
 .about-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .about-step{font-size:11.5px;font-weight:600;color:var(--a-sub);letter-spacing:0.08em;text-transform:uppercase}
 .about-bar{height:3px;background:var(--a-line);overflow:hidden;margin-bottom:4px}
 .about-bar span{display:block;height:100%;background:var(--a-navy);transition:width .3s ease}
-.about-stage{flex:1;display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:22px 0 8px;min-height:0;overflow-y:auto;
+.about-stage{flex:1;display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:18px 0 4px;min-height:0;overflow-y:auto;
   touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .about-stage > *{flex:none}
 .about-stage.from-right{animation:about-in-right .25s ease-out}
 .about-stage.from-left{animation:about-in-left .25s ease-out}
-.about-ask{font-family:Georgia,'Times New Roman',Times,serif;font-size:27px;font-weight:400;line-height:1.25;letter-spacing:-0.005em;margin:0 0 8px;color:var(--a-text)}
-.about-lead{font-size:14px;color:var(--a-sub);line-height:1.55;margin:0 0 22px}
-.about-facts{list-style:none;padding:0;margin:0 0 28px;display:flex;flex-direction:column;border-top:1px solid var(--a-line)}
-.about-facts li{display:flex;gap:12px;align-items:flex-start;font-size:13.5px;line-height:1.5;color:var(--a-sub);padding:12px 2px;border-bottom:1px solid var(--a-line)}
-.about-facts b{color:var(--a-text);font-weight:600}
-.about-fi{flex:none;width:18px;height:18px;border-radius:50%;background:var(--a-navy);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;margin-top:1px}
-.about-actions{display:flex;align-items:center;gap:16px;margin-top:auto;padding-top:8px}
+.about-ask{font-family:Georgia,'Times New Roman',Times,serif;font-size:26px;font-weight:400;line-height:1.25;letter-spacing:-0.005em;margin:0 0 8px;color:var(--a-text)}
+.about-lead{font-size:14px;color:var(--a-sub);line-height:1.55;margin:0 0 6px}
 .about-primary,.about-secondary{font:inherit;font-size:14px;font-weight:600;border-radius:4px;padding:11px 26px;cursor:pointer;min-width:120px;transition:background .12s,border-color .12s,color .12s}
 .about-primary{background:var(--a-navy);color:#fff;border:1px solid var(--a-navy)}
 .about-primary:hover{background:var(--a-navy-h);border-color:var(--a-navy-h)}
@@ -1684,28 +1678,13 @@ body.tour-open{overflow:hidden}
 .about-secondary:hover{background:var(--a-soft);border-color:var(--a-navy)}
 .about-link{background:none;border:0;font:inherit;font-size:13px;color:var(--a-navy);cursor:pointer;padding:4px 2px;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#b9c2d0}
 .about-link:hover{text-decoration-color:var(--a-navy)}
-.about-opts{display:flex;flex-direction:column;gap:8px}
-.about-opt{display:flex;align-items:center;gap:14px;text-align:left;font:inherit;font-size:15px;color:var(--a-text);
-  background:#fff;border:1px solid var(--a-line);border-radius:4px;padding:13px 16px;cursor:pointer;transition:border-color .12s,background .12s}
-.about-opt:hover{border-color:#9aa6b8;background:var(--a-soft)}
-.about-opt.on{border-color:var(--a-navy);background:var(--a-sel);box-shadow:inset 3px 0 0 var(--a-navy)}
-.about-opt:focus-visible,.about-crow:focus-visible,.about-primary:focus-visible,.about-secondary:focus-visible,.about-link:focus-visible{outline:2px solid #4d78b8;outline-offset:2px}
-/* The control drawn as a form would: a ring for one answer, a box for several. */
-.about-ctl{flex:none;width:18px;height:18px;border:1.5px solid #8794a8;background:#fff;position:relative}
-.about-radio{border-radius:50%}
-.about-checkbox{border-radius:3px}
-.about-opt.on .about-ctl{border-color:var(--a-navy)}
-.about-opt.on .about-radio::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--a-navy)}
-.about-opt.on .about-checkbox{background:var(--a-navy)}
-.about-opt.on .about-checkbox::after{content:'';position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
 /* The name: two labelled boxes, as on any account form. */
-.about-names{display:flex;flex-direction:column;gap:16px}
+.about-names{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .about-field{display:flex;flex-direction:column;gap:6px}
 .about-field > span{font-size:12.5px;font-weight:600;color:var(--a-text)}
 .about-input{width:100%;font-size:15px;padding:12px 13px;border-radius:4px;background:#fff;color:var(--a-text);border:1px solid #b9c2d0;user-select:text;-webkit-user-select:text}
 .about-input:focus{border-color:var(--a-navy);box-shadow:0 0 0 3px rgba(27,54,93,0.12)}
 .about-suggest{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
-.about-opt-c{padding:11px 12px;font-size:13.5px;gap:10px}
 .about-flag{font-size:17px;line-height:1;flex:none}
 .about-search{width:100%;font-size:14px;padding:11px 13px;border-radius:4px;background:#fff;color:var(--a-text);border:1px solid #b9c2d0}
 .about-search::placeholder{color:#8f99ab}
@@ -1718,16 +1697,35 @@ body.tour-open{overflow:hidden}
 .about-crow.on{background:var(--a-sel);font-weight:600}
 .about-crow.on .about-tick::after{content:'✓';color:var(--a-navy);font-weight:700}
 .about-none{font-size:13px;color:var(--a-sub);padding:12px;margin:0}
-.about-check{width:52px;height:52px;border-radius:50%;border:2px solid var(--a-navy);position:relative;margin:6px 0 18px}
-.about-check::after{content:'';position:absolute;left:17px;top:9px;width:12px;height:22px;border:solid var(--a-navy);border-width:0 3px 3px 0;transform:rotate(45deg)}
 .about-err{font-size:13px;color:#b3261e;margin:-8px 0 14px}
 .about-err:empty{display:none}
 .about-foot{display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid var(--a-line)}
+/* Three pages: each question a small label over a row of chips. */
+.about-top{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.about-top .about-mark{margin-right:auto}
+.about-qblock{padding:16px 0;border-top:1px solid var(--a-line)}
+.about-q-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
+.about-q{font-size:13.5px;font-weight:600;color:var(--a-text)}
+.about-hint,.about-sub{font-size:12px;color:var(--a-sub);font-weight:400}
+.about-chips{display:flex;flex-wrap:wrap;gap:8px}
+.about-chip{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:13.5px;line-height:1.2;color:var(--a-text);background:#fff;border:1px solid #c3cad6;border-radius:3px;padding:9px 13px;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+.about-chip:hover{border-color:var(--a-navy)}
+.about-chip.on{background:var(--a-navy);border-color:var(--a-navy);color:#fff}
+.about-chip:focus-visible,.about-crow:focus-visible,.about-select:focus-visible,.about-primary:focus-visible,.about-secondary:focus-visible,.about-link:focus-visible{outline:2px solid #4d78b8;outline-offset:2px}
+.about-select{width:100%;display:flex;align-items:center;gap:10px;font:inherit;font-size:14.5px;color:var(--a-text);text-align:left;background:#fff;border:1px solid #b9c2d0;border-radius:4px;padding:11px 13px;cursor:pointer;position:relative}
+.about-select::after{content:'';position:absolute;right:15px;top:50%;width:7px;height:7px;border:solid var(--a-sub);border-width:0 1.5px 1.5px 0;transform:translateY(-70%) rotate(45deg)}
+.about-select[aria-expanded="true"]{border-color:var(--a-navy)}
+.about-ph{color:#8f99ab}
+.about-cpanel{margin-top:10px}
+.about-cpanel[hidden]{display:none}
+.about-suggest{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.about-foot [hidden]{visibility:hidden;display:inline-block}
 @media (max-width:640px){
   .tour.about{padding:0}
   .tour-card.about-card{border-radius:0;border:0;height:100dvh;max-height:100dvh;padding:20px 18px calc(16px + env(safe-area-inset-bottom))}
   .about-ask{font-size:24px}
-  .about-suggest{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .about-names{grid-template-columns:1fr}
+  .about-chip{padding:9px 12px;font-size:13.5px}
   .about-primary,.about-secondary{min-width:0;padding:12px 22px}
 }
 @keyframes about-in-right{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}

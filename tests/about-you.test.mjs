@@ -1,5 +1,5 @@
 /**
- * "About you" (November 2026): eight optional questions a new account is
+ * "About you" (November 2026): nine optional questions on three pages a new account is
  * asked once after sign-up, kept on the server apart from the encrypted
  * journal so Romy can see who uses Riskbook. Against SQLite in memory.
  */
@@ -14,7 +14,7 @@ import signup from '../api/_auth/signup.js';
 import deleteAccount from '../api/account.js';
 import social from '../api/social/[action].js';
 import { ABOUT_CHOICES, MULTI, cleanAnswers, cleanName } from '../api/_lib/about.js';
-import { ABOUT_QUESTIONS, COUNTRY_CODES, COMMON_COUNTRIES, countryName } from '../src/config/aboutYou.js';
+import { ABOUT_QUESTIONS, ABOUT_PAGES, COUNTRY_CODES, COMMON_COUNTRIES, countryName } from '../src/config/aboutYou.js';
 import {
   generateDataKey, wrapDataKey, encryptJson, generateRecoveryKey, normalizeRecoveryKey,
   generateAuthSalt, deriveAuthSecret,
@@ -56,14 +56,12 @@ describe('the questions', () => {
     assert.deepEqual(ABOUT_QUESTIONS.map((q) => q.id), ['name', 'sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation']);
   });
 
-  test('the name: two boxes the browser can fill, and Enter moves on', async () => {
+  test('the name: two boxes the browser can fill', async () => {
     const { slideHtml } = await import('../src/ui/views/aboutYou.js');
-    const html = slideHtml(1, { firstName: 'Romy', lastName: '' });
+    const html = slideHtml(0, { firstName: 'Romy', lastName: '' });
     assert.match(html, /id="aboutFirst"[^>]*autocomplete="given-name"[^>]*value="Romy"/);
     assert.match(html, /id="aboutLast"[^>]*autocomplete="family-name"/);
-    assert.match(html, />Continue</, 'a first name alone is an answer');
-    assert.match(slideHtml(1, {}), />Skip</);
-    assert.match(slideHtml(1, { firstName: '<b>' }), /value="&lt;b&gt;"/);
+    assert.match(slideHtml(0, { firstName: '<b>' }), /value="&lt;b&gt;"/);
   });
 
   test('a name is kept as typed, in any alphabet, and nothing else', () => {
@@ -101,33 +99,46 @@ describe('the questions', () => {
     assert.match(countryListHtml('zzzz'), /No country matches/);
   });
 
-  test('one question a step, like a broker profile: an introduction that reassures, the eight questions, a confirmation', async () => {
+  // Romy, November 2026: eleven steps were too many.
+  test('three pages: about you, your investing, how they heard of Riskbook', () => {
+    assert.deepEqual(ABOUT_PAGES.map((p) => p.ids), [
+      ['name', 'sex', 'age', 'country'],
+      ['experience', 'style', 'goal', 'occupation'],
+      ['heard'],
+    ]);
+    // Every question on exactly one page.
+    assert.deepEqual(ABOUT_PAGES.flatMap((p) => p.ids).sort(), ABOUT_QUESTIONS.map((q) => q.id).sort());
+  });
+
+  test('each page shows all its questions, a step count, and a way out', async () => {
     const { slideHtml } = await import('../src/ui/views/aboutYou.js');
-    const intro = slideHtml(0, {});
-    assert.match(intro, /Complete your investor profile/);
-    assert.match(intro, /Confidential\./);
-    assert.match(intro, /end-to-end encrypted/);
-    assert.match(intro, /data-about-skipall/);
-    ABOUT_QUESTIONS.forEach((q, n) => {
-      const html = slideHtml(n + 1, {});
-      assert.match(html, new RegExp(`Step ${n + 1} of ${ABOUT_QUESTIONS.length}`), q.id);
-      assert.ok(html.includes(q.ask.replace(/'/g, '&#39;')), q.id);
-      assert.match(html, /data-about-back/);
-      assert.match(html, />Skip</, 'every question can be skipped');
-      if (q.options) assert.match(html, q.multi ? /role="checkbox"/ : /role="radio"/, q.id);
+    ABOUT_PAGES.forEach((page, i) => {
+      const html = slideHtml(i, {});
+      assert.match(html, new RegExp(`Step ${i + 1} of 3`));
+      assert.match(html, /data-about-skipall>Not now</);
+      for (const id of page.ids) {
+        const q = ABOUT_QUESTIONS.find((x) => x.id === id);
+        if (q.options) assert.match(html, new RegExp(`data-q="${id}" data-v="[^"]+" role="${q.multi ? 'checkbox' : 'radio'}"`), id);
+      }
     });
-    const chosen = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.id === 'sex') + 1, { sex: 'female' });
+    assert.match(slideHtml(0, {}), /data-about-back hidden/, 'nothing to go back to');
+    assert.match(slideHtml(0, {}), /data-about-next>Continue</);
+    assert.match(slideHtml(2, {}), /data-about-finish>Finish</);
+    assert.doesNotMatch(slideHtml(2, {}), /data-about-next/);
+
+    const chosen = slideHtml(0, { sex: 'female' });
     assert.match(chosen, /data-q="sex" data-v="female" role="radio" aria-checked="true"/);
-    assert.match(chosen, />Continue</);
-    const goal = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.id === 'goal') + 1, { goal: ['wealth', 'learn'] });
+    const goal = slideHtml(1, { goal: ['wealth', 'learn'] });
     assert.match(goal, /data-v="wealth" role="checkbox" aria-checked="true"/);
     assert.match(goal, /data-v="learn" role="checkbox" aria-checked="true"/);
     assert.match(goal, /data-v="trading" role="checkbox" aria-checked="false"/);
-    const country = slideHtml(ABOUT_QUESTIONS.findIndex((q) => q.country) + 1, { country: 'IL' });
+    // The country: a field showing the choice, its searchable list folded until opened.
+    const country = slideHtml(0, { country: 'IL' });
+    assert.match(country, /data-country-toggle[^>]*>\s*<span class="about-flag"[^>]*>[^<]*<\/span><span>Israel<\/span>/);
+    assert.match(country, /id="aboutCpanel" hidden/);
     for (const c of COMMON_COUNTRIES) assert.match(country, new RegExp(`data-country="${c}"`));
     assert.match(country, /id="aboutSearch"/);
-    assert.match(slideHtml(ABOUT_QUESTIONS.length + 1, { sex: 'female' }), /Your profile is complete/);
-    assert.match(slideHtml(ABOUT_QUESTIONS.length + 1, {}), /data-about-finish/);
+    assert.match(slideHtml(0, {}), /Select your country/);
   });
 
   test('goals, approach, how they heard and employment take several answers; the rest one', () => {
@@ -206,7 +217,7 @@ describe('when it is asked', () => {
     assert.match(read('src/ui/views/tour.js'), /\(aboutDue\(\) && cloudEnabled\(\)\)/);
     // Only the eight questions: an existing account is never asked for its email or password again.
     const { slideHtml } = await import('../src/ui/views/aboutYou.js');
-    for (let i = 0; i <= ABOUT_QUESTIONS.length + 1; i++) assert.doesNotMatch(slideHtml(i, {}), /email|password/i, `slide ${i}`);
+    for (let i = 0; i < ABOUT_PAGES.length; i++) assert.doesNotMatch(slideHtml(i, {}), /email|password/i, `page ${i}`);
     const view = read('src/ui/views/aboutYou.js');
     assert.match(view, /if \(!state\.tourSeen\) setTimeout\(openTour/);
     assert.match(read('src/app/actions.js'), /import '\.\.\/ui\/views\/aboutYou\.js';/);
