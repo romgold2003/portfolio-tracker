@@ -95,10 +95,11 @@ describe('what the documents say', () => {
     assert.match(privacy, /We do not sell personal information/);
   });
 
+  // Vercel's clean URLs serve assets/terms.html at /assets/terms; the rewrite points there.
   test('served at /terms and /privacy', () => {
     const vercel = JSON.parse(read('vercel.json'));
-    assert.ok(vercel.rewrites.some((r) => r.source === '/terms' && r.destination === '/assets/terms.html'));
-    assert.ok(vercel.rewrites.some((r) => r.source === '/privacy' && r.destination === '/assets/privacy.html'));
+    assert.ok(vercel.rewrites.some((r) => r.source === '/terms' && r.destination === '/assets/terms'));
+    assert.ok(vercel.rewrites.some((r) => r.source === '/privacy' && r.destination === '/assets/privacy'));
   });
 });
 

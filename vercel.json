@@ -7,11 +7,11 @@
   "rewrites": [
     {
       "source": "/terms",
-      "destination": "/assets/terms.html"
+      "destination": "/assets/terms"
     },
     {
       "source": "/privacy",
-      "destination": "/assets/privacy.html"
+      "destination": "/assets/privacy"
     },
     {
       "source": "/api/fed",
