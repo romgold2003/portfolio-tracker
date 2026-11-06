@@ -95,6 +95,18 @@ describe('what the documents say', () => {
     assert.match(privacy, /We do not sell personal information/);
   });
 
+  // Laid out like a brokerage's legal pages: masthead, contents beside the text, no boxes.
+  test('masthead, a link between the two, contents on the side', () => {
+    for (const [doc, self] of [[terms, '/terms'], [privacy, '/privacy']]) {
+      assert.match(doc, /<header class="masthead">/);
+      assert.match(doc, new RegExp(`<a href="${self}" aria-current="page">`));
+      assert.match(doc, /<details class="side" open>\s*<summary>Contents<\/summary>\s*<ol class="toc">/);
+      assert.equal((doc.match(/class="toc"/g) ?? []).length, 1);
+      assert.match(doc, /<script src="\/assets\/legal\.js" defer><\/script>/);
+    }
+    assert.doesNotMatch(read('assets/legal.css'), /border-radius/);
+  });
+
   // Vercel's clean URLs serve assets/terms.html at /assets/terms; the rewrite points there.
   test('served at /terms and /privacy', () => {
     const vercel = JSON.parse(read('vercel.json'));
