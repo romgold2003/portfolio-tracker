@@ -1,49 +1,52 @@
 /**
- * "D% ↓ Worst" has to rank by D%.
+ * Sorting the holdings lists by a column (November 2026: the columns are the
+ * user's own, IBKR-style, and any heading sorts up or down).
  *
- * Both daily sort buttons are labelled with a percentage and both ranked by
- * `dailyDollar` — the day's move in money. So a small holding down six per cent
- * sorted below a large one down one, because the large one had lost more
- * dollars, and the button had said percent. Reported against USO, which was the
- * worst thing in the book that day and would not go to the end of the list.
+ * Carried over from the old "D% ↓ Worst" button, whose lesson still holds:
+ * a percent column ranks by percent, not by the money behind it — a small
+ * holding down six per cent is worse than a large one down one. Signed for the
+ * position, so a short whose stock rose is a loser. A figure not known yet goes
+ * last whichever way the list is turned.
  *
- * The sort now uses the same number the row prints beside the price, signed for
- * the direction, and gated on the session the way every figure on the page is.
+ * Crypto here, because its day never closes, so the figures do not depend on
+ * when the tests run.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { sortPositions, dailyPercent } from '../src/core/portfolio.js';
+globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+const { dailyPercent } = await import('../src/core/portfolio.js');
+const { sortByLayout, columnValue, listContext } = await import('../src/ui/views/holdingColumns.js');
+const { cleanLayout, cleanLayouts, defaultLayout, COLUMNS, COLUMN_PRESETS, MAX_COLUMNS } = await import('../src/config/columns.js');
 
 /** A holding, sized in dollars so money and percent can be made to disagree. */
-function pos(ticker, { pct, qty = 1, price = 100, dir = 'Long' } = {}) {
+function pos(ticker, { pct, qty = 1, price = 100, dir = 'Long', entry = price } = {}) {
   return {
-    id: ticker, ticker, cls: 'Stocks', dir, status: 'Open',
-    entry: price, cur: price, qty,
+    id: ticker, ticker, cls: 'Crypto', dir, status: 'Open', open: '2026-01-02',
+    entry, cur: price, qty,
     ...(pct === undefined ? {} : { dailyChg: pct }),
   };
 }
 
-const order = (list, key) => sortPositions(list, key).map((p) => p.ticker);
+const ctx = () => listContext([]);
+const order = (list, id, dir) => sortByLayout(list, { cols: [id], sort: { id, dir } }, ctx()).map((p) => p.ticker);
 
-describe('the day sorts rank by percent, not by money', () => {
-  // USO is small and down hard. SPY is large and barely down: more dollars
-  // lost, a far smaller move. This is the case that was reported.
+describe('a percent column ranks by percent, not by money', () => {
   const uso = pos('USO', { pct: -6.2, qty: 10, price: 70 });
   const spy = pos('SPY', { pct: -0.4, qty: 200, price: 560 });
 
-  test('worst puts the biggest faller first, whatever it is worth', () => {
-    assert.deepEqual(order([spy, uso], 'dDown'), ['USO', 'SPY']);
+  test('lowest first puts the biggest faller first, whatever it is worth', () => {
+    assert.deepEqual(order([spy, uso], 'dayPct', 'asc'), ['USO', 'SPY']);
   });
 
-  test('best is the same list the other way up', () => {
-    assert.deepEqual(order([uso, spy], 'dUp'), ['SPY', 'USO']);
+  test('highest first is the same list the other way up', () => {
+    assert.deepEqual(order([uso, spy], 'dayPct', 'desc'), ['SPY', 'USO']);
   });
 
-  test('a large holding does not outrank a larger move', () => {
-    // SPY loses about $450 on the day; USO about $43. Money would put SPY last.
-    const worst = sortPositions([spy, uso], 'dDown')[0];
-    assert.equal(worst.ticker, 'USO', 'ranked by dollars again');
+  test('and the money column ranks by money', () => {
+    const big = pos('BIG', { pct: -0.4, qty: 200, price: 560 });
+    const small = pos('SMALL', { pct: -6.2, qty: 10, price: 70 });
+    assert.deepEqual(order([small, big], 'value', 'desc'), ['BIG', 'SMALL']);
   });
 });
 
@@ -51,61 +54,64 @@ describe('direction', () => {
   test('a short whose stock rose is a loser', () => {
     const short = pos('TSLA', { pct: 4.0, dir: 'Short' });
     const long = pos('AAPL', { pct: -1.0 });
-    assert.deepEqual(order([long, short], 'dDown'), ['TSLA', 'AAPL']);
-  });
-
-  test('a short whose stock fell is a winner', () => {
-    const short = pos('TSLA', { pct: -4.0, dir: 'Short' });
-    const long = pos('AAPL', { pct: 1.0 });
-    assert.deepEqual(order([long, short], 'dUp'), ['TSLA', 'AAPL']);
+    assert.deepEqual(order([long, short], 'dayPct', 'asc'), ['TSLA', 'AAPL']);
   });
 
   test('dailyPercent reports the sign the position feels', () => {
     assert.equal(dailyPercent(pos('X', { pct: 4, dir: 'Short' })), -4);
     assert.equal(dailyPercent(pos('X', { pct: 4 })), 4);
   });
+
+  test('unrealised P&L of a short gains when the price falls', () => {
+    const short = pos('S', { dir: 'Short', entry: 100, price: 90, qty: 10 });
+    assert.equal(columnValue('unrealUsd', short, ctx()), 100);
+    assert.equal(columnValue('value', short, ctx()), -900);
+  });
 });
 
-describe('a position with no daily figure yet', () => {
+describe('a figure not known yet', () => {
   const known = pos('AAPL', { pct: -2.0 });
   const unknown = pos('NEW');
 
-  test('is not treated as flat at either end', () => {
+  test('goes last either way round', () => {
     assert.equal(dailyPercent(unknown), null);
-    assert.equal(sortPositions([unknown, known], 'dDown')[0].ticker, 'AAPL',
-      'an unknown move must not outrank a real fall');
-    assert.equal(sortPositions([unknown, known], 'dUp')[0].ticker, 'AAPL',
-      'nor a real rise');
+    assert.equal(order([unknown, known], 'dayPct', 'asc')[0], 'AAPL');
+    assert.equal(order([unknown, known], 'dayPct', 'desc')[0], 'AAPL');
   });
 
-  test('and neither is a figure that is not a number', () => {
+  test('and so does a figure that is not a number', () => {
     for (const bad of [NaN, Infinity, undefined, null]) {
       assert.equal(dailyPercent({ dir: 'Long', dailyChg: bad }), null, String(bad));
     }
   });
 });
 
-describe('the other sorts are untouched', () => {
-  test('size still ranks by what a holding is worth', () => {
-    const big = pos('SPY', { pct: -0.4, qty: 200, price: 560 });
-    const small = pos('USO', { pct: -6.2, qty: 10, price: 70 });
-    assert.deepEqual(order([small, big], 'size'), ['SPY', 'USO']);
-  });
-
-  test('P&L is still the default, and still ranks by open profit', () => {
-    const winner = { ...pos('A', { pct: -9 }), entry: 100, cur: 150, qty: 10 };
-    const loser = { ...pos('B', { pct: 9 }), entry: 100, cur: 90, qty: 10 };
-    assert.deepEqual(order([loser, winner], 'pnl'), ['A', 'B']);
-    assert.deepEqual(order([loser, winner], undefined), ['A', 'B']);
+describe('text columns and the symbol', () => {
+  test('sort A to Z', () => {
+    const list = [pos('MSFT'), pos('AAPL'), pos('BTC')];
+    assert.deepEqual(order(list, 'symbol', 'asc'), ['AAPL', 'BTC', 'MSFT']);
+    assert.deepEqual(order(list, 'symbol', 'desc'), ['MSFT', 'BTC', 'AAPL']);
   });
 });
 
-describe('the caller may supply its own reading of the day', () => {
-  test('which is how the session reset reaches a sort that cannot see it', () => {
-    const a = pos('A', { pct: -5 });
-    const b = pos('B', { pct: -1 });
-    // Standing in for "the trading day is over, so every figure reads zero".
-    assert.deepEqual(sortPositions([a, b], 'dDown', () => 0).map((p) => p.ticker), ['A', 'B'],
-      'with every figure equal the list should keep the order it was given');
+describe('the layout a person keeps', () => {
+  test('everyone starts on Simple, largest unrealised P&L first', () => {
+    assert.deepEqual(defaultLayout(), { cols: COLUMN_PRESETS.simple.cols, sort: { id: 'unrealUsd', dir: 'desc' } });
+    assert.deepEqual(cleanLayouts(undefined).home, defaultLayout());
+    assert.deepEqual(cleanLayouts(undefined).positions, defaultLayout());
+  });
+
+  test('a stored layout keeps known columns once each, at most twelve, and a known sort', () => {
+    const l = cleanLayout({ cols: ['dayPct', 'junk', 'dayPct', 'weight', 42], sort: { id: 'nope', dir: 'up' } });
+    assert.deepEqual(l.cols, ['dayPct', 'weight']);
+    assert.deepEqual(l.sort, { id: 'unrealUsd', dir: 'desc' });
+    assert.equal(cleanLayout({ cols: Object.keys(COLUMNS) }).cols.length, MAX_COLUMNS);
+    assert.deepEqual(cleanLayout({ cols: [], sort: { id: 'symbol', dir: 'asc' } }), { cols: [], sort: { id: 'symbol', dir: 'asc' } });
+  });
+
+  test('every preset names only real columns', () => {
+    for (const [key, preset] of Object.entries(COLUMN_PRESETS)) {
+      for (const id of preset.cols) assert.ok(COLUMNS[id], `${key}: ${id}`);
+    }
   });
 });

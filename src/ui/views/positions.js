@@ -1,24 +1,15 @@
 /** The Positions page: summary tiles, then open and closed position cards. */
 import { state } from '../../core/store.js';
+import { unreal, costOf, realized } from '../../core/portfolio.js';
 import {
-  unreal, costOf, sortPositions, realized, dailyPercent,
-} from '../../core/portfolio.js';
-import { dayStillRunning } from '../dayReset.js';
+  headerHtml, toolbarHtml, sortByLayout, gridStyle, listContext, bindColumns,
+} from './holdingColumns.js';
 import { ui } from '../uiState.js';
 import { positionCard } from './positionCard.js';
 import { money as $u, signedMoney as $s, pnlColor as clr } from '../format.js';
 import { MONTHS_LONG } from '../../config/constants.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-
-/**
- * The day's move as the rows are currently showing it.
- *
- * Once the trading day is over every daily figure on the page resets to zero
- * for the next one, so ranking by the move that has just finished would order
- * the list by numbers no longer on screen. Crypto never closes and keeps its.
- */
-const dayPctOnScreen = (p) => (dayStillRunning(p) ? dailyPercent(p) : 0);
 
 export function renderPositions() {
   const open = state.positions.filter((p) => p.status === 'Open');
@@ -33,11 +24,17 @@ export function renderPositions() {
   setText('sOpenCount', open.length);
   setText('sDeployed', $u(deployed).replace('.00', ''));
 
+  // Each card's head shows the columns chosen for this page, sorted by the heading clicked (holdingColumns.js).
+  bindColumns(document.getElementById('posColumns'), 'positions', () => renderPositions());
+  const layout = state.columns.positions;
+  const ctx = listContext();
+  const bar = document.getElementById('posColsBar');
+  if (bar) bar.innerHTML = open.length ? toolbarHtml('positions', layout) : '';
   const openEl = document.getElementById('openPositions');
   if (openEl) {
     keepOpenPanels(openEl, () => {
       openEl.innerHTML = open.length
-        ? sortPositions(open, ui.posSort, dayPctOnScreen).map((p) => positionCard(p, true, state.positions)).join('')
+        ? `<div class="hc-cards" style="${gridStyle(layout)}">${headerHtml('positions', layout)}${sortByLayout(open, layout, ctx).map((p) => positionCard(p, true, state.positions, { layout, ctx })).join('')}</div>`
         : '<div class="pos-empty-state"><div class="pos-empty-title">No open positions yet</div><div class="pos-empty-sub">Log a trade to start tracking your portfolio</div><button class="btn btn-blue pos-empty-cta" onclick="show(\'add\')">+ Log your first trade</button></div>';
     });
   }

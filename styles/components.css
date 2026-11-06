@@ -33,37 +33,9 @@
 .card-lbl{font-size:11px;color:var(--text3);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center}
 
 /* Compact position rows + badges */
-/**
- * One column definition, shared by the header and every row.
- *
- * Each row is its own grid element, so a column sized by its content — auto, or
- * a bare 1fr — resolves separately in each one, and the columns wander from row
- * to row. That is exactly what they were doing: the price sat wherever the
- * ticker and its badge happened to end. Everything but the asset column is a
- * fixed width for that reason, and the header shares the class so the two
- * cannot drift apart again.
- */
-.mini-grid{display:grid;grid-template-columns:minmax(0,1fr) 64px 92px 66px 104px;align-items:center}
-@media (max-width:900px){.mini-grid{grid-template-columns:minmax(0,1fr) 54px 80px 56px 88px}}
-/* No empty slot for the hidden cell: display:none takes a cell out of the
-   grid entirely, so a zero-width column left for it was filled by the next
-   cell along and every one after it sat a column to the left. */
-@media (max-width:640px){.mini-grid{grid-template-columns:minmax(0,1fr) 46px 72px 76px}}
-
 .mini-row{padding:9px 0;border-bottom:0.5px solid var(--input)}
 .mini-row:last-child{border-bottom:none}
-.mini-asset{display:flex;align-items:center;gap:6px;min-width:0}
-/* Secondary to the ticker, and in tabular figures so a column of them lines up
-   even though it sits inside a flex row rather than a column of its own. */
-.mini-price{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
-/* The badge carries its own margin for the position cards, where it follows
-   inline text. Here the flex gap already spaces it. */
-.mini-asset .ext-badge{margin-left:0}
-.mini-col{text-align:center;font-size:12px;padding:0 6px}
-.mini-pnl{text-align:right}
-@media (max-width:640px){.mini-ytd{display:none}}
 .mini-tk{font-size:13px;font-weight:600;color:var(--text)}
-.mini-cl{font-size:10px;color:var(--text4);margin-left:5px}
 .mini-dir{font-size:10px;padding:2px 6px;border-radius:3px;flex:none}
 .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;line-height:1.5;vertical-align:middle}
 .d-long{background:var(--green-bg);color:var(--green)}
@@ -365,8 +337,6 @@
 .dgi-k{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px}
 .dgi-v{font-size:15px;font-weight:600;color:var(--text)}
 .dgi-unit{font-size:11px;font-weight:400;color:var(--text3)}
-/* The size of a holding, in the column left of its day: Home (views/home.js). */
-.mini-size{text-align:center;font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pos-btns{display:flex;gap:6px;flex-wrap:wrap}
 .pbtn{background:var(--input);border:0.5px solid var(--border2);border-radius:6px;padding:7px 14px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit}
 .pbtn:hover{background:var(--hover2)}
@@ -786,7 +756,7 @@ a.gam-title:hover{color:var(--text);text-decoration:underline}
 .gam-when{color:var(--text3);font-size:11px;font-variant-numeric:tabular-nums}
 .gam-src{margin:12px 0 0;font-size:10px;color:var(--text4)}
 @media (max-width:640px){
-  /* No slot for the hidden cell — see .mini-grid. */
+  /* No empty slot for a hidden cell: display:none takes it out of the grid, and the next cell would slide into its column. */
   .gam-grid{grid-template-columns:84px minmax(0,1fr) minmax(0,1.2fr) 38px}
   .gam-bet,.gam-head div:nth-child(3){display:none}
 }
@@ -952,7 +922,7 @@ a.gam-title:hover{color:var(--text);text-decoration:underline}
   .cw-nf-side{padding-left:0;font-size:8px}
 }
 @media (max-width:640px){
-  /* No slot for the hidden cell — see .mini-grid. */
+  /* No empty slot for a hidden cell: display:none takes it out of the grid, and the next cell would slide into its column. */
   .cw-nf-head,.cw-nf-row,.cw-nf-vrow{grid-template-columns:52px minmax(0,1fr) minmax(0,1fr) 62px}
   .cw-nf-out,.cw-nf-head span:nth-child(3){display:none}
 }
@@ -1035,7 +1005,7 @@ a.gam-title:hover{color:var(--text);text-decoration:underline}
 .cw-act-note{display:block;margin-top:2px;font-size:9px;color:var(--text4)}
 @media (max-width:900px){
   /* The asset flow goes first: the action already names the movement. */
-  /* No slot for the hidden cell — see .mini-grid. */
+  /* No empty slot for a hidden cell: display:none takes it out of the grid, and the next cell would slide into its column. */
   .cw-act-grid{grid-template-columns:92px minmax(0,1.4fr) 118px 54px}
   .cw-flow,.gam-head.cw-act-grid div:nth-child(3){display:none}
 }
@@ -1891,3 +1861,61 @@ body.is-guest{padding-top:36px}
 .set-marketing{color:var(--text2);font-size:13px;margin:10px 0 0}
 .set-marketing input{accent-color:var(--blue)}
 #legalStatus a{color:var(--blue)}
+
+/* ───────── Holdings columns (views/holdingColumns.js) ─────────
+   The Home list and the Positions cards share one grid: the symbol, then one
+   track per column the user chose. Every heading sorts; ⚙ Columns picks them. */
+.hc-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.hc-by{font-size:11.5px;color:var(--text3)}
+.hc-by b{color:var(--text2);font-weight:600}
+.hc-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.hc-table,.hc-cards{min-width:var(--hc-min)}
+.hc-row{display:grid;grid-template-columns:minmax(130px,1.5fr) repeat(var(--hc-cols),minmax(78px,1fr));align-items:center;column-gap:10px}
+.hc-header{padding:0 2px 6px;border-bottom:0.5px solid var(--border2);margin-bottom:2px}
+.hc-cards .hc-header{padding:0 18px 6px;margin-bottom:8px}
+.hc-head{font:inherit;font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;
+  background:none;border:0;padding:4px 0;cursor:pointer;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-head:hover{color:var(--text)}
+.hc-head.on{color:var(--blue)}
+.hc-head:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:3px}
+.hc-cell{font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.hc-left{text-align:left}
+.hc-sym{display:flex;align-items:center;gap:6px;min-width:0}
+.hc-sym .ext-badge{margin-left:0}
+.hc-none{color:var(--text4)}
+.hc-text{color:var(--text2)}
+.mini-row.hc-row{padding:9px 2px}
+.pos-head.hc-row{display:grid}
+/* The symbol stays put while the rest scrolls sideways. */
+.hc-scroll .hc-sym{position:sticky;left:0;z-index:1;background:var(--panel)}
+/* The picker. */
+.hc-picker{border:0.5px solid var(--border2);border-radius:10px;background:var(--panel2);padding:14px 16px;margin-bottom:12px}
+.hc-picker[hidden]{display:none}
+.hc-presets{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.hc-ptitle,.hc-gtitle{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-right:4px}
+.hc-gtitle{margin:0 0 6px}
+.hc-cols{display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:18px}
+@media (max-width:760px){.hc-cols{grid-template-columns:minmax(0,1fr)}}
+.hc-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.hc-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--panel);cursor:grab;font-size:12.5px}
+.hc-item.dragging{opacity:0.45}
+.hc-grip{color:var(--text4);letter-spacing:-2px}
+.hc-name{flex:1;color:var(--text)}
+.hc-moves{display:flex;gap:2px}
+.hc-moves button{font:inherit;font-size:11px;width:22px;height:22px;border-radius:4px;border:0.5px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;padding:0}
+.hc-moves button:hover:not([disabled]){border-color:var(--blue);color:var(--text)}
+.hc-moves button[disabled]{opacity:0.3;cursor:default}
+.hc-empty{font-size:12px;color:var(--text3)}
+.hc-all{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.hc-check{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text2);padding:2px 0;cursor:pointer}
+.hc-check input{accent-color:var(--blue)}
+.hc-check:has(input:disabled){opacity:0.45;cursor:default}
+.hc-done{display:flex;justify-content:flex-end;margin-top:12px}
+.hc-done .btn{padding:7px 18px;font-size:12.5px}
+/* Positions on a phone: the symbol and the first three columns; the rest are on Home's sideways scroll. */
+@media (max-width:640px){
+  .hc-cards{min-width:0}
+  .hc-cards .hc-row{grid-template-columns:minmax(110px,1.3fr) repeat(min(var(--hc-cols),3),minmax(0,1fr))}
+  .hc-cards .hc-row > .hc-cell:nth-child(n+5),.hc-cards .hc-header > .hc-head:nth-child(n+5){display:none}
+  .hc-cards .hc-header{padding:0 14px 6px}
+}

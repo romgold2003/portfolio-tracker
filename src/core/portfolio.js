@@ -304,34 +304,6 @@ export function dailyPercent(p) {
   return p.dir === 'Long' ? chg : -chg;
 }
 
-/**
- * Sorting for the open-positions lists. Returns a new array.
- *
- * The two daily sorts are labelled "D% ↑ Best" and "D% ↓ Worst" and used to
- * rank by dailyDollar() — the day's move in *money*. A small holding down six
- * per cent therefore sorted above a large one down one, because the large one
- * had lost more dollars, and the button had promised percent. Ranking now uses
- * the percentage the rows are showing.
- *
- * `dayPct` is a seam for the caller. The daily figures reset when the trading
- * day ends, and knowing whether it has is a question for the layer that also
- * knows about sessions; core cannot reach it. The view passes a version that
- * checks, so the order always agrees with the figures printed next to it.
- */
-export function sortPositions(list, sortKey, dayPct = dailyPercent) {
-  const arr = [...list];
-  switch (sortKey) {
-    case 'size':
-      return arr.sort((a, b) => Math.abs(curValOf(b)) - Math.abs(curValOf(a)));
-    case 'dUp':
-      return arr.sort((a, b) => (dayPct(b) ?? -Infinity) - (dayPct(a) ?? -Infinity));
-    case 'dDown':
-      return arr.sort((a, b) => (dayPct(a) ?? Infinity) - (dayPct(b) ?? Infinity));
-    case 'pnl':
-    default:
-      return arr.sort((a, b) => unreal(b) - unreal(a));
-  }
-}
 
 /**
  * Account totals for the whole book.

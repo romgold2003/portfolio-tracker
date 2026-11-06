@@ -14,6 +14,7 @@ import { SECTOR_NAMES } from '../config/sectors.js';
 import { returnMethodOf } from '../config/brokers.js';
 import { ABOUT_VERSION, ABOUT_ASK_BELOW } from '../config/aboutYou.js';
 import { LEGAL_VERSION } from '../config/legal.js';
+import { cleanLayouts as cleanColumnLayouts, cleanLayout as cleanColumnLayout } from '../config/columns.js';
 
 export const state = {
   /** @type {Position[]} every trade, open and closed */
@@ -121,7 +122,16 @@ export const state = {
    * 'mwr'. Null follows the broker (config/brokers.js, returnMethodOf).
    */
   returnMethod: null,
+  /** The columns of the Home and Positions lists, their order and sort (config/columns.js). */
+  columns: cleanColumnLayouts(null),
 };
+
+/** Set one page's columns and sort; kept with the account, so it follows it to any device. */
+export function setColumns(page, layout) {
+  if (!(page in state.columns)) return;
+  state.columns = { ...state.columns, [page]: cleanColumnLayout(layout) };
+  scheduleFlush();
+}
 
 /** The broker this person imports from; null to choose again. */
 export function setBroker(id) {
@@ -927,6 +937,7 @@ export function loadState(journal) {
     state.legalVersion = Number.isInteger(source.legalVersion) ? source.legalVersion : 0;
     state.broker = typeof source.broker === 'string' ? source.broker : null;
     state.returnMethod = source.returnMethod === 'twr' || source.returnMethod === 'mwr' ? source.returnMethod : null;
+    state.columns = cleanColumnLayouts(source.columns);
   } else {
     if (book.activeId === ALL_ACCOUNTS) book.activeId = book.homeId;
     book.accounts.find((a) => a.id === book.activeId).journal = journalPart(source);
@@ -954,6 +965,7 @@ export function journalSnapshot() {
     legalVersion: state.legalVersion,
     broker: state.broker,
     returnMethod: state.returnMethod,
+    columns: state.columns,
     homeId: book.homeId,
     activeId: book.activeId,
     accounts: book.accounts.map((a) => (a.id === book.homeId ? { id: a.id, name: a.name } : a)),
@@ -984,6 +996,7 @@ export function clearState() {
   state.legalVersion = 0;
   state.broker = null;
   state.returnMethod = null;
+  state.columns = cleanColumnLayouts(null);
   announceJournal();
 }
 

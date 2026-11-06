@@ -5,7 +5,6 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 
 import { fmtShares } from '../src/ui/format.js';
 import { positionCard } from '../src/ui/views/positionCard.js';
@@ -44,14 +43,11 @@ describe('the size of a holding', () => {
     assert.equal(closed['Shares traded'], '10 shares');
   });
 
-  test('on Home, a Size column left of the day', () => {
-    const home = readFileSync(new URL('../src/ui/views/home.js', import.meta.url), 'utf8');
-    assert.match(home, /">Asset<\/div>\s*<div[^>]*>Size<\/div>\s*<div[^>]*>D%<\/div>/);
-    assert.match(home, /<div class="mini-col mini-size"[^>]*>\$\{escapeHtml\(fmtShares\(p\.qty\)\)\}<\/div>\s*<div class="mini-col">\s*\$\{dailyText\}/);
-    // One more column in the grid at every width, header and rows alike.
-    const css = readFileSync(new URL('../styles/components.css', import.meta.url), 'utf8');
-    for (const cols of css.match(/\.mini-grid\{[^}]*grid-template-columns:[^;}]+/g)) {
-      assert.ok(cols.split(/\s+(?![^(]*\))/).length >= 4, cols);
-    }
+  // Since November 2026 the Home columns are the user's own; Quantity is one they can pick.
+  test('Quantity is a column anyone can add to Home or Positions, in the same words', async () => {
+    const { COLUMNS } = await import('../src/config/columns.js');
+    const { columnCell, listContext } = await import('../src/ui/views/holdingColumns.js');
+    assert.equal(COLUMNS.qty.label, 'Quantity');
+    assert.match(columnCell('qty', stock({ qty: 1250 }), listContext([])), />1,250</);
   });
 });

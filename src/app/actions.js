@@ -658,20 +658,6 @@ export function toggleMonthTrade(id) {
   renderMonthDetail();
 }
 
-export function setSort(key) {
-  ui.homeSort = key;
-  document.querySelectorAll('[id^="sort-"]').forEach((b) => b.classList.remove('active'));
-  el(`sort-${key}`)?.classList.add('active');
-  renderHome();
-}
-
-export function setPosSort(key) {
-  ui.posSort = key;
-  document.querySelectorAll('[id^="psort-"]').forEach((b) => b.classList.remove('active'));
-  el(`psort-${key}`)?.classList.add('active');
-  renderPositions();
-}
-
 /**
  * Change the window the curve and the period KPI cover.
  *
@@ -799,7 +785,7 @@ export function installActions(extra = {}) {
     // dca & close
     calcDca, applyDca, setClosePct, syncClose, confirmClose,
     // lists & sorting
-    setSort, setPosSort, refreshPrices, toggleClosedMonth,
+    refreshPrices, toggleClosedMonth,
     // monthly
     renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker,
     selectMonth, toggleMonthTrade,

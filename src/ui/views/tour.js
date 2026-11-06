@@ -75,6 +75,7 @@ export const SLIDES = [
       ['card', 'Open a position', 'Click any row to see its price, shares, amount invested and profit.'],
       ['dca', '+ DCA', 'Add to it, and see your new average price before you confirm.'],
       ['close', 'Close', 'Sell all of it, or only part — 25%, 50%, any amount.'],
+      ['columns', 'Columns', 'Pick the columns you want, drag them in order, and click any heading to sort.'],
     ],
   },
   {

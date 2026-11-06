@@ -112,7 +112,7 @@ const SHOTS = [
       close: { sel: 'button', text: 'Close' },
       dca: { sel: 'button', text: '+ DCA' },
       edit: { sel: 'button', text: '✎ Edit' },
-      sort: { sel: '#psort-dUp' },
+      columns: { sel: '[data-hc-picker="positions"]' },
     },
   },
   {

@@ -6,6 +6,7 @@
  * which resolve against the global bridge in src/app/actions.js.
  */
 import { ASSET_CLASSES, MONTHS_LONG } from '../../config/constants.js';
+import { columnCell, gridStyle } from './holdingColumns.js';
 import { cleanMind, mindLabel } from '../../core/mind.js';
 import {
   unreal, realized, pctD, costOf, marketValueOf,
@@ -314,7 +315,7 @@ function progressBadge(p) {
 }
 
 /** `positions` is the whole book, so a held position can find its own imported sales. */
-export function positionCard(p, isOpen, positions = []) {
+export function positionCard(p, isOpen, positions = [], columns = null) {
   const pnl = isOpen ? unreal(p) : realized(p);
   const retPct = pctD(pnl, costOf(p));
   const expanded = ui.expandedId === p.id;
@@ -346,6 +347,20 @@ export function positionCard(p, isOpen, positions = []) {
         ${isOpen ? reasonBlock(p) + exitsBlock(p) + openBody(p) : closedBody(p, retPct)}
       </div></div>`
     : '';
+
+  // An open holding's head shows the columns chosen for the page, under the header that sorts them.
+  if (columns) {
+    return `<div class="pos-card ${expanded ? 'expanded' : ''}">
+    <div class="pos-head hc-row" style="${gridStyle(columns.layout)}" onclick="toggleExpand(${p.id})">
+      <div class="hc-cell hc-left hc-sym">
+        <span class="chevron">▶</span>
+        <span class="pos-ticker">${escapeHtml(p.ticker)}</span>${progressBadge(p)}
+        <span class="pos-dir d-${p.dir.toLowerCase()}">${p.dir}</span>${p.extPhase ? `<span class="ext-badge" title="Traded outside regular hours">${p.extPhase === 'pre' ? 'PRE' : 'AFTER'}</span>` : ''}
+      </div>
+      ${columns.layout.cols.map((id) => columnCell(id, p, columns.ctx)).join('')}
+    </div>${body}
+  </div>`;
+  }
 
   return `<div class="pos-card ${expanded ? 'expanded' : ''}">
     <div class="pos-head" onclick="toggleExpand(${p.id})">

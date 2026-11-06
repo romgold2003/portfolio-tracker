@@ -272,12 +272,9 @@
       </div>
       <div class="card" id="homeHoldings">
         <div class="card-lbl"><span>Open positions</span><span class="green" style="text-transform:none;letter-spacing:0">● updating live</span></div>
-        <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">
-          <button class="sort-btn active" id="sort-pnl" onclick="setSort('pnl')">P&L ↕</button>
-          <button class="sort-btn" id="sort-size" onclick="setSort('size')">Size ↓</button>
-          <button class="sort-btn" id="sort-dUp" onclick="setSort('dUp')">D% ↑ Best</button>
-          <button class="sort-btn" id="sort-dDown" onclick="setSort('dDown')">D% ↓ Worst</button>
-        </div>
+        <!-- Columns chosen by the user, IBKR-style (src/ui/views/holdingColumns.js). -->
+        <div id="homeColsBar"></div>
+        <div class="hc-picker" id="hcPicker-home" hidden></div>
         <div id="homePositions"></div>
       </div>
     </div>
@@ -297,13 +294,11 @@
         <div class="sum"><div class="sum-lbl">Deployed</div><div class="sum-val" id="sDeployed">$0</div></div>
       </div>
       <div class="section-title">Open positions</div>
-      <div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">
-        <button class="sort-btn active" id="psort-pnl" onclick="setPosSort('pnl')">P&L ↕</button>
-        <button class="sort-btn" id="psort-size" onclick="setPosSort('size')">Size ↓</button>
-        <button class="sort-btn" id="psort-dUp" onclick="setPosSort('dUp')">D% ↑ Best</button>
-        <button class="sort-btn" id="psort-dDown" onclick="setPosSort('dDown')">D% ↓ Worst</button>
+      <div id="posColumns">
+        <div id="posColsBar"></div>
+        <div class="hc-picker" id="hcPicker-positions" hidden></div>
+        <div id="openPositions"></div>
       </div>
-      <div id="openPositions"></div>
       <div class="section-title" style="margin-top:20px">Closed</div>
       <div id="closedPositions"></div>
     </div>

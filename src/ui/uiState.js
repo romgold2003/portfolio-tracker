@@ -16,8 +16,4 @@ export const ui = {
   expandedId: null,
   /** Expanded trade row in the monthly detail table, or null. */
   expandedMonthTradeId: null,
-  /** Sort key for the home page list. */
-  homeSort: 'pnl',
-  /** Sort key for the positions page list. */
-  posSort: 'pnl',
 };

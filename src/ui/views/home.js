@@ -2,22 +2,15 @@
 import { state, isShown, returnMethod } from '../../core/store.js';
 import { RETURN_METHODS } from '../../config/brokers.js';
 import {
-  accountTotals, dailyPortfolioMove, unreal, costOf, pctD,
-  dailyDollar, dailyDollarExits, dailyDollarTotal, sortPositions, todayStr, dailyPercent,
-  sectorBreakdown, accountPerformance,
+  accountTotals, dailyPortfolioMove,
+  todayStr, sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
 import { regularSessionOpen, extendedPricingAvailable } from '../../services/extendedHours.js';
-import { dayStillRunning, inPlay } from '../dayReset.js';
-
-/**
- * The day's move as this page is currently showing it — the key the "D% ↑ Best"
- * and "D% ↓ Worst" buttons sort on. Both used to rank by the day's move in
- * money while promising percent, so a small holding down six per cent sorted
- * below a large one down one. Once the day is over the figures reset to zero,
- * and the order resets with them; crypto never closes and keeps its.
- */
-const dayPctOnScreen = (p) => (dayStillRunning(p) ? dailyPercent(p) : 0);
+import { inPlay } from '../dayReset.js';
 import { ui } from '../uiState.js';
+import {
+  headerHtml, toolbarHtml, columnCell, sortByLayout, gridStyle, listContext, setPriceSource, bindColumns,
+} from './holdingColumns.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
   benchmarkSeries, benchmarkKey, benchmarkFailure,
@@ -46,7 +39,7 @@ import { buildPortfolioHistory, periodReturnFromHistory, combineHistories } from
 import { moneyWeightedReturn, modifiedDietzReturn } from '../../core/moneyWeighted.js';
 import {
   money as $u, signedMoney as $s, pctText as fp, pnlColor as clr,
-  fmtPrice, fmtShares, escapeHtml,
+  escapeHtml,
 } from '../format.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -106,16 +99,6 @@ function renderPrivacyToggle() {
   button.setAttribute('aria-pressed', String(hidden));
 }
 
-/** Header row above the compact position list. */
-const HEAD = 'font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em';
-const LIST_HEADER = `<div class="mini-grid" style="margin-bottom:6px;padding:0 2px">
-  <div style="${HEAD}">Asset</div>
-  <div style="${HEAD};text-align:center">Size</div>
-  <div style="${HEAD};text-align:center">D%</div>
-  <div class="mini-ytd" style="${HEAD};text-align:center">YTD %</div>
-  <div style="${HEAD};text-align:right">P&L</div>
-</div>`;
-
 /**
  * Says when a price came from outside regular hours.
  *
@@ -128,67 +111,22 @@ function extBadge(p) {
   return `<span class="ext-badge" title="Traded outside regular hours">${label}</span>`;
 }
 
-/**
- * How far a holding has moved this year.
- *
- * From last year's close for something held since before January, and from what
- * was paid for anything bought since — a position opened in March has no
- * January price, and its whole move is this year's.
- *
- * The price move is what is shown, coloured for the position, so a short whose
- * price fell reads as the gain it is. Null when the history has not loaded yet,
- * which shows as a dash rather than a wrong number.
- */
-function ytdPct(p) {
-  const year = new Date().getFullYear();
-  const start = p.open && p.open >= `${year}-01-01` ? p.entry : pastPrice(p.ticker, `${year - 1}-12-31`);
-  if (!(start > 0) || !(p.cur > 0)) return null;
-  return ((p.cur - start) / start) * 100;
+/** One holding as a row of the columns chosen for Home (holdingColumns.js). */
+function homeRow(p, layout, ctx) {
+  return `<div class="hc-row mini-row" style="${gridStyle(layout)}">
+    <div class="hc-cell hc-left hc-sym">
+      <span class="mini-tk">${escapeHtml(p.ticker)}</span>
+      <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>${extBadge(p)}
+    </div>
+    ${layout.cols.map((id) => columnCell(id, p, ctx)).join('')}
+  </div>`;
 }
 
-function miniRow(p) {
-  const pnl = unreal(p);
-  const retPct = pctD(pnl, costOf(p));
-  const ytd = ytdPct(p);
-  /**
-   * The day's column resets with the portfolio figure above it, or the two
-   * disagree: a row reading +2.41% under a total reading 0.00% is worse than
-   * either of them alone.
-   */
-  const running = dayStillRunning(p);
-  const daily = running ? (p.dailyChg ?? null) : 0;
-  const dailyMoney = !running
-    ? 0
-    : (dailyDollar(p) == null && dailyDollarExits(p) === 0 ? null : dailyDollarTotal(p));
-
-  // Colour the % by what it means for THIS position: a short gains when the
-  // price falls, so the raw percentage and its colour can disagree.
-  const dailySign = daily == null ? 0 : (p.dir === 'Long' ? daily : -daily);
-  const dailyText = daily != null
-    ? `<span style="color:${clr(dailySign)}">${fp(daily)}</span>`
-    : '<span style="color:var(--text4)">—</span>';
-  const ytdSign = ytd == null ? 0 : (p.dir === 'Long' ? ytd : -ytd);
-  const ytdText = ytd != null
-    ? `<span style="color:${clr(ytdSign)}">${fp(ytd)}</span>`
-    : '<span style="color:var(--text4)">—</span>';
-
-  return `<div class="mini-row mini-grid">
-    <div class="mini-asset">
-      <span class="mini-tk">${escapeHtml(p.ticker)}</span>
-      <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
-      <span class="mini-price" style="color:${daily == null ? 'var(--text3)' : clr(dailySign)}">$${fmtPrice(p.cur)}</span>${extBadge(p)}
-    </div>
-    <div class="mini-col mini-size" title="${escapeHtml(fmtShares(p.qty))} ${p.cls === 'Crypto' ? escapeHtml(p.ticker) : 'shares'} held">${escapeHtml(fmtShares(p.qty))}</div>
-    <div class="mini-col">
-      ${dailyText}
-      ${dailyMoney != null ? `<div style="font-size:10px;color:${clr(dailyMoney)};margin-top:2px">${$s(+dailyMoney.toFixed(2))}</div>` : ''}
-    </div>
-    <div class="mini-col mini-ytd">${ytdText}</div>
-    <div class="mini-pnl">
-      <div class="mini-tk" style="color:${clr(pnl)}">${$s(pnl)}</div>
-      <div style="font-size:10px;color:${clr(retPct)}">${fp(retPct)}</div>
-    </div>
-  </div>`;
+/** The Home list: the header that sorts, then every open holding in that order. */
+function holdingsList(open) {
+  const layout = state.columns.home;
+  const ctx = listContext();
+  return `<div class="hc-scroll"><div class="hc-table" style="${gridStyle(layout)}">${headerHtml('home', layout)}${sortByLayout(open, layout, ctx).map((p) => homeRow(p, layout, ctx)).join('')}</div></div>`;
 }
 
 /**
@@ -346,6 +284,11 @@ let startPrices = new Map();
 
 /** Price history per ticker, for reconstructing the days before the recording. */
 let priceHistories = new Map();
+// The holdings columns read past closes from here: 1W, 1M, 3M and YTD moves, and the 52-week range.
+setPriceSource({
+  pastPrice: (ticker, day) => pastPrice(ticker, day),
+  rowsOf: (ticker) => priceHistories.get(historySymbol(ticker, state.positions.find((p) => p.ticker === ticker)?.cls)) ?? [],
+});
 let backfillPending = false;
 /**
  * The book the back-cast was last built for.
@@ -1027,9 +970,12 @@ export function renderHome() {
   const list = document.getElementById('homePositions');
   if (list) {
     list.innerHTML = totals.open.length
-      ? LIST_HEADER + sortPositions(totals.open, ui.homeSort, dayPctOnScreen).map(miniRow).join('')
+      ? holdingsList(totals.open)
       : '<div class="empty">No open positions</div>';
   }
+  bindColumns(document.getElementById('homeHoldings'), 'home', () => renderHome());
+  const bar = document.getElementById('homeColsBar');
+  if (bar) bar.innerHTML = totals.open.length ? toolbarHtml('home', state.columns.home) : '';
 
   renderAllocation();
   // Open or not, so a day that has just closed is in it the next time it is.
