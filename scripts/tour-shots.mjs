@@ -116,8 +116,31 @@ const SHOTS = [
     },
   },
   {
+    // The column settings, open, on the Positions page.
+    name: 'columns',
+    setup: async () => {
+      window.show('positions');
+      document.querySelector('#positions .pos-card.expanded .pos-head')?.click();
+      await new Promise((r) => { setTimeout(r, 300); });
+      const box = document.getElementById('hcPicker-positions');
+      if (box?.hidden) document.querySelector('[data-hc-picker="positions"]')?.click();
+    },
+    targets: {
+      button: { sel: '[data-hc-picker="positions"]' },
+      presets: { sel: '#hcPicker-positions .hc-presets' },
+      pick: { sel: '#hcPicker-positions .hc-check', text: '1W %' },
+      order: { sel: '#hcPicker-positions .hc-item' },
+      sort: { sel: '#openPositions [data-hc-sort="dayPct"]' },
+    },
+  },
+  {
     name: 'monthly',
-    setup: () => { window.show('monthly'); },
+    setup: () => {
+      // The picker closed again, so it is not left open behind the next screens.
+      const box = document.getElementById('hcPicker-positions');
+      if (box && !box.hidden) document.querySelector('[data-hc-picker="positions"]')?.click();
+      window.show('monthly');
+    },
     targets: { tabs: { sel: '.month-tabs' }, chart: { sel: '#monthChart' }, months: { sel: '#monthTable' } },
   },
   {

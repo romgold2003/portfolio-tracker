@@ -75,7 +75,18 @@ export const SLIDES = [
       ['card', 'Open a position', 'Click any row to see its price, shares, amount invested and profit.'],
       ['dca', '+ DCA', 'Add to it, and see your new average price before you confirm.'],
       ['close', 'Close', 'Sell all of it, or only part — 25%, 50%, any amount.'],
-      ['columns', 'Columns', 'Choose what each row shows — today, this week, YTD, value, weight and more — and drag them in order. Click any heading to sort. Home has the same button, and each page keeps its own setup.'],
+    ],
+  },
+  {
+    shot: 'columns',
+    title: 'Set up your columns',
+    text: 'Choose what your lists show, and sort them any way you like.',
+    marks: [
+      ['button', '⚙ Columns', 'Opens the settings. Home and Positions each have one, and each keeps its own setup.'],
+      ['presets', 'Ready-made layouts', 'Simple, Performance, Detailed or Range in one click.'],
+      ['pick', 'Tick to add', 'Today, this week, 1 month, YTD, value, weight, 52-week high and more.'],
+      ['order', 'Drag to order', 'Drag a column up or down, or use the arrows. ✕ removes it.'],
+      ['sort', 'Click to sort', 'Click any heading for highest first, click again for lowest first.'],
     ],
   },
   {
