@@ -35,6 +35,9 @@ export const social = {
   leave: (chat) => api('leave', { body: { chat } }),
   about: (answers) => api('about', { body: answers }),
   role: () => api('role'),
+  consent: () => api('consent'),
+  accept: (version, marketing) => api('accept', { body: { version, marketing } }),
+  marketing: (marketing) => api('marketing', { body: { marketing } }),
   adminStats: () => api('admin'),
 };
 

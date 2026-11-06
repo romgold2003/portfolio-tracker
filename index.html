@@ -808,6 +808,13 @@
       </div>
     </section>
 
+    <!-- Terms, privacy and the news-email choice (src/ui/views/settings.js, api/_lib/consent.js). -->
+    <section class="set-card">
+      <div class="set-title">Terms, privacy and emails</div>
+      <div class="set-sub" id="legalStatus">Riskbook's <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</div>
+      <label class="legal-check set-marketing" id="marketingRow" hidden><input type="checkbox" id="marketingBox" onchange="chooseMarketing(this.checked)"><span>Email me news and tips about Riskbook</span></label>
+    </section>
+
     <!-- Folded, so deleting is never one stray click away. -->
     <details class="set-card danger-zone">
       <summary>Delete or erase this account</summary>

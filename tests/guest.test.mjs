@@ -99,7 +99,7 @@ describe('in the app', () => {
 
   test('a guest is never counted, asked the questions, offered Admin, or shown to friends', () => {
     assert.match(read('src/services/usage.js'), /&& !isGuest\(\)/);
-    assert.match(read('src/ui/views/aboutYou.js'), /\|\| isGuest\(\)\) return;/);
+    assert.match(read('src/ui/views/aboutYou.js'), /\|\| isGuest\(\) \|\|/);
     assert.match(read('src/ui/views/admin.js'), /\|\| isGuest\(\)\) return;/);
     assert.match(read('src/services/social.js'), /if \(!cloudEnabled\(\) \|\| isGuest\(\)\) return;/);
     assert.match(read('src/ui/views/friends.js'), /const online = cloudEnabled\(\) && !isGuest\(\);/);

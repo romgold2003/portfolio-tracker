@@ -16,7 +16,8 @@ import { query, driverGeneration } from './db.js';
 /** The accepted answers; the same ids as src/config/aboutYou.js (the tests keep them in step). */
 export const ABOUT_CHOICES = {
   sex: ['male', 'female', 'other', 'na'],
-  age: ['u18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+'],
+  // Riskbook is 18+ (Terms, section 2), so there is no "Under 18".
+  age: ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'],
   goal: ['wealth', 'trading', 'retire', 'learn', 'track'],
   experience: ['lt1', '1-3', '3-10', '10+'],
   style: ['long', 'swing', 'day'],

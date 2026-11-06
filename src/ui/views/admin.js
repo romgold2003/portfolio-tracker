@@ -71,8 +71,8 @@ function usersHtml(d) {
     || Object.entries(u.answers).some(([f, v]) => answerLabel(f, v).toLowerCase().includes(q)));
   const cols = ABOUT_QUESTIONS.map((x) => x.title);
   return `<div class="adm-tablewrap"><table class="adm-table">
-      <thead><tr><th>Email</th><th>Joined</th><th>Last active</th><th>Days active</th>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
-      <tbody>${list.map((u) => `<tr><td>${escapeHtml(u.email)}</td><td>${day(u.joined)}</td><td>${day(u.lastActive)}</td><td>${u.daysActive}</td>${ABOUT_QUESTIONS.map((x) => `<td>${escapeHtml(answerLabel(x.id, u.answers[x.id]))}</td>`).join('')}</tr>`).join('')}</tbody>
+      <thead><tr><th>Email</th><th>Joined</th><th>Last active</th><th>Days active</th><th>Agreed to terms</th><th>News emails</th>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+      <tbody>${list.map((u) => `<tr><td>${escapeHtml(u.email)}</td><td>${day(u.joined)}</td><td>${day(u.lastActive)}</td><td>${u.daysActive}</td><td>${u.agreed ? `v${u.agreed.version} · ${day(u.agreed.at)}` : 'Not yet'}</td><td>${u.newsEmails ? 'Yes' : 'No'}</td>${ABOUT_QUESTIONS.map((x) => `<td>${escapeHtml(answerLabel(x.id, u.answers[x.id]))}</td>`).join('')}</tr>`).join('')}</tbody>
     </table></div>
     <div class="adm-foot">${list.length} of ${d.users.length} users</div>`;
 }
@@ -89,6 +89,7 @@ export function adminHtml(d) {
       ${tile('Active this week', t.wau, pct(t.wau, t.users) + ' of users')}
       ${tile('Active this month', t.mau, pct(t.mau, t.users) + ' of users')}
       ${tile('Profiles answered', t.profiles, pct(t.profiles, t.users) + ' of users')}
+      ${tile('Agreed to the terms', t.agreed ?? 0, `${t.newsEmails ?? 0} want news emails`)}
       ${tile('Came back after 1 / 7 / 30 days', `${ret('d1')} · ${ret('d7')} · ${ret('d30')}`, 'retention')}
     </div>
     <div class="adm-two">
@@ -119,12 +120,13 @@ export function adminHtml(d) {
 
 /** Every user and their answers as a CSV, for a spreadsheet. Exported for the tests. */
 export function usersCsv(d) {
-  const head = ['email', 'joined', 'last_active', 'days_active', ...ABOUT_QUESTIONS.map((q) => q.id)];
+  const head = ['email', 'joined', 'last_active', 'days_active', 'terms_version', 'terms_accepted', 'news_emails', ...ABOUT_QUESTIONS.map((q) => q.id)];
   const cell = (v) => {
     const s = String(v ?? '');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const rows = d.users.map((u) => [u.email, String(u.joined ?? '').slice(0, 10), u.lastActive ?? '', u.daysActive,
+    u.agreed?.version ?? '', String(u.agreed?.at ?? '').slice(0, 10), u.newsEmails ? 'yes' : 'no',
     ...ABOUT_QUESTIONS.map((q) => (q.country ? (u.answers[q.id] ?? '') : answerLabel(q.id, u.answers[q.id])))]);
   return [head, ...rows].map((r) => r.map(cell).join(',')).join('\n');
 }

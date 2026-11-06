@@ -11,8 +11,10 @@
 import {
   listProfiles, findByEmail, createProfile, unlockWithPassword,
   unlockWithRecoveryKey, setPassword, looksLikeEmail, cloudMode,
-  requestPasswordReset, completePasswordReset, resetTokenInUrl, startGuest,
+  requestPasswordReset, completePasswordReset, resetTokenInUrl, startGuest, emptyJournal,
 } from '../../core/profiles.js';
+import { LEGAL_VERSION, TERMS_URL, PRIVACY_URL } from '../../config/legal.js';
+import { social } from '../../services/social.js';
 import { buildDemoJournal, FALLBACK_PRICES } from '../../features/demoJournal.js';
 import { cryptoAvailable } from '../../core/crypto.js';
 import { emailResetEnabled } from '../../services/cloud.js';
@@ -99,6 +101,7 @@ function signinForm() {
     ${cloudMode() ? `<div class="lock-guest">
       <button type="button" class="lock-guest-btn" id="lockGuest">Continue as a guest</button>
       <p>Look around with a sample portfolio. Nothing you do is saved.</p>
+      <p class="lock-legal">By continuing as a guest you agree to the <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>.</p>
     </div>` : ''}`;
 }
 
@@ -191,6 +194,11 @@ function createForm() {
       <label for="lockPassword2">Confirm password</label>
       <input type="password" id="lockPassword2" autocomplete="new-password" placeholder="Type it again">
     </div>
+    <!-- Agreement: required, never pre-ticked. News emails: optional, separate, never pre-ticked. -->
+    <label class="lock-agree"><input type="checkbox" id="lockAgree">
+      <span>I am 18 or older and I agree to the <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and the <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
+    <label class="lock-agree lock-agree-opt"><input type="checkbox" id="lockMarketing">
+      <span>Email me news and tips about Riskbook (optional — unsubscribe any time).</span></label>
     <div id="lockError" class="lock-error"></div>
     <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Create account">Create account</button>
     <div class="lock-links">
@@ -405,13 +413,18 @@ async function doCreate() {
   const confirm = el('lockPassword2').value;
   if (!looksLikeEmail(email)) throw new Error('That does not look like an email address.');
   if (password !== confirm) throw new Error('The two passwords do not match.');
+  if (!el('lockAgree')?.checked) throw new Error('To create an account, confirm you are 18 or older and agree to the Terms of Service and the Privacy Policy.');
+  const marketing = Boolean(el('lockMarketing')?.checked);
 
   busy(true, 'Creating…');
+  // Agreed at sign-up, so the account is not asked again at its first sign-in.
   const journal = legacyJournal
-    ? { ...legacyJournal, priceLog: {} }
-    : null;
+    ? { ...legacyJournal, priceLog: {}, legalVersion: LEGAL_VERSION }
+    : { ...emptyJournal(), legalVersion: LEGAL_VERSION };
   const { recoveryKey } = await createProfile(email, password, journal);
   pendingEmail = email;
+  // The proof, on the server: this version, now, and the marketing choice. Never blocks the sign-up.
+  if (cloudMode()) social.accept(LEGAL_VERSION, marketing).catch(() => {});
 
   /**
    * The recovery-key screen only earns its place when it is the only way back.

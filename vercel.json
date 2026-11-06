@@ -6,6 +6,14 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/terms",
+      "destination": "/assets/terms.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/assets/privacy.html"
+    },
+    {
       "source": "/api/fed",
       "destination": "/api/news/fed"
     },

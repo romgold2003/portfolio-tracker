@@ -1,5 +1,9 @@
 /** The Settings window: importing from the broker, live prices, the journal and the account. */
 import { state, returnMethod, setReturnMethod } from '../../core/store.js';
+import { isGuest } from '../../core/profiles.js';
+import { social } from '../../services/social.js';
+import { cloudEnabled } from '../../services/cloud.js';
+import { TERMS_URL, PRIVACY_URL } from '../../config/legal.js';
 import { benchmarkKey } from '../../services/benchmark.js';
 import { cloudMode } from '../../core/profiles.js';
 import { chainReport, historyGaps } from '../../features/statementLibrary.js';
@@ -16,6 +20,7 @@ export function openSettings() {
   describeStorage();
   describeImport();
   describeReturns();
+  describeLegal();
   renderStatementYears();
   modal()?.classList.add('show');
 }
@@ -42,6 +47,29 @@ export function describeReturns() {
     : broker && broker.id !== 'other' ? `${RETURN_METHODS[method].label}, as ${broker.name} measures it —`
       : `${RETURN_METHODS[method].label} —`;
   hint.textContent = `${lead} ${why} When no money moved, both give the same number.`;
+}
+
+/**
+ * The Terms and Privacy card: links to both, which version was accepted and
+ * when, and the news-email choice, read from the server's record.
+ */
+async function describeLegal() {
+  const status = document.getElementById('legalStatus');
+  const row = document.getElementById('marketingRow');
+  const box = document.getElementById('marketingBox');
+  const links = `<a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>`;
+  if (status) status.innerHTML = `Riskbook's ${links}.`;
+  if (row) row.hidden = true;
+  if (!cloudEnabled() || isGuest()) return;
+  try {
+    const c = await social.consent();
+    if (status && c.version) {
+      const on = new Date(c.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      status.innerHTML = `You accepted the ${links} (version ${c.version}) on ${on}.`;
+    }
+    if (box) box.checked = Boolean(c.marketing);
+    if (row) row.hidden = false;
+  } catch { /* the links are still there */ }
 }
 
 /** The import card says where things stand: which broker, which years are in. */

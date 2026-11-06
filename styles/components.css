@@ -1830,3 +1830,22 @@ body.is-guest{padding-top:36px}
 .mind-gv{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text3);padding:3px 0}
 .mind-gv b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
 .mind-foot,.mind-empty{font-size:12px;color:var(--text3);margin:10px 0 0;line-height:1.5}
+
+/* ───────── Terms and privacy (views/legal.js, lockScreen.js, settings.js) ───────── */
+.lock-agree{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.5;color:var(--text2);margin:4px 0 10px;cursor:pointer;text-align:left}
+.lock-agree input{width:16px;height:16px;flex:none;margin-top:2px;accent-color:var(--blue);-webkit-appearance:auto;appearance:auto}
+.lock-agree a{color:var(--blue)}
+.lock-agree-opt{color:var(--text3)}
+.lock-legal{font-size:11.5px !important}
+.lock-legal a{color:var(--text2)}
+.legal-points{margin:0 0 16px;padding-left:20px;font-size:14px;color:var(--a-sub);line-height:1.55}
+.legal-points b{color:var(--a-text)}
+.legal-check{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.5;color:var(--a-text);margin:0 0 12px;cursor:pointer}
+.legal-check input{width:18px;height:18px;flex:none;margin-top:2px;accent-color:var(--a-navy);-webkit-appearance:auto;appearance:auto}
+.legal-check a,.legal-gate .guest-text a{color:var(--a-navy)}
+.legal-opt{color:var(--a-sub)}
+.about-primary[disabled]{opacity:0.45;cursor:not-allowed}
+/* In Settings, in the app's own colours. */
+.set-marketing{color:var(--text2);font-size:13px;margin:10px 0 0}
+.set-marketing input{accent-color:var(--blue)}
+#legalStatus a{color:var(--blue)}

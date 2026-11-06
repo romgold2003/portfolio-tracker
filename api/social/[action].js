@@ -20,6 +20,9 @@
  *   GET  /api/social/role                   whether this account is admin (_lib/admin.js)
  *   GET  /api/social/admin                  the Admin page's figures — admin only
  *   POST /api/social/ping       {open, pages, imports}  a batch of use, counted per day
+ *   GET  /api/social/consent                which Terms/Privacy version this account accepted (_lib/consent.js)
+ *   POST /api/social/accept     {version, marketing}  accept a version of the Terms and Privacy Policy
+ *   POST /api/social/marketing  {marketing}  change the marketing-email choice
  *
  * One function for all of them, as with auth and the News panels: a Hobby
  * deployment allows twelve, and this is the eighth.
@@ -31,6 +34,7 @@ import { userForToken } from '../_lib/accounts.js';
 import * as social from '../_lib/social.js';
 import { saveAbout } from '../_lib/about.js';
 import { isAdmin, adminStats, recordActivity } from '../_lib/admin.js';
+import { recordConsent, setMarketing, consentOf } from '../_lib/consent.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -40,6 +44,7 @@ const GETS = {
   portfolio: (user, url) => social.friendShare(user, url.searchParams.get('friend') ?? ''),
   chats: async (user) => ({ chats: await social.chatsOf(user) }),
   role: (user) => ({ admin: isAdmin(user) }),
+  consent: (user) => consentOf(user),
   // Checked here, on the server: the page's button is only a convenience.
   admin: (user) => {
     if (!isAdmin(user)) throw new social.SocialError(403, 'Not allowed.');
@@ -64,6 +69,8 @@ const POSTS = {
   members: { limit: [60, 60], run: (user, b) => social.setMembers(user, b.chat, b.add, b.remove) },
   about: { limit: [20, 60], run: (user, b) => saveAbout(user, b) },
   ping: { limit: [120, 60], run: (user, b) => recordActivity(user, b) },
+  accept: { limit: [30, 60], run: (user, b) => recordConsent(user, b) },
+  marketing: { limit: [30, 60], run: (user, b) => setMarketing(user, b) },
 };
 
 function actionFrom(url) {

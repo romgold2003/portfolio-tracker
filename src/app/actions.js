@@ -40,6 +40,8 @@ import { openTour, closeTour } from '../ui/views/tour.js';
 import '../ui/views/aboutYou.js';
 // And the guest notice and bar, for a visit without an account.
 import '../ui/views/guest.js';
+// And the Terms and Privacy Policy screen, asked before anything else.
+import '../ui/views/legal.js';
 import { renderPositions } from '../ui/views/positions.js';
 import { renderClosePreview } from '../ui/views/closePreview.js';
 import { renderMonthly, renderMonthDetail, populateMonthPicker, populateYearPicker, selectMonth } from '../ui/views/monthly.js';
@@ -52,6 +54,7 @@ import {
 } from '../ui/views/brokerPicker.js';
 import { decodeText, sheetsFromMarkup } from '../features/sheetText.js';
 import { notePage, noteImport } from '../services/usage.js';
+import { social } from '../services/social.js';
 import {
   statementRecord, withStatements, withoutStatement, chainReport, journalFromStatements, newestYearIn, sourceOf,
 } from '../features/statementLibrary.js';
@@ -787,7 +790,7 @@ export function installActions(extra = {}) {
     openFavorites, closeFavorites,
     openSettings: openSettingsFresh, closeSettings, saveAndQuit,
     openYearsPanel, closeYearsPanel, chooseYearFile, chooseWholeHistory,
-    chooseBroker, changeBroker, filterBrokers, toggleEarlierYears, chooseReturnMethod,
+    chooseBroker, changeBroker, filterBrokers, toggleEarlierYears, chooseReturnMethod, chooseMarketing,
     // trades
     addPos, clearForm, setDir, updateSizeHint, setMind,
     checkTicker, toggleClosedTrade, saveEdit, updatePrice, editCash, del, reopen,
@@ -1396,6 +1399,18 @@ function redrawIfMethodChanges(change) {
 }
 const chooseBroker = (id) => redrawIfMethodChanges(() => pickBroker(id));
 const changeBroker = () => redrawIfMethodChanges(() => unpickBroker());
+
+/** News emails on or off, from Settings; recorded on the server with the time it changed. */
+async function chooseMarketing(on) {
+  try {
+    await social.marketing(Boolean(on));
+    showToast(on ? 'You will get news and tips by email' : 'No more news emails', 'heard', 2500);
+  } catch (err) {
+    showToast(err.message, 'error', 4000);
+    const box = el('marketingBox');
+    if (box) box.checked = !on;
+  }
+}
 
 /** Time- or money-weighted, or '' to follow the broker; every figure is redrawn at once. */
 function chooseReturnMethod(method) {

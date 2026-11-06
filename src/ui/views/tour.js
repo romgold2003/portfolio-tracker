@@ -8,7 +8,7 @@
  * The pictures are assets/tour-*.webp and where their buttons sit is
  * tourShots.js, both written by scripts/tour-shots.mjs from the same screens.
  */
-import { state, setTourSeen, aboutDue, onJournalLoaded } from '../../core/store.js';
+import { state, setTourSeen, aboutDue, legalDue, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { notePage } from '../../services/usage.js';
@@ -280,7 +280,7 @@ function bind() {
 onJournalLoaded(() => {
   // "About you" comes first where it is asked; that window opens the tutorial when it closes.
   // A guest's tutorial follows the guest notice instead (ui/views/guest.js).
-  if (state.tourSeen || !isUnlocked() || isGuest() || (aboutDue() && cloudEnabled())) return;
+  if (state.tourSeen || !isUnlocked() || isGuest() || legalDue() || (aboutDue() && cloudEnabled())) return;
   setTimeout(() => {
     if (!state.tourSeen && isUnlocked() && el('tour')?.hidden) openTour();
   }, 900);

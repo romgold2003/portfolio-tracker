@@ -38,7 +38,7 @@ export const ABOUT_QUESTIONS = [
   },
   {
     id: 'age', title: 'Age', ask: 'Age', hint: 'Select your age range.',
-    options: [['u18', 'Under 18'], ['18-24', '18–24'], ['25-34', '25–34'], ['35-44', '35–44'], ['45-54', '45–54'], ['55-64', '55–64'], ['65+', '65 and over']],
+    options: [['18-24', '18–24'], ['25-34', '25–34'], ['35-44', '35–44'], ['45-54', '45–54'], ['55-64', '55–64'], ['65+', '65 and over']],
   },
   {
     id: 'goal', title: 'Investment objectives', ask: 'Investment objectives', hint: 'Select all that apply.', multi: true,

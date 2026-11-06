@@ -293,6 +293,8 @@ export async function deleteUser(userId) {
   // And the counts of their use (the Admin page).
   const { forgetActivity } = await import('./admin.js');
   await forgetActivity(userId);
+  const { forgetConsent } = await import('./consent.js');
+  await forgetConsent(userId);
   forgetAllSessions();
   await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   await query('DELETE FROM resets WHERE user_id = $1', [userId]);

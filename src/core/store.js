@@ -13,6 +13,7 @@ import { STORAGE_KEYS, ASSET_CLASSES } from '../config/constants.js';
 import { SECTOR_NAMES } from '../config/sectors.js';
 import { returnMethodOf } from '../config/brokers.js';
 import { ABOUT_VERSION, ABOUT_ASK_BELOW } from '../config/aboutYou.js';
+import { LEGAL_VERSION } from '../config/legal.js';
 
 export const state = {
   /** @type {Position[]} every trade, open and closed */
@@ -104,6 +105,13 @@ export const state = {
    */
   aboutVersion: 0,
   /**
+   * The version of the Terms of Service and Privacy Policy this account
+   * accepted (config/legal.js); 0 for none. Behind LEGAL_VERSION, the account
+   * is asked to accept before using the app (ui/views/legal.js). The server
+   * keeps the proof (api/_lib/consent.js).
+   */
+  legalVersion: 0,
+  /**
    * The broker chosen in the import window (config/brokers.js), so it opens
    * straight on that broker's steps next time. Kept with the sign-in.
    */
@@ -133,6 +141,18 @@ export function setReturnMethod(method) {
   const next = method === 'twr' || method === 'mwr' ? method : null;
   if (state.returnMethod === next) return;
   state.returnMethod = next;
+  scheduleFlush();
+}
+
+/** Whether this account still has to accept the current Terms and Privacy Policy. */
+export function legalDue() {
+  return state.legalVersion < LEGAL_VERSION;
+}
+
+/** The current Terms and Privacy Policy were accepted. */
+export function setLegalAccepted() {
+  if (!legalDue()) return;
+  state.legalVersion = LEGAL_VERSION;
   scheduleFlush();
 }
 
@@ -904,6 +924,7 @@ export function loadState(journal) {
     state.layoutHidden = cleanLayout(source.layoutHidden);
     state.tourSeen = source.tourSeen === true;
     state.aboutVersion = Number.isInteger(source.aboutVersion) ? source.aboutVersion : (source.aboutDone === true ? 1 : 0);
+    state.legalVersion = Number.isInteger(source.legalVersion) ? source.legalVersion : 0;
     state.broker = typeof source.broker === 'string' ? source.broker : null;
     state.returnMethod = source.returnMethod === 'twr' || source.returnMethod === 'mwr' ? source.returnMethod : null;
   } else {
@@ -930,6 +951,7 @@ export function journalSnapshot() {
     layoutHidden: state.layoutHidden,
     tourSeen: state.tourSeen,
     aboutVersion: state.aboutVersion,
+    legalVersion: state.legalVersion,
     broker: state.broker,
     returnMethod: state.returnMethod,
     homeId: book.homeId,
@@ -959,6 +981,7 @@ export function clearState() {
   state.layoutHidden = [];
   state.tourSeen = false;
   state.aboutVersion = 0;
+  state.legalVersion = 0;
   state.broker = null;
   state.returnMethod = null;
   announceJournal();

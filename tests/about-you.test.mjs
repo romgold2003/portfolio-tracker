@@ -202,7 +202,7 @@ describe('when it is asked', () => {
     // Accounts made before the questions have no flag, so they are asked too.
     assert.match(store, /aboutVersion: 0,/);
     assert.match(store, /aboutVersion: state\.aboutVersion/);
-    assert.match(read('src/ui/views/aboutYou.js'), /if \(!aboutDue\(\) \|\| !isUnlocked\(\) \|\| isGuest\(\)\) return;/);
+    assert.match(read('src/ui/views/aboutYou.js'), /if \(!aboutDue\(\) \|\| !isUnlocked\(\) \|\| isGuest\(\) \|\| legalDue\(\)\) return;/);
     assert.match(read('src/ui/views/tour.js'), /\(aboutDue\(\) && cloudEnabled\(\)\)/);
     // Only the eight questions: an existing account is never asked for its email or password again.
     const { slideHtml } = await import('../src/ui/views/aboutYou.js');

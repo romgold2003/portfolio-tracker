@@ -16,7 +16,7 @@
  * The answers go to the server on their own (api/_lib/about.js), never into
  * the encrypted journal, and never to anyone but Romy.
  */
-import { state, setAboutDone, aboutDue, onJournalLoaded } from '../../core/store.js';
+import { state, setAboutDone, aboutDue, legalDue, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { social } from '../../services/social.js';
@@ -268,7 +268,8 @@ export function openAboutYou() {
  */
 onJournalLoaded(() => {
   // A guest has no account to keep answers with.
-  if (!aboutDue() || !isUnlocked() || isGuest()) return;
+  // The Terms come first (ui/views/legal.js), which opens this once they are accepted.
+  if (!aboutDue() || !isUnlocked() || isGuest() || legalDue()) return;
   if (!cloudEnabled()) { setAboutDone(); return; }
   setTimeout(() => {
     if (aboutDue() && isUnlocked() && el('aboutYou')?.hidden) openAboutYou();

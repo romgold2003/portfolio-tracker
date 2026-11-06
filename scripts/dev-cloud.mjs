@@ -127,6 +127,9 @@ const ROUTES = {
   '/api/social/role': '../api/social/[action].js',
   '/api/social/admin': '../api/social/[action].js',
   '/api/social/ping': '../api/social/[action].js',
+  '/api/social/consent': '../api/social/[action].js',
+  '/api/social/accept': '../api/social/[action].js',
+  '/api/social/marketing': '../api/social/[action].js',
 };
 
 const handlers = new Map();
@@ -139,7 +142,11 @@ async function handlerFor(pathname) {
   return handlers.get(pathname);
 }
 
+/** The legal pages at the same addresses as on Vercel (vercel.json rewrites). */
+const PAGE_ALIASES = { '/terms': '/assets/terms.html', '/privacy': '/assets/privacy.html' };
+
 async function serveStatic(res, urlPath) {
+  urlPath = PAGE_ALIASES[urlPath] ?? urlPath;
   // Anything that resolves outside the project is a traversal attempt.
   const relative = normalize(decodeURIComponent(urlPath)).replace(/^([/\\])+/, '');
   const file = join(ROOT, relative === '' ? 'index.html' : relative);

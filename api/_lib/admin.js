@@ -127,6 +127,9 @@ export async function adminStats({ now = new Date() } = {}) {
   const activity = await rowsOf('SELECT user_id, day, opens, pages, imports FROM activity_days WHERE day >= $1', [since]);
   const lastSeen = await rowsOf('SELECT user_id, MAX(day) AS day, COUNT(*) AS days FROM activity_days GROUP BY user_id');
   const vaults = await rowsOf('SELECT user_id, updated_at FROM vaults');
+  const { ensureConsentTable } = await import('./consent.js');
+  await ensureConsentTable();
+  const consents = new Map((await rowsOf('SELECT user_id, version, accepted_at, marketing FROM consents')).map((c) => [c.user_id, c]));
   const count = async (sql) => Number((await rowsOf(sql))[0]?.n ?? 0);
 
   const answersOf = new Map(about.map((a) => [a.user_id, a]));
@@ -198,6 +201,8 @@ export async function adminStats({ now = new Date() } = {}) {
       dau: activeWithin(1),
       wau: activeWithin(7),
       mau: activeWithin(30),
+      agreed: users.filter((u) => consents.has(u.id)).length,
+      newsEmails: users.filter((u) => Number(consents.get(u.id)?.marketing) === 1).length,
       profiles: about.filter((a) => ['first_name', 'last_name', 'sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation'].some((f) => a[f])).length,
     },
     days,
@@ -218,6 +223,9 @@ export async function adminStats({ now = new Date() } = {}) {
         email: u.email,
         joined: u.created_at,
         lastActive: lastActive(u.id),
+        // Which Terms/Privacy version they accepted and when, and the news-email choice.
+        agreed: consents.has(u.id) ? { version: Number(consents.get(u.id).version), at: consents.get(u.id).accepted_at } : null,
+        newsEmails: Number(consents.get(u.id)?.marketing) === 1,
         daysActive: Number(seenOf.get(u.id)?.days ?? 0),
         answers: {
           name: [a.first_name, a.last_name].filter(Boolean).join(' ') || null,
