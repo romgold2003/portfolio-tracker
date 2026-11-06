@@ -95,16 +95,18 @@ describe('what the documents say', () => {
     assert.match(privacy, /We do not sell personal information/);
   });
 
-  // Laid out like a brokerage's legal pages: masthead, contents beside the text, no boxes.
-  test('masthead, a link between the two, contents on the side', () => {
-    for (const [doc, self] of [[terms, '/terms'], [privacy, '/privacy']]) {
-      assert.match(doc, /<header class="masthead">/);
-      assert.match(doc, new RegExp(`<a href="${self}" aria-current="page">`));
-      assert.match(doc, /<details class="side" open>\s*<summary>Contents<\/summary>\s*<ol class="toc">/);
+  // Romy, November 2026: set like a law firm's agreement — type on plain paper, no coloured band, no boxes.
+  test('one column of type: a plain head, the other document linked, contents after the summary', () => {
+    for (const [doc, other] of [[terms, '/privacy'], [privacy, '/terms']]) {
+      assert.match(doc, /<main class="doc">\s*<header class="doc-head">/);
+      assert.match(doc, new RegExp(`<a class="doc-other" href="${other}">`));
+      assert.match(doc, /<\/section>\s*<nav class="contents" aria-label="Contents">\s*<p class="contents-h">Contents<\/p>\s*<ol class="toc">/);
       assert.equal((doc.match(/class="toc"/g) ?? []).length, 1);
-      assert.match(doc, /<script src="\/assets\/legal\.js" defer><\/script>/);
+      assert.doesNotMatch(doc, /masthead|class="side"|legal\.js/);
     }
-    assert.doesNotMatch(read('assets/legal.css'), /border-radius/);
+    const css = read('assets/legal.css');
+    assert.doesNotMatch(css, /border-radius|--navy|box-shadow/);
+    assert.match(css, /Palatino/);
   });
 
   // Vercel's clean URLs serve assets/terms.html at /assets/terms; the rewrite points there.
