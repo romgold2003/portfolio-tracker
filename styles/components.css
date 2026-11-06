@@ -1734,28 +1734,72 @@ body.tour-open{overflow:hidden}
 
 /* ───────── Admin (views/admin.js) — Romy only ───────── */
 .admin-btn{color:var(--amber)}
-.adm-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px}
-.adm-kpis-sm{margin-top:14px}
-.adm-tile{background:var(--panel);border:0.5px solid var(--border);border-radius:10px;padding:13px 16px}
-.adm-tl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
-.adm-tv{font-size:22px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
-.adm-ts{font-size:11.5px;color:var(--text3);margin-top:4px}
-.adm-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
-@media (max-width:900px){.adm-two{grid-template-columns:minmax(0,1fr)}}
-.adm-section{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 10px}
-.adm-qs{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
-.adm-bars{display:flex;flex-direction:column;gap:7px;margin-top:6px}
-.adm-bar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.6fr) 34px 40px;align-items:center;gap:8px;font-size:12.5px}
-.adm-bl{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.adm-bt{height:8px;border-radius:4px;background:var(--input);overflow:hidden}
-.adm-bt span{display:block;height:100%;border-radius:4px;background:var(--blue)}
-.adm-bn{text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
-.adm-bp{text-align:right;color:var(--text3);font-variant-numeric:tabular-nums}
-.adm-cols{display:flex;align-items:flex-end;gap:2px;height:110px;margin-top:10px}
-.adm-col{flex:1;height:100%;display:flex;align-items:flex-end;background:var(--input);border-radius:2px}
-.adm-col span{display:block;width:100%;background:var(--blue);border-radius:2px;min-height:0}
+.adm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+@media (max-width:760px){.adm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.adm-kpi{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;font:inherit;cursor:pointer;
+  background:var(--panel);border:0.5px solid var(--border);border-radius:10px;padding:14px 16px;transition:border-color .15s,background .15s}
+.adm-kpi:hover{border-color:var(--border2)}
+.adm-kpi.on{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
+.adm-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.adm-kl{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
+.adm-kv{font-size:30px;font-weight:600;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
+.adm-ks{font-size:11.5px;color:var(--text3)}
+.adm-live{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 25%,transparent)}
+.adm-chart{margin-bottom:8px}
+.adm-chead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.adm-cmax{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums}
+.adm-cols{display:flex;align-items:flex-end;gap:2px;height:150px;margin-top:12px;border-bottom:1px solid var(--border2)}
+.adm-col{flex:1;height:100%;display:flex;align-items:flex-end;position:relative;cursor:default}
+.adm-col span{display:block;width:100%;background:var(--blue);border-radius:3px 3px 0 0;min-height:0}
+.adm-col:hover span{filter:brightness(1.25)}
+.adm-col:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:nowrap;z-index:2;
+  font-size:11.5px;color:var(--text);background:var(--panel);border:0.5px solid var(--border2);border-radius:6px;padding:4px 8px;box-shadow:0 4px 14px rgba(0,0,0,0.3);pointer-events:none}
+.adm-col:first-child:hover::after{left:0;transform:none}
+.adm-col:last-child:hover::after{left:auto;right:0;transform:none}
 .adm-axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text3);margin-top:6px}
-.adm-userhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.adm-total{font-size:12.5px;color:var(--text3);margin:4px 0 0}
+.adm-section{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:22px 0 10px}
+.adm-hint{text-transform:none;letter-spacing:0}
+/* The pies: the reference categorical palette, dark steps by default, light with body.light; slot 0 is Other. */
+.adm-pies{--p1:#3987e5;--p2:#d95926;--p3:#199e70;--p4:#c98500;--p5:#d55181;--p6:#008300;--p7:#9085e9;--p0:#7c8496;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+body.light .adm-pies{--p1:#2a78d6;--p2:#eb6834;--p3:#1baf7a;--p4:#eda100;--p5:#e87ba4;--p6:#008300;--p7:#6250d6;--p0:#a3a9b6}
+.adm-pnote{font-size:11px;color:var(--text3);margin-top:-2px}
+.adm-pbody{display:flex;align-items:center;gap:16px;margin-top:10px}
+.adm-psvg{width:118px;height:118px;flex:none}
+.adm-slice{stroke:var(--panel);stroke-width:2;stroke-linejoin:round}
+.adm-slice:hover{opacity:0.85}
+.adm-pies .s1{fill:var(--p1);background:var(--p1)}.adm-pies .s2{fill:var(--p2);background:var(--p2)}.adm-pies .s3{fill:var(--p3);background:var(--p3)}.adm-pies .s4{fill:var(--p4);background:var(--p4)}
+.adm-pies .s5{fill:var(--p5);background:var(--p5)}.adm-pies .s6{fill:var(--p6);background:var(--p6)}.adm-pies .s7{fill:var(--p7);background:var(--p7)}.adm-pies .s0{fill:var(--p0);background:var(--p0)}
+.adm-legend{list-style:none;margin:0;padding:0;flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.adm-legend li{display:grid;grid-template-columns:10px minmax(0,1fr) auto 36px;align-items:center;gap:8px;font-size:12px}
+.adm-legend li.zero{opacity:0.45}
+.adm-sw{width:10px;height:10px;border-radius:2px}
+.adm-ll{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-ln{color:var(--text);font-variant-numeric:tabular-nums;text-align:right}
+.adm-lp{color:var(--text3);font-variant-numeric:tabular-nums;text-align:right}
+/* What users see. */
+.adm-pvs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.adm-pv{display:flex;flex-direction:column;gap:3px;text-align:left;font:inherit;cursor:pointer;background:var(--panel);border:0.5px solid var(--border);border-radius:10px;padding:12px 14px}
+.adm-pv:hover{border-color:var(--blue)}
+.adm-pvl{font-size:13.5px;font-weight:600;color:var(--text)}
+.adm-pvs{font-size:11.5px;color:var(--text3)}
+.adm-ribbon{position:fixed;top:0;left:0;right:0;z-index:600;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;
+  padding:8px 14px;font-size:13px;color:#fff;background:#7a3fd1;box-shadow:0 2px 10px rgba(0,0,0,0.35)}
+.adm-ribbon[hidden]{display:none}
+.adm-ribbon button{font:inherit;font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.5);border-radius:6px;padding:4px 12px;cursor:pointer}
+.adm-ribbon button:hover{background:rgba(255,255,255,0.3)}
+.adm-preview{z-index:550}
+/* Room for the ribbon above whatever is previewed. */
+body.adm-previewing .tour{padding-top:56px}
+body.adm-previewing .tour-card{max-height:calc(100dvh - 72px)}
+.adm-pv-lock{width:min(420px,100%);max-height:calc(100dvh - 80px);overflow-y:auto}
+/* All users, folded away. */
+.adm-users > summary{cursor:pointer;list-style:none}
+.adm-users > summary::-webkit-details-marker{display:none}
+.adm-users > summary::before{content:'▸ '}
+.adm-users[open] > summary::before{content:'▾ '}
+.adm-userhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .adm-search{flex:1;min-width:180px;max-width:320px;padding:7px 10px;font-size:12.5px;text-transform:none;letter-spacing:0}
 .adm-csv{padding:7px 14px;font-size:12px;text-transform:none;letter-spacing:0}
 .adm-tablewrap{overflow-x:auto;border:0.5px solid var(--border);border-radius:10px;background:var(--panel)}

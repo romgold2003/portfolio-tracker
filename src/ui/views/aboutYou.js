@@ -33,6 +33,8 @@ const byId = Object.fromEntries(ABOUT_QUESTIONS.map((q) => [q.id, q]));
 let answers = {};
 let at = 0;
 let saving = false;
+/** Opened from Admin to see it as users do: nothing is saved, and nothing follows it. */
+let previewing = false;
 
 const picked = (v) => (Array.isArray(v) ? v.length > 0 : Boolean(v));
 /** Whether a question has an answer: the name either part of it, the rest a choice. */
@@ -161,6 +163,12 @@ function choose(id, value) {
 }
 
 function close() {
+  if (previewing) {
+    previewing = false;
+    el('aboutYou').hidden = true;
+    document.body.classList.remove('tour-open');
+    return;
+  }
   setAboutDone();
   el('aboutYou').hidden = true;
   document.body.classList.remove('tour-open');
@@ -170,7 +178,7 @@ function close() {
 
 async function finish() {
   if (saving) return;
-  if (!countAnswered(answers)) { close(); return; }
+  if (previewing || !countAnswered(answers)) { close(); return; }
   const button = el('aboutCard').querySelector('[data-about-finish]');
   saving = true;
   if (button) { button.disabled = true; button.textContent = 'Saving…'; }
@@ -228,9 +236,10 @@ function bind(box) {
   });
 }
 
-export function openAboutYou() {
+export function openAboutYou({ preview = false } = {}) {
   const box = el('aboutYou');
   if (!box) return;
+  previewing = preview;
   answers = {};
   at = 0;
   bind(box);

@@ -152,12 +152,65 @@ describe('the page', () => {
       users: [{ email: 'noa@example.com', joined: '2026-11-04T10:00:00Z', lastActive: '2026-11-04', daysActive: 1, answers: { sex: 'female', goal: 'wealth,learn', country: 'IL' } }],
     };
     const html = adminHtml(d);
-    for (const s of ['Active today', 'Came back after 1 / 7 / 30 days', 'Investment objectives', 'Interactive Brokers', 'noa@example.com', 'Long-term growth of wealth']) assert.ok(html.includes(s), s);
+    for (const s of ['Online now', 'Today', 'This week', 'New today', 'Investment objectives', 'noa@example.com', 'Long-term growth of wealth']) assert.ok(html.includes(s), s);
     assert.equal(answerLabel('goal', 'wealth,learn'), 'Long-term growth of wealth, Learning to invest');
     const csv = usersCsv(d).split('\n');
     assert.equal(csv[0].split(',')[0], 'email');
     assert.match(csv[1], /"Long-term growth of wealth, Learning to invest"/);
     assert.match(csv[1], /,IL,/);
+  });
+
+  // Romy, November 2026: online now, today, this week, new today — each opening its history — and a pie per question.
+  test('four numbers, each pressing open its history; a pie for every question', async () => {
+    const { adminHtml, chartHtml } = await import('../src/ui/views/admin.js');
+    const d = {
+      generatedAt: new Date().toISOString(),
+      totals: { users: 5, newToday: 2, dau: 3, wau: 4, online: 1, profiles: 3, agreed: 5 },
+      days: Array.from({ length: 60 }, (_, i) => ({ day: `2026-09-${String((i % 28) + 1).padStart(2, '0')}`, signups: i === 59 ? 2 : 0, active: i % 4 })),
+      hourly: Array.from({ length: 48 }, (_, i) => ({ hour: `2026-11-06T${String(i % 24).padStart(2, '0')}`, active: i === 47 ? 1 : 0 })),
+      weeks: Array.from({ length: 12 }, (_, i) => ({ start: '2026-10-01', end: '2026-10-07', active: i })),
+      questions: { sex: { female: 2, male: 1 }, age: { '25-34': 3 }, country: { IL: 2, US: 1 }, goal: { wealth: 2, learn: 1 } },
+      users: [],
+    };
+    const html = adminHtml(d);
+    for (const key of ['online', 'today', 'week', 'new']) assert.match(html, new RegExp(`data-adm-series="${key}"`));
+    assert.match(html, /data-adm-series="today" aria-pressed="true"/, 'today is shown first');
+    assert.equal((chartHtml(d, 'online').match(/class="adm-col"/g) ?? []).length, 48);
+    assert.equal((chartHtml(d, 'week').match(/class="adm-col"/g) ?? []).length, 12);
+    assert.equal((chartHtml(d, 'new').match(/class="adm-col"/g) ?? []).length, 60);
+    assert.match(chartHtml(d, 'new'), /Now · 2/);
+    // Eight pies: gender and age drawn, an unanswered one says so.
+    assert.equal((html.match(/class="card adm-pie"/g) ?? []).length, 8);
+    assert.match(html, /<path d="M64,64[^"]*" class="adm-slice s2"><title>Female: 2 \(67%\)/);
+    assert.match(html, /<circle[^>]*class="adm-slice s2"><title>25–34: 3 \(100%\)/);
+    assert.match(html, /Several answers per person/);
+    assert.match(html, /No answers yet/);
+  });
+
+  test('what users see: the real screens, from the code that shows them to users', async () => {
+    const { adminHtml, PREVIEWS } = await import('../src/ui/views/admin.js');
+    assert.deepEqual(PREVIEWS.map(([k]) => k), ['signup', 'legal', 'profile', 'tour', 'guest', 'terms', 'privacy']);
+    const view = read('src/ui/views/admin.js');
+    for (const s of ['openAboutYou({ preview: true })', 'openTour()', 'legalGateHtml()', 'guestNoticeHtml()', 'createForm()', 'TERMS_URL', 'PRIVACY_URL']) assert.ok(view.includes(s), s);
+    // The questionnaire's preview saves nothing and leads nowhere.
+    assert.match(read('src/ui/views/aboutYou.js'), /if \(previewing \|\| !countAnswered\(answers\)\) \{ close\(\); return; \}/);
+    assert.match(adminHtml({ generatedAt: new Date().toISOString(), totals: { users: 0, profiles: 0 }, days: [], questions: {}, users: [] }), /data-adm-preview="profile"/);
+  });
+
+  test('online now: seen in the last fifteen minutes, and the hour of each visit kept', async () => {
+    const boss = await person('boss@example.com');
+    const dan = await person('dan@example.com');
+    await dan.call('ping', { open: true });
+    const d = (await boss.call('admin')).body;
+    assert.ok(d.totals.online >= 1);
+    assert.equal(d.hourly.length, 48);
+    assert.equal(d.hourly.at(-1).active, 1, 'this hour');
+    assert.equal(d.weeks.length, 12);
+    assert.equal(d.weeks.at(-1).active, 1);
+    const { rows } = await query('SELECT hours FROM activity_days WHERE user_id = $1', [dan.id]);
+    assert.deepEqual(JSON.parse(rows[0].hours), [new Date().getUTCHours()]);
+    const later = await adminStats({ now: new Date(Date.now() + 20 * 60000) });
+    assert.ok(later.totals.online <= d.totals.online - 1, 'gone after fifteen minutes');
   });
 
   test('use is counted in batches, never on every click', () => {

@@ -68,6 +68,8 @@ useDriver(fileDriver());
 process.env.ESCROW_SECRET ??= 'dev-only-escrow-secret-not-for-production';
 process.env.MAIL_FROM ??= 'dev@localhost';
 process.env.MAIL_API_KEY ??= 'dev';
+// The Admin page on this dev server: the account made with this address (never a real one).
+process.env.ADMIN_EMAILS ??= 'admin@riskbook.test';
 
 /**
  * The mail provider, replaced by the terminal. Anything aimed at Brevo is

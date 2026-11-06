@@ -173,7 +173,8 @@ function resetForm() {
     </div>`;
 }
 
-function createForm() {
+/** "Create an account", as a new user sees it; Admin shows it too. */
+export function createForm() {
   return `
     <h1 class="lock-title">Create an account</h1>
     <p class="lock-sub">${!cloudMode()

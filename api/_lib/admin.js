@@ -41,6 +41,8 @@ let readyFor = null;
 async function ensureTables() {
   if (readyFor === driverGeneration()) return;
   for (const statement of TABLES) await query(statement, []);
+  // The hours of the day (UTC) a batch arrived in, for "online" over time; added November 2026.
+  await query("ALTER TABLE activity_days ADD COLUMN hours TEXT NOT NULL DEFAULT '[]'", []).catch(() => {});
   readyFor = driverGeneration();
 }
 
@@ -51,6 +53,8 @@ export function isAdmin(user) {
 }
 
 const today = (at = new Date()) => at.toISOString().slice(0, 10);
+/** The hours a row was active in: whole numbers 0 to 23. */
+const hoursOf = (text) => { try { const v = JSON.parse(text); return Array.isArray(v) ? v.filter((h) => Number.isInteger(h) && h >= 0 && h < 24) : []; } catch { return []; } };
 const parse = (text) => { try { const v = JSON.parse(text); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
 
 /** Counts only: whole numbers, capped, for known pages and plausible broker ids. */
@@ -77,18 +81,20 @@ export async function recordActivity(user, body) {
 
   const day = today();
   const at = new Date().toISOString();
-  const row = await one('SELECT opens, pages, imports FROM activity_days WHERE user_id = $1 AND day = $2', [user.id, day]);
+  const hour = new Date(at).getUTCHours();
+  const row = await one('SELECT opens, pages, imports, hours FROM activity_days WHERE user_id = $1 AND day = $2', [user.id, day]);
   const add = (base, more) => {
     const sum = { ...base };
     for (const [k, v] of Object.entries(more)) sum[k] = Math.min((Number(sum[k]) || 0) + v, 100000);
     return JSON.stringify(sum);
   };
   if (row) {
-    await query('UPDATE activity_days SET opens = $1, pages = $2, imports = $3, last_at = $4 WHERE user_id = $5 AND day = $6',
-      [Number(row.opens) + opens, add(parse(row.pages), pages), add(parse(row.imports), imports), at, user.id, day]);
+    const hours = [...new Set([...hoursOf(row.hours), hour])].sort((a, b) => a - b);
+    await query('UPDATE activity_days SET opens = $1, pages = $2, imports = $3, last_at = $4, hours = $5 WHERE user_id = $6 AND day = $7',
+      [Number(row.opens) + opens, add(parse(row.pages), pages), add(parse(row.imports), imports), at, JSON.stringify(hours), user.id, day]);
   } else {
-    await query('INSERT INTO activity_days (user_id, day, opens, pages, imports, first_at, last_at) VALUES ($1, $2, $3, $4, $5, $6, $6)',
-      [user.id, day, opens, JSON.stringify(pages), JSON.stringify(imports), at]);
+    await query('INSERT INTO activity_days (user_id, day, opens, pages, imports, first_at, last_at, hours) VALUES ($1, $2, $3, $4, $5, $6, $6, $7)',
+      [user.id, day, opens, JSON.stringify(pages), JSON.stringify(imports), at, JSON.stringify([hour])]);
   }
   return { recorded: true };
 }
@@ -100,6 +106,8 @@ export async function forgetActivity(userId) {
 }
 
 const DAY_MS = 86400000;
+/** "Online now": seen in the last fifteen minutes. */
+export const ONLINE_MS = 15 * 60000;
 const dayPlus = (day, n) => today(new Date(Date.parse(`${day}T00:00:00Z`) + n * DAY_MS));
 
 /** A table that may not exist yet reads as empty. */
@@ -124,7 +132,7 @@ export async function adminStats({ now = new Date() } = {}) {
 
   const users = await rowsOf('SELECT id, email, created_at FROM users ORDER BY created_at DESC');
   const about = await rowsOf('SELECT * FROM about_you');
-  const activity = await rowsOf('SELECT user_id, day, opens, pages, imports FROM activity_days WHERE day >= $1', [since]);
+  const activity = await rowsOf('SELECT user_id, day, opens, pages, imports, hours, first_at, last_at FROM activity_days WHERE day >= $1', [since]);
   const lastSeen = await rowsOf('SELECT user_id, MAX(day) AS day, COUNT(*) AS days FROM activity_days GROUP BY user_id');
   const vaults = await rowsOf('SELECT user_id, updated_at FROM vaults');
   const { ensureConsentTable } = await import('./consent.js');
@@ -151,6 +159,37 @@ export async function adminStats({ now = new Date() } = {}) {
     const d = lastActive(u.id);
     return d && d >= dayPlus(todayIs, -(n - 1));
   }).length;
+
+  // Online now: a batch or a journal save in the last 15 minutes (the app sends at most every 10).
+  const onlineSince = new Date(now.getTime() - ONLINE_MS).toISOString();
+  const online = new Set([
+    ...activity.filter((r) => String(r.last_at) >= onlineSince).map((r) => r.user_id),
+    ...vaults.filter((v) => String(v.updated_at) >= onlineSince).map((v) => v.user_id),
+  ]).size;
+
+  // The last 48 hours: accounts active in each hour. Rows from before hours were kept count their first and last.
+  const hourly = [];
+  const thisHour = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours());
+  const byDay = new Map();
+  for (const r of activity) {
+    const hs = new Set(hoursOf(r.hours));
+    for (const t of [r.first_at, r.last_at]) if (t) hs.add(new Date(t).getUTCHours());
+    if (!byDay.has(r.day)) byDay.set(r.day, []);
+    byDay.get(r.day).push(hs);
+  }
+  for (let i = 47; i >= 0; i--) {
+    const at = new Date(thisHour - i * 3600000);
+    const rows = byDay.get(today(at)) ?? [];
+    hourly.push({ hour: at.toISOString().slice(0, 13), active: rows.filter((hs) => hs.has(at.getUTCHours())).length });
+  }
+
+  // The last 12 weeks: accounts active at least once in each seven days, the latest ending today.
+  const weeks = [];
+  for (let i = 11; i >= 0; i--) {
+    const end = dayPlus(todayIs, -7 * i);
+    const start = dayPlus(end, -6);
+    weeks.push({ start, end, active: new Set(activity.filter((r) => r.day >= start && r.day <= end).map((r) => r.user_id)).size });
+  }
 
   // The last 60 days: sign-ups and active accounts per day.
   const days = [];
@@ -197,6 +236,7 @@ export async function adminStats({ now = new Date() } = {}) {
     totals: {
       users: users.length,
       newToday: users.filter((u) => String(u.created_at).slice(0, 10) === todayIs).length,
+      online,
       newWeek: users.filter((u) => String(u.created_at).slice(0, 10) >= dayPlus(todayIs, -6)).length,
       dau: activeWithin(1),
       wau: activeWithin(7),
@@ -206,6 +246,8 @@ export async function adminStats({ now = new Date() } = {}) {
       profiles: about.filter((a) => ['first_name', 'last_name', 'sex', 'age', 'goal', 'experience', 'style', 'country', 'heard', 'occupation'].some((f) => a[f])).length,
     },
     days,
+    hourly,
+    weeks,
     retention,
     questions,
     pages,
