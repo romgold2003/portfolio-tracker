@@ -79,7 +79,17 @@ describe('every upstream call can be cut short', () => {
       opts.signal?.addEventListener('abort', () => reject(opts.signal.reason));
     });
     const started = Date.now();
-    const out = await collectGmx({ now: NOW, fetcher: hanging });
+    // AbortSignal.timeout's timer does not keep Node running by itself: with
+    // only it pending, Node 22 ends the run and cancels this test and every one
+    // after it (the weekly check, 8 November 2026). A request keeps a real
+    // function alive; this interval stands in for it.
+    const keepAlive = setInterval(() => {}, 1_000);
+    let out;
+    try {
+      out = await collectGmx({ now: NOW, fetcher: hanging });
+    } finally {
+      clearInterval(keepAlive);
+    }
     const took = Date.now() - started;
     assert.ok(took < 45_000, `took ${took}ms — longer than the poll's budget`);
     assert.ok(out.failed.length > 0, 'the stall should be reported, not swallowed');
