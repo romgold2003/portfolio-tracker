@@ -80,23 +80,12 @@ function signinBlurb() {
 
 /**
  * What Riskbook is, before anyone is asked to sign in (November 2026): one
- * line, then the three things it does for a day of investing. Tracking and
- * information only — never advice, as the Terms say.
+ * sentence. Tracking and information only — never advice, as the Terms say.
  */
-export const PITCH = {
-  tagline: 'See your money. Read the market. Learn from every trade.',
-  perks: [
-    ['Your portfolio, live', 'every position from 20 brokers, valued as the market moves'],
-    ['The market, in one place', 'news, earnings, Fed odds, whale trades and prediction markets'],
-    ['Your trading journal', 'every trade with why you took it and how you felt, and month by month what really worked'],
-  ],
-};
+export const TAGLINE = 'Your money. The market. Your journal. All in one place — always at your fingertips.';
 
 function pitchHtml() {
-  return `<div class="lock-pitch">
-      <p class="lock-tagline">${PITCH.tagline}</p>
-      <ul class="lock-perks">${PITCH.perks.map(([title, text]) => `<li><b>${title}</b> — ${text}</li>`).join('')}</ul>
-    </div>`;
+  return `<p class="lock-tagline">${TAGLINE}</p>`;
 }
 
 function signinForm() {

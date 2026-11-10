@@ -444,13 +444,8 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 .pos-empty-sub{font-size:13px;color:var(--text3);margin-bottom:20px}
 .pos-empty-cta{font-size:14px;padding:12px 28px}
 .lock-title{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px}
-/* What Riskbook is, above the sign-in (views/lockScreen.js, PITCH). */
-.lock-pitch{margin:-6px 0 22px;padding-bottom:18px;border-bottom:0.5px solid var(--border2)}
-.lock-tagline{font-size:19px;font-weight:600;line-height:1.3;letter-spacing:-0.015em;color:var(--text);margin:0 0 12px}
-.lock-perks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
-.lock-perks li{position:relative;padding-left:16px;font-size:12.5px;line-height:1.45;color:var(--text3)}
-.lock-perks li::before{content:'';position:absolute;left:2px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--blue)}
-.lock-perks b{color:var(--text2);font-weight:600}
+/* What Riskbook is, above the sign-in (views/lockScreen.js, TAGLINE). */
+.lock-tagline{font-size:19px;font-weight:600;line-height:1.35;letter-spacing:-0.015em;color:var(--text);margin:-6px 0 22px;padding-bottom:18px;border-bottom:0.5px solid var(--border2)}
 .lock-sub{font-size:13px;color:var(--text3);line-height:1.5;margin-bottom:22px}
 .lock-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 .lock-field label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
