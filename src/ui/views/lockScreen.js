@@ -78,10 +78,32 @@ function signinBlurb() {
     : 'Sign in from any device. Your journal is encrypted before it leaves this one.';
 }
 
+/**
+ * What Riskbook is, before anyone is asked to sign in (November 2026): one
+ * line, then the three things it does for a day of investing. Tracking and
+ * information only — never advice, as the Terms say.
+ */
+export const PITCH = {
+  tagline: 'See your money. Read the market. Learn from every trade.',
+  perks: [
+    ['Your portfolio, live', 'every position from 20 brokers, valued as the market moves'],
+    ['The market, in one place', 'news, earnings, Fed odds, whale trades and prediction markets'],
+    ['Your results, honestly', 'month by month, realised and unrealised — see what really worked'],
+  ],
+};
+
+function pitchHtml() {
+  return `<div class="lock-pitch">
+      <p class="lock-tagline">${PITCH.tagline}</p>
+      <ul class="lock-perks">${PITCH.perks.map(([title, text]) => `<li><b>${title}</b> — ${text}</li>`).join('')}</ul>
+    </div>`;
+}
+
 function signinForm() {
   const accounts = listProfiles();
   return `
     <div class="lock-brand">Riskbook</div>
+    ${pitchHtml()}
     <h1 class="lock-title">Sign in</h1>
     <p class="lock-sub">${signinBlurb()}</p>
     <div class="lock-field">
