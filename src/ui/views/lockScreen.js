@@ -88,7 +88,7 @@ export const PITCH = {
   perks: [
     ['Your portfolio, live', 'every position from 20 brokers, valued as the market moves'],
     ['The market, in one place', 'news, earnings, Fed odds, whale trades and prediction markets'],
-    ['Your results, honestly', 'month by month, realised and unrealised — see what really worked'],
+    ['Your trading journal', 'every trade with why you took it and how you felt, and month by month what really worked'],
   ],
 };
 
