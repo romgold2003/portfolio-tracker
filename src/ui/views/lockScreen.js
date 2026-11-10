@@ -82,7 +82,7 @@ function signinBlurb() {
  * What Riskbook is, before anyone is asked to sign in (November 2026): one
  * sentence. Tracking and information only — never advice, as the Terms say.
  */
-export const TAGLINE = 'Your money. The market. Your journal. All in one place — always at your fingertips.';
+export const TAGLINE = 'Your money. The market. Your journal. All in one place, always at your fingertips.';
 
 function pitchHtml() {
   return `<p class="lock-tagline">${TAGLINE}</p>`;
