@@ -51,6 +51,27 @@ const SOURCES = [
     },
   },
   {
+    name: 'Nasdaq quote (pre-market and after-hours prices)',
+    used: 'api/quote.js (nasdaqExtended)',
+    url: 'https://api.nasdaq.com/api/quote/AAPL/info?assetclass=stocks',
+    // The same headers api/quote.js sends; without a browser's, Nasdaq does not answer.
+    run: async (signal) => {
+      const res = await fetch('https://api.nasdaq.com/api/quote/AAPL/info?assetclass=stocks', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+          Accept: 'application/json, text/plain, */*', Origin: 'https://www.nasdaq.com', Referer: 'https://www.nasdaq.com/',
+        },
+        signal,
+      });
+      const d = (await res.json().catch(() => null))?.data;
+      return {
+        status: res.status,
+        problem: need(typeof d?.marketStatus === 'string' && /\$[\d,.]+/.test(d?.primaryData?.lastSalePrice ?? '') && 'isRealTime' in (d?.primaryData ?? {}),
+          'no data.marketStatus and primaryData.lastSalePrice / isRealTime'),
+      };
+    },
+  },
+  {
     name: 'Nasdaq Trader listings',
     used: 'api/_lib/earnings.js (company picker)',
     url: 'https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt',
