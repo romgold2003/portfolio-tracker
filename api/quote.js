@@ -26,6 +26,67 @@ const SYMBOL = /^[A-Za-z][A-Za-z0-9.\-]{0,9}$/;
 /** Enough for any realistic book, and a bound on what one request can cost. */
 const MAX_SYMBOLS = 40;
 
+/**
+ * Pre-market and after-hours prices come from Nasdaq (November 2026).
+ *
+ * Yahoo's bars, which this used alone, often have no extended-hours trades at
+ * all for most stocks — at 04:28 New York it had nothing for NVDA, AMD, TSLA
+ * or META, so the app showed last night's after-hours print while TradingView
+ * and Interactive Brokers showed NVDA +3.5% and AMD +5.3%. Nasdaq's quote is
+ * real time across every US listing, ETFs included, with no key. Yahoo still
+ * prices the regular session, and is the fallback when Nasdaq does not answer.
+ */
+const NASDAQ = 'https://api.nasdaq.com/api/quote';
+const NASDAQ_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+  Accept: 'application/json, text/plain, */*',
+  Origin: 'https://www.nasdaq.com',
+  Referer: 'https://www.nasdaq.com/',
+};
+/** Stock or ETF, as Nasdaq files it; remembered while this instance lives. */
+const assetClass = new Map();
+const money = (text) => {
+  const n = Number(String(text ?? '').replace(/[$,]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * The extended-hours price, or null. The last sale when it sits inside the
+ * bid and ask, else the middle of them: in thin pre-market trading the last
+ * print is often a stray odd lot — NVDA's read $173.03 while it was quoted
+ * $174.56 / $174.63.
+ */
+export function extendedPriceOf(primary) {
+  const last = money(primary?.lastSalePrice);
+  const bid = money(primary?.bidPrice);
+  const ask = money(primary?.askPrice);
+  const quoted = Boolean(bid && ask && ask >= bid && (ask - bid) / bid < 0.02);
+  if (last && (!quoted || (last >= bid && last <= ask))) return last;
+  return quoted ? +((bid + ask) / 2).toFixed(4) : last;
+}
+
+/** The extended session's real-time price from Nasdaq: { phase, price }, or null. */
+export async function nasdaqExtended(symbol, fetcher = fetch) {
+  const tries = assetClass.has(symbol) ? [assetClass.get(symbol)] : ['stocks', 'etf'];
+  for (const cls of tries) {
+    try {
+      const res = await fetcher(`${NASDAQ}/${encodeURIComponent(symbol)}/info?assetclass=${cls}`, {
+        headers: NASDAQ_HEADERS, signal: AbortSignal.timeout(4000),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json())?.data;
+      if (!data?.primaryData) continue;
+      assetClass.set(symbol, cls);
+      const status = String(data.marketStatus ?? '').toLowerCase();
+      const phase = status.startsWith('pre') ? 'pre' : status.startsWith('after') ? 'post' : null;
+      const price = extendedPriceOf(data.primaryData);
+      if (!phase || !price || data.primaryData.isRealTime !== true) return null;
+      return { phase, price };
+    } catch { /* the next class, or Yahoo */ }
+  }
+  return null;
+}
+
 /** Every window of one session kind across the days asked for (one per day). */
 function windowsOf(periods, name) {
   const raw = periods?.[name];
@@ -118,6 +179,28 @@ export async function quoteFor(symbol) {
     }
   }
   if (!last) return null;
+
+  /**
+   * While pre-market or after-hours is running, Nasdaq's real-time price is
+   * the one; Yahoo's latest bar only if Nasdaq has none.
+   */
+  const nowS = Date.now() / 1000;
+  const current = meta.currentTradingPeriod;
+  const inside = (w) => w && typeof w.start === 'number' && nowS >= w.start && nowS < w.end;
+  if (inside(current?.pre) || inside(current?.post)) {
+    const live = await nasdaqExtended(symbol);
+    if (live) {
+      return {
+        symbol,
+        price: live.price,
+        at: Math.floor(nowS),
+        phase: live.phase,
+        regularClose: typeof meta.regularMarketPrice === 'number' ? meta.regularMarketPrice : null,
+        previousClose: typeof meta.previousClose === 'number' ? meta.previousClose : null,
+        source: 'nasdaq',
+      };
+    }
+  }
 
   return {
     symbol,

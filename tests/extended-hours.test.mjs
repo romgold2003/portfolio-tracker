@@ -389,3 +389,33 @@ describe('early pre-market: the latest trade since the close is the price', () =
     assert.match(api, /interval=1m&range=2d&includePrePost=true/);
   });
 });
+
+// November 2026: Yahoo had no pre-market trades for most stocks; Nasdaq's real-time quote does.
+describe('pre-market and after-hours prices from Nasdaq', () => {
+  test('the last sale inside the bid and ask, else the middle of them', async () => {
+    const { extendedPriceOf } = await import('../api/quote.js');
+    assert.equal(extendedPriceOf({ lastSalePrice: '$174.60', bidPrice: '$174.56', askPrice: '$174.63' }), 174.6);
+    // A stray odd lot well away from the market: the quote's middle instead.
+    assert.equal(extendedPriceOf({ lastSalePrice: '$173.03', bidPrice: '$174.56', askPrice: '$174.63' }), 174.595);
+    // No usable quote: the last sale stands.
+    assert.equal(extendedPriceOf({ lastSalePrice: '$1,234.50', bidPrice: '', askPrice: '' }), 1234.5);
+    assert.equal(extendedPriceOf({ lastSalePrice: 'N/A' }), null);
+  });
+
+  test('a stock or an ETF, real time only, and the session it is in', async () => {
+    const { nasdaqExtended } = await import('../api/quote.js');
+    const answer = (cls, data) => async (url) => ({
+      ok: true,
+      json: async () => ({ data: url.includes(`assetclass=${cls}`) ? data : null }),
+    });
+    const pre = { marketStatus: 'Pre-Market', primaryData: { lastSalePrice: '$755.07', bidPrice: '$755.00', askPrice: '$755.10', isRealTime: true } };
+    assert.deepEqual(await nasdaqExtended('SPYTEST', answer('etf', pre)), { phase: 'pre', price: 755.07 });
+    const after = { ...pre, marketStatus: 'After-Hours' };
+    assert.deepEqual(await nasdaqExtended('AFTERTEST', answer('stocks', after)), { phase: 'post', price: 755.07 });
+    // Delayed, or the market open or shut: not an extended price.
+    assert.equal(await nasdaqExtended('DELAYTEST', answer('stocks', { ...pre, primaryData: { ...pre.primaryData, isRealTime: false } })), null);
+    assert.equal(await nasdaqExtended('OPENTEST', answer('stocks', { ...pre, marketStatus: 'Market Open' })), null);
+    // Nasdaq refusing: nothing, and Yahoo prices it instead.
+    assert.equal(await nasdaqExtended('DOWNTEST', async () => ({ ok: false, status: 403 })), null);
+  });
+});

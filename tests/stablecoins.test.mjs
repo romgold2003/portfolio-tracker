@@ -200,6 +200,8 @@ describe('reading the published stablecoin history', () => {
   test('a bad answer throws rather than returning an empty market', async () => {
     await assert.rejects(() => fetchStableHistory({
       fetcher: async () => ({ ok: false, status: 502 }),
+      // A 502 is retried with real pauses of 15, 30 and 45 seconds; the test need not sit through them.
+      sleep: async () => {},
     }), /502/);
   });
 });
