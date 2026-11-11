@@ -329,3 +329,25 @@ describe('applying an extended quote', () => {
     assert.equal(positions[0].extPhase, 'post');
   });
 });
+
+// November 2026: at 11:09 in Israel (04:09 New York) the app said the market was closed.
+describe('which session it is, by the clock', () => {
+  test('pre-market from four in New York, before any holding has traded', async () => {
+    const { sessionPhase } = await import('../src/services/extendedHours.js');
+    const at = (iso) => sessionPhase(new Date(iso));
+    assert.equal(at('2026-11-11T09:09:00Z'), 'pre', '11:09 in Israel, Veterans Day: stocks trade');
+    assert.equal(at('2026-11-11T08:59:00Z'), 'closed', 'a minute before four');
+    assert.equal(at('2026-11-11T15:00:00Z'), 'regular');
+    assert.equal(at('2026-11-11T22:00:00Z'), 'after');
+    assert.equal(at('2026-11-12T01:30:00Z'), 'closed', 'after eight in New York');
+    assert.equal(at('2026-11-14T15:00:00Z'), 'closed', 'Saturday');
+    assert.equal(at('2026-11-26T15:00:00Z'), 'closed', 'Thanksgiving');
+    assert.equal(at('2026-11-27T19:00:00Z'), 'after', 'the half day closes at one');
+  });
+
+  test('the pill names the session even with no pre-market trade yet', async () => {
+    const { readFileSync } = await import('node:fs');
+    const home = readFileSync(new URL('../src/ui/views/home.js', import.meta.url), 'utf8');
+    assert.match(home, /const phase = sessionPhase\(\);\s*if \(phase === 'pre' \|\| phase === 'after'\)/);
+  });
+});

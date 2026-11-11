@@ -92,6 +92,25 @@ export function regularSessionOpen(now = new Date()) {
 }
 
 /**
+ * Which US session it is right now, by New York's clock: 'pre' (four to half
+ * past nine), 'regular', 'after' (the close to eight, or five on a half day),
+ * or 'closed' — nights, weekends and holidays.
+ *
+ * By the clock, not by the quotes: pre-market used to be named only once a
+ * holding had traded in it, so in its first minutes — eleven in the morning
+ * in Israel — the app said the market was closed (November 2026).
+ */
+export function sessionPhase(now = new Date()) {
+  const { date, minutes } = newYorkClock(now);
+  if (marketHoliday(date)) return 'closed';
+  const { close, settled } = sessionBounds(date);
+  if (minutes >= PRE_MARKET_OPEN && minutes < REGULAR_OPEN) return 'pre';
+  if (minutes >= REGULAR_OPEN && minutes < close) return 'regular';
+  if (minutes >= close && minutes < settled) return 'after';
+  return 'closed';
+}
+
+/**
  * Is the trading day finished for now?
  *
  * The day worth measuring is not the regular session, it is everything that

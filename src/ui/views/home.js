@@ -5,7 +5,7 @@ import {
   accountTotals, dailyPortfolioMove,
   todayStr, sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
-import { regularSessionOpen, extendedPricingAvailable } from '../../services/extendedHours.js';
+import { regularSessionOpen, extendedPricingAvailable, sessionPhase } from '../../services/extendedHours.js';
 import { inPlay } from '../dayReset.js';
 import { ui } from '../uiState.js';
 import {
@@ -920,6 +920,17 @@ function priceStatus() {
   }
 
   if (openStocks.length && !regularSessionOpen()) {
+    // Pre-market and after-hours are named by the clock even before a holding
+    // has traded in them; the pill stays dim until one has.
+    const phase = sessionPhase();
+    if (phase === 'pre' || phase === 'after') {
+      const label = phase === 'pre' ? 'Pre-market' : 'After hours';
+      return {
+        label: extendedPricingAvailable() ? label : `${label} · last close`,
+        short: phase === 'pre' ? 'Pre' : 'After',
+        off: true,
+      };
+    }
     // Without a server there is nothing that could be showing, so say so
     // rather than implying the feed is merely quiet.
     return extendedPricingAvailable()
