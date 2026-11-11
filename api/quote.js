@@ -26,18 +26,40 @@ const SYMBOL = /^[A-Za-z][A-Za-z0-9.\-]{0,9}$/;
 /** Enough for any realistic book, and a bound on what one request can cost. */
 const MAX_SYMBOLS = 40;
 
+/** Every window of one session kind across the days asked for (one per day). */
+function windowsOf(periods, name) {
+  const raw = periods?.[name];
+  if (!Array.isArray(raw)) return raw && typeof raw.start === 'number' ? [raw] : [];
+  return raw.flat(2).filter((w) => w && typeof w.start === 'number');
+}
+
 /** Which part of the day a timestamp falls in, per the exchange's own hours. */
-function phaseOf(at, periods) {
-  const window = (name) => {
-    const raw = periods?.[name];
-    const w = Array.isArray(raw?.[0]) ? raw[0][0] : raw?.[0];
-    return w && typeof w.start === 'number' ? w : null;
-  };
+export function phaseOf(at, periods) {
   for (const name of ['pre', 'regular', 'post']) {
-    const w = window(name);
-    if (w && at >= w.start && at < w.end) return name;
+    if (windowsOf(periods, name).some((w) => at >= w.start && at < w.end)) return name;
   }
   return 'closed';
+}
+
+/**
+ * The session the market is in now, and so what the latest trade means.
+ *
+ * In the first part of pre-market most stocks have not traded yet, and the
+ * latest trade is last night's after-hours print. That is the price a broker
+ * shows (Interactive Brokers did, +1.5% on the day, while this read the
+ * four o'clock close; November 2026), so any trade since the last regular
+ * close counts as the extended session now running.
+ */
+export function phaseNow(last, meta, nowS = Date.now() / 1000) {
+  const current = meta?.currentTradingPeriod;
+  const inside = (w) => w && typeof w.start === 'number' && nowS >= w.start && nowS < w.end;
+  const closedAt = Number(meta?.regularMarketTime) || 0;
+  const phase = phaseOf(last.at, meta?.tradingPeriods);
+  if (last.at > closedAt) {
+    if (inside(current?.pre)) return 'pre';
+    if (inside(current?.post)) return 'post';
+  }
+  return phase;
 }
 
 /**
@@ -50,9 +72,11 @@ function phaseOf(at, periods) {
  */
 const upstreamSymbol = (symbol) => symbol.replace(/\./g, '-');
 
-async function quoteFor(symbol) {
+export async function quoteFor(symbol) {
   const res = await fetch(
-    `${SOURCE}/${encodeURIComponent(upstreamSymbol(symbol))}?interval=1m&range=1d&includePrePost=true`,
+    // Two days, not one: early in pre-market "today" has no bars at all, and
+    // the latest trade is in yesterday's after-hours.
+    `${SOURCE}/${encodeURIComponent(upstreamSymbol(symbol))}?interval=1m&range=2d&includePrePost=true`,
     { headers: { 'User-Agent': 'portfolio-tracker', Accept: 'application/json' } },
   );
   if (!res.ok) return null;
@@ -99,7 +123,7 @@ async function quoteFor(symbol) {
     symbol,
     price: last.price,
     at: last.at,
-    phase: phaseOf(last.at, meta.tradingPeriods),
+    phase: phaseNow(last, meta),
     /** Where the regular session finished, which is what a day's move is measured to. */
     regularClose: typeof meta.regularMarketPrice === 'number' ? meta.regularMarketPrice : null,
     /** The session before this one — the base a daily percentage is measured from. */

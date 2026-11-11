@@ -356,3 +356,36 @@ describe('which session it is, by the clock', () => {
     assert.match(prices, /return sessionPhase\(\) !== 'closed';/);
   });
 });
+
+// November 2026: IBKR read +1.5% at 04:21 New York while the app read +0.5% — the
+// after-hours prints from the night before were thrown away.
+describe('early pre-market: the latest trade since the close is the price', () => {
+  const day = (start) => ({ start, end: start + 60 });
+  // Tuesday's close at 16:00 (21:00Z); Wednesday's pre-market from 09:00Z.
+  const meta = {
+    regularMarketTime: Date.UTC(2026, 10, 10, 21, 0, 1) / 1000,
+    currentTradingPeriod: {
+      pre: { start: Date.UTC(2026, 10, 11, 9) / 1000, end: Date.UTC(2026, 10, 11, 14, 30) / 1000 },
+      regular: { start: Date.UTC(2026, 10, 11, 14, 30) / 1000, end: Date.UTC(2026, 10, 11, 21) / 1000 },
+      post: { start: Date.UTC(2026, 10, 11, 21) / 1000, end: Date.UTC(2026, 10, 12, 1) / 1000 },
+    },
+    tradingPeriods: { pre: [[day(0)]], regular: [[day(0)]], post: [[{ start: Date.UTC(2026, 10, 10, 21) / 1000, end: Date.UTC(2026, 10, 11, 1) / 1000 }]] },
+  };
+  const lastNight = { price: 170.48, at: Date.UTC(2026, 10, 11, 0, 59) / 1000 };
+  const at0421 = Date.UTC(2026, 10, 11, 9, 21) / 1000;
+
+  test('last night\'s after-hours print counts as this pre-market', async () => {
+    const { phaseNow } = await import('../api/quote.js');
+    assert.equal(phaseNow(lastNight, meta, at0421), 'pre');
+    // Overnight it is still what it was: an after-hours trade.
+    assert.equal(phaseNow(lastNight, meta, Date.UTC(2026, 10, 11, 3) / 1000), 'post');
+    // A last trade at the close itself is not an extended price.
+    assert.equal(phaseNow({ price: 168.89, at: meta.regularMarketTime - 60 }, meta, at0421), 'closed');
+  });
+
+  test('the server asks for two days, so an empty "today" still has last night', async () => {
+    const { readFileSync } = await import('node:fs');
+    const api = readFileSync(new URL('../api/quote.js', import.meta.url), 'utf8');
+    assert.match(api, /interval=1m&range=2d&includePrePost=true/);
+  });
+});

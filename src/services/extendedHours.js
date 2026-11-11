@@ -210,7 +210,10 @@ export async function extendedQuotes(tickers) {
      * same close.
      */
     if (!(q.price > 0)) continue;
-    if (now - q.at * 1000 > FRESH_FOR_MS) continue;
+    // Between four and eight, New York, the latest trade since the close is
+    // the price however long ago it printed; overnight an old one is left alone.
+    const extended = q.phase === 'pre' || q.phase === 'post';
+    if (!(extended && !tradingDayOver(new Date(now))) && now - q.at * 1000 > FRESH_FOR_MS) continue;
     bySymbol.set(q.symbol.toUpperCase(), {
       price: q.price,
       phase: q.phase,
