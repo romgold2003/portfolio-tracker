@@ -182,7 +182,11 @@ describe('a day is shown on the day it happened', () => {
   });
 
   test('the log stops at the last day every holding has a close for, and rebuilds at each close', () => {
-    assert.match(read('src/ui/views/dailyLog.js'), /through: priced && priced < closed \? priced : closed/);
+    const log = read('src/ui/views/dailyLog.js');
+    assert.match(log, /const through = priced && priced < closed \? priced : closed;/);
+    assert.match(log, /dailyReturns\(rows, \{ through \}\)/);
+    // Today joins, live, only while its session runs and every finished day is priced.
+    assert.match(log, /if \(!tradingDayOver\(now\) && through === closed\)/);
     assert.match(read('src/ui/views/home.js'), /\(state\.ledger\?\.events \?\? \[\]\)\.length\}\|\$\{through\}`/);
   });
 });
