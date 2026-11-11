@@ -1290,6 +1290,7 @@ a.wt-wallet:hover{color:var(--blue);text-decoration:underline}
 @keyframes dl-slide{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
 .dl-date{color:var(--text2);white-space:nowrap}
 .dl-flow{margin-left:5px;color:var(--amber);font-size:10px}
+.dl-live{margin-left:6px;padding:1px 5px;border-radius:4px;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent)}
 .dl-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden}
 .dl-bar span{display:block;height:100%;border-radius:2px}
 .dl-day.is-up .dl-bar span{background:var(--green)}.dl-day.is-down .dl-bar span{background:var(--red)}

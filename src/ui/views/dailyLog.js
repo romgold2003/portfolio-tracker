@@ -9,7 +9,8 @@
  */
 import { accountHistory } from '../../core/snapshots.js';
 import { dailyReturns, yearsOf, yearView } from '../../core/dailyLog.js';
-import { lastClosedSession } from '../../config/marketCalendar.js';
+import { lastClosedSession, newYorkNow } from '../../config/marketCalendar.js';
+import { tradingDayOver } from '../../services/extendedHours.js';
 import { escapeHtml } from '../format.js';
 import { amountsHidden, MASK, pricedThrough, breakDownDay } from './home.js';
 
@@ -39,7 +40,7 @@ function dayRow(d, scale) {
   const width = Math.max(2, Math.round((Math.abs(d.pct) / scale) * 100));
   const flow = d.flow ? ` title="Money in or out that day: ${escapeHtml(usd(d.flow))}, not counted as return"` : '';
   return `<div class="dl-day ${tone(d.pnl)}" data-day="${escapeHtml(d.date)}" role="button" tabindex="0"${flow}>
-    <span class="dl-date">${escapeHtml(dayLabel(d.date))}${d.flow ? '<span class="dl-flow">⇅</span>' : ''}</span>
+    <span class="dl-date">${d.live ? 'Today<span class="dl-live">live</span>' : escapeHtml(dayLabel(d.date))}${d.flow ? '<span class="dl-flow">⇅</span>' : ''}</span>
     <span class="dl-bar"><span style="width:${width}%"></span></span>
     <span class="dl-pct">${pct(d.pct)}</span>
     <span class="dl-usd">${escapeHtml(usd(d.pnl))}</span>
@@ -147,10 +148,23 @@ export function dailyLogHtml(days, chosen) {
  * before then is priced at the day before for part of the book, and showed
  * 14 October's fall on the 15th.
  */
-function closedDays() {
-  const closed = lastClosedSession();
+/**
+ * Every finished day, and today while its session runs (four in the morning to
+ * eight at night, New York), marked live. Without today the year's total
+ * stopped at yesterday's close while the year-to-date figure above it counted
+ * today's move, and the two read +27.27% and +31.66% (November 2026).
+ */
+export function closedDays(now = new Date()) {
+  const closed = lastClosedSession(now);
   const priced = pricedThrough();
-  return dailyReturns(accountHistory(), { through: priced && priced < closed ? priced : closed });
+  const through = priced && priced < closed ? priced : closed;
+  const rows = accountHistory();
+  const days = dailyReturns(rows, { through });
+  if (!tradingDayOver(now) && through === closed) {
+    const today = dailyReturns(rows).at(-1);
+    if (today && today.date > closed) days.push({ ...today, date: newYorkNow(now).date, live: true });
+  }
+  return days;
 }
 
 export function renderDailyLog() {
