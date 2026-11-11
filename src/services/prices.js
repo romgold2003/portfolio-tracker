@@ -11,7 +11,7 @@
 import { CG_IDS, API } from '../config/constants.js';
 import { state, currentApiKey } from '../core/store.js';
 import { logPrice, seedPrevClose, getWeekChg } from './priceLog.js';
-import { extendedQuotes, applyExtendedQuotes, tradingDayOver, regularSessionOpen, batchedQuote } from './extendedHours.js';
+import { extendedQuotes, applyExtendedQuotes, tradingDayOver, batchedQuote, sessionPhase } from './extendedHours.js';
 import { weekStartCloses } from './weekStart.js';
 import { catchSplits } from './splits.js';
 
@@ -286,5 +286,6 @@ export function priceIsLive(p) {
    * screen. Live now means a session is actually running, or the holding has an
    * extended-hours print of its own.
    */
-  return regularSessionOpen() || !!p.extPhase;
+  // By the clock: live from pre-market at four to the end of after-hours at eight, New York.
+  return sessionPhase() !== 'closed';
 }

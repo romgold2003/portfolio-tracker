@@ -5,7 +5,7 @@ import {
   accountTotals, dailyPortfolioMove,
   todayStr, sectorBreakdown, accountPerformance,
 } from '../../core/portfolio.js';
-import { regularSessionOpen, extendedPricingAvailable, sessionPhase } from '../../services/extendedHours.js';
+import { extendedPricingAvailable, sessionPhase } from '../../services/extendedHours.js';
 import { inPlay } from '../dayReset.js';
 import { ui } from '../uiState.js';
 import {
@@ -899,43 +899,25 @@ function renderPeriodGain(period) {
  * shut market from a broken app. That is exactly the wrong way round, because
  * one of those needs no action and the other does.
  *
- * So the pill now names the session. Pre-market and after-hours are reported
- * only when prices genuinely came from those sessions, which is something the
- * positions themselves know: applyExtendedQuotes stamps the ones it moved.
+ * So the pill names the session, by New York's clock alone (November 2026):
+ * the market opens with pre-market at four and closes with after-hours at
+ * eight, whether or not a holding has traded yet. Waiting for a trade read
+ * "Market closed" through the first minutes of pre-market.
  */
 function priceStatus() {
   const openStocks = state.positions.filter((p) => p.status === 'Open' && p.cls !== 'Crypto');
-  const extended = openStocks.find((p) => p.extPhase);
-
-  if (extended) {
-    return {
-      label: extended.extPhase === 'pre' ? 'Pre-market' : 'After hours',
-      short: extended.extPhase === 'pre' ? 'Pre' : 'After',
-      off: false,
-    };
-  }
 
   if (openStocks.length && !state.apiKey) {
     return { label: 'Crypto live · stocks manual', short: 'Partial', off: true };
   }
 
-  if (openStocks.length && !regularSessionOpen()) {
-    // Pre-market and after-hours are named by the clock even before a holding
-    // has traded in them; the pill stays dim until one has.
+  if (openStocks.length) {
     const phase = sessionPhase();
-    if (phase === 'pre' || phase === 'after') {
-      const label = phase === 'pre' ? 'Pre-market' : 'After hours';
-      return {
-        label: extendedPricingAvailable() ? label : `${label} · last close`,
-        short: phase === 'pre' ? 'Pre' : 'After',
-        off: true,
-      };
-    }
-    // Without a server there is nothing that could be showing, so say so
-    // rather than implying the feed is merely quiet.
-    return extendedPricingAvailable()
-      ? { label: 'Market closed', short: 'Closed', off: true }
-      : { label: 'Market closed · last close', short: 'Closed', off: true };
+    // Without a server there are no pre- or after-hours prices to show, only the last close.
+    const last = extendedPricingAvailable() ? '' : ' · last close';
+    if (phase === 'pre') return { label: `Pre-market${last}`, short: 'Pre', off: false };
+    if (phase === 'after') return { label: `After hours${last}`, short: 'After', off: false };
+    if (phase === 'closed') return { label: `Market closed${extendedPricingAvailable() ? '' : ' · last close'}`, short: 'Closed', off: true };
   }
 
   return { label: 'Live prices on', short: 'Live', off: false };

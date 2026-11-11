@@ -348,6 +348,11 @@ describe('which session it is, by the clock', () => {
   test('the pill names the session even with no pre-market trade yet', async () => {
     const { readFileSync } = await import('node:fs');
     const home = readFileSync(new URL('../src/ui/views/home.js', import.meta.url), 'utf8');
-    assert.match(home, /const phase = sessionPhase\(\);\s*if \(phase === 'pre' \|\| phase === 'after'\)/);
+    // Open from pre-market to the end of after-hours by the clock, lit, with no trade needed.
+    assert.match(home, /if \(phase === 'pre'\) return \{ label: `Pre-market\$\{last\}`, short: 'Pre', off: false \};/);
+    assert.match(home, /if \(phase === 'after'\) return \{ label: `After hours\$\{last\}`, short: 'After', off: false \};/);
+    assert.doesNotMatch(home, /openStocks\.find\(\(p\) => p\.extPhase\)/);
+    const prices = readFileSync(new URL('../src/services/prices.js', import.meta.url), 'utf8');
+    assert.match(prices, /return sessionPhase\(\) !== 'closed';/);
   });
 });
