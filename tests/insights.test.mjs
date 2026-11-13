@@ -382,3 +382,57 @@ describe('this year counts what you already held on 31 December', () => {
     assert.match(r.summary, /^This year your account is up 25\.0%, while the S&P 500 is up 11\.0%\. You are ahead of the market\. In money, /);
   });
 });
+
+describe('the year from the broker\'s ledger', () => {
+  /**
+   * Romy's ETHA in 2026, as IBKR's ledger has it (in pre-split shares, which
+   * is how this ledger is written): 138 held on 31 December at $22.43, five
+   * purchases through the year at $12–17, all sold near $20. IBKR: about +$430
+   * before commissions. The position alone, with the year's purchases folded
+   * into its average, read every share as held on 31 December: −$856.
+   */
+  const ledger = {
+    from: '2026-01-01', to: '2026-11-06',
+    openingHoldings: { ETHA: 138 }, openingMarks: { ETHA: 22.43 },
+    events: [
+      { date: '2026-02-03', kind: 'trade', ticker: 'ETHA', qty: 34, price: 16.9 },
+      { date: '2026-02-05', kind: 'trade', ticker: 'ETHA', qty: 60, price: 15 },
+      { date: '2026-02-17', kind: 'trade', ticker: 'ETHA', qty: 4, price: 14.68 },
+      { date: '2026-05-28', kind: 'trade', ticker: 'ETHA', qty: 20, price: 14.97 },
+      { date: '2026-06-05', kind: 'trade', ticker: 'ETHA', qty: 35, price: 12.2 },
+      { date: '2026-09-18', kind: 'trade', ticker: 'ETHA', qty: -140, price: 19.93 },
+      { date: '2026-09-21', kind: 'trade', ticker: 'ETHA', qty: -85, price: 20.8 },
+      { date: '2026-10-30', kind: 'trade', ticker: 'ETHA', qty: -66, price: 16.83 },
+      { date: '2026-03-02', kind: 'flow', cash: 1000 },
+    ],
+  };
+  const positions = [{ id: 'e1', ticker: 'ETHA', cls: 'Stocks', dir: 'Long', status: 'Closed', entry: 18.2, qty: 291, cur: 19.6, open: null, close: '2026-10-30' }];
+  const r = analyse({ positions, history: HISTORY, index: INDEX, ledger, today: TODAY });
+  const year = r.cards.find((c) => c.id === 'twin').twin.year;
+
+  test('each purchase counts at its own price, and the holding on 31 December at the broker\'s', () => {
+    const bought = 34 * 16.9 + 60 * 15 + 4 * 14.68 + 20 * 14.97 + 35 * 12.2;
+    const sold = 140 * 19.93 + 85 * 20.8 + 66 * 16.83;
+    const etha = year.rows.find((x) => x.ticker === 'ETHA');
+    near(etha.you, sold - bought - 138 * 22.43);
+    assert.ok(etha.you > 0, 'a gain, as IBKR has it');
+    assert.equal(etha.live, false);
+  });
+
+  test('the S&P side gets the same money on the same days', () => {
+    const ix = indexLevels(INDEX);
+    const L = (d) => levelOn(ix, d);
+    let units = (138 * 22.43) / L('2025-12-31');
+    let paid = 138 * 22.43;
+    for (const [d, q, p] of [['2026-02-03', 34, 16.9], ['2026-02-05', 60, 15], ['2026-02-17', 4, 14.68], ['2026-05-28', 20, 14.97], ['2026-06-05', 35, 12.2]]) { units += (q * p) / L(d); paid += q * p; }
+    let held = 291;
+    let back = 0;
+    for (const [d, q] of [['2026-09-18', 140], ['2026-09-21', 85], ['2026-10-30', 66]]) { const part = q / held; back += units * part * L(d); units -= units * part; held -= q; }
+    near(year.rows.find((x) => x.ticker === 'ETHA').spx, back - paid);
+  });
+
+  test('without a ledger or prices, nothing is guessed', () => {
+    const alone = analyse({ positions, history: HISTORY, index: INDEX, today: TODAY });
+    assert.equal(alone.cards.find((c) => c.id === 'twin'), undefined, 'no year drawn from a holding it cannot price');
+  });
+});

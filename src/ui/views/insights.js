@@ -296,7 +296,7 @@ function marketHtml(a) {
             <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(tw(dollars(r.diff)))}</span></div>`).join('')}
         </div>
         ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the largest 8' : `Show all ${p.rows.length} trades`}</button>` : ''}
-        ${p.accountPnl != null ? `<p class="tw-account">${safe(tw(`Your account made ${usd(p.accountPnl)} this year; the positions above made ${usd(p.you)}. The difference (${usd(p.accountPnl - p.you)}) is dividends, interest, fees${p.unmeasured.length ? ' and the positions below that could not be measured' : ''}.`))}</p>` : ''}
+        ${p.accountPnl != null ? `<p class="tw-account">${safe(tw(`Your account made ${usd(p.accountPnl)} this year; the positions above made ${usd(p.you)}. The difference (${usd(p.accountPnl - p.you)}) is dividends, interest, commissions and fees${p.unmeasured.length ? ' and the positions below that could not be measured' : ''}.`))}</p>` : ''}
         ${p.unmeasured?.length ? `<p class="tw-account">Not measured yet: ${p.unmeasured.map((u) => `<b>${escapeHtml(u.ticker)}</b> (${escapeHtml(u.why)})`).join(', ')}.</p>` : ''}
         ${acc ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(tw(dollars(acc.diff)))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
         <details class="ins-how"><summary>How we calculate this</summary><p>Each time you bought, the same amount buys the S&amp;P 500 (with dividends reinvested) at that day's close. Each time you sold part or all of the position, the same share of that S&amp;P 500 holding is sold that day. Open positions are valued today. The chart adds up both sides every market day. A short is matched with the same money in the S&amp;P 500, bought. "This year" covers every position you held during the year: what you already held on 31 December enters at that day's close, as if bought then, so only this year's gains and losses count, as in your year to date. "All time" follows each trade from the day you opened it.</p></details>
@@ -432,6 +432,8 @@ function draw() {
     series,
     accountValue: accountTotals(state.positions, state.cash).account,
     year: { you: homeYearToDate(), spx },
+    // The broker's ledger, for the year traded as it really was (one account; the combined view has none of its own).
+    ledger: state.combined ? null : state.ledger,
   });
   last = a;
   const habits = a.cards.filter((c) => c.group === 'habits');

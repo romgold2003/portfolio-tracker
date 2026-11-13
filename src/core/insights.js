@@ -30,6 +30,7 @@ import { realized, costOf, outcomeOf, marketValueOf, unreal } from './portfolio.
 import { cleanMind } from './mind.js';
 import { sectorOf } from '../config/sectors.js';
 import { dayGrowth, measurable, monthlyReturns, periodReturnFromHistory } from './portfolioHistory.js';
+import { appTradeEvents } from './appTrades.js';
 
 export const MIN_GROUP = 8;
 export const MIN_TRADES = 10;
@@ -717,6 +718,95 @@ export function yearLife(p, yearStart, prices, today) {
 /** What a life made: what is held now at its price, plus what the sales brought in, less what the buys cost. */
 const lifePnl = (life) => life.dir * (life.held * life.price + sum(life.sells.map((x) => x.qty * x.price)) - sum(life.buys.map((b) => b.qty * b.price)));
 
+/** One spelling for a symbol: IBKR writes "BRK B", the app "BRK.B", Yahoo "BRK-B". */
+const symbolKey = (t) => String(t ?? '').toUpperCase().replace(/[\s.\-/]/g, '');
+
+/**
+ * The year from the broker's own ledger (November 2026), when there is one.
+ *
+ * A statement import folds a year's purchases into a position's average
+ * price, so a holding added to in the year looked, from the positions alone,
+ * as if every share had been held on 31 December at that day's price: ETHA,
+ * bought down to $12–17 through 2026 and sold near $20, read −$856 where IBKR
+ * says +$304. The ledger keeps every purchase and sale with its date and
+ * price, and what was held on 31 December with IBKR's own price for it, all
+ * in today's share terms (the import restates them across splits). So each
+ * symbol's year is read from it: the holding on 31 December entered at that
+ * price, then every trade as it happened, then what is held now at today's
+ * price. Trades entered in the app after the last statement join it.
+ *
+ * Returns { items, unmeasured } or null when there is no ledger for the year.
+ */
+export function ledgerYear({ ledger, positions, prices, yearStart, today }) {
+  if (!ledger?.from || !(ledger.from <= addDays(yearStart, 1))) return null;
+  const opensOnYear = ledger.from > yearStart;
+  const bySymbol = new Map((positions ?? []).filter((p) => p?.ticker).map((p) => [symbolKey(p.ticker), p]));
+  const current = (key) => [...(positions ?? [])].filter((p) => symbolKey(p.ticker) === key && p.status !== 'Closed' && p.cur > 0)[0];
+
+  // Every share-moving event, the app's own after the last statement, in date order.
+  const events = [
+    ...(ledger.events ?? []).filter((e) => (e.kind === 'trade' || e.kind === 'transfer') && e.ticker && Number.isFinite(e.qty)),
+    ...appTradeEventsAfter(positions, ledger.to),
+  ].map((e) => ({ ...e, key: symbolKey(e.ticker) })).sort((a, b) => a.date.localeCompare(b.date));
+
+  // What was held on 31 December: the opening holdings, rolled on to the year if the ledger starts earlier.
+  const held = new Map(Object.entries(ledger.openingHoldings ?? {}).map(([t, q]) => [symbolKey(t), Number(q) || 0]));
+  if (!opensOnYear) for (const e of events) if (e.date <= yearStart) held.set(e.key, (held.get(e.key) ?? 0) + e.qty);
+  const marks = new Map(Object.entries(ledger.openingMarks ?? {}).map(([t, v]) => [symbolKey(t), Number(v)]));
+
+  const keys = new Set([...[...held].filter(([, q]) => Math.abs(q) > 1e-9).map(([k]) => k), ...events.filter((e) => e.date > yearStart).map((e) => e.key)]);
+  const items = [];
+  const unmeasured = [];
+  for (const key of keys) {
+    const p = bySymbol.get(key);
+    const ticker = p?.ticker ?? events.find((e) => e.key === key)?.ticker ?? key;
+    const series = prices?.get(p?.ticker ?? ticker);
+    const seriesOn = (d) => { if (!series?.length) return null; const i = at(rowDates(series), d); return i >= 0 ? series[i].close : null; };
+    const start = held.get(key) ?? 0;
+    let startPrice = null;
+    if (Math.abs(start) > 1e-9) {
+      startPrice = opensOnYear && marks.get(key) > 0 ? marks.get(key) : seriesOn(yearStart);
+      if (!(startPrice > 0)) { unmeasured.push({ ticker, why: 'no price for 31 December' }); continue; }
+    }
+    const mine = events.filter((e) => e.key === key && e.date > yearStart);
+    let h = start;
+    const dir = (start || mine.find((e) => e.qty)?.qty || 1) < 0 ? -1 : 1;
+    const buys = Math.abs(start) > 1e-9 ? [{ d: yearStart, qty: Math.abs(start), price: startPrice }] : [];
+    const sells = [];
+    let priced = true;
+    for (const e of mine) {
+      const price = e.price > 0 ? e.price : seriesOn(e.date);
+      if (!(price > 0)) { priced = false; break; }
+      const grows = h === 0 || Math.sign(e.qty) === Math.sign(h);
+      if (grows) buys.push({ d: e.date, qty: Math.abs(e.qty), price });
+      else {
+        const shrink = Math.min(Math.abs(e.qty), Math.abs(h));
+        sells.push({ d: e.date, qty: shrink, price });
+        if (Math.abs(e.qty) > shrink) buys.push({ d: e.date, qty: Math.abs(e.qty) - shrink, price });
+      }
+      h += e.qty;
+    }
+    if (!priced) { unmeasured.push({ ticker, why: 'a trade without a price' }); continue; }
+    const now = Math.abs(h) > 1e-9;
+    const nowPrice = now ? current(key)?.cur ?? seriesOn(today) : 0;
+    if (now && !(nowPrice > 0)) { unmeasured.push({ ticker, why: 'no price today' }); continue; }
+    if (!buys.length) continue;
+    items.push({
+      id: p?.id ?? key, ticker,
+      life: { dir, buys, sells, held: now ? Math.abs(h) : 0, price: nowPrice },
+      close: now ? null : sells[sells.length - 1]?.d ?? null,
+      live: now,
+    });
+  }
+  return { items, unmeasured };
+}
+
+/** The app's own buys and sales after the last statement, as ledger trades. */
+function appTradeEventsAfter(positions, after) {
+  if (!after) return [];
+  return appTradeEvents(positions, after);
+}
+
 /**
  * The S&P twin, trade by trade: every time you bought, the same money went
  * into the S&P 500 that day, and came out as you sold. Open positions count
@@ -728,13 +818,20 @@ const lifePnl = (life) => life.dir * (life.held * life.price + sum(life.sells.ma
  * The whole-account comparison (every deposit into the S&P, held) rides along:
  * it also counts cash left idle and time out of the market.
  */
-function twin(history, ix, trades, open, today, prices, positions) {
+function twin(history, ix, trades, open, today, prices, positions, ledger) {
   const periods = {};
   const yearStart = `${Number(today.slice(0, 4)) - 1}-12-31`;
+  const fromLedger = ledgerYear({ ledger, positions, prices, yearStart, today });
   const yearItems = [];
   // Every position of the year that cannot be measured is named, never dropped in silence.
-  const unmeasured = [];
-  for (const p of positions ?? []) {
+  const unmeasured = fromLedger ? [...fromLedger.unmeasured] : [];
+  for (const item of fromLedger?.items ?? []) {
+    const t = twinOfLife(item.life, ix, today);
+    if (!t) { unmeasured.push({ ticker: item.ticker, why: 'no S&P 500 price for its dates' }); continue; }
+    const you = lifePnl(item.life);
+    yearItems.push({ ...item, cost: t.paid, open: item.life.buys[0].d, you, spx: t.pnl, ret: t.paid > 0 ? (you / t.paid) * 100 : null, spxRet: t.paid > 0 ? (t.pnl / t.paid) * 100 : null });
+  }
+  for (const p of fromLedger ? [] : positions ?? []) {
     if (!p?.ticker) continue;
     const closed = p.status === 'Closed';
     if (closed && !(p.close > yearStart)) continue;
@@ -1516,7 +1613,7 @@ function summaryOf({ year, twinCard, cards, picks, trades, days }) {
  */
 export function analyse({
   positions = [], history = [], index = [], fearGreed = [], bigDays = [], series = new Map(),
-  accountValue = null, year = null, today = new Date(),
+  accountValue = null, year = null, ledger = null, today = new Date(),
 } = {}) {
   const day = typeof today === 'string' ? today : today.toISOString().slice(0, 10);
   const ix = indexLevels(index);
@@ -1546,7 +1643,7 @@ export function analyse({
   const paired = pairDays(days, ix);
   const weeks = weeksOf(paired);
 
-  const twinCard = twin(history, ix, trades, open, day, series, positions);
+  const twinCard = twin(history, ix, trades, open, day, series, positions, ledger);
   const swingCard = swings(paired);
   const cards = [
     twinCard,
