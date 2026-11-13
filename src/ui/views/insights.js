@@ -76,8 +76,9 @@ async function loadMarket() {
 }
 
 /**
- * Each traded stock's closes, for the run-up before a buy and the month after
- * a sale: the 30 most recently closed, four at a time.
+ * Each traded stock's closes: for the twin's daily line, the run-up before a
+ * buy and the month after a sale. Every open position, and the 40 most
+ * recently closed, four at a time.
  */
 async function loadSeries() {
   const latest = new Map();
@@ -85,7 +86,9 @@ async function loadSeries() {
     if (p?.status !== 'Closed' || !p.ticker || !p.close) continue;
     if (!latest.has(p.ticker) || latest.get(p.ticker).close < p.close) latest.set(p.ticker, p);
   }
-  const wanted = [...latest.values()].sort((a, b) => b.close.localeCompare(a.close)).slice(0, 30)
+  const held = state.positions.filter((p) => p?.status !== 'Closed' && p.ticker);
+  const recent = [...latest.values()].sort((a, b) => b.close.localeCompare(a.close)).slice(0, 40);
+  const wanted = [...new Map([...held, ...recent].map((p) => [p.ticker, p])).values()]
     .filter((p) => !asked.has(p.ticker));
   for (let i = 0; i < wanted.length; i += 4) {
     await Promise.all(wanted.slice(i, i + 4).map(async (p) => {
@@ -188,7 +191,7 @@ function chartSvg(points) {
     const ahead = (a.you - a.twin) + (b.you - b.twin) >= 0;
     fills.push(`<polygon class="${ahead ? 'tw-ahead' : 'tw-behind'}" points="${x(i - 1).toFixed(1)},${y(a.you).toFixed(1)} ${x(i).toFixed(1)},${y(b.you).toFixed(1)} ${x(i).toFixed(1)},${y(b.twin).toFixed(1)} ${x(i - 1).toFixed(1)},${y(a.twin).toFixed(1)}"/>`);
   }
-  return `<svg class="tw-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Your account against your S&amp;P twin">
+  return `<svg class="tw-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Your trades' profit against your S&amp;P twin">
       ${fills.join('')}
       <path class="tw-twin" d="${line('twin')}"/>
       <path class="tw-you" d="${line('you')}"/>
@@ -201,6 +204,9 @@ function twinHtml(card) {
   const which = card.twin[period] ? period : 'all';
   const ahead = p.diff >= 0;
   const rows = allRows ? p.rows : p.rows.slice(0, 8);
+  const dollars = (n) => safe(`$${Math.abs(Math.round(n)).toLocaleString('en-US')}`);
+  const share = (n) => (n != null ? ` <small>(${pct(n)})</small>` : '');
+  const acc = p.account;
   return `<article class="card ins-card ins-twin ins-${ahead ? 'good' : 'bad'}" id="ins-twin">
       <div class="tw-head">
         <span class="card-lbl">Your S&amp;P twin</span>
@@ -209,15 +215,15 @@ function twinHtml(card) {
           <button type="button" role="tab" data-twin-period="all" aria-selected="${which === 'all'}">All time</button>
         </div>
       </div>
-      <p class="tw-q">What if every dollar you put in had gone into the S&amp;P 500 instead, on the same days?</p>
+      <p class="tw-q">What if every trade had gone into the S&amp;P 500 instead: the same money, bought the day you bought and sold the day you sold?</p>
       <div class="tw-nums">
-        <div><span>You have</span><b>${safe(`$${Math.round(p.you).toLocaleString('en-US')}`)}</b></div>
-        <div><span>Your S&amp;P twin</span><b>${safe(`$${Math.round(p.twin).toLocaleString('en-US')}`)}</b></div>
-        <div><span>${ahead ? 'You beat the market by' : 'The market beat you by'}</span><b style="color:${clr(p.diff)}">${safe(`$${Math.abs(Math.round(p.diff)).toLocaleString('en-US')}`)}${p.diffPct != null ? ` <small>(${pct(p.diffPct)})</small>` : ''}</b></div>
+        <div><span>You made</span><b style="color:${clr(p.you)}">${safe(usd(p.you))}${share(p.youPct)}</b></div>
+        <div><span>The S&amp;P would have made</span><b style="color:${clr(p.twin)}">${safe(usd(p.twin))}${share(p.twinPct)}</b></div>
+        <div><span>${ahead ? 'Your picks beat the S&amp;P by' : 'The S&amp;P beat your picks by'}</span><b style="color:${clr(p.diff)}">${dollars(p.diff)}</b></div>
       </div>
       ${chartSvg(p.series)}
-      <div class="tw-legend"><span><i class="tw-k-you"></i>Your account</span><span><i class="tw-k-twin"></i>S&amp;P twin</span><span><i class="tw-k-ahead"></i>Ahead</span><span><i class="tw-k-behind"></i>Behind</span></div>
-      ${p.decided ? `<p class="tw-score">You beat the S&amp;P on <b>${p.beat} of ${p.decided}</b> closed trades.${p.best && p.best.diff > 0 ? ` Your best call: <b>${escapeHtml(p.best.ticker)}</b>, ${safe(usd(p.best.diff))} more than the S&amp;P.` : ''}${p.worst && p.worst.diff < 0 ? ` Your costliest: <b>${escapeHtml(p.worst.ticker)}</b>, ${safe(`$${Math.abs(Math.round(p.worst.diff)).toLocaleString('en-US')}`)} worse than buying the S&amp;P.` : ''}</p>` : ''}
+      <div class="tw-legend"><span><i class="tw-k-you"></i>Your trades</span><span><i class="tw-k-twin"></i>S&amp;P twin</span><span><i class="tw-k-ahead"></i>Ahead</span><span><i class="tw-k-behind"></i>Behind</span></div>
+      ${p.decided ? `<p class="tw-score">You beat the S&amp;P on <b>${p.beat} of ${p.decided}</b> closed trades.${p.best && p.best.diff > 0 ? ` Your best call: <b>${escapeHtml(p.best.ticker)}</b>, ${safe(usd(p.best.diff))} more than the S&amp;P.` : ''}${p.worst && p.worst.diff < 0 ? ` Your costliest: <b>${escapeHtml(p.worst.ticker)}</b>, ${dollars(p.worst.diff)} worse than the S&amp;P.` : ''}</p>` : ''}
       ${rows.length ? `<div class="ins-table tw-table" role="table">
         <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>You made</span><span>S&amp;P would have</span><span>Result</span></div>
         ${rows.map((r) => `<div class="ins-tr" role="row"><span><b>${escapeHtml(r.ticker)}</b></span>
@@ -226,7 +232,8 @@ function twinHtml(card) {
           <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(`$${Math.abs(Math.round(r.diff)).toLocaleString('en-US')}`)}</span></div>`).join('')}
       </div>
       ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the largest 8' : `Show all ${p.rows.length} trades`}</button>` : ''}` : ''}
-      <p class="ins-small">The twin starts with your account's value on ${shortDate(p.from)} ${p.from.slice(0, 4)} and receives every deposit and withdrawal on the same day. S&amp;P 500 with dividends reinvested.</p>
+      ${acc ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${dollars(acc.diff)}${acc.diffPct != null ? ` (${pct(acc.diffPct)})` : ''}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
+      <p class="ins-small">Closed trades count on the day they closed; open positions count up to today. Percentages are on the money you put into these trades. S&amp;P 500 with dividends reinvested.</p>
     </article>`;
 }
 

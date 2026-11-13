@@ -7,7 +7,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
-  analyse, tradesOf, chanceOf, chanceVsZero, confidence, whyOf, twinSeries, indexLevels,
+  analyse, tradesOf, chanceOf, chanceVsZero, confidence, whyOf, twinSeries, indexLevels, levelOn, dailyTwin,
   traderTitle, traderBadges, moodOf, MIN_TRADES,
 } = await import('../src/core/insights.js');
 
@@ -91,7 +91,7 @@ describe('you against the market', () => {
   const r = analyse({ positions: [], history: HISTORY, index: INDEX, today: TODAY });
   const card = (cardId) => r.cards.find((c) => c.id === cardId);
 
-  test('the S&P twin gets the same money on the same days', () => {
+  test('the whole-account twin gets every deposit on the same day', () => {
     const ix = indexLevels(INDEX);
     const s = twinSeries(HISTORY, ix);
     assert.equal(s[0].twin, s[0].you, 'both start from the same value');
@@ -99,8 +99,7 @@ describe('you against the market', () => {
     const june = s.findIndex((p) => p.date === '2026-06-01');
     const twinBefore = s[june - 1].twin * (1 + ix.daily.get('2026-06-01') / 100);
     assert.ok(Math.abs(s[june].twin - (twinBefore + 5000)) < 1e-6);
-    const t = card('twin');
-    assert.ok(t.twin.year && t.twin.all);
+    assert.equal(card('twin'), undefined, 'no trades, no trade twin');
   });
 
   test('when the S&P falls 1%+, the account falls 150% as much', () => {
@@ -154,7 +153,23 @@ describe('what it reads in the trades', () => {
   test('each trade against the S&P over the same days', () => {
     const p = card('picks');
     assert.match(p.title, /over the same days by \d+\.\d points; \d+ of 20 beat it/);
-    assert.ok(r.cards.find((c) => c.id === 'twin').twin.year.decided === 20);
+  });
+
+  test('the S&P twin: each trade\'s money in the S&P from the day bought to the day sold', () => {
+    const ix = indexLevels(INDEX);
+    const t = card('twin').twin.year;
+    assert.equal(t.decided, 20);
+    assert.equal(t.you, 10 * 120 - 10 * 90, 'what the trades made');
+    // The twin of each trade: its $1,000 in the S&P over exactly its own days.
+    const expected = book.reduce((s, p) => s + 1000 * (levelOn(ix, p.close) / levelOn(ix, p.open) - 1), 0);
+    assert.ok(Math.abs(t.twin - expected) < 1e-6);
+    assert.ok(Math.abs(t.diff - (t.you - t.twin)) < 1e-9);
+    // The curve adds each trade up on the day it closed and ends on both totals.
+    const last = t.series[t.series.length - 1];
+    assert.equal(t.series[0].you, 0);
+    assert.ok(Math.abs(last.you - t.you) < 1e-9 && Math.abs(last.twin - t.twin) < 1e-9);
+    assert.ok(t.account && t.account.diffPct > 0, 'the whole-account line rides along');
+    assert.match(card('twin').title, /^If every trade had gone into the S&P 500 instead, same money, same days, you'd have made [+−]\$[\d,]+\. You made \+\$300\.$/);
   });
 
   test('the strengths and weaknesses come from solid findings only', () => {
@@ -193,5 +208,24 @@ describe('the trader card', () => {
     assert.equal(moodOf(12), 'Extreme fear');
     assert.equal(moodOf(50), 'Neutral');
     assert.equal(moodOf(80), 'Extreme greed');
+  });
+});
+
+describe('the twin, day by day', () => {
+  test('a held trade counts its open profit from the stock\'s closes, and its twin the S&P\'s, until it closes', () => {
+    const ix = indexLevels(INDEX);
+    const prices = new Map([['AAA', DAYS.map((date, i) => ({ date, close: 100 + i }))]]);
+    const open = DAYS[100];
+    const mid = DAYS[110];
+    const close = DAYS[120];
+    // 5 bought at $200 ($1,000), sold at $230 (+$150) on a day the stock closed at 220.
+    const rows = [{ ticker: 'AAA', dir: 'Long', cost: 1000, qty: 5, price: 230, open, close, you: 150, spx: 40, live: false }];
+    const s = dailyTwin(rows, ix, prices, null, TODAY);
+    const at = (d) => s.find((p) => p.date === d);
+    assert.equal(at(DAYS[99]).you, 0, 'nothing before it was bought');
+    assert.ok(Math.abs(at(mid).you - (5 * 210 * (230 / 220) - 1000)) < 1e-9, 'marked at the stock\'s close, in the trade\'s own prices');
+    assert.ok(Math.abs(at(mid).twin - 1000 * (levelOn(ix, mid) / levelOn(ix, open) - 1)) < 1e-9);
+    assert.deepEqual([at(close).you, at(close).twin], [150, 40], 'its final figures from the day it closed');
+    assert.equal(s[s.length - 1].date, TODAY);
   });
 });

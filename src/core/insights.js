@@ -542,30 +542,97 @@ export function twinSeries(rows, ix, from = null) {
   return out;
 }
 
-function twin(history, ix, trades, open, today) {
+/**
+ * The S&P twin, trade by trade: every time you bought, the same money went
+ * into the S&P 500 (total return) that day, and came out the day you sold.
+ * Open positions count to today. It isolates the picks — what each decision
+ * made against the index over exactly the days it was held. The account-wide
+ * twin (every deposit into the S&P, held) rides along as one line: it also
+ * counts cash left idle and time out of the market, which the trades cannot.
+ */
+/**
+ * Both sides marked every trading day. A trade counts its open profit from
+ * the stock's own closes while it is held and its final figure once closed;
+ * its twin, the S&P's move over the same days. A stock whose closes could not
+ * be loaded counts nothing until it closes (or, still open, until today).
+ */
+export function dailyTwin(rows, ix, prices, from, today) {
+  if (!rows.length) return [];
+  const first = rows.map((r) => r.open).sort()[0];
+  const start = from && from > first ? from : addDays(first, -1);
+  const dates = ix.dates.slice(Math.max(0, at(ix.dates, start))).filter((d) => d <= today);
+  if (!dates.length || dates[dates.length - 1] < today) dates.push(today);
+  /**
+   * The stock's closes are adjusted for later splits; the trade's own prices
+   * are not. Scaling each close by the trade's last price over the close on
+   * its last day puts the series in the trade's own terms, so the line starts
+   * from the price actually paid and ends exactly on the profit actually made.
+   */
+  const marks = rows.map((r) => {
+    const s = prices?.get(r.ticker);
+    const sd = s?.map((x) => x.date) ?? null;
+    const last = sd ? at(sd, r.live ? today : r.close) : -1;
+    const scale = last >= 0 && s[last].close > 0 && r.price > 0 && r.qty > 0 ? r.price / s[last].close : null;
+    return { r, s, sd, scale, baseLevel: levelOn(ix, r.open), sign: r.dir === 'Short' ? -1 : 1 };
+  });
+  return dates.map((d) => {
+    let you = 0;
+    let twinValue = 0;
+    for (const m of marks) {
+      const { r } = m;
+      if (d < r.open) continue;
+      if ((r.close && d >= r.close) || (r.live && d >= today)) { you += r.you; twinValue += r.spx; continue; }
+      const lv = levelOn(ix, d);
+      if (m.baseLevel > 0 && lv > 0) twinValue += r.cost * (lv / m.baseLevel - 1);
+      if (m.scale) {
+        const k = at(m.sd, d);
+        if (k >= 0) you += (r.qty * m.s[k].close * m.scale - r.cost) * m.sign;
+      }
+    }
+    return { date: d, you, twin: twinValue };
+  });
+}
+
+function twin(history, ix, trades, open, today, prices) {
   const periods = {};
   for (const [key, from] of [['year', `${today.slice(0, 4)}-01-01`], ['all', null]]) {
-    const series = twinSeries(history, ix, from);
-    if (series.length < 2) continue;
-    const end = series[series.length - 1];
     const closed = trades.filter((t) => t.spxPnl != null && (!from || t.close >= from));
+    const live = open.filter((p) => p.spxPnl != null);
+    if (!closed.length && !live.length) continue;
     const rows = [
-      ...closed.map((t) => ({ id: t.id, ticker: t.ticker, open: t.open, close: t.close, you: t.pnl, spx: t.spxPnl, live: false })),
-      ...open.filter((p) => p.spxPnl != null).map((p) => ({ id: p.id, ticker: p.ticker, open: p.open, close: null, you: p.pnl, spx: p.spxPnl, live: true })),
+      ...closed.map((t) => ({ id: t.id, ticker: t.ticker, dir: t.dir, cost: t.cost, qty: t.qty, price: t.exit, open: t.open, close: t.close, you: t.pnl, spx: t.spxPnl, live: false })),
+      ...live.map((p) => ({ id: p.id, ticker: p.ticker, dir: p.dir, cost: p.cost, qty: p.qty, price: p.price, open: p.open, close: null, you: p.pnl, spx: p.spxPnl, live: true })),
     ].map((r) => ({ ...r, diff: r.you - r.spx })).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+
+    const series = dailyTwin(rows, ix, prices, from, today);
+    const you = sum(rows.map((r) => r.you));
+    const spx = sum(rows.map((r) => r.spx));
+
+    const traded = sum([...closed.map((t) => t.cost), ...live.map((p) => p.cost)]);
     const byDiff = [...closed].sort((a, b) => (b.pnl - b.spxPnl) - (a.pnl - a.spxPnl));
+    const account = twinSeries(history, ix, from);
+    const accEnd = account[account.length - 1];
     periods[key] = {
       from: series[0].date,
       series,
-      you: end.you,
-      twin: end.twin,
-      diff: end.you - end.twin,
-      diffPct: end.twin > 0 ? (end.you / end.twin - 1) * 100 : null,
+      you,
+      twin: spx,
+      diff: you - spx,
+      youPct: traded > 0 ? (you / traded) * 100 : null,
+      twinPct: traded > 0 ? (spx / traded) * 100 : null,
       beat: closed.filter((t) => t.pnl > t.spxPnl).length,
       decided: closed.length,
+      open: live.length,
       best: byDiff.length ? { ticker: byDiff[0].ticker, diff: byDiff[0].pnl - byDiff[0].spxPnl } : null,
       worst: byDiff.length > 1 ? { ticker: byDiff[byDiff.length - 1].ticker, diff: byDiff[byDiff.length - 1].pnl - byDiff[byDiff.length - 1].spxPnl } : null,
       rows,
+      account: account.length >= 2 ? {
+        from: account[0].date,
+        you: accEnd.you,
+        twin: accEnd.twin,
+        diff: accEnd.you - accEnd.twin,
+        diffPct: accEnd.twin > 0 ? (accEnd.you / accEnd.twin - 1) * 100 : null,
+      } : null,
     };
   }
   if (!periods.all) return null;
@@ -573,7 +640,7 @@ function twin(history, ix, trades, open, today) {
   return {
     id: 'twin',
     section: 'market',
-    title: `If every dollar had gone into the S&P 500 instead, you'd have ${plain$(main.twin)}. You have ${plain$(main.you)}.`,
+    title: `If every trade had gone into the S&P 500 instead, same money, same days, you'd have made ${usd(main.twin)}. You made ${usd(main.you)}.`,
     tone: tone(main.diff),
     impact: Math.abs(main.diff),
     twin: periods,
@@ -1039,8 +1106,8 @@ export function traderBadges(trades, { open = [], accountValue = 0, twinPct = nu
     else if (sectors >= 6 && base > 0 && share(biggest, base) <= 15) add('diversifier', 40 + sectors, `${sectors} sectors, and no position over 15% of the account.`);
   }
   if (twinPct != null && twinDays >= 60) {
-    if (twinPct >= 2) add('beater', 50 + Math.min(twinPct, 40), `Ahead of your S&P twin by ${twinPct.toFixed(1)}%.`);
-    else if (Math.abs(twinPct) < 2 && twinDays >= 120) add('hugger', 35, `Within ${Math.abs(twinPct).toFixed(1)}% of your S&P twin.`);
+    if (twinPct >= 2) add('beater', 50 + Math.min(twinPct, 40), `Your account is ${twinPct.toFixed(1)}% ahead of putting every deposit in the S&P.`);
+    else if (Math.abs(twinPct) < 2 && twinDays >= 120) add('hugger', 35, `Your account is within ${Math.abs(twinPct).toFixed(1)}% of putting every deposit in the S&P.`);
   }
   const held = trades.filter((t) => t.dipped != null && t.dipped <= -20 && t.outcome === 'win');
   if (held.length) add('diamond', 30 + held.length * 5, `${plural(held.length, 'trade')} fell 20%+ while you held, and you closed ${held.length === 1 ? 'it' : 'them'} in profit.`);
@@ -1101,8 +1168,8 @@ export function analyse({
     const cost = Math.abs(costOf(p));
     const spxRet = indexBetween(ix, p.open, day);
     return {
-      id: p.id, ticker: p.ticker, open: p.open, cls: p.cls, sector: sectorOf(p),
-      pnl, ret: cost ? (pnl / cost) * 100 : 0, value: marketValueOf(p),
+      id: p.id, ticker: p.ticker, dir: p.dir, open: p.open, cls: p.cls, sector: sectorOf(p), qty: Math.abs(Number(p.qty) || 0), price: Number(p.cur) || 0,
+      pnl, cost, ret: cost ? (pnl / cost) * 100 : 0, value: marketValueOf(p),
       days: Math.max(0, Math.round((ms(day) - ms(p.open)) / DAY)),
       spxPnl: spxRet != null ? (cost * spxRet) / 100 : null,
     };
@@ -1113,7 +1180,7 @@ export function analyse({
   const weeks = weeksOf(paired);
   const enough = trades.length >= MIN_TRADES;
 
-  const twinCard = twin(history, ix, trades, open, day);
+  const twinCard = twin(history, ix, trades, open, day, series);
   const swingCard = swings(paired);
   const cards = [
     lastWeek(weeks, trades, day),
@@ -1132,7 +1199,8 @@ export function analyse({
     enough ? holding(trades) : null,
   ].filter(Boolean);
 
-  const yearTwin = twinCard?.twin?.year ?? twinCard?.twin?.all ?? null;
+  // The title and the Market Beater badge read the whole account against the S&P.
+  const yearTwin = twinCard?.twin?.year?.account ?? twinCard?.twin?.all?.account ?? null;
   const twinDays = yearTwin ? Math.round((ms(day) - ms(yearTwin.from)) / DAY) : 0;
   const sectors = new Set(trades.map((t) => t.sector).filter((s) => s !== 'Other')).size;
   const title = traderTitle(trades, { twinAhead: yearTwin ? yearTwin.diff > 0 : null, calmer: swingCard?.calmer ?? null, sectors });
