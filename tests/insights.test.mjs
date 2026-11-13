@@ -343,3 +343,20 @@ describe('the trader card: one title, and a collection', () => {
     assert.ok(collection.next && collection.next.points > points);
   });
 });
+
+describe('the drawings', () => {
+  test('every achievement and every style has its own drawing', async () => {
+    const { art } = await import('../src/ui/art/cards.js');
+    const { TITLES, TITLE_RULES } = await import('../src/core/insights.js');
+    const fallback = art('no-such-card');
+    const r = analyse({ positions: [], today: TODAY });
+    const keys = [...r.profile.collection.cards.map((c) => c.key), ...Object.keys(TITLES).map((k) => `style:${k}`)];
+    assert.equal(keys.length, 42);
+    for (const k of keys) {
+      const drawing = art(k);
+      assert.notEqual(drawing, fallback, `${k} has a drawing`);
+      assert.match(drawing, /^<svg class="art" viewBox="0 0 64 64"/);
+    }
+    assert.deepEqual(Object.keys(TITLE_RULES).sort(), Object.keys(TITLES).sort(), 'every style says who gets it');
+  });
+});

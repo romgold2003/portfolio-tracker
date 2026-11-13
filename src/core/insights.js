@@ -1193,6 +1193,22 @@ export const TITLES = {
   tortoise: ['🐢', 'The Tortoise'],
 };
 
+/** Who gets each style, in plain words, for the screen that shows every card. */
+export const TITLE_RULES = {
+  homerun: 'Wins under 45% of trades, but the wins are at least 3× the size of the losses.',
+  sharpshooter: 'Wins more than 70% of trades.',
+  sniper: 'Most trades close within a day, and more than 60% win.',
+  adrenaline: 'Most trades close within a day, with big moves both ways.',
+  scalper: 'Most trades close within a day.',
+  labrat: '40 trades or more, across many different stocks, mostly small moves.',
+  surfer: 'Holds for days to weeks, and often buys after a stock has already risen.',
+  wave: 'Usually holds for days to weeks.',
+  tortoise: 'Holds for months, calmer than the market, and ahead of it.',
+  fortress: 'Holds for months, spread across 8 sectors or more.',
+  hunter: 'Holds for months.',
+  oak: 'Typically holds a trade for more than six months.',
+};
+
 /**
  * One main title from how long you hold, how often you win and how big your
  * wins are against your losses. The first rule that fits wins, in this order.

@@ -2097,5 +2097,42 @@ body.is-guest{padding-top:36px}
 .ach small{font-size:11px;line-height:1.4;color:var(--text3)}
 .ach small em{display:block;font-style:normal;margin-top:3px;color:var(--text2)}
 .ach.is-locked{background:var(--panel);border-style:dashed;opacity:0.62}
-.ach.is-locked .ach-icon{filter:grayscale(1);opacity:0.7}
 .ach.is-locked b{color:var(--text2)}
+
+/* the drawings (ui/art/cards.js) */
+.art{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;color:var(--text);overflow:visible}
+.art .a{fill:color-mix(in srgb,var(--r,var(--blue)) 26%,transparent)}
+.art .s{stroke:var(--r,var(--blue))}
+.art .f{fill:var(--r,var(--blue));stroke:none}
+.art .k{fill:currentColor;stroke:none}
+.art .t{fill:currentColor;stroke:none;font:700 8px/1 system-ui,-apple-system,"Segoe UI",sans-serif;text-anchor:middle}
+.ach-icon{position:relative;display:block;width:56px;height:56px;font-size:0}
+.ach-lock{position:absolute;right:-6px;bottom:-4px;font-size:13px;font-style:normal;line-height:1;filter:none}
+.ach.is-locked .ach-icon .art{filter:grayscale(1);opacity:0.55}
+.pf-icon{--r:var(--blue);flex:none;width:58px;height:58px;font-size:0;padding:6px;border-radius:14px;background:color-mix(in srgb,var(--blue) 10%,var(--panel));border:0.5px solid var(--border-blue)}
+
+/* the circle beside the title */
+.pf-title{position:relative}
+.pf-title > div{flex:1;min-width:0}
+.pf-all{flex:none;align-self:flex-start;width:36px;height:36px;border-radius:50%;border:0.5px solid var(--border2);background:var(--input);color:var(--text);display:grid;place-items:center;cursor:pointer;opacity:0.5;transition:opacity 0.15s,transform 0.15s}
+.pf-all:hover,.pf-all:focus-visible{opacity:1;transform:scale(1.06)}
+.pf-all svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}
+
+/* every card, on its own screen */
+.cards-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.55);display:flex;justify-content:center;align-items:flex-start;padding:40px 16px;overflow-y:auto;backdrop-filter:blur(3px)}
+.cards-panel{width:100%;max-width:920px;background:var(--panel);border:0.5px solid var(--border2);border-radius:16px;padding:22px 24px 28px;box-shadow:0 24px 60px -20px rgba(0,0,0,0.6)}
+@media (max-width:640px){.cards-overlay{padding:12px 8px}.cards-panel{padding:18px 14px 22px}}
+.cards-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.cards-head h2{font-size:19px;font-weight:600;margin:0;color:var(--text)}
+.cards-close{width:34px;height:34px;border-radius:50%;border:0.5px solid var(--border2);background:var(--input);color:var(--text2);font-size:20px;line-height:1;cursor:pointer}
+.cards-close:hover{color:var(--text)}
+.cards-intro{font-size:13.5px;line-height:1.55;color:var(--text2);margin:8px 0 4px}
+.cards-panel h3{font-size:14px;font-weight:600;color:var(--text);margin:22px 0 10px}
+.lv-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:8px}
+@media (max-width:640px){.lv-row{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.lv{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:10px;border:0.5px solid var(--border2);background:var(--input)}
+.lv b{font-size:13px;color:var(--text)}
+.lv span{font-size:11px;color:var(--text3)}
+.lv.is-mine{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,var(--panel))}
+.lv.is-mine b{color:var(--blue)}
+.ach.is-mine{box-shadow:0 0 0 1px color-mix(in srgb,#a855f7 40%,transparent),0 4px 18px -6px color-mix(in srgb,#a855f7 55%,transparent)}

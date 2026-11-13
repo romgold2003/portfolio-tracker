@@ -12,7 +12,8 @@
  * the past, never advice.
  */
 import { state } from '../../core/store.js';
-import { analyse, MIN_GROUP, MIN_TRADES, FAMILIES as FAMILY_LIST } from '../../core/insights.js';
+import { analyse, MIN_GROUP, MIN_TRADES, FAMILIES as FAMILY_LIST, TITLES, TITLE_RULES, LEVELS } from '../../core/insights.js';
+import { art } from '../art/cards.js';
 import { accountTotals } from '../../core/portfolio.js';
 import { authoritativeHistory, portfolioHistory } from '../../core/snapshots.js';
 import { benchmarkSeries, benchmarkSpot, benchmarkYearToDate } from '../../services/benchmark.js';
@@ -302,10 +303,13 @@ function marketHtml(a) {
 const RARITY_NAME = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
 const longDay = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
+/** Two cards fanned out: the button that opens every card. */
+const CARDS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="11" height="15" rx="2" transform="rotate(-10 9 12.5)"/><rect x="9.5" y="4" width="11" height="15" rx="2"/></svg>';
+
 /** One collectible card: earned, with its date and story, or locked, with how to earn it. */
 function achievementHtml(c) {
   return `<div class="ach r-${c.rarity}${c.earned ? '' : ' is-locked'}" title="${escapeHtml(c.earned ? c.how : `Locked: ${c.how}`)}">
-      <span class="ach-icon" aria-hidden="true">${c.earned ? c.icon : '🔒'}</span>
+      <span class="ach-icon">${art(c.key)}${c.earned ? '' : '<i class="ach-lock" aria-hidden="true">🔒</i>'}</span>
       <b>${escapeHtml(c.name)}</b>
       <span class="ach-rar">${RARITY_NAME[c.rarity]}</span>
       <small>${c.earned ? `${safe(c.detail)}<em>${longDay(c.earned)}</em>` : escapeHtml(c.how)}</small>
@@ -324,10 +328,11 @@ function styleHtml(a) {
     .sort((x, y) => Number(Boolean(y.earned)) - Number(Boolean(x.earned)));
   return `<h2 class="ins-group">Your trader card</h2>
     <section class="card ins-profile">
-      <div class="pf-title"><span class="pf-icon">${title ? title.icon : '🌱'}</span><div>
+      <div class="pf-title"><span class="pf-icon">${title ? art(`style:${title.key}`) : art('ten')}</span><div>
         <b><span class="pf-level">${escapeHtml(level)}</span>${title ? ` · ${escapeHtml(title.name)}` : ''}</b>
         <p>${title ? safe(title.why) : `Your trading style appears after ${MIN_TRADES} closed trades. You have ${a.trades}.`}</p>
-      </div></div>
+      </div>
+      <button type="button" class="pf-all" data-ins-allcards aria-label="See every title and achievement" title="See every title and achievement">${CARDS_ICON}</button></div>
       <div class="pf-progress">
         <div class="pf-bar" role="progressbar" aria-valuenow="${Math.round(progress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.max(3, progress)}%"></span></div>
         <p>${collection.earned} of ${collection.total} achievements · ${points} points${next ? ` · Next: <b>${escapeHtml(next.name)}</b> at ${next.points} points` : ' · The highest level'}</p>
@@ -368,6 +373,49 @@ function listHtml(title, intro, cards, extra = '') {
     <section class="card ins-list">${sorted.map(rowHtml).join('')}${extra}</section>`;
 }
 
+/* ── every card, on its own screen ── */
+
+let last = null;
+
+/** Every level, every style and every achievement, opened from the circle beside the title. */
+function openAllCards(a) {
+  if (!a) return;
+  document.querySelector('.cards-overlay')?.remove();
+  const { title, level, collection } = a.profile;
+  const styles = Object.keys(TITLE_RULES).map((key) => {
+    const mine = title?.key === key;
+    return `<div class="ach ${mine ? 'r-epic is-mine' : 'r-common'}">
+        <span class="ach-icon">${art(`style:${key}`)}</span>
+        <b>${escapeHtml(TITLES[key][1])}</b>
+        ${mine ? '<span class="ach-rar">Your style</span>' : ''}
+        <small>${escapeHtml(TITLE_RULES[key])}</small>
+      </div>`;
+  }).join('');
+  const levels = LEVELS.map(([name, from]) => `<div class="lv${name === level ? ' is-mine' : ''}"><b>${escapeHtml(name)}</b><span>${from} points</span></div>`).join('');
+  const families = FAMILY_LIST.map(([key, label]) => `<h4 class="pf-family">${escapeHtml(label)}</h4>
+      <div class="ach-grid">${collection.cards.filter((c) => c.family === key).map(achievementHtml).join('')}</div>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'cards-overlay';
+  overlay.innerHTML = `<div class="cards-panel" role="dialog" aria-modal="true" aria-labelledby="cardsTitle">
+      <header class="cards-head"><h2 id="cardsTitle">Every card you can collect</h2><button type="button" class="cards-close" aria-label="Close">×</button></header>
+      <p class="cards-intro">Your title has two parts: your <b>level</b>, which rises as you collect achievements, and your <b>style</b>, read from how you trade.</p>
+      <h3>Levels</h3>
+      <div class="lv-row">${levels}</div>
+      <p class="ins-small">Each achievement is worth points by rarity: Common 1, Rare 2, Epic 3, Legendary 5. You have ${collection.points}.</p>
+      <h3>Styles</h3>
+      <div class="ach-grid">${styles}</div>
+      <h3>Achievements · ${collection.earned} of ${collection.total}</h3>
+      ${families}
+    </div>`;
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay || e.target.closest('.cards-close')) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+  overlay.querySelector('.cards-close').focus();
+}
+
 /* ── the page ── */
 
 function draw() {
@@ -385,6 +433,7 @@ function draw() {
     accountValue: accountTotals(state.positions, state.cash).account,
     year: { you: homeYearToDate(), spx },
   });
+  last = a;
   const habits = a.cards.filter((c) => c.group === 'habits');
   const deeper = a.cards.filter((c) => c.group === 'deeper');
   body.innerHTML = `${summaryHtml(a)}
@@ -413,6 +462,7 @@ function bind() {
     if (e.target.closest('[data-ins-twin]')) return toggle('twin:detail');
     if (e.target.closest('[data-ins-records]')) return toggle('records');
     if (e.target.closest('[data-ins-collection]')) return toggle('collection');
+    if (e.target.closest('[data-ins-allcards]')) { openAllCards(last); return undefined; }
     const tab = e.target.closest('[data-twin-period]');
     if (tab) { period = tab.dataset.twinPeriod; allRows = false; draw(); return undefined; }
     if (e.target.closest('[data-twin-all]')) { allRows = !allRows; draw(); }
