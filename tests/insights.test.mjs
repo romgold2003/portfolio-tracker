@@ -56,9 +56,10 @@ describe('enough evidence, and better than chance', () => {
     const r = analyse({ positions: [trade(110, '2026-01-05', '2026-01-09')], today: TODAY });
     assert.equal(r.needed, MIN_TRADES - 1);
     assert.equal(r.profile.title, null);
-    const w = r.cards.find((c) => c.id === 'weekday');
-    assert.equal(w.confidence.level, 'early');
-    assert.equal(w.headline, undefined, 'no conclusion is drawn');
+    const h = r.cards.find((c) => c.id === 'holding');
+    assert.equal(h.confidence.level, 'early');
+    assert.equal(h.headline, undefined, 'no conclusion is drawn');
+    assert.equal(r.cards.find((c) => c.id === 'weekday'), undefined, 'no best-day-to-open card');
     assert.equal(r.standOut.length, 0);
   });
 
@@ -280,23 +281,6 @@ describe('the investing style', () => {
     assert.equal(moodOf(55), 'Neutral');
     assert.equal(moodOf(75), 'Greed');
     assert.equal(moodOf(76), 'Extreme greed');
-  });
-});
-
-describe('the best day to open a trade', () => {
-  test('is counted in wins and losses, so one huge winner cannot carry a day', () => {
-    const mondays = weekdays('2026-01-05', '2026-06-30').filter((d) => new Date(`${d}T12:00:00Z`).getUTCDay() === 1);
-    const tuesdays = weekdays('2026-01-05', '2026-06-30').filter((d) => new Date(`${d}T12:00:00Z`).getUTCDay() === 2);
-    // Mondays: 9 small losses and one +1,000% winner. Tuesdays: 8 of 10 small wins.
-    const book = [
-      ...mondays.slice(0, 10).map((d, i) => trade(i ? 97 : 1100, d, d)),
-      ...tuesdays.slice(0, 10).map((d, i) => trade(i < 8 ? 103 : 98, d, d)),
-    ];
-    const w = analyse({ positions: book, today: TODAY }).cards.find((c) => c.id === 'weekday');
-    assert.equal(w.headline, 'Trades you open on Tuesdays win most often; Mondays win least');
-    assert.match(w.data, /^Tuesday: 8 of 10 won \(80%\)\. Monday: 1 of 10 won \(10%\)\. Based on 20 trades\.$/);
-    assert.equal(w.unit, 'rate');
-    assert.equal(w.confidence.level, 'strong');
   });
 });
 
