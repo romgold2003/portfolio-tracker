@@ -465,31 +465,44 @@ export function whyOf(group, rest, skip = []) {
 
 /* ── the best and worst day to open a trade ── */
 
+/**
+ * Counted in wins and losses, not in per cent (November 2026): one trade held
+ * for years that made 1,000% would otherwise make its weekday look like the
+ * best by itself. What matters here is how often a trade opened that day
+ * works out. Trades that closed flat count as neither.
+ */
 function weekdayTrades(trades) {
-  const days = [1, 2, 3, 4, 5].map((d) => ({ d, ts: trades.filter((t) => t.weekday === d) }));
+  const decided = trades.filter((t) => t.outcome !== 'even');
+  const days = [1, 2, 3, 4, 5].map((d) => ({ d, ts: decided.filter((t) => t.weekday === d) }));
   const usable = days.filter((x) => x.ts.length >= 3);
   const base = {
     id: 'weekday', group: 'habits', topic: 'Your best day to open a trade',
-    how: 'The average return of your closed trades, grouped by the weekday you opened them. Each trade counts once, whatever its size: return = profit ÷ amount invested. The weakest day is compared with all your other days, and the difference is checked against chance.',
+    how: 'Out of the trades you opened on each weekday, the share that closed in profit. Only winning or losing counts, not by how much, so one very large winner cannot make a day look good on its own. Trades that closed flat are left out. The day with the lowest share is compared with all your other days and checked against chance.',
   };
   if (usable.length < 2) return { ...base, tone: 'neutral', impact: 0, confidence: { level: 'early', needed: Math.max(1, MIN_TRADES - trades.length, 3 - usable.length) } };
-  const avg = (x) => mean(x.ts.map((t) => t.ret));
-  const worst = usable.reduce((a, b) => (avg(b) < avg(a) ? b : a));
-  const best = usable.reduce((a, b) => (avg(b) > avg(a) ? b : a));
-  const rest = trades.filter((t) => t.weekday !== worst.d);
+  const won = (x) => x.ts.filter((t) => t.outcome === 'win').length;
+  const rate = (x) => (won(x) / x.ts.length) * 100;
+  // A tie goes to the day with more trades behind it.
+  const worst = usable.reduce((a, b) => (rate(b) < rate(a) || (rate(b) === rate(a) && b.ts.length > a.ts.length) ? b : a));
+  const best = usable.reduce((a, b) => (rate(b) > rate(a) || (rate(b) === rate(a) && b.ts.length > a.ts.length) ? b : a));
+  const rest = decided.filter((t) => t.weekday !== worst.d);
   const why = whyOf(worst.ts, rest);
   const total = sum(worst.ts.map((t) => t.pnl));
+  const line = (x) => `${WEEKDAYS[x.d]}: ${won(x)} of ${x.ts.length} won (${Math.round(rate(x))}%)`;
   return {
     ...base,
-    headline: `Your trades opened on ${WEEKDAYS[best.d]}s do best; ${WEEKDAYS[worst.d]}s are weaker`,
-    matters: avg(worst) < 0 ? `Trades opened on ${WEEKDAYS[worst.d]}s have lost money on average. This pattern may be costing you performance.` : `Your ${WEEKDAYS[worst.d]} trades still make money, just less than on other days.`,
-    data: `${WEEKDAYS[best.d]}: ${pct(avg(best))} per trade. ${WEEKDAYS[worst.d]}: ${pct(avg(worst))} per trade. Based on ${plural(trades.length, 'trade')}.`,
-    more: `${best.ts.length} trades opened on ${WEEKDAYS[best.d]}s, ${worst.ts.length} on ${WEEKDAYS[worst.d]}s, which added up to ${usd(total)}.`,
+    headline: `Trades you open on ${WEEKDAYS[best.d]}s win most often; ${WEEKDAYS[worst.d]}s win least`,
+    matters: rate(worst) < 50
+      ? `Most trades you open on ${WEEKDAYS[worst.d]}s end in a loss. This pattern may be costing you performance.`
+      : `Even your ${WEEKDAYS[worst.d]} trades win more often than not, just less than on other days.`,
+    data: `${line(best)}. ${line(worst)}. Based on ${plural(decided.length, 'trade')}.`,
+    more: `Your ${WEEKDAYS[worst.d]} trades added up to ${usd(total)}.`,
     cause: why ? `Your ${WEEKDAYS[worst.d]} trades: ${why.text}` : null,
-    tone: avg(worst) < 0 ? 'bad' : 'neutral',
+    tone: rate(worst) < 50 ? 'bad' : 'neutral',
     impact: Math.abs(total),
-    confidence: confidence(worst.ts, rest),
-    bars: days.map((x) => [WEEKDAYS[x.d].slice(0, 3), x.ts.length ? avg(x) : 0]),
+    confidence: confidence(worst.ts, rest, (t) => (t.outcome === 'win' ? 1 : 0)),
+    bars: days.map((x) => [WEEKDAYS[x.d].slice(0, 3), x.ts.length ? rate(x) : 0]),
+    unit: 'rate',
     trades: ids(worst.ts),
   };
 }

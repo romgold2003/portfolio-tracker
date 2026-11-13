@@ -105,6 +105,7 @@ function fmt(v, unit) {
   if (unit === 'pts') return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} pts`;
   if (unit === 'vol') return `${v.toFixed(0)}% a year`;
   if (unit === 'move') return `±${v.toFixed(2)}%`;
+  if (unit === 'rate') return `${Math.round(v)}% won`;
   return pct(v, unit === 'pct2' ? 2 : 1);
 }
 
@@ -112,10 +113,13 @@ function barsHtml(bars, unit) {
   if (!bars?.length) return '';
   const top = Math.max(...bars.map(([, v]) => Math.abs(v)), 1e-9);
   const neutral = unit === 'days' || unit === 'vol' || unit === 'move';
+  // A win rate is good above half and weak below it; the bar runs from 0 to 100.
+  const sign = (v) => (unit === 'rate' ? v - 50 : v);
+  const width = (v) => (unit === 'rate' ? v : (Math.abs(v) / top) * 100);
   return `<div class="ins-bars">${bars.map(([label, v]) => `<div class="ins-bar">
       <span class="ins-bl">${escapeHtml(label)}</span>
-      <span class="ins-bt"><span class="${neutral ? 'is-days' : v >= 0 ? 'is-up' : 'is-down'}" style="width:${Math.max(2, (Math.abs(v) / top) * 100)}%"></span></span>
-      <span class="ins-bv" style="color:${neutral ? 'var(--text2)' : clr(v)}">${fmt(v, unit)}</span>
+      <span class="ins-bt"><span class="${neutral ? 'is-days' : sign(v) >= 0 ? 'is-up' : 'is-down'}" style="width:${Math.max(2, width(v))}%"></span></span>
+      <span class="ins-bv" style="color:${neutral ? 'var(--text2)' : clr(sign(v))}">${fmt(v, unit)}</span>
     </div>`).join('')}</div>`;
 }
 
