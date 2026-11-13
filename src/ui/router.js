@@ -8,10 +8,10 @@
 import { isShown } from '../core/store.js';
 
 // Admin comes last and has no tab: its button is in the menu, for the admin account only.
-const PAGES = ['home', 'positions', 'add', 'monthly', 'news', 'crypto', 'friends', 'admin'];
+const PAGES = ['home', 'positions', 'add', 'monthly', 'insights', 'news', 'crypto', 'friends', 'admin'];
 
 /** Pages that can be switched off in Customize (core/layout.js); one switched off is not opened. */
-const SWITCHABLE = { monthly: 'page.monthly', news: 'page.news', crypto: 'page.crypto', friends: 'page.friends' };
+const SWITCHABLE = { monthly: 'page.monthly', insights: 'page.insights', news: 'page.news', crypto: 'page.crypto', friends: 'page.friends' };
 
 /** Set at boot so the router can trigger a page's lazy re-render. */
 let onEnter = () => {};

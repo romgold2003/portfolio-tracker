@@ -21,6 +21,7 @@ const navButton = (page) => qs(`.nl[onclick="show('${page}')"]`);
 /** Which elements each switch removes. */
 const TARGETS = {
   'page.monthly': () => [navButton('monthly')],
+  'page.insights': () => [navButton('insights'), document.querySelector('.month-insights')],
   'page.news': () => [navButton('news')],
   'page.crypto': () => [navButton('crypto')],
   'page.friends': () => [navButton('friends')],
@@ -44,7 +45,7 @@ const TARGETS = {
 };
 
 /** The pages a switch can take away, and the page each id belongs to. */
-const PAGE_OF = { 'page.monthly': 'monthly', 'page.news': 'news', 'page.crypto': 'crypto', 'page.friends': 'friends' };
+const PAGE_OF = { 'page.monthly': 'monthly', 'page.insights': 'insights', 'page.news': 'news', 'page.crypto': 'crypto', 'page.friends': 'friends' };
 
 /** Put the chosen layout on screen. Safe to call any time, as often as wanted. */
 export function applyLayout() {

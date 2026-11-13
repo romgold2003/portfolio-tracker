@@ -21,6 +21,7 @@ export const LAYOUT_GROUPS = [
     note: 'Home, Positions and New trade are always there.',
     items: [
       { id: 'page.monthly', label: 'Monthly', hint: 'Profit, win rate and trades month by month' },
+      { id: 'page.insights', label: 'Insights', hint: 'Patterns in your own trades: habits, timing, what works' },
       { id: 'page.news', label: 'News', hint: 'The Fed, earnings, economic data, options and prediction markets' },
       { id: 'page.crypto', label: 'Crypto', hint: 'Whales, ETF flows and your crypto journal' },
       { id: 'page.friends', label: 'Friends', hint: 'Friends, shared investments and messages' },

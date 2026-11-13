@@ -1931,3 +1931,47 @@ body.is-guest{padding-top:36px}
 .month-tabs button.on span{color:var(--blue)}
 .month-tabs button:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
 .month-note{font-size:12.5px;color:var(--text3);line-height:1.5;margin:-4px 2px 12px}
+
+/* ───────── Insights (views/insights.js) ───────── */
+.ins-sub{font-size:12.5px;color:var(--text3);margin-top:2px}
+.ins-review{margin-bottom:18px}
+.ins-rline{font-size:15px;color:var(--text2);margin:8px 0 10px}
+.ins-rline b{font-size:20px;font-weight:600;margin-right:4px}
+.ins-rlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text2)}
+.ins-rlist li{display:flex;align-items:center;gap:8px}
+.ins-dot{width:7px;height:7px;border-radius:50%;background:var(--text4);flex:none}
+.ins-dot.is-up{background:var(--green)}
+.ins-dot.is-down{background:var(--red)}
+.ins-group{font-size:12px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:22px 0 10px}
+.ins-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
+@media (max-width:640px){.ins-grid{grid-template-columns:minmax(0,1fr)}}
+.ins-card{display:flex;flex-direction:column;gap:8px;border-left:3px solid var(--border2)}
+.ins-card.ins-good{border-left-color:var(--green)}
+.ins-card.ins-bad{border-left-color:var(--red)}
+.ins-card.is-early{opacity:0.62}
+.ins-top{display:flex;justify-content:space-between;align-items:center}
+.ins-badge{font-size:10.5px;font-weight:600;letter-spacing:0.03em;padding:2px 8px;border-radius:999px;border:0.5px solid var(--border2);color:var(--text3)}
+.ins-badge.ins-strong{color:var(--blue);border-color:var(--border-blue);background:var(--blue-bg)}
+.ins-badge.ins-likely{color:var(--text);border-color:var(--border2)}
+.ins-badge.ins-possible{color:var(--text3);border-style:dashed}
+.ins-title{font-size:15px;font-weight:600;line-height:1.4;color:var(--text);margin:0}
+.ins-detail{font-size:12.5px;line-height:1.5;color:var(--text3);margin:0}
+.ins-bars{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.ins-bar{display:grid;grid-template-columns:minmax(0,110px) minmax(0,1fr) 72px;align-items:center;gap:8px;font-size:12px}
+.ins-bl{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ins-bt{height:8px;border-radius:4px;background:var(--input);overflow:hidden}
+.ins-bt span{display:block;height:100%;border-radius:4px}
+.ins-bt .is-up{background:var(--green)}
+.ins-bt .is-down{background:var(--red)}
+.ins-bt .is-days{background:var(--blue)}
+.ins-bv{text-align:right;font-variant-numeric:tabular-nums}
+.ins-more{align-self:flex-start;font:inherit;font-size:12px;color:var(--blue);background:none;border:0;padding:2px 0;cursor:pointer}
+.ins-more:hover{text-decoration:underline}
+.ins-trades{display:flex;flex-direction:column;border-top:0.5px solid var(--border);padding-top:6px}
+.ins-trade{display:grid;grid-template-columns:70px minmax(0,1fr) 70px 80px;gap:8px;font-size:12px;padding:4px 0;color:var(--text2);font-variant-numeric:tabular-nums}
+.ins-trade span:nth-child(n+3){text-align:right}
+.ins-empty h3{font-size:16px;margin:0 0 6px}
+.ins-empty p{font-size:13px;color:var(--text2);margin:0 0 10px}
+.ins-empty ul{margin:0 0 10px;padding-left:18px;font-size:13px;color:var(--text3);line-height:1.7}
+.ins-small{font-size:12px!important;color:var(--text3)!important}
+.ins-foot{font-size:11.5px;color:var(--text3);line-height:1.5;margin:20px 0 0}

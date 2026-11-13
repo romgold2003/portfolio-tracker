@@ -10,6 +10,7 @@ import { renderHome, updateLivePill } from './views/home.js';
 import { setOrbitBackdrop } from '../features/orbitBackdrop.js';
 import { renderPositions } from './views/positions.js';
 import { renderMonthly, renderMonthDetail } from './views/monthly.js';
+import { renderInsights } from './views/insights.js';
 import { renderNews } from './views/news.js';
 import { renderCrypto } from './views/crypto.js';
 import { pauseHyperliquid } from './views/cryptoWhales.js';
@@ -42,6 +43,7 @@ export function renderAll() {
   if (page === 'home') renderHome();
   else if (page === 'positions') renderPositions();
   else if (page === 'monthly') renderMonthly();
+  else if (page === 'insights') renderInsights();
   // Fetches over the network and resolves on its own; nothing here waits on it.
   else if (page === 'news') renderNews();
   // A summary shared with friends follows the book, at most every ten minutes.
@@ -59,6 +61,7 @@ export function renderOnPageEnter(page) {
   if (page === 'home') setTimeout(renderHome, 50);
   if (page === 'positions') renderPositions();
   if (page === 'monthly') setTimeout(renderMonthly, 50);
+  if (page === 'insights') renderInsights();
   if (page === 'news') renderNews();
   if (page === 'friends') renderFriends();
   if (page === 'admin') renderAdmin();

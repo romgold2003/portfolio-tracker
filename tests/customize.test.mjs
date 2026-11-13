@@ -16,7 +16,7 @@ globalThis.localStorage ??= { getItem: () => null, setItem: () => {} };
 describe('what can be switched off', () => {
   test('pages, the dials, and the panels of Home, News and Crypto — never Home, Positions or New trade', () => {
     assert.deepEqual(LAYOUT_GROUPS.map((g) => g.title), ['Pages', 'Every page', 'Home', 'News', 'Crypto']);
-    assert.deepEqual(LAYOUT_GROUPS[0].items.map((i) => i.label), ['Monthly', 'News', 'Crypto', 'Friends']);
+    assert.deepEqual(LAYOUT_GROUPS[0].items.map((i) => i.label), ['Monthly', 'Insights', 'News', 'Crypto', 'Friends']);
     for (const essential of ['page.home', 'page.positions', 'page.add']) assert.ok(!LAYOUT_IDS.includes(essential), essential);
     for (const id of ['gauges', 'news.options', 'news.gamble', 'news.earnings', 'crypto.whales', 'home.allocation']) assert.ok(LAYOUT_IDS.includes(id), id);
     // Every switch says, in plain words, what it is.
