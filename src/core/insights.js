@@ -273,6 +273,8 @@ function pairOf(days, ix) {
  * recorded sales, one sale of everything at its exit price on its close date.
  * The same reconstruction the daily history uses (appTrades.js).
  */
+const EARLIEST = '0000-01-01';
+
 export function tradeLife(p) {
   const adds = (p.adds ?? []).filter((a) => a?.d && Number(a.qty) > 0 && Number(a.price) > 0).map((a) => ({ d: a.d, qty: +a.qty, price: +a.price }));
   let sells = (p.exits ?? []).filter((e) => e?.d && Number(e.qty) > 0 && Number(e.price) > 0).map((e) => ({ d: e.d, qty: +e.qty, price: +e.price }));
@@ -284,8 +286,8 @@ export function tradeLife(p) {
   const first = held + sum(sells.map((s) => s.qty)) - addedQty;
   const firstPrice = first > 1e-9 ? (p.entry * (first + addedQty) - sum(adds.map((a) => a.qty * a.price))) / first : 0;
   const buys = first > 1e-9 && firstPrice > 0
-    ? [{ d: p.open, qty: first, price: firstPrice }, ...adds]
-    : [{ d: p.open, qty: held + sum(sells.map((s) => s.qty)), price: +p.entry }];
+    ? [{ d: p.open || EARLIEST, qty: first, price: firstPrice }, ...adds]
+    : [{ d: p.open || EARLIEST, qty: held + sum(sells.map((s) => s.qty)), price: +p.entry }];
   return { dir: p.dir === 'Short' ? -1 : 1, buys, sells, held, price: +p.cur || 0 };
 }
 
@@ -755,29 +757,82 @@ export function twinDaily(items, ix, prices, from, today) {
 }
 
 /**
+ * A position's year: everything held on 31 December enters at that day's
+ * close, as if bought then, and the year's own buys and sales follow. This is
+ * how a holding carried into the year is measured over the year alone, the way
+ * the account's year to date measures it. The close on 31 December comes from
+ * the stock's own daily closes, put in the trade's terms (its split-adjusted
+ * close scaled to the last price the trade knows); without them the position
+ * cannot be measured and is counted apart.
+ */
+export function yearLife(p, yearStart, prices, today) {
+  const life = tradeLife(p);
+  const before = (e) => e.d <= yearStart;
+  const buys = life.buys.filter((b) => !before(b));
+  const sells = life.sells.filter((x) => !before(x));
+  const heldThen = sum(life.buys.filter(before).map((b) => b.qty)) - sum(life.sells.filter(before).map((x) => x.qty));
+  if (!buys.length && !sells.length && !(heldThen > 1e-9)) return null;
+  const entry = [];
+  if (heldThen > 1e-9) {
+    const rows = prices?.get(p.ticker);
+    if (!rows?.length) return { missing: true };
+    const lastSale = life.sells[life.sells.length - 1];
+    const [endDay, endPrice] = life.held > 0 ? [today, life.price] : [lastSale?.d, lastSale?.price];
+    const k = endDay ? at(rowDates(rows), endDay) : -1;
+    const k0 = at(rowDates(rows), yearStart);
+    if (k < 0 || k0 < 0 || !(rows[k].close > 0) || !(endPrice > 0)) return { missing: true };
+    entry.push({ d: yearStart, qty: heldThen, price: rows[k0].close * (endPrice / rows[k].close) });
+  }
+  return { ...life, buys: [...entry, ...buys], sells };
+}
+
+/** What a life made: what is held now at its price, plus what the sales brought in, less what the buys cost. */
+const lifePnl = (life) => life.dir * (life.held * life.price + sum(life.sells.map((x) => x.qty * x.price)) - sum(life.buys.map((b) => b.qty * b.price)));
+
+/**
  * The S&P twin, trade by trade: every time you bought, the same money went
  * into the S&P 500 that day, and came out as you sold. Open positions count
- * to today. "This year" is the trades opened this year, whole, so nothing
- * from before January is mixed in. The whole-account comparison (every
- * deposit into the S&P, held) rides along as one line: it also counts cash
- * left idle and time out of the market, which the trades cannot.
+ * to today.
+ *  - This year: every position held during the year, from its value at the
+ *    close on 31 December (or from the day it was bought, if later), so the
+ *    holdings carried into the year count, as they do in the year to date.
+ *  - All time: every trade over its whole life, from the day it was opened.
+ * The whole-account comparison (every deposit into the S&P, held) rides along:
+ * it also counts cash left idle and time out of the market.
  */
-function twin(history, ix, trades, open, today, prices) {
+function twin(history, ix, trades, open, today, prices, positions) {
   const periods = {};
-  const items = [
+  const yearStart = `${Number(today.slice(0, 4)) - 1}-12-31`;
+  const yearItems = [];
+  let unmeasured = 0;
+  for (const p of positions ?? []) {
+    if (!p?.ticker || !(p.qty > 0) || !(p.entry > 0)) continue;
+    const closed = p.status === 'Closed';
+    if (closed && !(p.close > yearStart)) continue;
+    const life = yearLife(p, yearStart, prices, today);
+    if (!life) continue;
+    if (life.missing) { unmeasured += 1; continue; }
+    const t = twinOfLife(life, ix, today);
+    if (!t) { unmeasured += 1; continue; }
+    const you = lifePnl(life);
+    yearItems.push({
+      id: p.id, ticker: p.ticker, life, cost: t.paid, open: life.buys[0].d, close: closed ? p.close : null,
+      you, spx: t.pnl, ret: t.paid > 0 ? (you / t.paid) * 100 : null, spxRet: t.paid > 0 ? (t.pnl / t.paid) * 100 : null, live: !closed,
+    });
+  }
+  const allItems = [
     ...trades.filter((t) => t.spxPnl != null).map((t) => ({ id: t.id, ticker: t.ticker, life: t.life, cost: t.cost, open: t.open, close: t.close, you: t.pnl, spx: t.spxPnl, ret: t.ret, spxRet: t.spxRet, live: false })),
     ...open.filter((p) => p.spxPnl != null).map((p) => ({ id: p.id, ticker: p.ticker, life: p.life, cost: p.cost, open: p.open, close: null, you: p.pnl, spx: p.spxPnl, live: true })),
   ];
-  for (const [key, from] of [['year', `${today.slice(0, 4)}-01-01`], ['all', null]]) {
-    const rows = items.filter((r) => !from || r.open >= from).map((r) => ({ ...r, diff: r.you - r.spx }))
-      .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  for (const [key, from, items] of [['year', `${today.slice(0, 4)}-01-01`, yearItems], ['all', null, allItems]]) {
+    const rows = items.map((r) => ({ ...r, diff: r.you - r.spx })).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
     if (!rows.length) continue;
     const closed = rows.filter((r) => !r.live);
     const you = sum(rows.map((r) => r.you));
     const spx = sum(rows.map((r) => r.spx));
     const traded = sum(rows.map((r) => r.cost));
     const byDiff = [...closed].sort((a, b) => b.diff - a.diff);
-    const excess = closed.filter((r) => r.spxRet != null).map((r) => r.ret - r.spxRet);
+    const excess = closed.filter((r) => r.spxRet != null && r.ret != null).map((r) => r.ret - r.spxRet);
     const account = twinSeries(history, ix, from);
     const accEnd = account[account.length - 1];
     periods[key] = {
@@ -791,6 +846,7 @@ function twin(history, ix, trades, open, today, prices) {
       beat: closed.filter((r) => r.diff > 0).length,
       decided: closed.length,
       open: rows.length - closed.length,
+      unmeasured: key === 'year' ? unmeasured : 0,
       luck: confidenceOne(excess),
       best: byDiff.length && byDiff[0].diff > 0 ? { ticker: byDiff[0].ticker, diff: byDiff[0].diff } : null,
       worst: byDiff.length > 1 && byDiff[byDiff.length - 1].diff < 0 ? { ticker: byDiff[byDiff.length - 1].ticker, diff: byDiff[byDiff.length - 1].diff } : null,
@@ -804,7 +860,7 @@ function twin(history, ix, trades, open, today, prices) {
       } : null,
     };
   }
-  if (!periods.all) return null;
+  if (!periods.all && !periods.year) return null;
   const main = periods.year ?? periods.all;
   return {
     id: 'twin',
@@ -1492,11 +1548,13 @@ function summaryOf({ year, twinCard, cards, picks, trades, days }) {
     const ahead = year.you >= year.spx;
     parts.push(`This year your account is ${year.you >= 0 ? 'up' : 'down'} ${plainPct(year.you)}, while the S&P 500 is ${year.spx >= 0 ? 'up' : 'down'} ${plainPct(year.spx)}. ${ahead ? 'You are ahead of the market.' : 'The market is ahead of you for now.'}`);
   }
-  const t = twinCard?.twin?.year ?? twinCard?.twin?.all;
-  if (t && t.decided + t.open >= 3) {
-    parts.push(t.diff >= 0
-      ? `Your picks have made ${plain$(t.diff)} more than the same money would have in the S&P 500.`
-      : `Putting the same money in the S&P 500 would have made ${plain$(-t.diff)} more than your picks so far.`);
+  // In money, the same comparison as the percentages: the whole account against
+  // every deposit put into the S&P 500 on the same day, over the same year.
+  const acc = twinCard?.twin?.year?.account;
+  if (acc && year?.you != null) {
+    parts.push(acc.diff >= 0
+      ? `In money, that is about ${plain$(acc.diff)} more than the same deposits would have made in the S&P 500.`
+      : `In money, the same deposits in the S&P 500 would have made about ${plain$(-acc.diff)} more.`);
   }
   const byId = new Map(cards.map((c) => [c.id, c]));
   const edge = picks.find((p) => p.kind === 'edge');
@@ -1555,7 +1613,7 @@ export function analyse({
   const paired = pairDays(days, ix);
   const weeks = weeksOf(paired);
 
-  const twinCard = twin(history, ix, trades, open, day, series);
+  const twinCard = twin(history, ix, trades, open, day, series, positions);
   const swingCard = swings(paired);
   const cards = [
     twinCard,

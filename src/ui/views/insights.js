@@ -74,9 +74,10 @@ async function loadMarket() {
 }
 
 /**
- * Each traded stock's closes: for the twin's daily line, the run-up before a
- * buy and the month after a sale. Every open position, and the 40 most
- * recently closed, four at a time.
+ * Each traded stock's closes: for the twin's daily line and its 31 December
+ * values, the run-up before a buy and the month after a sale. Every open
+ * position, every one closed this year, and the 40 most recently closed,
+ * four at a time.
  */
 async function loadSeries() {
   const latest = new Map();
@@ -85,8 +86,10 @@ async function loadSeries() {
     if (!latest.has(p.ticker) || latest.get(p.ticker).close < p.close) latest.set(p.ticker, p);
   }
   const held = state.positions.filter((p) => p?.status !== 'Closed' && p.ticker);
+  const yearStart = `${new Date().getFullYear() - 1}-12-31`;
+  const thisYear = [...latest.values()].filter((p) => p.close > yearStart);
   const recent = [...latest.values()].sort((a, b) => b.close.localeCompare(a.close)).slice(0, 40);
-  const wanted = [...new Map([...held, ...recent].map((p) => [p.ticker, p])).values()]
+  const wanted = [...new Map([...held, ...thisYear, ...recent].map((p) => [p.ticker, p])).values()]
     .filter((p) => !asked.has(p.ticker));
   for (let i = 0; i < wanted.length; i += 4) {
     await Promise.all(wanted.slice(i, i + 4).map(async (p) => {
@@ -275,7 +278,7 @@ function marketHtml(a) {
           <button type="button" role="tab" data-twin-period="all" aria-selected="${which === 'all'}">All time</button>
         </div>
       </div>
-      <p class="tw-q">If every trade${which === 'year' ? ' you opened this year' : ''} had gone into the S&amp;P 500 instead, with the same money on the same days:</p>
+      <p class="tw-q">${which === 'year' ? 'If the money in each of your positions this year had been in the S&amp;P 500 instead, on the same days (what you already held on 31 December counts from that day’s value):' : 'If every trade had gone into the S&amp;P 500 instead, with the same money on the same days:'}</p>
       <div class="tw-nums">
         <div><span>You made</span><b style="color:${clr(p.you)}">${safe(tw(usd(p.you)))}</b></div>
         <div><span>The S&amp;P 500 would have made</span><b style="color:${clr(p.twin)}">${safe(tw(usd(p.twin)))}</b></div>
@@ -283,7 +286,7 @@ function marketHtml(a) {
       ${chartSvg(p.series)}
       <div class="tw-legend"><span><i class="tw-k-you"></i>Your trades</span><span><i class="tw-k-twin"></i>Same money in the S&amp;P 500</span></div>
       <div class="tw-detail">
-        <div class="ins-data"><span>Your data</span>${safe(tw(`You beat the S&P 500 on ${p.beat} of ${p.decided} closed trades${p.open ? `, with ${p.open} still open` : ''}. Your trades made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`))}</div>
+        <div class="ins-data"><span>Your data</span>${safe(tw(`You beat the S&P 500 on ${p.beat} of ${p.decided} closed trades${p.open ? `, with ${p.open} still open` : ''}.${p.unmeasured ? ` ${p.unmeasured} position${p.unmeasured === 1 ? '' : 's'} could not be measured yet: ${p.unmeasured === 1 ? 'its' : 'their'} price history has not loaded.` : ''} Your trades made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`))}</div>
         ${p.luck?.level && p.luck.level !== 'early' ? `<p class="ins-matters">${p.luck.level === 'strong' ? 'Your edge over the market is very unlikely to be luck.' : p.luck.level === 'likely' ? 'Your edge over the market is probably real, though not yet certain.' : 'It is still too early to tell whether this is skill or luck.'}</p>` : ''}
         <div class="ins-table tw-table" role="table">
           <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>You made</span><span>S&amp;P 500</span><span>Result</span></div>
@@ -294,7 +297,7 @@ function marketHtml(a) {
         </div>
         ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the largest 8' : `Show all ${p.rows.length} trades`}</button>` : ''}
         ${acc ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(tw(dollars(acc.diff)))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
-        <details class="ins-how"><summary>How we calculate this</summary><p>Each time you bought, the same amount buys the S&amp;P 500 (with dividends reinvested) at that day's close. Each time you sold part or all of the position, the same share of that S&amp;P 500 holding is sold that day. Open positions are valued today. The chart adds up both sides every market day. A short is matched with the same money in the S&amp;P 500, bought. "This year" covers the trades you opened this year.</p></details>
+        <details class="ins-how"><summary>How we calculate this</summary><p>Each time you bought, the same amount buys the S&amp;P 500 (with dividends reinvested) at that day's close. Each time you sold part or all of the position, the same share of that S&amp;P 500 holding is sold that day. Open positions are valued today. The chart adds up both sides every market day. A short is matched with the same money in the S&amp;P 500, bought. "This year" covers every position you held during the year: what you already held on 31 December enters at that day's close, as if bought then, so only this year's gains and losses count, as in your year to date. "All time" follows each trade from the day you opened it.</p></details>
       </div>
     </section>`;
 }

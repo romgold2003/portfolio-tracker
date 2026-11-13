@@ -360,3 +360,41 @@ describe('the drawings', () => {
     assert.deepEqual(Object.keys(TITLE_RULES).sort(), Object.keys(TITLES).sort(), 'every style says who gets it');
   });
 });
+
+describe('this year counts what you already held on 31 December', () => {
+  // A stock rising a point a day; held since June 2025, one with no opening date, and one with no prices.
+  const closes = DAYS.map((date, i) => ({ date, close: 100 + i }));
+  const last = closes[closes.length - 1].close;
+  const dec31 = closes.find((r) => r.date === '2025-12-31').close;
+  const positions = [
+    { id: 'h1', ticker: 'HOLD', cls: 'Stocks', dir: 'Long', status: 'Open', entry: 50, qty: 10, cur: last, open: '2025-06-02' },
+    { id: 'h2', ticker: 'OLD', cls: 'Stocks', dir: 'Long', status: 'Open', entry: 40, qty: 5, cur: last, open: null },
+    { id: 'h3', ticker: 'NOPRICE', cls: 'Stocks', dir: 'Long', status: 'Open', entry: 20, qty: 5, cur: 30, open: '2025-03-03' },
+  ];
+  const series = new Map([['HOLD', closes], ['OLD', closes]]);
+  const r = analyse({ positions, history: HISTORY, index: INDEX, series, today: TODAY, year: { you: 25, spx: 11 } });
+  const year = r.cards.find((c) => c.id === 'twin').twin.year;
+  const ix = indexLevels(INDEX);
+
+  test('a holding carried into the year counts from its close on 31 December, not from what was paid', () => {
+    const hold = year.rows.find((x) => x.ticker === 'HOLD');
+    near(hold.you, 10 * (last - dec31));
+    near(hold.spx, 10 * dec31 * (levelOn(ix, TODAY) / levelOn(ix, '2025-12-31') - 1));
+  });
+
+  test('a holding with no opening date counts too', () => {
+    assert.ok(year.rows.some((x) => x.ticker === 'OLD'));
+  });
+
+  test('one whose prices did not load is counted apart, not guessed', () => {
+    assert.equal(year.unmeasured, 1);
+    assert.ok(!year.rows.some((x) => x.ticker === 'NOPRICE'));
+  });
+
+  test('the summary puts the year in money with the whole account, the same comparison as the percentages', () => {
+    const acc = year.account;
+    assert.ok(acc);
+    assert.ok(r.summary.includes(Math.abs(Math.round(acc.diff)).toLocaleString('en-US')), r.summary);
+    assert.match(r.summary, /^This year your account is up 25\.0%, while the S&P 500 is up 11\.0%\. You are ahead of the market\. In money, /);
+  });
+});
