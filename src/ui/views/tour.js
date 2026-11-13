@@ -100,6 +100,26 @@ export const SLIDES = [
     ],
   },
   {
+    shot: 'insights',
+    title: 'Your personal analyst',
+    text: 'What your own trades say about you, in plain words.',
+    marks: [
+      ['summary', 'In short', 'How your year compares with the market, what you do well, and what is worth watching.'],
+      ['standout', 'What stands out', 'The three findings that matter most right now. Show details opens the numbers behind each.'],
+      ['navInsights', 'Insights', 'Below it: you against the market, your habits, and deeper statistics, each a tap away.'],
+    ],
+  },
+  {
+    shot: 'insights-card',
+    title: 'Your trader card',
+    text: 'A title that grows with you, and cards to collect.',
+    marks: [
+      ['title', 'Your title', 'Your level, which rises as you collect, and your style, read from how you trade.'],
+      ['allcards', 'Every card', 'Opens every level, style and achievement there is to collect.'],
+      ['collection', 'Your collection', 'From surviving a market fall to your hundredth trade, each with the day you earned it.'],
+    ],
+  },
+  {
     shot: 'news',
     title: 'Markets and friends',
     text: 'Everything around your portfolio, a click away.',

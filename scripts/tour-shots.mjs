@@ -144,6 +144,34 @@ const SHOTS = [
     targets: { tabs: { sel: '.month-tabs' }, chart: { sel: '#monthChart' }, months: { sel: '#monthTable' } },
   },
   {
+    name: 'insights',
+    setup: () => {
+      window.show('insights');
+      document.getElementById('insights')?.scrollIntoView({ block: 'start' });
+    },
+    targets: {
+      summary: { sel: '.ins-hero' },
+      standout: { sel: '.ins-standout' },
+      navInsights: { sel: '.nl', text: '✦' },
+    },
+  },
+  {
+    name: 'insights-card',
+    // The trader card brought to the top of the screen, wherever the page scrolls.
+    setup: () => {
+      const card = document.querySelector('.ins-profile');
+      if (!card) return;
+      let box = card.parentElement;
+      while (box && !(box.scrollHeight > box.clientHeight + 10 && getComputedStyle(box).overflowY !== 'visible')) box = box.parentElement;
+      (box ?? document.scrollingElement).scrollTop += card.getBoundingClientRect().top - 90;
+    },
+    targets: {
+      title: { sel: '.pf-title' },
+      allcards: { sel: '.pf-all' },
+      collection: { sel: '.pf-collection .ach-grid' },
+    },
+  },
+  {
     name: 'news',
     setup: () => { window.show('news'); },
     targets: {
@@ -163,7 +191,7 @@ for (const shot of SHOTS) {
   await page.evaluate(`(${shot.setup.toString()})()`);
   // A made-up address where the demo account's own would show.
   await page.evaluate(() => { const e = document.getElementById('accountEmail'); if (e) e.textContent = 'you@example.com'; });
-  await settle(shot.name === 'news' ? 6000 : 2200);
+  await settle({ news: 6000, insights: 18000, 'insights-card': 1500 }[shot.name] ?? 2200);
   // The today box is the parent of its figure.
   const t = Object.fromEntries(Object.entries(shot.targets).map(([k, v]) => [k, v.parent ? { sel: `${v.sel}` } : v]));
   const rects = await boxes(t);
