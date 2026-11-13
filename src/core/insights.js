@@ -732,16 +732,19 @@ function twin(history, ix, trades, open, today, prices, positions) {
   const periods = {};
   const yearStart = `${Number(today.slice(0, 4)) - 1}-12-31`;
   const yearItems = [];
-  let unmeasured = 0;
+  // Every position of the year that cannot be measured is named, never dropped in silence.
+  const unmeasured = [];
   for (const p of positions ?? []) {
-    if (!p?.ticker || !(p.qty > 0) || !(p.entry > 0)) continue;
+    if (!p?.ticker) continue;
     const closed = p.status === 'Closed';
     if (closed && !(p.close > yearStart)) continue;
+    // An imported short can carry its share count as a negative number.
+    if (!(Math.abs(Number(p.qty)) > 0) || !(p.entry > 0)) { unmeasured.push({ ticker: p.ticker, why: 'no share count or price recorded' }); continue; }
     const life = yearLife(p, yearStart, prices, today);
     if (!life) continue;
-    if (life.missing) { unmeasured += 1; continue; }
+    if (life.missing) { unmeasured.push({ ticker: p.ticker, why: 'its price history has not loaded' }); continue; }
     const t = twinOfLife(life, ix, today);
-    if (!t) { unmeasured += 1; continue; }
+    if (!t) { unmeasured.push({ ticker: p.ticker, why: 'no S&P 500 price for its dates' }); continue; }
     const you = lifePnl(life);
     yearItems.push({
       id: p.id, ticker: p.ticker, life, cost: t.paid, open: life.buys[0].d, close: closed ? p.close : null,
@@ -774,7 +777,9 @@ function twin(history, ix, trades, open, today, prices, positions) {
       beat: closed.filter((r) => r.diff > 0).length,
       decided: closed.length,
       open: rows.length - closed.length,
-      unmeasured: key === 'year' ? unmeasured : 0,
+      unmeasured: key === 'year' ? unmeasured : [],
+      // What the whole account made over the same span, to set the positions' total against.
+      accountPnl: from && history.length ? periodReturnFromHistory(history, from, today)?.pnl ?? null : null,
       luck: confidenceOne(excess),
       best: byDiff.length && byDiff[0].diff > 0 ? { ticker: byDiff[0].ticker, diff: byDiff[0].diff } : null,
       worst: byDiff.length > 1 && byDiff[byDiff.length - 1].diff < 0 ? { ticker: byDiff[byDiff.length - 1].ticker, diff: byDiff[byDiff.length - 1].diff } : null,

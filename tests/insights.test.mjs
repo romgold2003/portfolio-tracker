@@ -371,7 +371,7 @@ describe('this year counts what you already held on 31 December', () => {
   });
 
   test('one whose prices did not load is counted apart, not guessed', () => {
-    assert.equal(year.unmeasured, 1);
+    assert.deepEqual(year.unmeasured, [{ ticker: 'NOPRICE', why: 'its price history has not loaded' }]);
     assert.ok(!year.rows.some((x) => x.ticker === 'NOPRICE'));
   });
 
