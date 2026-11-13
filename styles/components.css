@@ -2151,3 +2151,18 @@ body.is-guest{padding-top:36px}
 @media (min-width:1280px){.ins-cols{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
 .ins-col:empty{display:none}
 .ins-cols:has(> .ins-col:empty){grid-template-columns:minmax(0,1fr)}
+
+/* the trader card kept compact beside the market (November 2026): the chart is what matters */
+@media (min-width:1280px){.ins-cols.is-market{grid-template-columns:minmax(0,2fr) minmax(300px,1fr)}.tw-chart{height:230px}}
+.ins-profile{gap:12px}
+.ins-profile .pf-icon{width:46px;height:46px;padding:5px;border-radius:12px}
+.ins-profile .pf-title b{font-size:17px}
+.ins-profile .pf-title p{font-size:12.5px}
+.ins-profile .pf-collection{gap:8px;padding-top:10px}
+.ins-profile .ach-grid{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.ins-profile .ach{padding:10px 4px 8px;gap:2px;border-width:1px;border-radius:10px}
+.ins-profile .ach-icon{width:36px;height:36px}
+.ins-profile .ach b{font-size:11px}
+.ins-profile .ach-rar{font-size:8.5px}
+.ins-profile .ach small{display:none}
+.ins-profile .ach-lock{font-size:10px;right:-4px;bottom:-2px}

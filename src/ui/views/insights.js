@@ -342,7 +342,7 @@ function styleHtml(a) {
         ${all
     ? FAMILY_LIST.map(([key, label]) => `<h4 class="pf-family">${escapeHtml(label)}</h4><div class="ach-grid">${byFamily(key).map(achievementHtml).join('')}</div>`).join('')
     : earned.length
-      ? `<div class="ach-grid">${earned.map(achievementHtml).join('')}</div>`
+      ? `<div class="ach-grid">${earned.slice(0, 8).map(achievementHtml).join('')}</div>${earned.length > 8 ? `<p class="ins-small">And ${earned.length - 8} more.</p>` : ''}`
       : '<p class="ins-wait">No achievements yet. Your first one comes with your first closed trade.</p>'}
       </div>
       ${records.length ? `<button type="button" class="ins-more" data-ins-records aria-expanded="${rec}">${rec ? 'Hide your records' : 'See your personal records'}</button>
@@ -438,7 +438,7 @@ function draw() {
   const deeper = a.cards.filter((c) => c.group === 'deeper');
   body.innerHTML = `${summaryHtml(a)}
     ${standOutHtml(a)}
-    <div class="ins-cols">
+    <div class="ins-cols is-market">
       <div class="ins-col">${marketHtml(a)}</div>
       <div class="ins-col">${styleHtml(a)}</div>
     </div>
