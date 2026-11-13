@@ -176,17 +176,22 @@ function chips(c) {
   return `<span class="ins-chip is-${c.tone ?? 'neutral'}">${TONE[c.tone ?? 'neutral']}</span>${sure ? `<span class="ins-chip is-sure" title="${escapeHtml(sure[1])}">${sure[0]}</span>` : ''}`;
 }
 
-/** A closed row that opens into the finding. */
-function rowHtml(c) {
-  const open = opened.has(c.id);
-  return `<div class="ins-row${open ? ' is-open' : ''}${early(c) ? ' is-early' : ''}" id="ins-${c.id}">
-      <button type="button" class="ins-rowhead" data-ins-open="${c.id}" aria-expanded="${open}">
-        <span class="ins-dot is-${early(c) ? 'wait' : c.tone ?? 'neutral'}"></span>
-        <span class="ins-rowtitle">${safe(early(c) ? c.topic : c.headline)}</span>
-        <span class="ins-chev" aria-hidden="true">›</span>
-      </button>
-      ${open ? `<div class="ins-rowbody"><div class="ins-chips">${chips(c)}</div>${findingHtml(c)}</div>` : ''}
-    </div>`;
+/** A finding, open: what we found, why it matters, your data, the chart; the calculation one tap away. */
+function findCardHtml(c) {
+  return `<article class="card ins-find is-${c.tone ?? 'neutral'}" id="ins-${c.id}">
+      <div class="ins-chips">${chips(c)}</div>
+      <h3>${safe(c.headline)}</h3>
+      ${findingHtml(c)}
+    </article>`;
+}
+
+/** Everything still short of evidence, in one small box rather than a row of empty cards. */
+function waitingHtml(cards) {
+  if (!cards.length) return '';
+  return `<section class="card ins-waiting">
+      <h4>Waiting for more data</h4>
+      <ul>${cards.map((c) => `<li id="ins-${c.id}"><b>${escapeHtml(c.topic)}</b><span>${escapeHtml(waitingText(c))}</span></li>`).join('')}</ul>
+    </section>`;
 }
 
 /* ── 1. the summary ── */
@@ -213,14 +218,12 @@ function standOutHtml(a) {
   return `<h2 class="ins-group">What stands out</h2>
     <div class="ins-standout">${a.standOut.map((s) => {
       const c = byId.get(s.id);
-      const open = opened.has(`top:${c.id}`);
       return `<article class="card ins-top is-${s.kind}">
           <span class="ins-kind">${escapeHtml(s.label)}</span>
           <h3>${safe(c.headline)}</h3>
           <p class="ins-matters">${safe(c.matters)}</p>
           <div class="ins-data"><span>Your data</span>${safe(c.data)}</div>
-          <button type="button" class="ins-more" data-ins-top="${c.id}" aria-expanded="${open}">${open ? 'Show less' : 'Show details'}</button>
-          ${open ? `<div class="ins-topmore">${c.more ? `<p class="ins-moretext">${safe(c.more)}</p>` : ''}${barsHtml(c.bars, c.unit)}${c.cause ? `<div class="ins-cause"><span>What these trades have in common</span>${safe(c.cause)}</div>` : ''}<details class="ins-how"><summary>How we calculate this</summary><p>${escapeHtml(c.how ?? '')}</p></details></div>` : ''}
+          <div class="ins-topmore">${c.more ? `<p class="ins-moretext">${safe(c.more)}</p>` : ''}${barsHtml(c.bars, c.unit)}${c.cause ? `<div class="ins-cause"><span>What these trades have in common</span>${safe(c.cause)}</div>` : ''}<details class="ins-how"><summary>How we calculate this</summary><p>${escapeHtml(c.how ?? '')}</p></details></div>
         </article>`;
     }).join('')}</div>`;
 }
@@ -261,7 +264,6 @@ function marketHtml(a) {
   const p = card.twin[period] ?? card.twin.all;
   const which = card.twin[period] ? period : 'all';
   const ahead = p.diff >= 0;
-  const detail = opened.has('twin:detail');
   const rows = allRows ? p.rows : p.rows.slice(0, 8);
   const acc = p.account;
   return `<h2 class="ins-group">You vs the market</h2>
@@ -280,8 +282,7 @@ function marketHtml(a) {
       </div>
       ${chartSvg(p.series)}
       <div class="tw-legend"><span><i class="tw-k-you"></i>Your trades</span><span><i class="tw-k-twin"></i>Same money in the S&amp;P 500</span></div>
-      <button type="button" class="ins-more" data-ins-twin aria-expanded="${detail}">${detail ? 'Show less' : 'See trade by trade'}</button>
-      ${detail ? `<div class="tw-detail">
+      <div class="tw-detail">
         <div class="ins-data"><span>Your data</span>${safe(tw(`You beat the S&P 500 on ${p.beat} of ${p.decided} closed trades${p.open ? `, with ${p.open} still open` : ''}. Your trades made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`))}</div>
         ${p.luck?.level && p.luck.level !== 'early' ? `<p class="ins-matters">${p.luck.level === 'strong' ? 'Your edge over the market is very unlikely to be luck.' : p.luck.level === 'likely' ? 'Your edge over the market is probably real, though not yet certain.' : 'It is still too early to tell whether this is skill or luck.'}</p>` : ''}
         <div class="ins-table tw-table" role="table">
@@ -294,7 +295,7 @@ function marketHtml(a) {
         ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the largest 8' : `Show all ${p.rows.length} trades`}</button>` : ''}
         ${acc ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(tw(dollars(acc.diff)))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
         <details class="ins-how"><summary>How we calculate this</summary><p>Each time you bought, the same amount buys the S&amp;P 500 (with dividends reinvested) at that day's close. Each time you sold part or all of the position, the same share of that S&amp;P 500 holding is sold that day. Open positions are valued today. The chart adds up both sides every market day. A short is matched with the same money in the S&amp;P 500, bought. "This year" covers the trades you opened this year.</p></details>
-      </div>` : ''}
+      </div>
     </section>`;
 }
 
@@ -319,7 +320,6 @@ function achievementHtml(c) {
 /** The trader card: one main title (level · style), the progress to the next level, and the collection. */
 function styleHtml(a) {
   const { title, level, collection, records } = a.profile;
-  const rec = opened.has('records');
   const all = opened.has('collection');
   const { next, points } = collection;
   const progress = next ? Math.min(100, ((points - next.from) / (next.points - next.from)) * 100) : 100;
@@ -345,8 +345,7 @@ function styleHtml(a) {
       ? `<div class="ach-grid">${earned.slice(0, 8).map(achievementHtml).join('')}</div>${earned.length > 8 ? `<p class="ins-small">And ${earned.length - 8} more.</p>` : ''}`
       : '<p class="ins-wait">No achievements yet. Your first one comes with your first closed trade.</p>'}
       </div>
-      ${records.length ? `<button type="button" class="ins-more" data-ins-records aria-expanded="${rec}">${rec ? 'Hide your records' : 'See your personal records'}</button>
-        ${rec ? `<div class="pf-records">${records.map((r) => `<div><span>${escapeHtml(r.label)}</span><b>${safe(r.value)}</b><small>${safe(r.sub)}</small></div>`).join('')}</div>` : ''}` : ''}
+      ${records.length ? `<div class="pf-records"><h3>Your records</h3>${records.map((r) => `<div><span>${escapeHtml(r.label)}</span><b>${safe(r.value)}</b><small>${safe(r.sub)}</small></div>`).join('')}</div>` : ''}
     </section>`;
 }
 
@@ -354,23 +353,19 @@ function styleHtml(a) {
 
 function nowRow(now) {
   if (!now?.items?.length) return '';
-  const open = opened.has('now');
-  return `<div class="ins-row${open ? ' is-open' : ''}" id="ins-now">
-      <button type="button" class="ins-rowhead" data-ins-open="now" aria-expanded="${open}">
-        <span class="ins-dot is-neutral"></span><span class="ins-rowtitle">Worth a look in your open positions</span><span class="ins-chev" aria-hidden="true">›</span>
-      </button>
-      ${open ? `<div class="ins-rowbody"><ul class="ins-now">${now.items.map((x) => `<li class="is-${x.tone}">${safe(x.text)}</li>`).join('')}</ul>
-        <p class="ins-small">Measured against your own closed trades. An observation, not a recommendation.</p></div>` : ''}
-    </div>`;
+  return `<article class="card ins-find is-neutral" id="ins-now">
+      <h3>Worth a look in your open positions</h3>
+      <ul class="ins-now">${now.items.map((x) => `<li class="is-${x.tone}">${safe(x.text)}</li>`).join('')}</ul>
+      <p class="ins-small">Measured against your own closed trades. An observation, not a recommendation.</p>
+    </article>`;
 }
 
 function listHtml(title, intro, cards, extra = '') {
   if (!cards.length && !extra) return '';
-  // Findings first, then what is still waiting for data.
-  const sorted = [...cards].sort((x, y) => Number(early(x)) - Number(early(y)));
+  const ready = cards.filter((c) => !early(c));
   return `<h2 class="ins-group">${escapeHtml(title)}</h2>
     <p class="ins-intro">${escapeHtml(intro)}</p>
-    <section class="card ins-list">${sorted.map(rowHtml).join('')}${extra}</section>`;
+    <div class="ins-findings">${ready.map(findCardHtml).join('')}${extra}${waitingHtml(cards.filter(early))}</div>`;
 }
 
 /* ── every card, on its own screen ── */
@@ -443,7 +438,7 @@ function draw() {
       <div class="ins-col">${styleHtml(a)}</div>
     </div>
     <div class="ins-cols">
-      <div class="ins-col">${listHtml('Understand your habits', 'Patterns in how you trade. Tap any line to see why it matters and the numbers behind it.', habits, nowRow(a.now))}</div>
+      <div class="ins-col">${listHtml('Understand your habits', 'Patterns in how you trade, and what they mean for your results.', habits, nowRow(a.now))}</div>
       <div class="ins-col">${listHtml('Explore deeper', 'More detailed statistics, for when you want to dig in.', deeper)}</div>
     </div>
     <p class="ins-foot">Worked out on this device from your own trades and account; only public market data is fetched. These describe what you have done, not what you should do, and are not investment advice. A pattern needs at least ${MIN_GROUP} examples on each side and is checked against chance before we call it one.</p>`;
@@ -457,14 +452,8 @@ function bind() {
   bound = true;
   const toggle = (key) => { if (opened.has(key)) opened.delete(key); else opened.add(key); draw(); };
   page.addEventListener('click', (e) => {
-    const row = e.target.closest('[data-ins-open]');
-    if (row) return toggle(row.dataset.insOpen);
-    const top = e.target.closest('[data-ins-top]');
-    if (top) return toggle(`top:${top.dataset.insTop}`);
     const more = e.target.closest('[data-ins-trades]');
     if (more) return toggle(`trades:${more.dataset.insTrades}`);
-    if (e.target.closest('[data-ins-twin]')) return toggle('twin:detail');
-    if (e.target.closest('[data-ins-records]')) return toggle('records');
     if (e.target.closest('[data-ins-collection]')) return toggle('collection');
     if (e.target.closest('[data-ins-allcards]')) { openAllCards(last); return undefined; }
     const tab = e.target.closest('[data-twin-period]');

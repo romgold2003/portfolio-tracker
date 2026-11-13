@@ -2166,3 +2166,18 @@ body.is-guest{padding-top:36px}
 .ins-profile .ach-rar{font-size:8.5px}
 .ins-profile .ach small{display:none}
 .ins-profile .ach-lock{font-size:10px;right:-4px;bottom:-2px}
+
+/* everything open (November 2026): findings as cards, nothing to tap but the calculation */
+.ins-findings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:12px;align-items:start}
+.ins-cols .ins-findings{grid-template-columns:minmax(0,1fr)}
+@media (max-width:1279px){.ins-cols .ins-findings{grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr))}}
+.ins-find{display:flex;flex-direction:column;gap:10px;margin:0;border-left:3px solid var(--blue)}
+.ins-find.is-good{border-left-color:var(--green)}
+.ins-find.is-bad{border-left-color:var(--amber)}
+.ins-find h3{font-size:15.5px;font-weight:600;line-height:1.4;color:var(--text);margin:0}
+.ins-waiting{grid-column:1/-1;margin:0;background:transparent;border-style:dashed}
+.ins-waiting h4{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin:0 0 8px}
+.ins-waiting ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ins-waiting li{display:flex;flex-direction:column;gap:1px;font-size:12.5px;color:var(--text3)}
+.ins-waiting li b{font-weight:600;color:var(--text2)}
+.pf-records h3{grid-column:1/-1;font-size:14px;font-weight:600;color:var(--text);margin:0}
