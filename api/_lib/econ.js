@@ -68,6 +68,8 @@ export function selectReleases(events, watchlist = WATCHLIST) {
         id: entry.keepTitle ? `${entry.id}:${slug(e.title)}` : entry.id,
         label: entry.keepTitle ? e.title : entry.label,
         date: typeof e.date === 'string' ? e.date.slice(0, 10) : null,
+        // The moment it prints, with New York's offset, as the calendar gives it.
+        at: typeof e.date === 'string' && e.date.length > 10 ? e.date : null,
         impact: e.impact || null,
         forecast: clean(e.forecast),
         previous: clean(e.previous),

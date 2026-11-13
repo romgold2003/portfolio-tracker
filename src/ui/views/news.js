@@ -9,7 +9,7 @@
  */
 import { MONTHS_LONG } from '../../config/constants.js';
 import { fedDecision } from '../../services/fed.js';
-import { econReleases } from '../../services/econ.js';
+import { econReleases, awaitingRelease } from '../../services/econ.js';
 import { marketSentiment } from '../../services/sentiment.js';
 import { drawGauges } from './sentimentGauges.js';
 import { optionsProfile } from '../../services/options.js';
@@ -290,6 +290,34 @@ let liveTimer = null;
 const FED_EVERY_MS = 5 * 60 * 1000;
 let fedTimer = null;
 
+/**
+ * The week's calendar refreshes itself while it is on screen (November 2026).
+ * It used to be fetched once, when the page opened, so a figure that printed
+ * while the page was being watched never appeared. Every thirty seconds from
+ * two minutes before a release until its figure arrives; every five minutes
+ * otherwise. A hidden page or tab asks for nothing.
+ */
+const ECON_HOT_MS = 30 * 1000;
+const ECON_QUIET_MS = 5 * 60 * 1000;
+let econTimer = null;
+
+function scheduleEcon(data) {
+  clearTimeout(econTimer);
+  econTimer = setTimeout(refreshEcon, awaitingRelease(data?.releases) ? ECON_HOT_MS : ECON_QUIET_MS);
+}
+
+async function refreshEcon() {
+  const card = el('econCard');
+  const onScreen = card && card.offsetParent !== null && document.visibilityState === 'visible';
+  if (!onScreen || !isShown('news.econ')) {
+    econTimer = setTimeout(refreshEcon, ECON_HOT_MS);
+    return;
+  }
+  const fresh = await econReleases();
+  if (fresh) renderEconPanel(fresh);
+  scheduleEcon(fresh);
+}
+
 function startFedRefresh() {
   clearInterval(fedTimer);
   fedTimer = setInterval(async () => {
@@ -358,7 +386,10 @@ export async function renderNews() {
 
   renderFedPanel(value(fed));
   if (on.earnings) renderEarnings();
-  if (on.econ) renderEconPanel(value(econ));
+  if (on.econ) {
+    renderEconPanel(value(econ));
+    scheduleEcon(value(econ));
+  }
   if (on.mood) drawGauges(value(mood));
   if (on.opts) {
     renderExposure(value(opts), pickMarket);

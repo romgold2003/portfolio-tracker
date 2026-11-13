@@ -14,11 +14,23 @@ import { cloudEnabled } from './cloud.js';
  * enough that opening the page repeatedly is not a request each time.
  */
 /**
- * Two minutes. A release prints at half past the hour and the panel is watched
- * for it — a quarter of an hour of holding the previous answer was most of why
- * a figure took so long to appear.
+ * Twenty seconds: no longer than the live refresh below asks, so a figure the
+ * server has is drawn at the next tick rather than two minutes later.
  */
-const CACHE_MS = 2 * 60 * 1000;
+const CACHE_MS = 20 * 1000;
+
+/**
+ * Whether a release is due or has just printed without a figure yet — the
+ * minutes the panel is watched for. From two minutes before it is due until
+ * six hours after, or until its figure arrives.
+ */
+export function awaitingRelease(releases, now = Date.now()) {
+  return (releases ?? []).some((r) => {
+    if (r?.actual || !r?.at) return false;
+    const at = Date.parse(r.at);
+    return Number.isFinite(at) && now >= at - 2 * 60_000 && now < at + 6 * 3600_000;
+  });
+}
 
 let cache = { at: 0, week: null };
 

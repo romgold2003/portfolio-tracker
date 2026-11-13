@@ -21,6 +21,14 @@ import { guestFor } from '../_lib/guest.js';
 import { selectReleases, orderReleases, weekOf } from '../_lib/econ.js';
 import { fetchActuals, attachActuals } from '../_lib/fred.js';
 import { fetchActuals as fetchBls } from '../_lib/bls.js';
+import { fetchActuals as fetchNasdaq } from '../_lib/nasdaqEcon.js';
+
+/** A source that has not answered by now is passed over, so one slow host cannot hold the panel. */
+const SOURCE_TIMEOUT_MS = 6000;
+const inTime = (promise, fallback) => Promise.race([
+  promise.catch(() => fallback),
+  new Promise((resolve) => { setTimeout(() => resolve(fallback), SOURCE_TIMEOUT_MS); }),
+]);
 
 const SESSION_COOKIE = 'pt_session';
 const FEED = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
@@ -59,13 +67,22 @@ export default async function handler(req, res) {
    * FRED covers the rest — claims, retail sales, GDP — and stands in wherever
    * BLS could not answer.
    */
+  /**
+   * Nasdaq first (November 2026): it posts each figure within a minute or two
+   * of the release, where FRED took hours and once more than a day. BLS and
+   * FRED stand behind it, each given six seconds — FRED once took over two
+   * minutes to answer, and the whole panel waited with it.
+   */
   let releases = scheduled;
   try {
-    const [fred, bls] = await Promise.all([
-      fetchActuals(scheduled),
-      fetchBls(scheduled),
+    const now = new Date();
+    const [nasdaq, fred, bls] = await Promise.all([
+      inTime(fetchNasdaq(scheduled, { now }), new Map()),
+      inTime(fetchActuals(scheduled, { now }), new Map()),
+      inTime(fetchBls(scheduled, { now }), new Map()),
     ]);
-    releases = attachActuals(scheduled, new Map([...fred, ...bls]), { now: new Date() });
+    releases = attachActuals(scheduled, new Map([...fred, ...bls]), { now })
+      .map((r) => (nasdaq.has(r.id) ? { ...r, actual: nasdaq.get(r.id), source: 'nasdaq' } : r));
   } catch (err) {
     console.error('Release figures unavailable:', err);
   }
@@ -80,7 +97,9 @@ export default async function handler(req, res) {
    * hour old before it was ever drawn, on top of whatever the source itself
    * took. That was the larger part of the delay and it was ours.
    */
-  res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
+  // Twenty seconds while a release that is due has no figure yet, so it shows within a minute of printing.
+  const waiting = releases.some((r) => !r.actual && r.at && Date.parse(r.at) <= Date.now() && Date.now() - Date.parse(r.at) < 6 * 3600_000);
+  res.setHeader('Cache-Control', waiting ? 'public, s-maxage=20, stale-while-revalidate=20' : 'public, s-maxage=120, stale-while-revalidate=600');
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   /**
