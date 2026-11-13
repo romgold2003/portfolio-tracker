@@ -192,9 +192,16 @@ function rowHtml(c) {
 /* ── 1. the summary ── */
 
 function summaryHtml(a) {
-  return `<section class="card ins-hero">
-      <div class="hero-head"><span class="hero-mark">✦</span><span>Your analyst</span></div>
-      <p class="hero-text">${safe(a.summary)}</p>
+  const yr = a.year;
+  const year = yr.you != null && yr.spx != null
+    ? `<div class="hero-year"><div><span>Your account this year</span><b style="color:${clr(yr.you)}">${pct(yr.you)}</b></div><div><span>S&amp;P 500 this year</span><b style="color:${clr(yr.spx)}">${pct(yr.spx)}</b></div></div>`
+    : '';
+  return `<section class="card ins-hero${year ? ' has-year' : ''}">
+      <div class="hero-main">
+        <div class="hero-head"><span class="hero-mark">✦</span><span>Your analyst</span></div>
+        <p class="hero-text">${safe(a.summary)}</p>
+      </div>
+      ${year}
     </section>`;
 }
 
@@ -250,13 +257,7 @@ function chartSvg(points) {
 
 function marketHtml(a) {
   const card = a.cards.find((c) => c.id === 'twin');
-  const yr = a.year;
-  const yearLine = yr.you != null && yr.spx != null
-    ? `<div class="mk-year"><div><span>Your account this year</span><b style="color:${clr(yr.you)}">${pct(yr.you)}</b></div><div><span>S&amp;P 500 this year</span><b style="color:${clr(yr.spx)}">${pct(yr.spx)}</b></div></div>`
-    : '';
-  if (!card) {
-    return yearLine ? `<h2 class="ins-group">You vs the market</h2><section class="card ins-market">${yearLine}</section>` : '';
-  }
+  if (!card) return '';
   const p = card.twin[period] ?? card.twin.all;
   const which = card.twin[period] ? period : 'all';
   const ahead = p.diff >= 0;
@@ -265,7 +266,6 @@ function marketHtml(a) {
   const acc = p.account;
   return `<h2 class="ins-group">You vs the market</h2>
     <section class="card ins-market" id="ins-twin">
-      ${yearLine}
       <div class="tw-head">
         <h3>${ahead ? 'Your picks are beating the market' : 'The market is ahead of your picks'}</h3>
         <div class="tw-tabs" role="tablist">
@@ -438,10 +438,14 @@ function draw() {
   const deeper = a.cards.filter((c) => c.group === 'deeper');
   body.innerHTML = `${summaryHtml(a)}
     ${standOutHtml(a)}
-    ${marketHtml(a)}
-    ${styleHtml(a)}
-    ${listHtml('Understand your habits', 'Patterns in how you trade. Tap any line to see why it matters and the numbers behind it.', habits, nowRow(a.now))}
-    ${listHtml('Explore deeper', 'More detailed statistics, for when you want to dig in.', deeper)}
+    <div class="ins-cols">
+      <div class="ins-col">${marketHtml(a)}</div>
+      <div class="ins-col">${styleHtml(a)}</div>
+    </div>
+    <div class="ins-cols">
+      <div class="ins-col">${listHtml('Understand your habits', 'Patterns in how you trade. Tap any line to see why it matters and the numbers behind it.', habits, nowRow(a.now))}</div>
+      <div class="ins-col">${listHtml('Explore deeper', 'More detailed statistics, for when you want to dig in.', deeper)}</div>
+    </div>
     <p class="ins-foot">Worked out on this device from your own trades and account; only public market data is fetched. These describe what you have done, not what you should do, and are not investment advice. A pattern needs at least ${MIN_GROUP} examples on each side and is checked against chance before we call it one.</p>`;
 }
 

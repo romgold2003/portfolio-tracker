@@ -2136,3 +2136,18 @@ body.is-guest{padding-top:36px}
 .lv.is-mine{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,var(--panel))}
 .lv.is-mine b{color:var(--blue)}
 .ach.is-mine{box-shadow:0 0 0 1px color-mix(in srgb,#a855f7 40%,transparent),0 4px 18px -6px color-mix(in srgb,#a855f7 55%,transparent)}
+
+/* the whole width (November 2026): the year beside the summary, two columns below on a wide screen */
+#insightsBody{max-width:1680px}
+.ins-hero.has-year{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media (min-width:1000px){.ins-hero.has-year{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:32px}}
+.hero-text{max-width:78ch}
+.hero-year{display:flex;gap:28px;padding:14px 20px;border-radius:12px;background:color-mix(in srgb,var(--panel) 70%,transparent);border:0.5px solid var(--border2)}
+.hero-year div{display:flex;flex-direction:column;gap:2px;white-space:nowrap}
+.hero-year span{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em}
+.hero-year b{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}
+@media (max-width:640px){.hero-year{gap:18px;padding:12px 14px}.hero-year b{font-size:24px}}
+.ins-cols{display:grid;grid-template-columns:minmax(0,1fr);column-gap:24px;align-items:start}
+@media (min-width:1280px){.ins-cols{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+.ins-col:empty{display:none}
+.ins-cols:has(> .ins-col:empty){grid-template-columns:minmax(0,1fr)}
