@@ -93,6 +93,7 @@ const ROUTES = {
   '/api/quote': '../api/quote.js',
   '/api/fed': '../api/_panels/fed.js',
   '/api/econ': '../api/_panels/econ.js',
+  '/api/insights-data': '../api/_panels/insights.js',
   '/api/weekstart': '../api/_panels/weekstart.js',
   '/api/sentiment': '../api/_panels/sentiment.js',
   '/api/options': '../api/_panels/options.js',

@@ -382,6 +382,12 @@ onJournalLoaded(() => {
  * service the rest of the app uses, and a value worked out for every day. It
  * runs once: a past close never changes.
  */
+/**
+ * Builds the daily history when it is not built yet, for a page that reads
+ * it without Home having been opened first (Insights, straight from a link).
+ */
+export function ensureHistory() { return loadBackfill(); }
+
 async function loadBackfill() {
   if (backfillPending) return;
   const generation = journalGeneration;

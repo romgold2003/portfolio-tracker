@@ -1,12 +1,15 @@
 /**
- * Insights (November 2026): what a person's own closed trades say about them,
- * only as far as the evidence goes — enough trades on each side, and a
- * difference checked against chance before it is called Strong or Likely.
+ * Insights, the personal analyst (November 2026): what a person's trades and
+ * account say about them, only as far as the evidence goes, and the "why"
+ * measured from each trade's context rather than guessed.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { insightsFor, tradesOf, chanceOf, confidence, weekReview, MIN_TRADES } = await import('../src/core/insights.js');
+const {
+  analyse, tradesOf, chanceOf, chanceVsZero, confidence, whyOf, twinSeries, indexLevels,
+  traderTitle, traderBadges, moodOf, MIN_TRADES,
+} = await import('../src/core/insights.js');
 
 let id = 0;
 /** A closed long: bought at 100 on `open`, sold at `exit` on `close`. */
@@ -15,22 +18,112 @@ const trade = (exit, open, close, extra = {}) => ({
   entry: 100, cur: exit, qty: 10, open, close, ...extra,
 });
 
+/** Weekdays from `from` to `to`. */
+function weekdays(from, to) {
+  const out = [];
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86400000) {
+    const d = new Date(t);
+    if (d.getUTCDay() % 6) out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/**
+ * A market and an account from December 2025: the S&P moves a little every day and
+ * falls 1.5% every tenth day; the account moves 1.5× as much, so it falls
+ * harder and swings more. $10,000 to start, $5,000 paid in on 1 June.
+ */
+const DAYS = weekdays('2025-12-01', '2026-11-13');
+const spxMove = (i) => (i % 10 === 9 ? -1.5 : 0.25 + 0.4 * Math.sin(i));
+const INDEX = [];
+const HISTORY = [];
+{
+  let close = 500;
+  let value = 10000;
+  DAYS.forEach((date, i) => {
+    if (i) close *= 1 + spxMove(i) / 100;
+    const flow = date === '2026-06-01' ? 5000 : 0;
+    if (i) value = value * (1 + (1.5 * spxMove(i)) / 100) + flow;
+    INDEX.push({ date, close });
+    HISTORY.push({ date, totalAccountValue: value, externalCashFlow: flow });
+  });
+}
+const TODAY = '2026-11-13';
+
 describe('enough evidence, and better than chance', () => {
-  test('nothing before ten closed trades, and it says how many more', () => {
-    const r = insightsFor([trade(110, '2026-01-05', '2026-01-09')]);
-    assert.equal(r.insights.length, 0);
+  test('trade patterns wait for ten closed trades, and say how many more', () => {
+    const r = analyse({ positions: [trade(110, '2026-01-05', '2026-01-09')], today: TODAY });
     assert.equal(r.needed, MIN_TRADES - 1);
+    assert.equal(r.profile.title, null);
+    assert.ok(!r.cards.some((c) => c.id === 'weekday'));
   });
 
   test('a clear difference is unlikely to be chance; the same values either side is not', () => {
     assert.ok(chanceOf([5, 6, 7, 5, 6, 7, 6, 5, 7, 6], [-5, -6, -4, -5, -6, -4, -5, -6, -5, -4]) < 0.01);
     assert.ok(chanceOf([1, -1, 2, -2, 1, -1, 2, -2], [1, -1, 2, -2, 1, -1, 2, -2]) > 0.5);
+    assert.ok(chanceVsZero([3, 4, 2, 5, 3, 4, 2, 3, 4, 5]) < 0.01, 'beating the S&P on every trade is not luck');
+    assert.ok(chanceVsZero([3, -3, 2, -2, 4, -4, 1, -1]) > 0.5);
   });
 
-  test('fewer than eight trades on a side is too early, with the count still needed', () => {
+  test('fewer than eight on a side is too early, with the count still needed', () => {
     const few = Array.from({ length: 5 }, () => ({ ret: 1 }));
     const many = Array.from({ length: 10 }, () => ({ ret: -1 }));
     assert.deepEqual(confidence(few, many), { level: 'early', needed: 3 });
+  });
+});
+
+describe('the measured why', () => {
+  test('names the context a group shares far more than the rest', () => {
+    const group = Array.from({ length: 6 }, (_, i) => ({ spx5: i < 5 ? 2 : 0, days: 5 }));
+    const rest = Array.from({ length: 10 }, () => ({ spx5: 0.2, days: 5 }));
+    const why = whyOf(group, rest);
+    assert.equal(why.id, 'spxUp');
+    assert.match(why.text, /^5 of 6 came after the S&P had risen 1\.5%\+ in the five days before, against 0% of your other trades\.$/);
+  });
+
+  test('and says nothing when nothing stands out', () => {
+    const same = Array.from({ length: 8 }, () => ({ spx5: 0.1, days: 5 }));
+    assert.equal(whyOf(same, same), null);
+  });
+});
+
+describe('you against the market', () => {
+  const r = analyse({ positions: [], history: HISTORY, index: INDEX, today: TODAY });
+  const card = (cardId) => r.cards.find((c) => c.id === cardId);
+
+  test('the S&P twin gets the same money on the same days', () => {
+    const ix = indexLevels(INDEX);
+    const s = twinSeries(HISTORY, ix);
+    assert.equal(s[0].twin, s[0].you, 'both start from the same value');
+    // A deposit with no market move changes both by the same amount.
+    const june = s.findIndex((p) => p.date === '2026-06-01');
+    const twinBefore = s[june - 1].twin * (1 + ix.daily.get('2026-06-01') / 100);
+    assert.ok(Math.abs(s[june].twin - (twinBefore + 5000)) < 1e-6);
+    const t = card('twin');
+    assert.ok(t.twin.year && t.twin.all);
+  });
+
+  test('when the S&P falls 1%+, the account falls 150% as much', () => {
+    const d = card('down');
+    assert.match(d.title, /^When the S&P falls 1% or more, your account falls 2\.\d\d% on average$/);
+    assert.match(d.why, /^That is 150% of the market's fall/);
+    assert.equal(d.tone, 'bad');
+  });
+
+  test('it swings 1.5× as much as the market', () => {
+    assert.match(card('swings').title, /^Your account swings 1\.5× as much as the S&P/);
+  });
+
+  test('last week and the streak, the months, and the deepest drop', () => {
+    assert.match(card('week').title, /^Last week your account [+−]\d\.\d\d%, the S&P [+−]\d\.\d\d%: (ahead|behind) by/);
+    assert.match(card('months').title, /^You beat the S&P in \d+ of the last \d+ months$/);
+    assert.ok(card('months').table.length >= 2);
+    assert.match(card('drawdown').title, /^Your deepest drop: −\d+\.\d%/);
+    assert.match(card('drawdown').why, /your book fell further than the market/);
+  });
+
+  test('the year beside the S&P\'s, for the headline', () => {
+    assert.ok(r.year.you > r.year.spx, 'a 1.5× book in a rising year is ahead');
   });
 });
 
@@ -42,43 +135,63 @@ describe('what it reads in the trades', () => {
     book.push(trade(112, `2026-02-${day}`, `2026-02-${String(i + 4).padStart(2, '0')}`, { mind: 9 }));
     book.push(trade(91, `2026-03-${day}`, `2026-03-${String(i + 22).padStart(2, '0')}`, { mind: 2, ticker: 'BAD' }));
   }
+  const r = analyse({ positions: book, history: HISTORY, index: INDEX, today: TODAY });
+  const card = (cardId) => r.cards.find((c) => c.id === cardId);
 
-  test('emotional against confident, and it is Strong', () => {
-    const { insights } = insightsFor(book);
-    const e = insights.find((i) => i.id === 'emotion');
+  test('emotional against confident, Strong, with what it cost', () => {
+    const e = card('emotion');
     assert.match(e.title, /emotional return −9\.0% on average; confident ones \+12\.0%/);
     assert.equal(e.confidence.level, 'strong');
-    assert.equal(e.tone, 'good');
+    assert.match(e.matters, /10 emotional trades \(rated 1–4\), −\$900 in total/);
   });
 
-  test('holding losers longer than winners', () => {
-    const h = insightsFor(book).insights.find((i) => i.id === 'holding');
+  test('holding losers longer than winners, and what the long ones lost', () => {
+    const h = card('holding');
     assert.match(h.title, /You keep losing trades 7\.0× longer than winning ones \(21 days against 3\)/);
-    assert.equal(h.tone, 'bad');
+    assert.match(h.matters, /10 losing trades stayed open .* lost \$900/);
   });
 
-  test('the costliest stock, the payoff and the losing streak', () => {
-    const { insights } = insightsFor(book);
-    assert.match(insights.find((i) => i.id === 'ticker').title, /^BAD: 10 trades, 0 wins, −\$900/);
-    assert.match(insights.find((i) => i.id === 'payoff').title, /average win is \$120 and your average loss \$90: you need to be right 43%/);
-    assert.match(insights.find((i) => i.id === 'streak').title, /10 trades in a row/);
+  test('each trade against the S&P over the same days', () => {
+    const p = card('picks');
+    assert.match(p.title, /over the same days by \d+\.\d points; \d+ of 20 beat it/);
+    assert.ok(r.cards.find((c) => c.id === 'twin').twin.year.decided === 20);
   });
 
-  test('averaging down is read from the adds, the first price worked out from the average', () => {
-    // 10 bought at 100, 10 more at 80: average 90.
-    const [t] = tradesOf([trade(95, '2026-04-01', '2026-04-20', { entry: 90, qty: 20, adds: [{ d: '2026-04-05', qty: 10, price: 80 }] })]);
-    assert.equal(t.averagedDown, true);
-    const [u] = tradesOf([trade(125, '2026-04-01', '2026-04-20', { entry: 110, qty: 20, adds: [{ d: '2026-04-05', qty: 10, price: 120 }] })]);
-    assert.equal(u.averagedDown, false, 'adding to a winner is not averaging down');
+  test('the strengths and weaknesses come from solid findings only', () => {
+    const all = [...r.briefing.strengths, ...r.briefing.weaknesses].map((x) => x.id);
+    for (const cid of all) {
+      const c = card(cid);
+      assert.ok(!c.confidence || ['strong', 'likely'].includes(c.confidence.level), `${cid} is solid`);
+    }
+    assert.ok(r.briefing.weaknesses.some((x) => x.id === 'holding'));
   });
 
-  test('last week: what closed in it, and how the emotional trades did', () => {
-    const r = weekReview([trade(110, '2026-11-02', '2026-11-04', { mind: 3 }), trade(95, '2026-11-03', '2026-11-06', { mind: 2 }), trade(130, '2026-10-01', '2026-11-11')], new Date('2026-11-13T12:00:00Z'));
-    assert.equal(r.from, '2026-11-02');
-    assert.equal(r.to, '2026-11-08');
-    assert.equal(r.closed, 2);
-    assert.equal(r.won, 1);
-    assert.equal(r.emotional, 2);
-    assert.equal(r.emotionalLost, 1);
+  test('after you sold: the month that followed, from the stock\'s own closes', () => {
+    const closes = DAYS.map((date, i) => ({ date, close: 100 + i }));
+    const sold = Array.from({ length: 10 }, (_, i) => trade(110, DAYS[10 + i * 5], DAYS[12 + i * 5], { ticker: 'UP' }));
+    const a = analyse({ positions: sold, history: HISTORY, index: INDEX, series: new Map([['UP', closes]]), today: TODAY });
+    const c = a.cards.find((x) => x.id === 'after');
+    assert.match(c.title, /^In the month after you sold, your stocks went up \d+\.\d% on average$/);
+    assert.match(c.matters, /left on the table/);
+  });
+});
+
+describe('the trader card', () => {
+  test('a day trader who wins most is the Day Sniper; most of them on Fridays earns the badge', () => {
+    const fridays = weekdays('2026-03-02', '2026-06-30').filter((d) => new Date(`${d}T12:00:00Z`).getUTCDay() === 5);
+    const trades = tradesOf(fridays.slice(0, 12).map((d, i) => trade(i % 3 ? 104 : 98, d, d)));
+    assert.equal(traderTitle(trades).name, 'The Day Sniper');
+    assert.ok(traderBadges(trades).some((b) => b.name === 'Friday Gambler'));
+  });
+
+  test('few wins but big ones is the Home-Run Hitter', () => {
+    const t = tradesOf(Array.from({ length: 10 }, (_, i) => trade(i < 3 ? 150 : 95, '2026-02-02', '2026-03-20')));
+    assert.equal(traderTitle(t).name, 'The Home-Run Hitter');
+  });
+
+  test('the mood of the market from its Fear & Greed reading', () => {
+    assert.equal(moodOf(12), 'Extreme fear');
+    assert.equal(moodOf(50), 'Neutral');
+    assert.equal(moodOf(80), 'Extreme greed');
   });
 });

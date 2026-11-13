@@ -22,6 +22,10 @@
       "destination": "/api/news/econ"
     },
     {
+      "source": "/api/insights-data",
+      "destination": "/api/news/insights"
+    },
+    {
       "source": "/api/sentiment",
       "destination": "/api/news/sentiment"
     },
