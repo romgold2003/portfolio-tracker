@@ -6,7 +6,7 @@
  *    — "the market's mood the day you bought" (Insights #15).
  *  - bigDays: the days the biggest US news landed — Fed decisions (the Fed's
  *    own meeting calendar), CPI (found on Nasdaq's economic calendar) and the
- *    jobs report (the first Friday of the month) — "your account on big-news
+ *    jobs report (both from Nasdaq's economic calendar) — "your account on big-news
  *    days" (Insights #4).
  *
  * The same for everyone and slow-moving, so it is cached for half a day and
@@ -87,52 +87,57 @@ export const KNOWN_CPI = [
 ];
 
 /**
- * CPI days, from Nasdaq's economic calendar: CPI lands between the 9th and
- * the 16th, and Nasdaq files a day's events under the next day's date, so
- * the 10th to the 17th of each month are asked for, eight at a time.
+ * Jobs-report days already past (US Nonfarm Payrolls), found once on Nasdaq's
+ * calendar in November 2026, plus the three it lacks from BLS's own schedule
+ * (7 March, 4 April and 5 September 2025). Not "the first Friday": it was a
+ * Thursday on 3 July 2025 and 2 July 2026, a week later than that in several
+ * months, and the 2025 shutdown moved two reports to 20 November and
+ * 16 December. June 2026 is missing from Nasdaq and left out rather than
+ * guessed.
  */
-async function cpiDays(months = 13, fetchImpl = fetch, now = new Date()) {
+export const KNOWN_JOBS = [
+  '2024-01-05', '2024-02-02', '2024-03-08', '2024-04-05', '2024-05-03', '2024-06-07', '2024-07-05', '2024-08-02',
+  '2024-09-06', '2024-10-04', '2024-11-01', '2024-12-06',
+  '2025-01-10', '2025-02-07', '2025-03-07', '2025-04-04', '2025-05-02', '2025-06-06', '2025-07-03', '2025-08-01',
+  '2025-09-05', '2025-11-20', '2025-12-16',
+  '2026-01-09', '2026-02-11', '2026-03-06', '2026-04-03', '2026-05-08', '2026-07-02', '2026-08-07', '2026-09-04',
+  '2026-10-02', '2026-11-06',
+];
+
+/**
+ * The last `months` months of CPI and jobs-report days from Nasdaq's
+ * calendar, so a new release joins without a code change. Nasdaq files a
+ * day's events under the next day's date. The 2nd to the 22nd of each month
+ * are asked for at once (both reports land in that span), each with a short
+ * timeout, so the scan never holds the page for long.
+ */
+export async function releaseDays(months = 2, fetchImpl = fetch, now = new Date()) {
   const asks = [];
   for (let k = 0; k < months; k++) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 1));
-    for (let day = 10; day <= 17; day++) {
+    for (let day = 2; day <= 22; day++) {
       const q = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), day));
       if (q <= now) asks.push(q.toISOString().slice(0, 10));
     }
   }
-  const found = new Set();
-  for (let i = 0; i < asks.length; i += 8) {
-    await Promise.all(asks.slice(i, i + 8).map(async (date) => {
-      try {
-        const res = await fetchImpl(`https://api.nasdaq.com/api/calendar/economicevents?date=${date}`, {
-          headers: { 'User-Agent': BROWSER, Accept: 'application/json, text/plain, */*', Origin: 'https://www.nasdaq.com', Referer: 'https://www.nasdaq.com/' },
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!res.ok) return;
-        const rows = (await res.json())?.data?.rows ?? [];
-        if (rows.some((r) => /united states/i.test(r?.country ?? '') && /^CPI$/i.test(String(r?.eventName ?? '').trim()))) {
-          const q = new Date(`${date}T00:00:00Z`);
-          q.setUTCDate(q.getUTCDate() - 1);
-          found.add(q.toISOString().slice(0, 10));
-        }
-      } catch { /* one day missing is one CPI fewer */ }
-    }));
-  }
-  return [...found].sort();
-}
-
-/** The jobs report: the first Friday of each month. */
-export function jobsDays(from, to) {
-  const out = [];
-  const d = new Date(`${from.slice(0, 7)}-01T00:00:00Z`);
-  while (d.toISOString().slice(0, 10) <= to) {
-    const f = new Date(d);
-    while (f.getUTCDay() !== 5) f.setUTCDate(f.getUTCDate() + 1);
-    const day = f.toISOString().slice(0, 10);
-    if (day >= from && day <= to) out.push(day);
-    d.setUTCMonth(d.getUTCMonth() + 1);
-  }
-  return out;
+  const cpi = new Set();
+  const jobs = new Set();
+  await Promise.all(asks.map(async (date) => {
+    try {
+      const res = await fetchImpl(`https://api.nasdaq.com/api/calendar/economicevents?date=${date}`, {
+        headers: { 'User-Agent': BROWSER, Accept: 'application/json, text/plain, */*', Origin: 'https://www.nasdaq.com', Referer: 'https://www.nasdaq.com/' },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!res.ok) return;
+      const rows = ((await res.json())?.data?.rows ?? []).filter((r) => /united states/i.test(r?.country ?? ''));
+      const q = new Date(`${date}T00:00:00Z`);
+      q.setUTCDate(q.getUTCDate() - 1);
+      const day = q.toISOString().slice(0, 10);
+      if (rows.some((r) => /^CPI$/i.test(String(r?.eventName ?? '').trim()))) cpi.add(day);
+      if (rows.some((r) => String(r?.eventName ?? '').trim() === 'Nonfarm Payrolls')) jobs.add(day);
+    } catch { /* one day missing is one release fewer */ }
+  }));
+  return { cpi: [...cpi].sort(), jobs: [...jobs].sort() };
 }
 
 export default async function handler(req, res) {
@@ -142,11 +147,12 @@ export default async function handler(req, res) {
 
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
-  const [fear, fomc, cpi] = await Promise.allSettled([fearGreedHistory(), fomcDays(), cpiDays(2)]);
+  const [fear, fomc, recent] = await Promise.allSettled([fearGreedHistory(), fomcDays(), releaseDays(2)]);
+  const latest = recent.status === 'fulfilled' ? recent.value : { cpi: [], jobs: [] };
   const bigDays = [
     ...(fomc.status === 'fulfilled' ? fomc.value.filter((d) => d <= today).map((date) => ({ date, kind: 'Fed decision' })) : []),
-    ...[...new Set([...KNOWN_CPI, ...(cpi.status === 'fulfilled' ? cpi.value : [])])].map((date) => ({ date, kind: 'CPI' })),
-    ...jobsDays('2024-01-01', today).map((date) => ({ date, kind: 'Jobs report' })),
+    ...[...new Set([...KNOWN_CPI, ...latest.cpi])].map((date) => ({ date, kind: 'CPI' })),
+    ...[...new Set([...KNOWN_JOBS, ...latest.jobs])].map((date) => ({ date, kind: 'Jobs report' })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   res.setHeader('Cache-Control', 'public, s-maxage=43200, stale-while-revalidate=86400');

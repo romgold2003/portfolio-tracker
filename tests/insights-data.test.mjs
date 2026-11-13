@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseFomc, jobsDays, fearGreedHistory, KNOWN_CPI } from '../api/_panels/insights.js';
+import { parseFomc, releaseDays, fearGreedHistory, KNOWN_CPI, KNOWN_JOBS } from '../api/_panels/insights.js';
 
 test('Fed decisions are the second day of each two-day meeting; notation votes are not', () => {
   const html = `<h4>2025 FOMC Meetings</h4>
@@ -17,8 +17,21 @@ test('Fed decisions are the second day of each two-day meeting; notation votes a
   assert.deepEqual(parseFomc(html), ['2025-01-29', '2025-05-01', '2025-12-10']);
 });
 
-test('the jobs report is the first Friday of each month', () => {
-  assert.deepEqual(jobsDays('2026-01-01', '2026-03-31'), ['2026-01-02', '2026-02-06', '2026-03-06']);
+test('the jobs report is the real release day, not the first Friday', () => {
+  assert.ok(KNOWN_JOBS.includes('2025-07-03'), 'a Thursday, before the 4 July holiday');
+  assert.ok(KNOWN_JOBS.includes('2026-01-09'), 'the second Friday');
+  assert.ok(KNOWN_JOBS.includes('2025-11-20') && !KNOWN_JOBS.includes('2025-10-03'), 'moved by the shutdown');
+  assert.deepEqual([...new Set(KNOWN_JOBS)].sort(), KNOWN_JOBS);
+});
+
+test('new releases are found on Nasdaq, filed under the next day', async () => {
+  const fake = async (url) => {
+    const date = new URL(url).searchParams.get('date');
+    const rows = date === '2026-11-07' ? [{ country: 'United States', eventName: 'Nonfarm Payrolls' }]
+      : date === '2026-11-11' ? [{ country: 'United States', eventName: 'CPI' }, { country: 'Japan', eventName: 'Nonfarm Payrolls' }] : [];
+    return { ok: true, json: async () => ({ data: { rows } }) };
+  };
+  assert.deepEqual(await releaseDays(1, fake, new Date('2026-11-13T12:00:00Z')), { cpi: ['2026-11-10'], jobs: ['2026-11-06'] });
 });
 
 test('CNN\'s readings become one per day, oldest first', async () => {

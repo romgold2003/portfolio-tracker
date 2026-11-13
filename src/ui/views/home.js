@@ -781,6 +781,11 @@ function splitsAppliedByJournal() {
  * account valued day by day. Shows nothing while those values load, rather
  * than a figure that credits the year's deposits with their profit.
  */
+/** This year's return exactly as Home shows it, for the analyst's summary (null while it cannot be measured). */
+export function homeYearToDate() {
+  return yearToDateReturn(accountTotals(state.positions, state.cash))?.returnPct ?? null;
+}
+
 function yearToDateReturn(totals) {
   // The YTD figure itself, by the same path, so the two can never disagree (November 2026).
   return timeframePerformance(totals, 'YTD') ?? { returnPct: null };

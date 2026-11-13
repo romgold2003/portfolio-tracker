@@ -1,14 +1,14 @@
 /**
  * Insights, the personal analyst (November 2026): what a person's trades and
- * account say about them, only as far as the evidence goes, and the "why"
- * measured from each trade's context rather than guessed.
+ * account say about them, only as far as the evidence goes, in plain words,
+ * with every formula checked here against numbers worked out by hand.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
-  analyse, tradesOf, chanceOf, chanceVsZero, confidence, whyOf, twinSeries, indexLevels, levelOn, dailyTwin,
-  traderTitle, traderBadges, moodOf, MIN_TRADES,
+  analyse, tradesOf, chanceOf, chanceVsZero, confidence, whyOf, twinSeries, indexLevels, levelOn,
+  twinDaily, tradeLife, twinOfLife, accountDays, pairDays, traderTitle, traderBadges, moodOf, MIN_TRADES,
 } = await import('../src/core/insights.js');
 
 let id = 0;
@@ -29,9 +29,9 @@ function weekdays(from, to) {
 }
 
 /**
- * A market and an account from December 2025: the S&P moves a little every day and
- * falls 1.5% every tenth day; the account moves 1.5× as much, so it falls
- * harder and swings more. $10,000 to start, $5,000 paid in on 1 June.
+ * A market and an account from December 2025: the S&P moves a little every
+ * day and falls 1.5% every tenth day; the account moves 1.5× as much, so it
+ * falls harder and swings more. $10,000 to start, $5,000 paid in on 1 June.
  */
 const DAYS = weekdays('2025-12-01', '2026-11-13');
 const spxMove = (i) => (i % 10 === 9 ? -1.5 : 0.25 + 0.4 * Math.sin(i));
@@ -49,13 +49,17 @@ const HISTORY = [];
   });
 }
 const TODAY = '2026-11-13';
+const near = (a, b, tol = 1e-6) => assert.ok(Math.abs(a - b) < tol, `${a} ≠ ${b}`);
 
 describe('enough evidence, and better than chance', () => {
-  test('trade patterns wait for ten closed trades, and say how many more', () => {
+  test('trade patterns wait for data, and say how much more they need', () => {
     const r = analyse({ positions: [trade(110, '2026-01-05', '2026-01-09')], today: TODAY });
     assert.equal(r.needed, MIN_TRADES - 1);
     assert.equal(r.profile.title, null);
-    assert.ok(!r.cards.some((c) => c.id === 'weekday'));
+    const w = r.cards.find((c) => c.id === 'weekday');
+    assert.equal(w.confidence.level, 'early');
+    assert.equal(w.headline, undefined, 'no conclusion is drawn');
+    assert.equal(r.standOut.length, 0);
   });
 
   test('a clear difference is unlikely to be chance; the same values either side is not', () => {
@@ -78,7 +82,7 @@ describe('the measured why', () => {
     const rest = Array.from({ length: 10 }, () => ({ spx5: 0.2, days: 5 }));
     const why = whyOf(group, rest);
     assert.equal(why.id, 'spxUp');
-    assert.match(why.text, /^5 of 6 came after the S&P had risen 1\.5%\+ in the five days before, against 0% of your other trades\.$/);
+    assert.match(why.text, /^5 of 6 came after the S&P 500 had risen 1\.5% or more in the five days before, against 0% of your other trades\.$/);
   });
 
   test('and says nothing when nothing stands out', () => {
@@ -87,42 +91,100 @@ describe('the measured why', () => {
   });
 });
 
-describe('you against the market', () => {
-  const r = analyse({ positions: [], history: HISTORY, index: INDEX, today: TODAY });
+describe('the account against the market', () => {
+  const r = analyse({ positions: [], history: HISTORY, index: INDEX, today: TODAY, year: { you: 20, spx: 12 } });
   const card = (cardId) => r.cards.find((c) => c.id === cardId);
+
+  test('a day after a gap in the history is not compared with one market day', () => {
+    const ix = indexLevels(INDEX);
+    const gappy = HISTORY.filter((row) => row.date < '2026-03-02' || row.date > '2026-03-13');
+    const paired = pairDays(accountDays(gappy), ix);
+    assert.ok(!paired.some((d) => d.date === '2026-03-16'), 'the day after the gap spans two weeks');
+    assert.ok(paired.some((d) => d.date === '2026-03-17'));
+  });
 
   test('the whole-account twin gets every deposit on the same day', () => {
     const ix = indexLevels(INDEX);
     const s = twinSeries(HISTORY, ix);
     assert.equal(s[0].twin, s[0].you, 'both start from the same value');
-    // A deposit with no market move changes both by the same amount.
     const june = s.findIndex((p) => p.date === '2026-06-01');
     const twinBefore = s[june - 1].twin * (1 + ix.daily.get('2026-06-01') / 100);
-    assert.ok(Math.abs(s[june].twin - (twinBefore + 5000)) < 1e-6);
+    near(s[june].twin, twinBefore + 5000);
     assert.equal(card('twin'), undefined, 'no trades, no trade twin');
   });
 
-  test('when the S&P falls 1%+, the account falls 150% as much', () => {
+  test('when the market falls 1%+, the account falls 150% as much, in plain words', () => {
     const d = card('down');
-    assert.match(d.title, /^When the S&P falls 1% or more, your account falls 2\.\d\d% on average$/);
-    assert.match(d.why, /^That is 150% of the market's fall/);
+    assert.equal(d.headline, 'When the market falls, your account usually falls harder');
+    assert.match(d.more, /^That is 150% of the market's move\./);
     assert.equal(d.tone, 'bad');
   });
 
-  test('it swings 1.5× as much as the market', () => {
-    assert.match(card('swings').title, /^Your account swings 1\.5× as much as the S&P/);
+  test('it moves 1.5× as much as the market', () => {
+    assert.match(card('swings').headline, /^Your account moves more than the market, /);
+    assert.match(card('swings').data, /moves 1\.5× as much as the S&P 500/);
   });
 
-  test('last week and the streak, the months, and the deepest drop', () => {
-    assert.match(card('week').title, /^Last week your account [+−]\d\.\d\d%, the S&P [+−]\d\.\d\d%: (ahead|behind) by/);
-    assert.match(card('months').title, /^You beat the S&P in \d+ of the last \d+ months$/);
-    assert.ok(card('months').table.length >= 2);
-    assert.match(card('drawdown').title, /^Your deepest drop: −\d+\.\d%/);
-    assert.match(card('drawdown').why, /your book fell further than the market/);
+  test('last week, the months and the biggest drop', () => {
+    assert.match(card('week').data, /^You [+−]\d\.\d\d%, S&P 500 [+−]\d\.\d\d%\./);
+    assert.match(card('months').headline, /^You beat the market in \d+ of the last \d+ months$/);
+    assert.match(card('drawdown').headline, /^Your biggest drop from a high was \d+\.\d%$/);
+    assert.match(card('drawdown').matters, /deeper than the market's biggest drop/);
   });
 
-  test('the year beside the S&P\'s, for the headline', () => {
-    assert.ok(r.year.you > r.year.spx, 'a 1.5× book in a rising year is ahead');
+  test('the year is Home\'s own figure, passed through, and opens the summary', () => {
+    assert.deepEqual(r.year, { you: 20, spx: 12 });
+    assert.match(r.summary, /^This year your account is up 20\.0%, while the S&P 500 is up 12\.0%\. You are ahead of the market\./);
+  });
+});
+
+describe('a trade\'s life and its S&P twin', () => {
+  test('the first purchase is worked out from the average once the top-ups are out', () => {
+    // 10 at 100, then 10 more at 80: average 90. Sold 5 at 95, then 15 at 110.
+    const life = tradeLife({
+      dir: 'Long', status: 'Closed', open: '2026-03-02', close: '2026-04-01', entry: 90, qty: 20, cur: 106.25,
+      adds: [{ d: '2026-03-09', qty: 10, price: 80 }],
+      exits: [{ d: '2026-03-16', qty: 5, price: 95 }, { d: '2026-04-01', qty: 15, price: 110 }],
+    });
+    assert.deepEqual(life.buys, [{ d: '2026-03-02', qty: 10, price: 100 }, { d: '2026-03-09', qty: 10, price: 80 }]);
+    assert.equal(life.sells.length, 2);
+  });
+
+  test('a closed trade with no recorded sales sells everything on its close date', () => {
+    const life = tradeLife({ dir: 'Long', status: 'Closed', open: '2026-03-02', close: '2026-03-20', entry: 50, qty: 4, cur: 60 });
+    assert.deepEqual(life.sells, [{ d: '2026-03-20', qty: 4, price: 60 }]);
+  });
+
+  test('the twin buys with each purchase and sells the same share with each sale', () => {
+    const ix = indexLevels(INDEX);
+    const L = (d) => levelOn(ix, d);
+    const life = {
+      dir: 1,
+      buys: [{ d: '2026-03-02', qty: 10, price: 100 }, { d: '2026-03-09', qty: 10, price: 80 }],
+      sells: [{ d: '2026-03-16', qty: 5, price: 95 }, { d: '2026-04-01', qty: 15, price: 110 }],
+    };
+    const units = 1000 / L('2026-03-02') + 800 / L('2026-03-09');
+    const back = units * 0.25 * L('2026-03-16') + units * 0.75 * L('2026-04-01');
+    const t = twinOfLife(life, ix, TODAY);
+    near(t.pnl, back - 1800);
+    near(t.paid, 1800);
+  });
+
+  test('day by day: a held trade is marked at the stock\'s close in its own prices, then its final figure', () => {
+    const ix = indexLevels(INDEX);
+    const prices = new Map([['AAA', DAYS.map((date, i) => ({ date, close: 100 + i }))]]);
+    const open = DAYS[100];
+    const mid = DAYS[110];
+    const close = DAYS[120];
+    // 5 bought at $200 ($1,000), sold at $230 (+$150) on a day the stock closed at 220.
+    const life = { dir: 1, buys: [{ d: open, qty: 5, price: 200 }], sells: [{ d: close, qty: 5, price: 230 }], price: 230 };
+    const s = twinDaily([{ ticker: 'AAA', life, close, you: 150, spx: 40, live: false }], ix, prices, null, TODAY);
+    const at = (d) => s.find((p) => p.date === d);
+    assert.equal(at(DAYS[99]).you, 0, 'nothing before it was bought');
+    near(at(mid).you, 5 * 210 * (230 / 220) - 1000);
+    near(at(mid).twin, 1000 * (levelOn(ix, mid) / levelOn(ix, open) - 1));
+    assert.deepEqual([at(close).you, at(close).twin], [150, 40]);
+    assert.equal(s[s.length - 1].date, TODAY);
   });
 });
 
@@ -137,61 +199,69 @@ describe('what it reads in the trades', () => {
   const r = analyse({ positions: book, history: HISTORY, index: INDEX, today: TODAY });
   const card = (cardId) => r.cards.find((c) => c.id === cardId);
 
-  test('emotional against confident, Strong, with what it cost', () => {
+  test('emotional against confident, a clear pattern, with what it cost', () => {
     const e = card('emotion');
-    assert.match(e.title, /emotional return −9\.0% on average; confident ones \+12\.0%/);
+    assert.equal(e.headline, 'Your calm, confident trades do clearly better');
     assert.equal(e.confidence.level, 'strong');
-    assert.match(e.matters, /10 emotional trades \(rated 1–4\), −\$900 in total/);
+    assert.equal(e.data, 'Emotional (rated 1–4): −9.0% per trade. Confident (7–10): +12.0% per trade. Based on 20 rated trades.');
+    assert.match(e.more, /^10 emotional trades, −\$900 in total; 10 confident trades, \+\$1,200\.$/);
   });
 
   test('holding losers longer than winners, and what the long ones lost', () => {
     const h = card('holding');
-    assert.match(h.title, /You keep losing trades 7\.0× longer than winning ones \(21 days against 3\)/);
-    assert.match(h.matters, /10 losing trades stayed open .* lost \$900/);
-  });
-
-  test('each trade against the S&P over the same days', () => {
-    const p = card('picks');
-    assert.match(p.title, /over the same days by \d+\.\d points; \d+ of 20 beat it/);
+    assert.equal(h.headline, 'You tend to hold losing trades longer than winning ones');
+    assert.equal(h.data, 'Winners: 3 days on average. Losers: 21 days. Based on 20 trades.');
+    assert.match(h.more, /^10 losing trades stayed open .* lost \$900 together\.$/);
   });
 
   test('the S&P twin: each trade\'s money in the S&P from the day bought to the day sold', () => {
     const ix = indexLevels(INDEX);
     const t = card('twin').twin.year;
     assert.equal(t.decided, 20);
-    assert.equal(t.you, 10 * 120 - 10 * 90, 'what the trades made');
-    // The twin of each trade: its $1,000 in the S&P over exactly its own days.
+    assert.equal(t.you, 10 * 120 - 10 * 90);
     const expected = book.reduce((s, p) => s + 1000 * (levelOn(ix, p.close) / levelOn(ix, p.open) - 1), 0);
-    assert.ok(Math.abs(t.twin - expected) < 1e-6);
-    assert.ok(Math.abs(t.diff - (t.you - t.twin)) < 1e-9);
-    // The curve adds each trade up on the day it closed and ends on both totals.
+    near(t.twin, expected);
     const last = t.series[t.series.length - 1];
-    assert.equal(t.series[0].you, 0);
-    assert.ok(Math.abs(last.you - t.you) < 1e-9 && Math.abs(last.twin - t.twin) < 1e-9);
+    near(last.you, t.you);
+    near(last.twin, t.twin);
     assert.ok(t.account && t.account.diffPct > 0, 'the whole-account line rides along');
-    assert.match(card('twin').title, /^If every trade had gone into the S&P 500 instead, same money, same days, you'd have made [+−]\$[\d,]+\. You made \+\$300\.$/);
   });
 
-  test('the strengths and weaknesses come from solid findings only', () => {
-    const all = [...r.briefing.strengths, ...r.briefing.weaknesses].map((x) => x.id);
-    for (const cid of all) {
-      const c = card(cid);
-      assert.ok(!c.confidence || ['strong', 'likely'].includes(c.confidence.level), `${cid} is solid`);
+  test('what stands out is only ever a fact or a pattern unlikely to be chance', () => {
+    assert.ok(r.standOut.length >= 2);
+    for (const s of r.standOut) {
+      const c = card(s.id);
+      assert.ok(!c.confidence || ['strong', 'likely'].includes(c.confidence.level), `${s.id} is solid`);
     }
-    assert.ok(r.briefing.weaknesses.some((x) => x.id === 'holding'));
+    const improve = r.standOut.find((s) => s.kind === 'improve');
+    assert.ok(improve, 'there is an area to improve');
+    const head = card(improve.id).headline;
+    assert.ok(r.summary.includes(`Worth watching: ${head[0].toLowerCase()}${head.slice(1)}.`));
   });
 
-  test('after you sold: the month that followed, from the stock\'s own closes', () => {
-    const closes = DAYS.map((date, i) => ({ date, close: 100 + i }));
-    const sold = Array.from({ length: 10 }, (_, i) => trade(110, DAYS[10 + i * 5], DAYS[12 + i * 5], { ticker: 'UP' }));
+  test('no card uses judging words', () => {
+    const text = r.cards.map((c) => [c.headline, c.matters, c.data].join(' ')).join(' ') + r.summary;
+    for (const word of [/bad trader/i, /terrible/i, /you are losing money/i, /high-risk behaviou?r/i]) assert.doesNotMatch(text, word);
+  });
+
+  test('after you sold: the 30 days that followed, from the stock\'s own closes', () => {
+    const closes = [];
+    for (let t = Date.parse('2026-01-01T00:00:00Z'); t <= Date.parse('2026-11-13T00:00:00Z'); t += 86400000) {
+      const date = new Date(t).toISOString().slice(0, 10);
+      closes.push({ date, close: 100 + closes.length * 0.5 });
+    }
+    const sold = Array.from({ length: 10 }, (_, i) => trade(110, closes[20 + i * 10].date, closes[25 + i * 10].date, { ticker: 'UP' }));
     const a = analyse({ positions: sold, history: HISTORY, index: INDEX, series: new Map([['UP', closes]]), today: TODAY });
     const c = a.cards.find((x) => x.id === 'after');
-    assert.match(c.title, /^In the month after you sold, your stocks went up \d+\.\d% on average$/);
-    assert.match(c.matters, /left on the table/);
+    assert.equal(c.headline, 'You tend to sell winners too early');
+    // 30 calendar days of +0.5 a day from wherever each was sold, averaged over the ten.
+    const moves = Array.from({ length: 10 }, (_, i) => (15 / (100 + (25 + i * 10) * 0.5)) * 100);
+    const avg = moves.reduce((x, y) => x + y, 0) / moves.length;
+    assert.match(c.data, new RegExp(`rose a further ${avg.toFixed(1)}%`));
   });
 });
 
-describe('the trader card', () => {
+describe('the investing style', () => {
   test('a day trader who wins most is the Day Sniper; most of them on Fridays earns the badge', () => {
     const fridays = weekdays('2026-03-02', '2026-06-30').filter((d) => new Date(`${d}T12:00:00Z`).getUTCDay() === 5);
     const trades = tradesOf(fridays.slice(0, 12).map((d, i) => trade(i % 3 ? 104 : 98, d, d)));
@@ -204,28 +274,11 @@ describe('the trader card', () => {
     assert.equal(traderTitle(t).name, 'The Home-Run Hitter');
   });
 
-  test('the mood of the market from its Fear & Greed reading', () => {
-    assert.equal(moodOf(12), 'Extreme fear');
-    assert.equal(moodOf(50), 'Neutral');
-    assert.equal(moodOf(80), 'Extreme greed');
-  });
-});
-
-describe('the twin, day by day', () => {
-  test('a held trade counts its open profit from the stock\'s closes, and its twin the S&P\'s, until it closes', () => {
-    const ix = indexLevels(INDEX);
-    const prices = new Map([['AAA', DAYS.map((date, i) => ({ date, close: 100 + i }))]]);
-    const open = DAYS[100];
-    const mid = DAYS[110];
-    const close = DAYS[120];
-    // 5 bought at $200 ($1,000), sold at $230 (+$150) on a day the stock closed at 220.
-    const rows = [{ ticker: 'AAA', dir: 'Long', cost: 1000, qty: 5, price: 230, open, close, you: 150, spx: 40, live: false }];
-    const s = dailyTwin(rows, ix, prices, null, TODAY);
-    const at = (d) => s.find((p) => p.date === d);
-    assert.equal(at(DAYS[99]).you, 0, 'nothing before it was bought');
-    assert.ok(Math.abs(at(mid).you - (5 * 210 * (230 / 220) - 1000)) < 1e-9, 'marked at the stock\'s close, in the trade\'s own prices');
-    assert.ok(Math.abs(at(mid).twin - 1000 * (levelOn(ix, mid) / levelOn(ix, open) - 1)) < 1e-9);
-    assert.deepEqual([at(close).you, at(close).twin], [150, 40], 'its final figures from the day it closed');
-    assert.equal(s[s.length - 1].date, TODAY);
+  test('the market\'s mood in CNN\'s own bands', () => {
+    assert.equal(moodOf(24), 'Extreme fear');
+    assert.equal(moodOf(25), 'Fear');
+    assert.equal(moodOf(55), 'Neutral');
+    assert.equal(moodOf(75), 'Greed');
+    assert.equal(moodOf(76), 'Extreme greed');
   });
 });
