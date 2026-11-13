@@ -29,7 +29,7 @@
 import { realized, costOf, outcomeOf, marketValueOf, unreal } from './portfolio.js';
 import { cleanMind } from './mind.js';
 import { sectorOf } from '../config/sectors.js';
-import { dayGrowth, measurable, monthlyReturns } from './portfolioHistory.js';
+import { dayGrowth, measurable, monthlyReturns, periodReturnFromHistory } from './portfolioHistory.js';
 
 export const MIN_GROUP = 8;
 export const MIN_TRADES = 10;
@@ -954,31 +954,44 @@ const MOODS = [
 ];
 export const moodOf = (v) => MOODS.find(([, lo, hi]) => v >= lo && v < hi)?.[0] ?? null;
 
+/** "14 of 18 won (78%)": how often a group of trades worked out, flat trades left out. */
+const wonLine = (ts) => {
+  const decided = ts.filter((t) => t.outcome !== 'even');
+  const won = decided.filter((t) => t.outcome === 'win').length;
+  return `${won} of ${decided.length} won (${Math.round(share(won, decided.length))}%)`;
+};
+const isWin = (t) => (t.outcome === 'win' ? 1 : 0);
+
+/**
+ * Counted in wins and losses, as the weekday card is (November 2026): one
+ * lucky trade that made 1,000% could otherwise decide the comparison alone.
+ */
 function moodAtEntry(trades) {
-  const rated = trades.filter((t) => t.fg != null);
+  const rated = trades.filter((t) => t.fg != null && t.outcome !== 'even');
   const fear = rated.filter((t) => t.fg < 45);
   const greed = rated.filter((t) => t.fg > 55);
   const base = {
     id: 'mood', group: 'habits', topic: 'The market\'s mood when you buy',
-    how: 'CNN\'s Fear & Greed index (0 = extreme fear, 100 = extreme greed) on the day you opened each stock trade (crypto is left out: the index measures the stock market). Trades bought below 45 (fear) are compared with those bought above 55 (greed) by average return, checked against chance.',
+    how: 'CNN\'s Fear & Greed index (0 = extreme fear, 100 = extreme greed) on the day you opened each stock trade (crypto is left out: the index measures the stock market). Of the trades bought below 45 (fear) and above 55 (greed), the share that closed in profit. Only winning or losing counts, not by how much; flat trades are left out. The difference is checked against chance.',
   };
   if (fear.length < MIN_GROUP || greed.length < MIN_GROUP) {
     return { ...base, tone: 'neutral', impact: 0, confidence: { level: 'early', needed: Math.max(0, MIN_GROUP - fear.length) + Math.max(0, MIN_GROUP - greed.length), unit: 'stock trades bought in fear or greed' } };
   }
   const groups = MOODS.map(([label]) => ({ label, ts: rated.filter((t) => moodOf(t.fg) === label) })).filter((g) => g.ts.length);
-  const f = mean(fear.map((t) => t.ret));
-  const g = mean(greed.map((t) => t.ret));
+  const f = winRate(fear);
+  const g = winRate(greed);
   const worse = f < g ? fear : greed;
   return {
     ...base,
-    headline: f > g ? 'You do better buying when other investors are fearful' : 'You do better buying when other investors are confident',
-    matters: f > g ? 'Buying when others are nervous often means buying at better prices.' : 'Your best trades come when the market is in a good mood; fearful markets have been harder for you.',
-    data: `Bought in fear: ${pct(f)} per trade. Bought in greed: ${pct(g)} per trade. Based on ${plural(rated.length, 'stock trade')}.`,
-    more: `${fear.length} trades bought in fear, ${greed.length} in greed. Your ${f < g ? 'fear' : 'greed'} trades added up to ${usd(sum(worse.map((t) => t.pnl)))}.`,
+    headline: f > g ? 'You win more often buying when other investors are fearful' : 'You win more often buying when other investors are confident',
+    matters: f > g ? 'Buying when others are nervous often means buying at better prices.' : 'Your trades work out more often when the market is in a good mood; fearful markets have been harder for you.',
+    data: `Bought in fear: ${wonLine(fear)}. Bought in greed: ${wonLine(greed)}.`,
+    more: `Your ${f < g ? 'fear' : 'greed'} trades added up to ${usd(sum(worse.map((t) => t.pnl)))}.`,
     tone: f > g ? 'good' : 'neutral',
     impact: Math.abs(sum(worse.map((t) => t.pnl))),
-    confidence: confidence(fear, greed),
-    bars: groups.map((x) => [x.label, mean(x.ts.map((t) => t.ret))]),
+    confidence: confidence(fear, greed, isWin),
+    bars: groups.map((x) => [x.label, winRate(x.ts)]),
+    unit: 'rate',
     trades: ids(worse),
   };
 }
@@ -986,12 +999,12 @@ function moodAtEntry(trades) {
 /* ── emotional against confident ── */
 
 function emotion(trades) {
-  const rated = trades.filter((t) => t.mind != null);
+  const rated = trades.filter((t) => t.mind != null && t.outcome !== 'even');
   const emotional = rated.filter((t) => t.mind <= 4);
   const confident = rated.filter((t) => t.mind >= 7);
   const base = {
     id: 'emotion', group: 'habits', topic: 'Your state of mind and your results',
-    how: 'The state of mind you rated when opening each trade (1 = emotional, 10 = calm and confident). Trades rated 1–4 are compared with trades rated 7–10 by average return, checked against chance. Trades rated 5–6, or not rated, are left out.',
+    how: 'The state of mind you rated when opening each trade (1 = emotional, 10 = calm and confident). Of the trades rated 1–4 and those rated 7–10, the share that closed in profit. Only winning or losing counts, not by how much; flat trades, trades rated 5–6 and unrated trades are left out. The difference is checked against chance.',
   };
   if (emotional.length < MIN_GROUP || confident.length < MIN_GROUP) {
     return {
@@ -1000,21 +1013,22 @@ function emotion(trades) {
       hint: 'Rate your state of mind when you open a trade (New trade → State of mind).',
     };
   }
-  const e = mean(emotional.map((t) => t.ret));
-  const c = mean(confident.map((t) => t.ret));
+  const e = winRate(emotional);
+  const c = winRate(confident);
   const why = whyOf(emotional, confident, ['emotional']);
   const total = sum(emotional.map((t) => t.pnl));
   return {
     ...base,
-    headline: c > e ? 'Your calm, confident trades do clearly better' : 'Your emotional trades have done as well or better',
+    headline: c > e ? 'Your calm, confident trades win more often' : 'Your emotional trades have won as often or more',
     matters: c > e ? 'Pausing to notice how you feel before a trade is one of the simplest ways to improve.' : 'Your instincts have served you well so far, even when you felt unsure.',
-    data: `Emotional (rated 1–4): ${pct(e)} per trade. Confident (7–10): ${pct(c)} per trade. Based on ${plural(emotional.length + confident.length, 'rated trade')}.`,
-    more: `${emotional.length} emotional trades, ${usd(total)} in total; ${confident.length} confident trades, ${usd(sum(confident.map((t) => t.pnl)))}.`,
+    data: `Confident (rated 7–10): ${wonLine(confident)}. Emotional (rated 1–4): ${wonLine(emotional)}.`,
+    more: `Your emotional trades added up to ${usd(total)}; your confident trades ${usd(sum(confident.map((t) => t.pnl)))}.`,
     cause: why ? `Your emotional trades: ${why.text}` : null,
     tone: c > e ? 'good' : 'neutral',
     impact: Math.abs(total),
-    confidence: confidence(emotional, confident),
+    confidence: confidence(emotional, confident, isWin),
     bars: [['Emotional', e], ['Confident', c]],
+    unit: 'rate',
     trades: ids(emotional),
   };
 }
@@ -1220,93 +1234,219 @@ export function traderTitle(trades, { twinAhead = null, calmer = null, sectors =
   return pick('oak', `You typically hold a trade for ${Math.round(held)} days: you rarely sell.`);
 }
 
-export const BADGES = {
-  icecold: ['🧊', 'Ice-Cold'],
-  hothead: ['🔥', 'Hot-Headed'],
-  dip: ['🛒', 'Dip Buyer'],
-  trend: ['🚀', 'Trend Chaser'],
-  fear: ['😱', 'Fear Buyer'],
-  greed: ['🤑', 'Greed Rider'],
-  tech: ['💻', 'Tech Devotee'],
-  crypto: ['₿', 'Crypto Native'],
-  energy: ['🛢️', 'Energy Baron'],
-  banks: ['🏦', 'Bank Teller'],
-  pills: ['💊', 'Pill Popper'],
-  diversifier: ['🌍', 'The Diversifier'],
-  allin: ['🎲', 'All-In'],
-  beater: ['🏆', 'Market Beater'],
-  hugger: ['🪞', 'Index Hugger'],
-  diamond: ['💎', 'Diamond Hands'],
-  paper: ['🧻', 'Paper Hands'],
-  friday: ['📅', 'Friday Gambler'],
-};
+/* ── achievements: a collection of 30 cards ──
+ *
+ * Personal accomplishments, collected once and kept: surviving a market fall,
+ * a trade that doubled, a year held, a hundred trades. Each has a rarity, worth
+ * points toward the level in the title (common 1, rare 2, epic 3, legendary 5),
+ * and the date it was first earned. A card that cannot be judged from the data
+ * on this device (no market history, no stock prices for the trade) stays
+ * locked rather than being guessed.
+ */
 
-/** Every badge earned, strongest first; the page shows two. */
-export function traderBadges(trades, { open = [], accountValue = 0, twinPct = null, twinDays = 0 } = {}) {
-  const out = [];
-  const add = (key, score, why) => out.push({ key, icon: BADGES[key][0], name: BADGES[key][1], why, score });
-  const rated = trades.filter((t) => t.mind != null);
-  if (rated.length >= MIN_GROUP) {
-    const calm = rated.filter((t) => t.mind >= 7);
-    const hot = rated.filter((t) => t.mind <= 4);
-    const calmShare = share(calm.length, rated.length);
-    const hotShare = share(hot.length, rated.length);
-    if (calmShare >= 60 && (!hot.length || mean(calm.map((t) => t.ret)) > mean(hot.map((t) => t.ret)))) add('icecold', calmShare, `${Math.round(calmShare)}% of your rated trades were taken calm and confident, and they do better.`);
-    if (hotShare >= 30 && mean(hot.map((t) => t.ret)) < mean(rated.filter((t) => t.mind > 4).map((t) => t.ret))) add('hothead', hotShare + 10, `${Math.round(hotShare)}% of your rated trades were taken emotional, and they do worse.`);
+export const RARITY = { common: 1, rare: 2, epic: 3, legendary: 5 };
+
+/** Levels by points; the next one is what the title's progress bar points to. */
+export const LEVELS = [
+  ['Rookie', 0],
+  ['Apprentice', 5],
+  ['Trader', 12],
+  ['Pro', 22],
+  ['Veteran', 35],
+  ['Legend', 50],
+];
+
+export const FAMILIES = [
+  ['survival', 'Market survival'],
+  ['wins', 'Big wins and streaks'],
+  ['patience', 'Patience and comebacks'],
+  ['milestones', 'Milestones and discipline'],
+];
+
+/** The S&P 500's fall from its highest close so far, by day, from its price (not total return). */
+function marketDrawdowns(index) {
+  const out = new Map();
+  let peak = 0;
+  for (const r of index ?? []) {
+    if (!r?.date || !(r.close > 0)) continue;
+    peak = Math.max(peak, r.close);
+    out.set(r.date, (r.close / peak - 1) * 100);
   }
-  const ran = trades.filter((t) => t.stock10 != null);
-  if (ran.length >= MIN_GROUP) {
-    const dips = share(ran.filter((t) => t.stock10 <= -5).length, ran.length);
-    const chases = share(ran.filter((t) => t.stock10 >= 10).length, ran.length);
-    if (dips >= 50) add('dip', dips, `${Math.round(dips)}% of your buys came after the stock fell 5% or more in two weeks.`);
-    if (chases >= 40) add('trend', chases, `${Math.round(chases)}% of your buys came after the stock rose 10% or more in two weeks.`);
-  }
-  const moods = trades.filter((t) => t.fg != null);
-  if (moods.length >= MIN_GROUP) {
-    const f = share(moods.filter((t) => t.fg < 45).length, moods.length);
-    const g = share(moods.filter((t) => t.fg > 55).length, moods.length);
-    if (f >= 50) add('fear', f, `${Math.round(f)}% of your stock buys were made while investors were fearful.`);
-    if (g >= 50) add('greed', g, `${Math.round(g)}% of your stock buys were made while investors were greedy.`);
-  }
-  const book = open.length
-    ? open.map((p) => ({ sector: p.sector, cls: p.cls, value: Math.abs(p.value) }))
-    : trades.map((t) => ({ sector: t.sector, cls: t.cls, value: t.cost }));
-  const total = sum(book.map((x) => x.value));
-  if (total > 0) {
-    const of = (test) => share(sum(book.filter(test).map((x) => x.value)), total);
-    const where = open.length ? 'of your open positions' : 'of the money you have traded';
-    const tech = of((x) => x.sector === 'Technology');
-    if (tech > 50) add('tech', tech - 20, `${Math.round(tech)}% ${where} is in technology.`);
-    const crypto = of((x) => x.cls === 'Crypto' || x.sector === 'Crypto');
-    if (crypto >= 30) add('crypto', crypto, `${Math.round(crypto)}% ${where} is in crypto.`);
-    for (const [key, sector] of [['energy', 'Energy'], ['banks', 'Financials'], ['pills', 'Healthcare']]) {
-      const s = of((x) => x.sector === sector);
-      if (s >= 30) add(key, s, `${Math.round(s)}% ${where} is in ${sector.toLowerCase()}.`);
+  return out;
+}
+
+/** The first trade, in order of `key`, that passes `test`: its date is when the card was earned. */
+const firstBy = (list, test, key) => [...list].filter(test).sort((a, b) => a[key].localeCompare(b[key]))[0] ?? null;
+
+export function achievementsFor({ trades, open, positions, index, ix, paired, history, bigDays, today }) {
+  const cards = [];
+  const add = (family, key, icon, name, rarity, how, earned) => cards.push({
+    family, key, icon, name, rarity, points: RARITY[rarity], how,
+    earned: earned ? earned.date : null, detail: earned ? earned.detail : null,
+  });
+  const got = (date, detail) => (date ? { date, detail } : null);
+
+  // Every holding as a span of days, closed or still open.
+  const spans = [
+    ...trades.map((t) => ({ ticker: t.ticker, from: t.open, to: t.close })),
+    ...open.map((p) => ({ ticker: p.ticker, from: p.open, to: today })),
+  ];
+  const heldOn = (date) => spans.find((s) => s.from <= date && date <= s.to) ?? null;
+
+  /* market survival */
+  const falls = marketDrawdowns(index);
+  const marketDay = (test) => [...falls].find(([date, dd]) => test(dd, date) && heldOn(date)) ?? null;
+  const correction = marketDay((dd) => dd <= -10);
+  add('survival', 'correction', '🛡️', 'Correction Survivor', 'rare',
+    'Hold a position while the S&P 500 is 10% or more below its high.',
+    correction && got(correction[0], `The S&P 500 was ${Math.abs(correction[1]).toFixed(1)}% below its high, and you held ${heldOn(correction[0]).ticker}.`));
+  const bear = marketDay((dd) => dd <= -20);
+  add('survival', 'bear', '🐻', 'Bear Survivor', 'legendary',
+    'Hold a position through a bear market: the S&P 500 20% or more below its high.',
+    bear && got(bear[0], `The S&P 500 was ${Math.abs(bear[1]).toFixed(1)}% below its high, and you held ${heldOn(bear[0]).ticker}.`));
+  const crashDays = [...ix.daily].filter(([, r]) => r <= -3);
+  const storm = crashDays.find(([date]) => heldOn(date));
+  add('survival', 'storm', '🌪️', 'Storm Rider', 'rare',
+    'Hold a position on a day the S&P 500 falls 3% or more.',
+    storm && got(storm[0], `The S&P 500 fell ${Math.abs(storm[1]).toFixed(1)}% that day, and you held ${heldOn(storm[0]).ticker}.`));
+  const beatCrash = paired.find((d) => d.spx <= -3 && d.ret > 0);
+  add('survival', 'crashproof', '🧯', 'Crash-Proof', 'epic',
+    'Finish a day in the green while the S&P 500 falls 3% or more.',
+    beatCrash && got(beatCrash.date, `The S&P 500 fell ${Math.abs(beatCrash.spx).toFixed(1)}%; your account rose ${beatCrash.ret.toFixed(2)}%.`));
+  const dip = firstBy(trades, (t) => (ix.daily.get(t.open) ?? 0) <= -2 && t.outcome === 'win', 'close');
+  add('survival', 'dip', '🛒', 'Bought the Dip', 'epic',
+    'Buy on a day the S&P 500 falls 2% or more, and close that trade in profit.',
+    dip && got(dip.close, `${dip.ticker}, bought on a ${Math.abs(ix.daily.get(dip.open)).toFixed(1)}% down day, closed ${pct(dip.ret)}.`));
+  const fedDays = new Set((bigDays ?? []).filter((b) => b.kind === 'Fed decision').map((b) => b.date));
+  const fed = firstBy([...trades, ...open], (t) => fedDays.has(t.open), 'open');
+  add('survival', 'fed', '🏛️', 'Fed Day Trader', 'common',
+    'Open a trade on the day the Fed announces its interest-rate decision.',
+    fed && got(fed.open, `${fed.ticker}, opened on a Fed decision day.`));
+
+  /* big wins and streaks */
+  const doubler = firstBy(trades, (t) => t.ret >= 100, 'close');
+  add('wins', 'doubler', '🚀', 'Doubler', 'epic', 'Close a trade up 100% or more.',
+    doubler && got(doubler.close, `${doubler.ticker}, ${pct(doubler.ret, 0)}.`));
+  const tenbag = firstBy(trades, (t) => t.ret >= 1000, 'close');
+  add('wins', 'tenbagger', '🌕', 'Ten-Bagger', 'legendary', 'Close a trade up 1,000% or more.',
+    tenbag && got(tenbag.close, `${tenbag.ticker}, ${pct(tenbag.ret, 0)}.`));
+  const four = firstBy(trades, (t) => t.pnl >= 1000, 'close');
+  add('wins', 'fourfigures', '💵', 'Four Figures', 'rare', 'Make $1,000 or more on a single trade.',
+    four && got(four.close, `${four.ticker}, ${usd(four.pnl)}.`));
+  const five = firstBy(trades, (t) => t.pnl >= 10000, 'close');
+  add('wins', 'fivefigures', '💰', 'Five Figures', 'epic', 'Make $10,000 or more on a single trade.',
+    five && got(five.close, `${five.ticker}, ${usd(five.pnl)}.`));
+  const streakAt = (n) => {
+    let run = 0;
+    for (const t of trades) {
+      if (t.outcome === 'win') run += 1;
+      else if (t.outcome === 'loss') run = 0;
+      if (run >= n) return t;
     }
+    return null;
+  };
+  const hot = streakAt(5);
+  add('wins', 'hotstreak', '🔥', 'Hot Streak', 'rare', 'Win 5 trades in a row.', hot && got(hot.close, 'Five winning trades in a row.'));
+  const ten = streakAt(10);
+  add('wins', 'unstoppable', '☄️', 'Unstoppable', 'legendary', 'Win 10 trades in a row.', ten && got(ten.close, 'Ten winning trades in a row.'));
+  const weeks = new Map();
+  for (const t of trades) weeks.set(mondayOf(t.close), [...(weeks.get(mondayOf(t.close)) ?? []), t]);
+  const perfect = [...weeks].filter(([, ts]) => ts.length >= 3 && ts.every((t) => t.outcome === 'win')).sort((a, b) => a[0].localeCompare(b[0]))[0];
+  add('wins', 'perfectweek', '✨', 'Perfect Week', 'rare', 'Close 3 or more trades in one week, all of them winners.',
+    perfect && got(addDays(perfect[0], 4), `${perfect[1].length} trades closed in the week of ${shortDate(perfect[0])}, all winners.`));
+  let beatYear = null;
+  for (let y = Number((history[0]?.date ?? today).slice(0, 4)); y < Number(today.slice(0, 4)); y++) {
+    const you = periodReturnFromHistory(history, `${y}-01-01`, `${y}-12-31`);
+    const spx = indexBetween(ix, `${y - 1}-12-31`, `${y}-12-31`);
+    if (you && spx != null && you.returnPct > spx) { beatYear = { y, you: you.returnPct, spx }; break; }
   }
-  if (open.length) {
-    const base = accountValue > 0 ? accountValue : total;
-    const biggest = Math.max(...open.map((p) => Math.abs(p.value)));
-    const sectors = new Set(open.map((p) => p.sector).filter((s) => s !== 'Other')).size;
-    if (base > 0 && share(biggest, base) >= 30) add('allin', share(biggest, base), `One position is ${Math.round(share(biggest, base))}% of your account.`);
-    else if (sectors >= 6 && base > 0 && share(biggest, base) <= 15) add('diversifier', 40 + sectors, `${sectors} sectors, and no position over 15% of the account.`);
+  add('wins', 'marketbeater', '🏆', 'Market Beater', 'legendary', 'Beat the S&P 500 over a full calendar year.',
+    beatYear && got(`${beatYear.y}-12-31`, `${beatYear.y}: you ${pct(beatYear.you)}, the S&P 500 ${pct(beatYear.spx)}.`));
+
+  /* patience and comebacks */
+  const held = [...trades.map((t) => ({ ...t, end: t.close, live: false })), ...open.map((p) => ({ ...p, end: today, live: true }))];
+  const reached = (t, n) => addDays(t.open, n);
+  const year = firstBy(held, (t) => t.days >= 365, 'open');
+  add('patience', 'oneyear', '⏳', 'One-Year Club', 'rare', 'Hold a position for a full year.',
+    year && got(reached(year, 365), `${year.ticker}, held ${plural(year.days, 'day')}${year.live ? ' and counting' : ''}.`));
+  const three = firstBy(held, (t) => t.days >= 1095, 'open');
+  add('patience', 'longhaul', '🌳', 'Long Haul', 'epic', 'Hold a position for three years.',
+    three && got(reached(three, 1095), `${three.ticker}, held ${plural(three.days, 'day')}${three.live ? ' and counting' : ''}.`));
+  const iron = firstBy(held, (t) => t.days >= 365 && t.pnl < 0, 'open');
+  add('patience', 'ironwill', '🪨', 'Iron Will', 'rare', 'Keep a position for over a year while it is below what you paid.',
+    iron && got(reached(iron, 365), `${iron.ticker}, ${plural(iron.days, 'day')} at ${pct(iron.ret)}${iron.live ? ', still holding' : ''}.`));
+  const diamond = firstBy(trades, (t) => t.dipped != null && t.dipped <= -20 && t.outcome === 'win', 'close');
+  add('patience', 'diamond', '💎', 'Diamond Hands', 'rare', 'Hold through a fall of 20% or more and still close in profit.',
+    diamond && got(diamond.close, `${diamond.ticker} fell ${Math.abs(diamond.dipped).toFixed(0)}% while you held it, and closed ${pct(diamond.ret)}.`));
+  const phoenix = firstBy(trades, (t) => t.dipped != null && t.dipped <= -50 && t.outcome === 'win', 'close');
+  add('patience', 'phoenix', '🐦‍🔥', 'Phoenix', 'legendary', 'Hold through a fall of 50% or more and still close in profit.',
+    phoenix && got(phoenix.close, `${phoenix.ticker} fell ${Math.abs(phoenix.dipped).toFixed(0)}% while you held it, and closed ${pct(phoenix.ret)}.`));
+  const pays = firstBy(trades, (t) => t.days >= 182 && t.ret >= 50, 'close');
+  add('patience', 'patiencepays', '🐢', 'Patience Pays', 'epic', 'Hold a trade for six months or more and close it up 50% or more.',
+    pays && got(pays.close, `${pays.ticker}, ${plural(pays.days, 'day')}, ${pct(pays.ret)}.`));
+  const months = [];
+  for (const [key, m] of monthlyReturns(history)) {
+    if (m.partial) continue;
+    const end = isoOf(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0));
+    if (end >= today) continue;
+    const spx = indexBetween(ix, addDays(`${key}-01`, -1), end);
+    if (spx != null) months.push({ key, end, ahead: m.returnPct > spx });
   }
-  if (twinPct != null && twinDays >= 60) {
-    if (twinPct >= 2) add('beater', 50 + Math.min(twinPct, 40), `Your account is ${twinPct.toFixed(1)}% ahead of putting every deposit in the S&P 500.`);
-    else if (Math.abs(twinPct) < 2 && twinDays >= 120) add('hugger', 35, `Your account is within ${Math.abs(twinPct).toFixed(1)}% of putting every deposit in the S&P 500.`);
+  let run = 0;
+  let steady = null;
+  for (const m of months) {
+    run = m.ahead ? run + 1 : 0;
+    if (run >= 3) { steady = m; break; }
   }
-  const held = trades.filter((t) => t.dipped != null && t.dipped <= -20 && t.outcome === 'win');
-  if (held.length) add('diamond', 30 + held.length * 5, `${plural(held.length, 'trade')} fell 20% or more while you held, and you still closed ${held.length === 1 ? 'it' : 'them'} in profit.`);
-  const wins = trades.filter((t) => t.outcome === 'win');
-  if (wins.length >= MIN_GROUP) {
-    const quick = share(wins.filter((t) => t.days <= 3).length, wins.length);
-    if (quick >= 50 && trades.some((t) => t.days > 10)) add('paper', quick, `${Math.round(quick)}% of your winners were sold within three days.`);
+  add('patience', 'steady', '🧭', 'Steady Hand', 'epic', 'Beat the S&P 500 three months in a row.',
+    steady && got(steady.end, `Three months in a row ahead of the S&P 500, to ${monthName(steady.key)}.`));
+
+  /* milestones and discipline */
+  const nth = (n) => trades[n - 1] ?? null;
+  for (const [n, key, icon, name, rarity] of [
+    [1, 'first', '🎉', 'First Step', 'common'],
+    [10, 'ten', '🔟', 'Getting Started', 'common'],
+    [50, 'fifty', '📈', 'Seasoned', 'rare'],
+    [100, 'hundred', '💯', 'Centurion', 'epic'],
+  ]) {
+    const t = nth(n);
+    add('milestones', key, icon, name, rarity, n === 1 ? 'Close your first trade.' : `Close ${n} trades.`,
+      t && got(t.close, n === 1 ? `${t.ticker}, ${pct(t.ret)}.` : `Your ${n}th closed trade was ${t.ticker}.`));
   }
-  if (trades.length >= MIN_TRADES) {
-    const fri = share(trades.filter((t) => t.weekday === 5).length, trades.length);
-    if (fri >= 35) add('friday', fri, `${Math.round(fri)}% of your trades were opened on a Friday.`);
+  const bySector = [...(positions ?? [])].filter((p) => p?.open).sort((a, b) => a.open.localeCompare(b.open));
+  const seen = new Set();
+  let explorer = null;
+  for (const p of bySector) {
+    const s = sectorOf(p);
+    if (s !== 'Other') seen.add(s);
+    if (seen.size >= 5) { explorer = p; break; }
   }
-  return out.sort((a, b) => b.score - a.score);
+  add('milestones', 'explorer', '🗺️', 'Explorer', 'common', 'Trade in 5 different sectors.',
+    explorer && got(explorer.open, `Your fifth sector: ${sectorOf(explorer)}.`));
+  const crypto = bySector.find((p) => p.cls === 'Crypto');
+  add('milestones', 'crypto', '₿', 'Crypto Pioneer', 'common', 'Make your first crypto trade.',
+    crypto && got(crypto.open, `${crypto.ticker}.`));
+  const short = firstBy(trades, (t) => t.dir === 'Short' && t.outcome === 'win', 'close');
+  add('milestones', 'short', '🐻‍❄️', 'Short Seller', 'rare', 'Close a short trade in profit.',
+    short && got(short.close, `${short.ticker}, ${usd(short.pnl)}.`));
+  const rated = [...(positions ?? [])].filter((p) => p?.open && cleanMind(p.mind) != null).sort((a, b) => a.open.localeCompare(b.open));
+  add('milestones', 'journal', '📓', 'Journal Keeper', 'rare', 'Rate your state of mind on 30 trades.',
+    rated[29] && got(rated[29].open, '30 trades with your state of mind written down.'));
+  const small = trades.filter((t) => t.outcome === 'loss' && t.ret >= -5);
+  add('milestones', 'smalllosses', '✂️', 'Cut Your Losses', 'rare', 'Close 10 losing trades before they lose more than 5%.',
+    small[9] && got(small[9].close, '10 losing trades each closed within 5% of what you paid.'));
+
+  const points = sum(cards.filter((c) => c.earned).map((c) => c.points));
+  const lvl = LEVELS.reduce((found, l, i) => (points >= l[1] ? i : found), 0);
+  const next = LEVELS[lvl + 1] ?? null;
+  return {
+    cards,
+    earned: cards.filter((c) => c.earned).length,
+    total: cards.length,
+    points,
+    level: LEVELS[lvl][0],
+    next: next ? { name: next[0], points: next[1], from: LEVELS[lvl][1] } : null,
+  };
 }
 
 /* ── what stands out, and the summary ── */
@@ -1398,7 +1538,6 @@ export function analyse({
   const days = accountDays(history);
   const paired = pairDays(days, ix);
   const weeks = weeksOf(paired);
-  const enough = trades.length >= MIN_TRADES;
 
   const twinCard = twin(history, ix, trades, open, day, series);
   const swingCard = swings(paired);
@@ -1421,10 +1560,9 @@ export function analyse({
   ].filter(Boolean);
 
   const yearTwin = twinCard?.twin?.year?.account ?? twinCard?.twin?.all?.account ?? null;
-  const twinDays = yearTwin ? Math.round((ms(day) - ms(yearTwin.from)) / DAY) : 0;
   const sectors = new Set(trades.map((t) => t.sector).filter((s) => s !== 'Other')).size;
   const title = traderTitle(trades, { twinAhead: yearTwin ? yearTwin.diff > 0 : null, calmer: swingCard?.calmer ?? null, sectors });
-  const badges = enough ? traderBadges(trades, { open, accountValue, twinPct: yearTwin?.diffPct ?? null, twinDays }) : [];
+  const collection = achievementsFor({ trades, open, positions, index, ix, paired, history, bigDays, today: day });
   const picks = standOut(cards);
 
   return {
@@ -1434,7 +1572,8 @@ export function analyse({
     year: year ?? { you: null, spx: null },
     summary: summaryOf({ year, twinCard, cards, picks, trades: trades.length, days: days.length }),
     standOut: picks,
-    profile: { title, badges: badges.slice(0, 2), allBadges: badges, records: records(days, history, trades, weeks) },
+    // One main title: the level earned by collecting, and the style from how you trade.
+    profile: { title, level: collection.level, collection, records: records(days, history, trades, weeks) },
     cards,
     now: openBook(open, trades, accountValue),
   };

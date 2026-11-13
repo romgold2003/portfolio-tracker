@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 const {
   analyse, tradesOf, chanceOf, chanceVsZero, confidence, whyOf, twinSeries, indexLevels, levelOn,
-  twinDaily, tradeLife, twinOfLife, accountDays, pairDays, traderTitle, traderBadges, moodOf, MIN_TRADES,
+  twinDaily, tradeLife, twinOfLife, accountDays, pairDays, traderTitle, moodOf, MIN_TRADES, LEVELS, RARITY,
 } = await import('../src/core/insights.js');
 
 let id = 0;
@@ -201,10 +201,11 @@ describe('what it reads in the trades', () => {
 
   test('emotional against confident, a clear pattern, with what it cost', () => {
     const e = card('emotion');
-    assert.equal(e.headline, 'Your calm, confident trades do clearly better');
+    assert.equal(e.headline, 'Your calm, confident trades win more often');
     assert.equal(e.confidence.level, 'strong');
-    assert.equal(e.data, 'Emotional (rated 1–4): −9.0% per trade. Confident (7–10): +12.0% per trade. Based on 20 rated trades.');
-    assert.match(e.more, /^10 emotional trades, −\$900 in total; 10 confident trades, \+\$1,200\.$/);
+    assert.equal(e.data, 'Confident (rated 7–10): 10 of 10 won (100%). Emotional (rated 1–4): 0 of 10 won (0%).');
+    assert.equal(e.unit, 'rate');
+    assert.match(e.more, /^Your emotional trades added up to −\$900; your confident trades \+\$1,200\.$/);
   });
 
   test('holding losers longer than winners, and what the long ones lost', () => {
@@ -262,11 +263,10 @@ describe('what it reads in the trades', () => {
 });
 
 describe('the investing style', () => {
-  test('a day trader who wins most is the Day Sniper; most of them on Fridays earns the badge', () => {
+  test('a day trader who wins most is the Day Sniper', () => {
     const fridays = weekdays('2026-03-02', '2026-06-30').filter((d) => new Date(`${d}T12:00:00Z`).getUTCDay() === 5);
     const trades = tradesOf(fridays.slice(0, 12).map((d, i) => trade(i % 3 ? 104 : 98, d, d)));
     assert.equal(traderTitle(trades).name, 'The Day Sniper');
-    assert.ok(traderBadges(trades).some((b) => b.name === 'Friday Gambler'));
   });
 
   test('few wins but big ones is the Home-Run Hitter', () => {
@@ -297,5 +297,49 @@ describe('the best day to open a trade', () => {
     assert.match(w.data, /^Tuesday: 8 of 10 won \(80%\)\. Monday: 1 of 10 won \(10%\)\. Based on 20 trades\.$/);
     assert.equal(w.unit, 'rate');
     assert.equal(w.confidence.level, 'strong');
+  });
+});
+
+describe('the trader card: one title, and a collection', () => {
+  // The same 1.5× market and account as above, and a book that earns a known set of cards.
+  const book = [
+    trade(250, '2026-01-05', '2026-02-02', { ticker: 'BIG' }), // +150%: Doubler, +$1,500: Four Figures
+    ...Array.from({ length: 5 }, (_, i) => trade(110, `2026-02-0${i + 2}`, `2026-02-1${i}`, { ticker: `W${i}` })), // five wins in a row
+    trade(90, '2025-01-02', '2026-03-02', { ticker: 'OLD' }), // over a year, in the red: Iron Will, One-Year Club
+    trade(96, '2026-03-03', '2026-03-06', { ticker: 'CUT', dir: 'Long' }),
+  ];
+  const r = analyse({ positions: book, history: HISTORY, index: INDEX, today: TODAY });
+  const { collection } = r.profile;
+  const card = (key) => collection.cards.find((c) => c.key === key);
+
+  test('thirty cards across the four families, each with a rarity worth points', () => {
+    assert.equal(collection.total, 30);
+    assert.deepEqual([...new Set(collection.cards.map((c) => c.family))], ['survival', 'wins', 'patience', 'milestones']);
+    for (const c of collection.cards) assert.equal(c.points, RARITY[c.rarity]);
+  });
+
+  test('cards are earned from the trades, with the date they were earned', () => {
+    assert.equal(card('doubler').earned, '2026-02-02');
+    assert.match(card('doubler').detail, /^BIG, \+150%\.$/);
+    assert.equal(card('fourfigures').earned, '2026-02-02');
+    assert.ok(card('hotstreak').earned, 'six winners in a row');
+    assert.equal(card('ironwill').earned, '2026-01-02', 'a year after it was opened');
+    assert.equal(card('oneyear').earned, '2026-01-02');
+    assert.equal(card('first').earned, '2026-02-02');
+    assert.equal(card('tenbagger').earned, null, 'not +1,000%');
+    assert.equal(card('unstoppable').earned, null);
+  });
+
+  test('a market fall is survived only by holding through it', () => {
+    // The S&P here never falls 10% from its high, so no correction to survive.
+    assert.equal(card('correction').earned, null);
+  });
+
+  test('the level comes from the points, and the next level is named', () => {
+    const points = collection.cards.filter((c) => c.earned).reduce((s, c) => s + c.points, 0);
+    assert.equal(collection.points, points);
+    const level = [...LEVELS].reverse().find(([, from]) => points >= from)[0];
+    assert.equal(r.profile.level, level);
+    assert.ok(collection.next && collection.next.points > points);
   });
 });

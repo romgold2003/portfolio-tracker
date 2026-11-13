@@ -2072,3 +2072,30 @@ body.is-guest{padding-top:36px}
 .ins-now li.is-bad::before{background:var(--amber)}
 .ins-moretext{font-size:12.5px;line-height:1.55;color:var(--text3);margin:0}
 @media (max-width:640px){.hero-text{font-size:15.5px}.ins-hero{padding:18px}}
+
+/* the trader card: level, progress and the collection */
+.pf-level{color:var(--blue);text-transform:uppercase;letter-spacing:0.04em}
+.pf-progress{display:flex;flex-direction:column;gap:6px}
+.pf-progress p{font-size:12.5px;color:var(--text3);margin:0}
+.pf-progress p b{color:var(--text2);font-weight:600}
+.pf-bar{height:8px;border-radius:999px;background:var(--input);overflow:hidden}
+.pf-bar span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--blue),#a855f7)}
+.pf-collection{display:flex;flex-direction:column;gap:10px;border-top:0.5px solid var(--border);padding-top:14px}
+.pf-colhead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.pf-colhead h3{font-size:14px;font-weight:600;color:var(--text);margin:0}
+.pf-family{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin:8px 0 0}
+.ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+@media (max-width:640px){.ach-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ach{--r:var(--text3);position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:14px 10px 12px;border-radius:12px;border:1.5px solid var(--r);background:linear-gradient(180deg,color-mix(in srgb,var(--r) 14%,var(--panel)),var(--panel) 70%)}
+.ach.r-common{--r:#8b8fa8}
+.ach.r-rare{--r:#3987e5}
+.ach.r-epic{--r:#a855f7}
+.ach.r-legendary{--r:#d4a017;box-shadow:0 0 0 1px color-mix(in srgb,#d4a017 35%,transparent),0 4px 18px -6px color-mix(in srgb,#d4a017 55%,transparent)}
+.ach-icon{font-size:30px;line-height:1.1}
+.ach b{font-size:13px;font-weight:600;color:var(--text);line-height:1.25}
+.ach-rar{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--r)}
+.ach small{font-size:11px;line-height:1.4;color:var(--text3)}
+.ach small em{display:block;font-style:normal;margin-top:3px;color:var(--text2)}
+.ach.is-locked{background:var(--panel);border-style:dashed;opacity:0.62}
+.ach.is-locked .ach-icon{filter:grayscale(1);opacity:0.7}
+.ach.is-locked b{color:var(--text2)}

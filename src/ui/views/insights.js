@@ -12,7 +12,7 @@
  * the past, never advice.
  */
 import { state } from '../../core/store.js';
-import { analyse, MIN_GROUP, MIN_TRADES } from '../../core/insights.js';
+import { analyse, MIN_GROUP, MIN_TRADES, FAMILIES as FAMILY_LIST } from '../../core/insights.js';
 import { accountTotals } from '../../core/portfolio.js';
 import { authoritativeHistory, portfolioHistory } from '../../core/snapshots.js';
 import { benchmarkSeries, benchmarkSpot, benchmarkYearToDate } from '../../services/benchmark.js';
@@ -25,8 +25,10 @@ const pct = (n, d = 1) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(d)}%`;
 const usd = (n) => `${n >= 0 ? '+' : '−'}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 const dollars = (n) => `$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 /** With the eye closed, dollar amounts in sentences are masked too; percentages stay, as everywhere. */
-const masked = (text) => (amountsHidden() ? String(text ?? '').replace(/[+−-]?\$[\d,]+(\.\d+)?/g, MASK) : String(text ?? ''));
+const masked = (text) => (amountsHidden() ? String(text ?? '').replace(/[+−-]?\$[\d,’]+(\.\d+)?/g, MASK) : String(text ?? ''));
 const safe = (text) => escapeHtml(masked(text));
+/** Thousands marked with a raised separator in the S&P twin (13’761), so it can never read as a decimal point. */
+const tw = (text) => String(text).replace(/(\d),(?=\d{3})/g, '$1’');
 const shortDate = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 const TONE = { good: 'Strength', bad: 'Area to improve', neutral: 'Worth knowing' };
@@ -272,24 +274,24 @@ function marketHtml(a) {
       </div>
       <p class="tw-q">If every trade${which === 'year' ? ' you opened this year' : ''} had gone into the S&amp;P 500 instead, with the same money on the same days:</p>
       <div class="tw-nums">
-        <div><span>You made</span><b style="color:${clr(p.you)}">${safe(usd(p.you))}</b></div>
-        <div><span>The S&amp;P 500 would have made</span><b style="color:${clr(p.twin)}">${safe(usd(p.twin))}</b></div>
+        <div><span>You made</span><b style="color:${clr(p.you)}">${safe(tw(usd(p.you)))}</b></div>
+        <div><span>The S&amp;P 500 would have made</span><b style="color:${clr(p.twin)}">${safe(tw(usd(p.twin)))}</b></div>
       </div>
       ${chartSvg(p.series)}
       <div class="tw-legend"><span><i class="tw-k-you"></i>Your trades</span><span><i class="tw-k-twin"></i>Same money in the S&amp;P 500</span></div>
       <button type="button" class="ins-more" data-ins-twin aria-expanded="${detail}">${detail ? 'Show less' : 'See trade by trade'}</button>
       ${detail ? `<div class="tw-detail">
-        <div class="ins-data"><span>Your data</span>${safe(`You beat the S&P 500 on ${p.beat} of ${p.decided} closed trades${p.open ? `, with ${p.open} still open` : ''}. Your trades made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`)}</div>
+        <div class="ins-data"><span>Your data</span>${safe(tw(`You beat the S&P 500 on ${p.beat} of ${p.decided} closed trades${p.open ? `, with ${p.open} still open` : ''}. Your trades made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`))}</div>
         ${p.luck?.level && p.luck.level !== 'early' ? `<p class="ins-matters">${p.luck.level === 'strong' ? 'Your edge over the market is very unlikely to be luck.' : p.luck.level === 'likely' ? 'Your edge over the market is probably real, though not yet certain.' : 'It is still too early to tell whether this is skill or luck.'}</p>` : ''}
         <div class="ins-table tw-table" role="table">
           <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>You made</span><span>S&amp;P 500</span><span>Result</span></div>
           ${rows.map((r) => `<div class="ins-tr" role="row"><span><b>${escapeHtml(r.ticker)}</b></span>
             <span>${shortDate(r.open)} → ${r.live ? 'open' : shortDate(r.close)}</span>
-            <span style="color:${clr(r.you)}">${safe(usd(r.you))}</span><span style="color:${clr(r.spx)}">${safe(usd(r.spx))}</span>
-            <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(dollars(r.diff))}</span></div>`).join('')}
+            <span style="color:${clr(r.you)}">${safe(tw(usd(r.you)))}</span><span style="color:${clr(r.spx)}">${safe(tw(usd(r.spx)))}</span>
+            <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(tw(dollars(r.diff)))}</span></div>`).join('')}
         </div>
         ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the largest 8' : `Show all ${p.rows.length} trades`}</button>` : ''}
-        ${acc ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(dollars(acc.diff))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
+        ${acc ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(tw(dollars(acc.diff)))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
         <details class="ins-how"><summary>How we calculate this</summary><p>Each time you bought, the same amount buys the S&amp;P 500 (with dividends reinvested) at that day's close. Each time you sold part or all of the position, the same share of that S&amp;P 500 holding is sold that day. Open positions are valued today. The chart adds up both sides every market day. A short is matched with the same money in the S&amp;P 500, bought. "This year" covers the trades you opened this year.</p></details>
       </div>` : ''}
     </section>`;
@@ -297,17 +299,49 @@ function marketHtml(a) {
 
 /* ── 4. your investing style ── */
 
+const RARITY_NAME = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+const longDay = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/** One collectible card: earned, with its date and story, or locked, with how to earn it. */
+function achievementHtml(c) {
+  return `<div class="ach r-${c.rarity}${c.earned ? '' : ' is-locked'}" title="${escapeHtml(c.earned ? c.how : `Locked: ${c.how}`)}">
+      <span class="ach-icon" aria-hidden="true">${c.earned ? c.icon : '🔒'}</span>
+      <b>${escapeHtml(c.name)}</b>
+      <span class="ach-rar">${RARITY_NAME[c.rarity]}</span>
+      <small>${c.earned ? `${safe(c.detail)}<em>${longDay(c.earned)}</em>` : escapeHtml(c.how)}</small>
+    </div>`;
+}
+
+/** The trader card: one main title (level · style), the progress to the next level, and the collection. */
 function styleHtml(a) {
-  const { title, allBadges, records } = a.profile;
+  const { title, level, collection, records } = a.profile;
   const rec = opened.has('records');
-  return `<h2 class="ins-group">Your investing style</h2>
+  const all = opened.has('collection');
+  const { next, points } = collection;
+  const progress = next ? Math.min(100, ((points - next.from) / (next.points - next.from)) * 100) : 100;
+  const earned = collection.cards.filter((c) => c.earned).sort((x, y) => y.earned.localeCompare(x.earned));
+  const byFamily = (key) => collection.cards.filter((c) => c.family === key)
+    .sort((x, y) => Number(Boolean(y.earned)) - Number(Boolean(x.earned)));
+  return `<h2 class="ins-group">Your trader card</h2>
     <section class="card ins-profile">
-      ${title ? `<div class="pf-title"><span class="pf-icon">${title.icon}</span><div><b>${escapeHtml(title.name)}</b><p>${safe(title.why)}</p></div></div>`
-    : `<p class="ins-wait">Your investing style appears after ${MIN_TRADES} closed trades. You have ${a.trades}.</p>`}
-      ${allBadges.length ? `<div class="pf-badges">${allBadges.slice(0, 2).map((b) => `<span class="pf-badge"><i>${b.icon}</i>${escapeHtml(b.name)}<small>${safe(b.why)}</small></span>`).join('')}</div>` : ''}
+      <div class="pf-title"><span class="pf-icon">${title ? title.icon : '🌱'}</span><div>
+        <b><span class="pf-level">${escapeHtml(level)}</span>${title ? ` · ${escapeHtml(title.name)}` : ''}</b>
+        <p>${title ? safe(title.why) : `Your trading style appears after ${MIN_TRADES} closed trades. You have ${a.trades}.`}</p>
+      </div></div>
+      <div class="pf-progress">
+        <div class="pf-bar" role="progressbar" aria-valuenow="${Math.round(progress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.max(3, progress)}%"></span></div>
+        <p>${collection.earned} of ${collection.total} achievements · ${points} points${next ? ` · Next: <b>${escapeHtml(next.name)}</b> at ${next.points} points` : ' · The highest level'}</p>
+      </div>
+      <div class="pf-collection">
+        <div class="pf-colhead"><h3>Your collection</h3><button type="button" class="ins-more" data-ins-collection aria-expanded="${all}">${all ? 'Show only what you have' : `See all ${collection.total} cards`}</button></div>
+        ${all
+    ? FAMILY_LIST.map(([key, label]) => `<h4 class="pf-family">${escapeHtml(label)}</h4><div class="ach-grid">${byFamily(key).map(achievementHtml).join('')}</div>`).join('')
+    : earned.length
+      ? `<div class="ach-grid">${earned.map(achievementHtml).join('')}</div>`
+      : '<p class="ins-wait">No achievements yet. Your first one comes with your first closed trade.</p>'}
+      </div>
       ${records.length ? `<button type="button" class="ins-more" data-ins-records aria-expanded="${rec}">${rec ? 'Hide your records' : 'See your personal records'}</button>
-        ${rec ? `<div class="pf-records">${records.map((r) => `<div><span>${escapeHtml(r.label)}</span><b>${safe(r.value)}</b><small>${safe(r.sub)}</small></div>`).join('')}</div>
-        ${allBadges.length > 2 ? `<p class="ins-small">Also earned: ${allBadges.slice(2).map((b) => `${b.icon} ${escapeHtml(b.name)}`).join(' · ')}</p>` : ''}` : ''}` : ''}
+        ${rec ? `<div class="pf-records">${records.map((r) => `<div><span>${escapeHtml(r.label)}</span><b>${safe(r.value)}</b><small>${safe(r.sub)}</small></div>`).join('')}</div>` : ''}` : ''}
     </section>`;
 }
 
@@ -378,6 +412,7 @@ function bind() {
     if (more) return toggle(`trades:${more.dataset.insTrades}`);
     if (e.target.closest('[data-ins-twin]')) return toggle('twin:detail');
     if (e.target.closest('[data-ins-records]')) return toggle('records');
+    if (e.target.closest('[data-ins-collection]')) return toggle('collection');
     const tab = e.target.closest('[data-twin-period]');
     if (tab) { period = tab.dataset.twinPeriod; allRows = false; draw(); return undefined; }
     if (e.target.closest('[data-twin-all]')) { allRows = !allRows; draw(); }
