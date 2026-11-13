@@ -125,8 +125,8 @@ describe('the account against the market', () => {
     assert.match(card('swings').data, /moves 1\.5× as much as the S&P 500/);
   });
 
-  test('last week, the months and the biggest drop', () => {
-    assert.match(card('week').data, /^You [+−]\d\.\d\d%, S&P 500 [+−]\d\.\d\d%\./);
+  test('the months and the biggest drop, and no last-week card', () => {
+    assert.equal(card('week'), undefined, 'no last-week card');
     assert.match(card('months').headline, /^You beat the market in \d+ of the last \d+ months$/);
     assert.match(card('drawdown').headline, /^Your biggest drop from a high was \d+\.\d%$/);
     assert.match(card('drawdown').matters, /deeper than the market's biggest drop/);

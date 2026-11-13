@@ -600,34 +600,6 @@ function weeksOf(paired) {
     .sort((a, b) => a.from.localeCompare(b.from));
 }
 
-function lastWeek(weeks, trades, today) {
-  const thisMonday = mondayOf(today);
-  const done = weeks.filter((w) => w.from < thisMonday);
-  const last = done[done.length - 1];
-  if (!last || last.from !== addDays(thisMonday, -7)) return null;
-  const gap = last.you - last.spx;
-  const ahead = gap >= 0;
-  let streak = 0;
-  for (let i = done.length - 1; i >= 0 && (done[i].you >= done[i].spx) === ahead; i--) streak += 1;
-  const closed = trades.filter((t) => t.close >= last.from && t.close <= addDays(last.from, 6));
-  const aheadWeeks = done.filter((w) => w.you >= w.spx).length;
-  return {
-    id: 'week',
-    group: 'deeper',
-    topic: 'Last week',
-    headline: Math.abs(gap) < 0.5 ? 'Last week you and the market moved about the same'
-      : ahead ? 'Last week you did better than the market' : 'Last week the market did a little better than you',
-    matters: 'One week says little on its own; what counts is how often you are ahead over many weeks.',
-    data: `You ${pct(last.you, 2)}, S&P 500 ${pct(last.spx, 2)}. Ahead in ${aheadWeeks} of ${plural(done.length, 'week')} measured.`,
-    more: `${streak > 1 ? `${streak} weeks in a row ${ahead ? 'ahead' : 'behind'}. ` : ''}${closed.length ? `${plural(closed.length, 'trade')} closed last week, ${usd(sum(closed.map((t) => t.pnl)))}.` : 'No trade closed last week.'}`,
-    how: 'Each week runs Monday to Friday: your daily returns (deposits taken out) compounded, against the S&P 500\'s total return over the same market days.',
-    tone: 'neutral',
-    impact: 0,
-    bars: done.slice(-8).map((w) => [`w/c ${shortDate(w.from)}`, w.you - w.spx]),
-    unit: 'pts',
-  };
-}
-
 /* ── the months against the S&P ── */
 
 function monthsVsIndex(history, ix, today) {
@@ -1529,7 +1501,7 @@ export function achievementsFor({ trades, open, positions, index, ix, paired, hi
  * pattern. Only facts and patterns unlikely to be chance qualify.
  */
 function standOut(cards) {
-  const ranked = cards.filter((c) => c.group !== 'market' && c.id !== 'week' && c.headline && c.confidence?.level !== 'early' && solid(c.confidence))
+  const ranked = cards.filter((c) => c.group !== 'market' && c.headline && c.confidence?.level !== 'early' && solid(c.confidence))
     .sort((a, b) => (b.impact ?? 0) - (a.impact ?? 0));
   const edge = ranked.find((c) => c.tone === 'good') ?? null;
   const improve = ranked.find((c) => c.tone === 'bad') ?? null;
@@ -1626,7 +1598,6 @@ export function analyse({
     moodAtEntry(trades),
     // Explore deeper
     monthsVsIndex(history, ix, day),
-    lastWeek(weeks, trades, day),
     deepestDrop(days, ix),
     swingCard,
     accountWeekdays(paired),
