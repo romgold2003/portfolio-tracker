@@ -72,6 +72,30 @@ const SOURCES = [
     },
   },
   {
+    name: 'Nasdaq economic calendar (printed figures)',
+    used: 'api/_lib/nasdaqEcon.js',
+    url: 'https://api.nasdaq.com/api/calendar/economicevents',
+    // A week back, so there are printed figures to find; the same headers the app sends.
+    run: async (signal) => {
+      const d = new Date(Date.now() - 7 * 86400000);
+      while ([0, 6].includes(d.getUTCDay())) d.setUTCDate(d.getUTCDate() + 1);
+      const res = await fetch(`https://api.nasdaq.com/api/calendar/economicevents?date=${d.toISOString().slice(0, 10)}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+          Accept: 'application/json, text/plain, */*', Origin: 'https://www.nasdaq.com', Referer: 'https://www.nasdaq.com/',
+        },
+        signal,
+      });
+      const rows = (await res.json().catch(() => null))?.data?.rows;
+      const us = (rows ?? []).filter((r) => /united states/i.test(r?.country ?? ''));
+      return {
+        status: res.status,
+        problem: need(us.length > 0 && us.every((r) => 'eventName' in r && 'actual' in r && 'consensus' in r && 'previous' in r),
+          'no United States rows with eventName, actual, consensus and previous'),
+      };
+    },
+  },
+  {
     name: 'Nasdaq Trader listings',
     used: 'api/_lib/earnings.js (company picker)',
     url: 'https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt',
