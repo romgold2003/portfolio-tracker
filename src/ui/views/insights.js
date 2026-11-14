@@ -88,7 +88,8 @@ async function loadSeries() {
   const held = state.positions.filter((p) => p?.status !== 'Closed' && p.ticker);
   const yearStart = `${new Date().getFullYear() - 1}-12-31`;
   const thisYear = [...latest.values()].filter((p) => p.close > yearStart);
-  const recent = [...latest.values()].sort((a, b) => b.close.localeCompare(a.close)).slice(0, 40);
+  // Every stock ever sold, newest first: "after you sell" reads them all.
+  const recent = [...latest.values()].sort((a, b) => b.close.localeCompare(a.close));
   const wanted = [...new Map([...held, ...thisYear, ...recent].map((p) => [p.ticker, p])).values()]
     .filter((p) => !asked.has(p.ticker));
   for (let i = 0; i < wanted.length; i += 4) {

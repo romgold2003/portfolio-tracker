@@ -2181,3 +2181,4 @@ body.is-guest{padding-top:36px}
 .ins-waiting li{display:flex;flex-direction:column;gap:1px;font-size:12.5px;color:var(--text3)}
 .ins-waiting li b{font-weight:600;color:var(--text2)}
 .pf-records h3{grid-column:1/-1;font-size:14px;font-weight:600;color:var(--text);margin:0}
+.ins-data{white-space:pre-line}

@@ -436,3 +436,50 @@ describe('the year from the broker\'s ledger', () => {
     assert.equal(alone.cards.find((c) => c.id === 'twin'), undefined, 'no year drawn from a holding it cannot price');
   });
 });
+
+describe('after you sell: every sale since the beginning, averaged', () => {
+  // One calendar close a day for each stock: UP rises 1 a day from 100, DOWN falls 0.5 a day from 200.
+  const days = [];
+  for (let t = Date.parse('2025-01-01T00:00:00Z'); t <= Date.parse('2026-11-13T00:00:00Z'); t += 86400000) days.push(new Date(t).toISOString().slice(0, 10));
+  const up = days.map((date, i) => ({ date, close: 100 + i }));
+  const down = days.map((date, i) => ({ date, close: 200 - i * 0.5 }));
+  const closeOf = (rows, d) => rows.find((r) => r.date === d).close;
+  const sold = (ticker, close, extra = {}) => ({ id: `${ticker}${close}${extra.lot ?? ''}`, ticker, cls: 'Stocks', dir: 'Long', status: 'Closed', entry: 50, cur: 120, qty: 10, open: '2025-01-02', close, ...extra });
+  // Eight UP sales, one of them split into two tax lots; two DOWN sales, one a short; one with no opening date.
+  const positions = [
+    ...['2025-03-03', '2025-05-05', '2025-07-07', '2025-09-08', '2026-01-05', '2026-03-02', '2026-05-04'].map((d) => sold('UP', d)),
+    sold('UP', '2026-07-06', { lot: 'a', qty: 4 }), sold('UP', '2026-07-06', { lot: 'b', qty: 6 }),
+    sold('DOWN', '2025-04-01', { open: null }),
+    sold('DOWN', '2026-02-02', { dir: 'Short', entry: 300 }),
+    sold('UP', '2026-11-10'), // too recent for a week
+  ];
+  const r = analyse({ positions, series: new Map([['UP', up], ['DOWN', down]]), today: TODAY });
+  const c = r.cards.find((x) => x.id === 'after');
+
+  test('each move is the stock 7 and 30 days on, over its close the day sold; the average is their sum over the count', () => {
+    const ups = ['2025-03-03', '2025-05-05', '2025-07-07', '2025-09-08', '2026-01-05', '2026-03-02', '2026-05-04', '2026-07-06'];
+    const move = (rows, d, n, sign = 1) => {
+      const later = new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+      return (closeOf(rows, later) / closeOf(rows, d) - 1) * 100 * sign;
+    };
+    const moves = (n) => [
+      ...ups.map((d) => move(up, d, n)),
+      move(down, '2025-04-01', n),
+      move(down, '2026-02-02', n, -1), // a short: the fall is the stock moving its way
+    ];
+    const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const fmt = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}%`;
+    assert.equal(c.data.split('\n')[0], `1 week after you sold: ${fmt(avg(moves(7)))} on average, over 10 sales.`);
+    assert.equal(c.data.split('\n')[1], `1 month after you sold: ${fmt(avg(moves(30)))} on average, over 10 sales.`);
+  });
+
+  test('two tax lots of one stock sold on one day are one sale; a position with no opening date counts', () => {
+    assert.match(c.data, /over 10 sales/);
+    assert.ok(c.trades.includes('UP2026-07-06a') && c.trades.includes('UP2026-07-06b') ? true : c.trades.length <= 9);
+  });
+
+  test('both lines sit in the one card, the week then the month', () => {
+    assert.equal(r.cards.filter((x) => x.id === 'after').length, 1);
+    assert.deepEqual(c.bars.map(([label]) => label), ['A week later', 'A month later']);
+  });
+});

@@ -955,31 +955,58 @@ function closeAfter(rows, date, days) {
   return i >= 0 ? rows[i].close : null;
 }
 
-function afterSold(trades, series) {
+/**
+ * What the stocks did after you sold them, over every sale since the journal
+ * began (November 2026). Each sale counts once: the records an import keeps
+ * for one stock sold on one day (one per tax lot) are one sale, and a closed
+ * position with no opening date counts like any other. For each sale, the
+ * stock's close 7 and 30 calendar days later against its close on the day you
+ * sold (for a short, a fall is the stock moving your way); each average is the
+ * sum of those moves over the number of sales that have that many days behind
+ * them. Sales whose stock has no price history are counted apart.
+ */
+export function afterSold(positions, series) {
+  const sales = new Map();
+  for (const p of positions ?? []) {
+    if (p?.status !== 'Closed' || !p.ticker || !p.close || !(p.cur > 0)) continue;
+    const qty = Math.abs(Number(p.qty) || 0);
+    if (!(qty > 0)) continue;
+    const key = `${symbolKey(p.ticker)}|${p.close}|${p.dir === 'Short' ? 'S' : 'L'}`;
+    const sale = sales.get(key) ?? { id: p.id, ids: [], ticker: p.ticker, close: p.close, dir: p.dir, qty: 0, value: 0, pnl: 0 };
+    sale.ids.push(p.id);
+    sale.qty += qty;
+    sale.value += qty * p.cur;
+    sale.pnl += realized(p);
+    sales.set(key, sale);
+  }
   const rows = [];
-  for (const t of trades) {
-    const s = series.get(t.ticker);
-    if (!s?.length || !(t.exit > 0)) continue;
-    const base = stockAt(s, t.close);
-    if (!base || !(base.close > 0) || s[base.i].date !== t.close) continue;
-    const sign = t.dir === 'Short' ? -1 : 1;
+  let unpriced = 0;
+  for (const sale of sales.values()) {
+    const s = series.get(sale.ticker);
+    const base = s?.length ? stockAt(s, sale.close) : null;
+    // The stock's close on the day sold (or the last before it, within a long weekend).
+    if (!base || !(base.close > 0) || ms(sale.close) - ms(s[base.i].date) > 4 * DAY) { unpriced += 1; continue; }
+    const sign = sale.dir === 'Short' ? -1 : 1;
     const later = (n) => {
-      const c = closeAfter(s, t.close, n);
+      const c = closeAfter(s, sale.close, n);
       return c != null ? (c / base.close - 1) * 100 * sign : null;
     };
+    const week = later(7);
+    if (week == null) continue;
     const month = later(30);
-    if (month == null) continue;
-    rows.push({ ...t, week: later(7), month, money: (t.qty * t.exit * month) / 100 });
+    rows.push({ ...sale, outcome: outcomeOf(sale.pnl), week, month, money: month != null ? (sale.value * month) / 100 : null });
   }
+  const full = rows.filter((r) => r.month != null);
   const base = {
     id: 'after', group: 'habits', topic: 'What happens after you sell',
-    how: 'For each closed trade, the stock\'s close 30 days after the day you sold, against its close that day (for a short, a fall counts as the stock moving your way). In money: the shares you sold × your sale price × that move. "Left on the table" adds up the stocks that kept moving your way; "saved" the ones that turned against you.',
+    how: 'Every position you have closed since your first trade, each sale counted once (several records for one stock sold on one day are one sale). For each, the stock’s close 7 and 30 days after the day you sold, against its close that day; for a short, a fall counts as the stock moving your way. Each average is the sum of those moves divided by the number of sales. In money: what you sold it for × the 30-day move. "Left on the table" adds up the stocks that kept moving your way; "saved" the ones that turned against you.',
   };
-  if (rows.length < MIN_GROUP) return { ...base, tone: 'neutral', impact: 0, confidence: { level: 'early', needed: MIN_GROUP - rows.length, unit: 'sales at least a month old' } };
-  const left = sum(rows.filter((r) => r.money > 0).map((r) => r.money));
-  const saved = -sum(rows.filter((r) => r.money < 0).map((r) => r.money));
-  const winners = rows.filter((r) => r.outcome === 'win');
-  const avgMonth = mean(rows.map((r) => r.month));
+  if (full.length < MIN_GROUP) return { ...base, tone: 'neutral', impact: 0, confidence: { level: 'early', needed: MIN_GROUP - full.length, unit: 'sales at least a month old' } };
+  const avgWeek = mean(rows.map((r) => r.week));
+  const avgMonth = mean(full.map((r) => r.month));
+  const left = sum(full.filter((r) => r.money > 0).map((r) => r.money));
+  const saved = -sum(full.filter((r) => r.money < 0).map((r) => r.money));
+  const winners = full.filter((r) => r.outcome === 'win');
   const winnersRan = winners.length >= 3 ? mean(winners.map((r) => r.month)) : null;
   const early = winnersRan != null && winnersRan > 3;
   return {
@@ -991,16 +1018,17 @@ function afterSold(trades, series) {
     matters: early || avgMonth > 2 ? 'This pattern may be costing you performance: gains you could have kept.'
       : avgMonth < -2 ? 'The stocks you sold usually fell afterwards, so getting out protected your money.'
         : 'Your timing on exits is neither costing nor saving you much.',
-    data: `${early ? `The winners you sold rose a further ${plainPct(winnersRan)} on average in the next 30 days.` : `In the 30 days after you sold, the stocks moved ${pct(avgMonth)} on average.`} Based on ${plural(rows.length, 'trade')}.`,
-    more: `All the stocks you sold moved ${pct(avgMonth)} on average over the next 30 days: ${plain$(left)} left on the table by those that kept going your way, ${plain$(saved)} saved by getting out of those that turned.`,
+    data: [
+      `1 week after you sold: ${pct(avgWeek)} on average, over ${plural(rows.length, 'sale')}.`,
+      `1 month after you sold: ${pct(avgMonth)} on average, over ${plural(full.length, 'sale')}.`,
+      ...(early ? [`The winners you sold rose a further ${plainPct(winnersRan)} on average in the month after.`] : []),
+    ].join('\n'),
+    more: `Over the month after: ${plain$(left)} left on the table by the stocks that kept going your way, ${plain$(saved)} saved by getting out of those that turned.${unpriced ? ` ${plural(unpriced, 'sale')} could not be measured: no price history for the stock.` : ''}`,
     tone: early || avgMonth > 2 ? 'bad' : avgMonth < -2 ? 'good' : 'neutral',
     impact: Math.abs(left - saved),
-    confidence: confidenceOne(rows.map((r) => r.month)),
-    bars: [
-      ...(rows.some((r) => r.week != null) ? [['A week later', mean(rows.filter((r) => r.week != null).map((r) => r.week))]] : []),
-      ['A month later', avgMonth],
-    ],
-    trades: ids([...rows].sort((a, b) => b.money - a.money).slice(0, 8)),
+    confidence: confidenceOne(full.map((r) => r.month)),
+    bars: [['A week later', avgWeek], ['A month later', avgMonth]],
+    trades: [...full].sort((a, b) => b.money - a.money).slice(0, 8).flatMap((r) => r.ids),
   };
 }
 
@@ -1649,7 +1677,7 @@ export function analyse({
     twinCard,
     // Your habits
     downMarket(paired),
-    afterSold(trades, series),
+    afterSold(positions, series),
     holding(trades),
     emotion(trades),
     moodAtEntry(trades),
