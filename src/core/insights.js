@@ -1609,7 +1609,8 @@ export function achievementsFor({ trades, open, positions, index, ix, paired, hi
  * pattern. Only facts and patterns unlikely to be chance qualify.
  */
 function standOut(cards) {
-  const ranked = cards.filter((c) => c.group !== 'market' && c.headline && c.confidence?.level !== 'early' && solid(c.confidence))
+  // "When the market falls" stays in Your habits only: at the top it read as the same card twice (Romy, November 2026).
+  const ranked = cards.filter((c) => c.group !== 'market' && c.id !== 'down' && c.headline && c.confidence?.level !== 'early' && solid(c.confidence))
     .sort((a, b) => (b.impact ?? 0) - (a.impact ?? 0));
   const edge = ranked.find((c) => c.tone === 'good') ?? null;
   const improve = ranked.find((c) => c.tone === 'bad') ?? null;

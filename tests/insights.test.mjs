@@ -506,3 +506,12 @@ describe('you against the market, this year, in Home\'s own dollars', () => {
     assert.equal(year.rows.length, 3);
   });
 });
+
+describe('what stands out', () => {
+  test('"when the market falls" is never repeated at the top; it stays in Your habits', () => {
+    // The 1.5× account falls harder than the market: a solid finding, and the largest in money.
+    const r = analyse({ positions: [], history: HISTORY, index: INDEX, today: TODAY });
+    assert.equal(r.cards.find((c) => c.id === 'down').tone, 'bad');
+    assert.ok(!r.standOut.some((s) => s.id === 'down'));
+  });
+});
