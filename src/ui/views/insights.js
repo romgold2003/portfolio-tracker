@@ -337,12 +337,12 @@ function marketHtml(a) {
           ${TWIN_SORTS.map(([key, label]) => `<button type="button" data-twin-sort="${key}" aria-pressed="${twinSort.key === key}">${label}${twinSort.key === key ? (twinSort.desc ? ' ↓' : ' ↑') : ''}</button>`).join('')}
         </div>
         <div class="ins-table tw-table" role="table">
-          <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>Invested</span><span>You made</span><span>S&amp;P 500</span><span>Result</span></div>
+          <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>Invested</span><span>You made</span><span>S&amp;P 500</span><span title="Who did better, by how much, and by what share of the money invested">Who won, by</span></div>
           ${rows.map((r) => `<div class="ins-tr" role="row"><span><b>${escapeHtml(r.ticker)}</b></span>
             <span>${shortDate(r.open)} → ${r.live ? 'open' : shortDate(r.close)}</span>
             <span>${safe(tw(dollars(r.cost ?? 0)))}</span>
             <span style="color:${clr(r.you)}">${safe(tw(usd(r.you)))}</span><span style="color:${clr(r.spx)}">${safe(tw(usd(r.spx)))}</span>
-            <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(tw(dollars(r.diff)))}${beatPct(r) != null ? ` <i>${pct(beatPct(r))}</i>` : ''}</span></div>`).join('')}
+            <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(tw(dollars(r.diff)))}${beatPct(r) != null ? ` · <i>+${Math.abs(beatPct(r)).toFixed(1)}%</i>` : ''}</span></div>`).join('')}
         </div>
         ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the first 8' : `Show all ${p.rows.length} positions`}</button>` : ''}
         ${p.accountPnl != null ? `<p class="tw-account">${safe(tw(`Your account made ${usd(p.accountPnl)} this year; the positions above made ${usd(p.you)}. The difference (${usd(p.accountPnl - p.you)}) is dividends, interest, commissions and fees${p.unmeasured.length ? ' and the positions below that could not be measured' : ''}.`))}</p>` : ''}
