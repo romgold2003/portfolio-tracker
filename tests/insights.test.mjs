@@ -271,8 +271,33 @@ describe('the investing style', () => {
   });
 
   test('few wins but big ones is the Home-Run Hitter', () => {
-    const t = tradesOf(Array.from({ length: 10 }, (_, i) => trade(i < 3 ? 150 : 95, '2026-02-02', '2026-03-20')));
+    const t = tradesOf(Array.from({ length: 10 }, (_, i) => trade(i < 3 ? 150 : 95, '2026-02-02', `2026-03-${String(10 + i).padStart(2, '0')}`)));
     assert.equal(traderTitle(t).name, 'The Home-Run Hitter');
+  });
+
+  test('the tax lots of one sale are one trade: summed, their holding time weighted by cost', () => {
+    // One sale of AAA on 20 March, kept as three lots bought on different days; and one lot with no opening date.
+    const lots = [
+      trade(120, '2026-01-05', '2026-03-20', { qty: 10 }), // $1,000 in, 74 days
+      trade(120, '2026-02-02', '2026-03-20', { qty: 30 }), // $3,000 in, 46 days
+      trade(120, null, '2026-03-20', { qty: 5 }), // carried in: no opening date
+      trade(90, '2026-04-01', '2026-04-20', { ticker: 'BBB' }),
+    ];
+    const t = tradesOf(lots);
+    assert.equal(t.length, 2, 'one sale of AAA, one of BBB');
+    const aaa = t.find((x) => x.ticker === 'AAA');
+    assert.equal(aaa.pnl, 45 * 20);
+    assert.equal(aaa.cost, 45 * 100);
+    assert.equal(aaa.ret, 20);
+    assert.equal(aaa.days, Math.round((1000 * 74 + 3000 * 46) / 4000));
+    assert.equal(aaa.lives, null, 'no S&P twin without every lot’s start');
+    assert.deepEqual(aaa.ids.length, 3);
+  });
+
+  test('a trade with no known holding time is never read as a short one', () => {
+    const t = tradesOf([trade(120, null, '2026-03-20')]);
+    assert.equal(t[0].days, null);
+    assert.equal(whyOf([...t, ...t, ...t], [...t, ...t, ...t]), null);
   });
 
   test('the market\'s mood in CNN\'s own bands', () => {
@@ -429,6 +454,12 @@ describe('the year from the broker\'s ledger', () => {
     let back = 0;
     for (const [d, q] of [['2026-09-18', 140], ['2026-09-21', 85], ['2026-10-30', 66]]) { const part = q / held; back += units * part * L(d); units -= units * part; held -= q; }
     near(year.rows.find((x) => x.ticker === 'ETHA').spx, back - paid);
+  });
+
+  test('all time reads the ledger too, from its first day', () => {
+    const all = r.cards.find((c) => c.id === 'twin').twin.all;
+    assert.equal(all.from, '2026-01-01');
+    near(all.rows.find((x) => x.ticker === 'ETHA').you, year.rows.find((x) => x.ticker === 'ETHA').you);
   });
 
   test('without a ledger or prices, nothing is guessed', () => {

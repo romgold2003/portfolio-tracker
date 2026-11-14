@@ -325,34 +325,61 @@ export function twinOfLife(life, ix, today) {
   return { pnl: back + units * (lvNow || 0) - paid, paid };
 }
 
-/** A closed trade as the analyst reads it. */
+const daysHeld = (p) => Math.max(0, Math.round((ms(p.close) - ms(p.open)) / DAY));
+
+/**
+ * The closed trades as the analyst reads them: one per sale (November 2026).
+ *
+ * A statement import keeps one closed record per tax lot, so one sale of AMD
+ * could count as four trades: four wins in a row, four times the weight in
+ * every average, a $1,500 gain split into lots too small for "Four Figures".
+ * The records of one stock sold on one day, the same way round, are one trade
+ * here: its profit and cost are their sums, its return the profit over the
+ * cost, its holding time their average weighted by cost. A record with no
+ * opening date (a holding carried in from before the first statement) counts
+ * like any other; its trade simply has no holding time when none of its
+ * records has one.
+ */
 export function tradesOf(positions) {
-  return (positions ?? [])
-    .filter((p) => p?.status === 'Closed' && p.open && p.close && p.close >= p.open)
-    .map((p) => {
-      const pnl = realized(p);
-      const cost = Math.abs(costOf(p));
-      return {
-        id: p.id,
-        ticker: p.ticker,
-        dir: p.dir,
-        cls: p.cls,
-        open: p.open,
-        close: p.close,
-        qty: Math.abs(Number(p.qty) || 0),
-        exit: Number(p.cur) || 0,
-        pnl,
-        cost,
-        ret: cost > 0 ? (pnl / cost) * 100 : 0,
-        days: Math.max(0, Math.round((ms(p.close) - ms(p.open)) / DAY)),
-        outcome: outcomeOf(pnl),
-        mind: cleanMind(p.mind),
-        sector: sectorOf(p),
-        weekday: new Date(`${p.open}T12:00:00Z`).getUTCDay(),
-        life: tradeLife(p),
-      };
-    })
-    .sort((a, b) => a.close.localeCompare(b.close) || a.open.localeCompare(b.open));
+  const groups = new Map();
+  for (const p of positions ?? []) {
+    if (p?.status !== 'Closed' || !p.ticker || !p.close || (p.open && p.close < p.open)) continue;
+    const key = `${symbolKey(p.ticker)}|${p.close}|${p.dir === 'Short' ? 'S' : 'L'}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  return [...groups.values()].map((records) => {
+    const first = records[0];
+    const pnl = sum(records.map((p) => realized(p)));
+    const cost = sum(records.map((p) => Math.abs(costOf(p))));
+    const qty = sum(records.map((p) => Math.abs(Number(p.qty) || 0)));
+    const dated = records.filter((p) => p.open);
+    const datedCost = sum(dated.map((p) => Math.abs(costOf(p))));
+    const days = !dated.length ? null
+      : Math.round(datedCost > 0 ? sum(dated.map((p) => Math.abs(costOf(p)) * daysHeld(p))) / datedCost : mean(dated.map(daysHeld)));
+    const open = dated.map((p) => p.open).sort()[0] ?? null;
+    return {
+      id: first.id,
+      ids: records.map((p) => p.id),
+      ticker: first.ticker,
+      dir: first.dir,
+      cls: first.cls,
+      open,
+      close: first.close,
+      qty,
+      exit: qty > 0 ? sum(records.map((p) => Math.abs(Number(p.qty) || 0) * (Number(p.cur) || 0))) / qty : 0,
+      pnl,
+      cost,
+      ret: cost > 0 ? (pnl / cost) * 100 : 0,
+      days,
+      outcome: outcomeOf(pnl),
+      mind: records.map((p) => cleanMind(p.mind)).find((m) => m != null) ?? null,
+      sector: sectorOf(first),
+      weekday: open ? new Date(`${open}T12:00:00Z`).getUTCDay() : null,
+      // Each record's life, for its S&P twin; only when every record knows when it began.
+      lives: dated.length === records.length ? records.map((p) => tradeLife(p)) : null,
+    };
+  }).sort((x, y) => x.close.localeCompare(y.close) || String(x.open ?? '').localeCompare(String(y.open ?? '')));
 }
 
 /** The reading on or before a date (within five days) from a sorted [{ date, value }] list. */
@@ -385,11 +412,12 @@ function enrich(trades, { ix, fearGreed, newsDays, series, today }) {
   const bigFrom = sizes[Math.floor(sizes.length * 0.8)] ?? Infinity;
   const fgDates = fearGreed.map((x) => x.date);
   return trades.map((t) => {
-    const twin = ix.dates.length ? twinOfLife(t.life, ix, today) : null;
+    const twins = ix.dates.length && t.lives ? t.lives.map((life) => twinOfLife(life, ix, today)) : null;
+    const twin = twins && twins.every(Boolean) ? { pnl: sum(twins.map((x) => x.pnl)), paid: sum(twins.map((x) => x.paid)) } : null;
     const rows = series.get(t.ticker);
     let stock10 = null;
     let dipped = null;
-    if (rows?.length) {
+    if (rows?.length && t.open) {
       const before = stockAt(rows, addDays(t.open, -1));
       if (before && before.i >= 10 && rows[before.i - 10].close > 0) stock10 = (before.close / rows[before.i - 10].close - 1) * 100;
       const start = stockAt(rows, t.open);
@@ -405,11 +433,11 @@ function enrich(trades, { ix, fearGreed, newsDays, series, today }) {
       ...t,
       spxPnl: twin ? twin.pnl : null,
       spxRet: twin && twin.paid > 0 ? (twin.pnl / twin.paid) * 100 : null,
-      spx5: indexBefore(ix, t.open),
+      spx5: t.open ? indexBefore(ix, t.open) : null,
       stock10: t.dir === 'Short' ? null : stock10,
       dipped,
-      fg: fearGreed.length && t.cls !== 'Crypto' ? readingOn(fearGreed, fgDates, t.open) : null,
-      news: newsDays.has(t.open),
+      fg: fearGreed.length && t.cls !== 'Crypto' && t.open ? readingOn(fearGreed, fgDates, t.open) : null,
+      news: t.open ? newsDays.has(t.open) : null,
       big: trades.length >= 5 && t.cost >= bigFrom,
     };
   });
@@ -430,8 +458,8 @@ const FEATURES = [
   ['greed', (t) => (t.fg != null ? t.fg > 55 : null), 'were bought while investors were greedy'],
   ['news', (t) => t.news, 'were opened on a big-news day (Fed, inflation or jobs report)'],
   ['big', (t) => t.big, 'were among your largest fifth by size'],
-  ['quick', (t) => t.days <= 2, 'were closed within two days'],
-  ['long', (t) => t.days > 30, 'were held for more than a month'],
+  ['quick', (t) => (t.days != null ? t.days <= 2 : null), 'were closed within two days'],
+  ['long', (t) => (t.days != null ? t.days > 30 : null), 'were held for more than a month'],
   ['short', (t) => t.dir === 'Short', 'were shorts'],
   ['crypto', (t) => t.cls === 'Crypto', 'were crypto'],
 ];
@@ -848,11 +876,33 @@ function twin(history, ix, trades, open, today, prices, positions, ledger, yearP
       you, spx: t.pnl, ret: t.paid > 0 ? (you / t.paid) * 100 : null, spxRet: t.paid > 0 ? (t.pnl / t.paid) * 100 : null, live: !closed,
     });
   }
-  const allItems = [
-    ...trades.filter((t) => t.spxPnl != null).map((t) => ({ id: t.id, ticker: t.ticker, life: t.life, cost: t.cost, open: t.open, close: t.close, you: t.pnl, spx: t.spxPnl, ret: t.ret, spxRet: t.spxRet, live: false })),
-    ...open.filter((p) => p.spxPnl != null).map((p) => ({ id: p.id, ticker: p.ticker, life: p.life, cost: p.cost, open: p.open, close: null, you: p.pnl, spx: p.spxPnl, live: true })),
-  ];
-  for (const [key, from, items] of [['year', `${today.slice(0, 4)}-01-01`, yearItems], ['all', null, allItems]]) {
+  /**
+   * All time, from the broker's ledger when there is one: since its first day,
+   * what was held then at that day's price, then every trade as it happened,
+   * the same reading as This year. Without one, every closed record that knows
+   * when it began, and every open position.
+   */
+  const sinceStart = ledger?.from ? ledgerYear({ ledger, positions, prices, yearStart: addDays(ledger.from, -1), today }) : null;
+  const allItems = [];
+  if (sinceStart) {
+    for (const item of sinceStart.items) {
+      const t = twinOfLife(item.life, ix, today);
+      if (!t) continue;
+      const you = lifePnl(item.life);
+      allItems.push({ ...item, cost: t.paid, open: item.life.buys[0].d, you, spx: t.pnl, ret: t.paid > 0 ? (you / t.paid) * 100 : null, spxRet: t.paid > 0 ? (t.pnl / t.paid) * 100 : null });
+    }
+  } else {
+    for (const p of positions ?? []) {
+      if (p?.status !== 'Closed' || !p.open || !p.close || !(p.entry > 0)) continue;
+      const life = tradeLife(p);
+      const t = ix.dates.length ? twinOfLife(life, ix, today) : null;
+      if (!t) continue;
+      const you = realized(p);
+      allItems.push({ id: p.id, ticker: p.ticker, life, cost: t.paid, open: p.open, close: p.close, you, spx: t.pnl, ret: t.paid > 0 ? (you / t.paid) * 100 : null, spxRet: t.paid > 0 ? (t.pnl / t.paid) * 100 : null, live: false });
+    }
+    allItems.push(...open.filter((p) => p.spxPnl != null).map((p) => ({ id: p.id, ticker: p.ticker, life: p.life, cost: p.cost, open: p.open, close: null, you: p.pnl, spx: p.spxPnl, live: true })));
+  }
+  for (const [key, from, items] of [['year', `${today.slice(0, 4)}-01-01`, yearItems], ['all', sinceStart ? ledger.from : null, allItems]]) {
     const rows = items.map((r) => ({ ...r, diff: r.you - r.spx })).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
     if (!rows.length) continue;
     const closed = rows.filter((r) => !r.live);
@@ -1173,7 +1223,8 @@ function emotion(trades) {
 
 /* ── how long you hold losers against winners ── */
 
-function holding(trades) {
+function holding(all) {
+  const trades = all.filter((t) => t.days != null);
   const wins = trades.filter((t) => t.outcome === 'win');
   const losses = trades.filter((t) => t.outcome === 'loss');
   const base = {
@@ -1290,7 +1341,8 @@ function swings(paired) {
 function openBook(open, trades, accountValue) {
   const items = [];
   const losses = trades.filter((t) => t.outcome === 'loss');
-  const typical = losses.length >= 3 ? median(losses.map((t) => t.days)) : null;
+  const lossDays = losses.filter((t) => t.days != null).map((t) => t.days);
+  const typical = lossDays.length >= 3 ? median(lossDays) : null;
   if (typical != null) {
     for (const p of open.filter((x) => x.pnl < 0 && x.days > Math.max(typical * 1.5, 5)).sort((a, b) => a.pnl - b.pnl).slice(0, 3)) {
       items.push({ tone: 'bad', text: `${p.ticker} has been open ${p.days} days and is ${plainPct(p.ret)} below what you paid. Your past losing trades usually lasted about ${Math.round(typical)} days.` });
@@ -1358,8 +1410,9 @@ export function traderTitle(trades, { twinAhead = null, calmer = null, sectors =
   const losses = trades.filter((t) => t.outcome === 'loss');
   const rate = winRate(trades);
   const payoff = wins.length && losses.length ? mean(wins.map((t) => t.pnl)) / -mean(losses.map((t) => t.pnl)) : null;
-  const held = median(trades.map((t) => t.days));
-  const dayShare = share(trades.filter((t) => t.days <= 1).length, trades.length);
+  const timed = trades.filter((t) => t.days != null);
+  const held = median(timed.map((t) => t.days));
+  const dayShare = share(timed.filter((t) => t.days <= 1).length, timed.length);
   const tickers = new Set(trades.map((t) => t.ticker)).size;
   const spread = stdev(trades.map((t) => t.ret));
   const ran = trades.filter((t) => t.stock10 != null);
@@ -1442,7 +1495,7 @@ export function achievementsFor({ trades, open, positions, index, ix, paired, hi
 
   // Every holding as a span of days, closed or still open.
   const spans = [
-    ...trades.map((t) => ({ ticker: t.ticker, from: t.open, to: t.close })),
+    ...trades.filter((t) => t.open).map((t) => ({ ticker: t.ticker, from: t.open, to: t.close })),
     ...open.map((p) => ({ ticker: p.ticker, from: p.open, to: today })),
   ];
   const heldOn = (date) => spans.find((s) => s.from <= date && date <= s.to) ?? null;
@@ -1467,12 +1520,12 @@ export function achievementsFor({ trades, open, positions, index, ix, paired, hi
   add('survival', 'crashproof', '🧯', 'Crash-Proof', 'epic',
     'Finish a day in the green while the S&P 500 falls 3% or more.',
     beatCrash && got(beatCrash.date, `The S&P 500 fell ${Math.abs(beatCrash.spx).toFixed(1)}%; your account rose ${beatCrash.ret.toFixed(2)}%.`));
-  const dip = firstBy(trades, (t) => (ix.daily.get(t.open) ?? 0) <= -2 && t.outcome === 'win', 'close');
+  const dip = firstBy(trades, (t) => t.open && (ix.daily.get(t.open) ?? 0) <= -2 && t.outcome === 'win', 'close');
   add('survival', 'dip', '🛒', 'Bought the Dip', 'epic',
     'Buy on a day the S&P 500 falls 2% or more, and close that trade in profit.',
     dip && got(dip.close, `${dip.ticker}, bought on a ${Math.abs(ix.daily.get(dip.open)).toFixed(1)}% down day, closed ${pct(dip.ret)}.`));
   const fedDays = new Set((bigDays ?? []).filter((b) => b.kind === 'Fed decision').map((b) => b.date));
-  const fed = firstBy([...trades, ...open], (t) => fedDays.has(t.open), 'open');
+  const fed = firstBy([...trades, ...open].filter((t) => t.open), (t) => fedDays.has(t.open), 'open');
   add('survival', 'fed', '🏛️', 'Fed Day Trader', 'common',
     'Open a trade on the day the Fed announces its interest-rate decision.',
     fed && got(fed.open, `${fed.ticker}, opened on a Fed decision day.`));
@@ -1518,7 +1571,7 @@ export function achievementsFor({ trades, open, positions, index, ix, paired, hi
     beatYear && got(`${beatYear.y}-12-31`, `${beatYear.y}: you ${pct(beatYear.you)}, the S&P 500 ${pct(beatYear.spx)}.`));
 
   /* patience and comebacks */
-  const held = [...trades.map((t) => ({ ...t, end: t.close, live: false })), ...open.map((p) => ({ ...p, end: today, live: true }))];
+  const held = [...trades.map((t) => ({ ...t, end: t.close, live: false })), ...open.map((p) => ({ ...p, end: today, live: true }))].filter((t) => t.open && t.days != null);
   const reached = (t, n) => addDays(t.open, n);
   const year = firstBy(held, (t) => t.days >= 365, 'open');
   add('patience', 'oneyear', '⏳', 'One-Year Club', 'rare', 'Hold a position for a full year.',
@@ -1535,7 +1588,7 @@ export function achievementsFor({ trades, open, positions, index, ix, paired, hi
   const phoenix = firstBy(trades, (t) => t.dipped != null && t.dipped <= -50 && t.outcome === 'win', 'close');
   add('patience', 'phoenix', '🐦‍🔥', 'Phoenix', 'legendary', 'Hold through a fall of 50% or more and still close in profit.',
     phoenix && got(phoenix.close, `${phoenix.ticker} fell ${Math.abs(phoenix.dipped).toFixed(0)}% while you held it, and closed ${pct(phoenix.ret)}.`));
-  const pays = firstBy(trades, (t) => t.days >= 182 && t.ret >= 50, 'close');
+  const pays = firstBy(trades, (t) => t.days != null && t.days >= 182 && t.ret >= 50, 'close');
   add('patience', 'patiencepays', '🐢', 'Patience Pays', 'epic', 'Hold a trade for six months or more and close it up 50% or more.',
     pays && got(pays.close, `${pays.ticker}, ${plural(pays.days, 'day')}, ${pct(pays.ret)}.`));
   const months = [];

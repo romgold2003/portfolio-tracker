@@ -294,7 +294,7 @@ function marketHtml(a) {
           <button type="button" role="tab" data-twin-period="all" aria-selected="${which === 'all'}">All time</button>
         </div>
       </div>
-      <p class="tw-q">${p.whole ? 'What your account made this year (the same figure as Home, under YTD), against putting your account’s value on 31 December and every deposit since into the S&amp;P 500 on the same days:' : which === 'year' ? 'If the money in each of your positions this year had been in the S&amp;P 500 instead, on the same days (what you already held on 31 December counts from that day’s value):' : 'If every trade had gone into the S&amp;P 500 instead, with the same money on the same days:'}</p>
+      <p class="tw-q">${p.whole ? 'What your account made this year (the same figure as Home, under YTD), against putting your account’s value on 31 December and every deposit since into the S&amp;P 500 on the same days:' : which === 'year' ? 'If the money in each of your positions this year had been in the S&amp;P 500 instead, on the same days (what you already held on 31 December counts from that day’s value):' : p.from ? `Since your first statement (${shortDate(p.from)} ${p.from.slice(0, 4)}), if the money in each of your positions had been in the S&amp;P 500 instead, on the same days:` : 'If every trade had gone into the S&amp;P 500 instead, with the same money on the same days:'}</p>
       <div class="tw-nums">
         <div><span>You made</span><b style="color:${clr(top.you)}">${safe(tw(usd(top.you)))}</b></div>
         <div><span>The S&amp;P 500 would have made</span><b style="color:${clr(top.twin)}">${safe(tw(usd(top.twin)))}</b></div>
