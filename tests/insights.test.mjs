@@ -476,7 +476,17 @@ describe('after you sell: every sale since the beginning, averaged', () => {
 
   test('two tax lots of one stock sold on one day are one sale; a position with no opening date counts', () => {
     assert.match(c.data, /over 10 sales/);
-    assert.ok(c.trades.includes('UP2026-07-06a') && c.trades.includes('UP2026-07-06b') ? true : c.trades.length <= 9);
+    assert.equal(c.sales.filter((x) => x.ticker === 'UP' && x.close === '2026-07-06').length, 1, 'two lots, one sale');
+    assert.ok(c.sales.some((x) => x.ticker === 'DOWN' && x.close === '2025-04-01'), 'no opening date, still counted');
+    assert.equal(c.sales.length, 10, 'the sale of 10 November has no week behind it yet');
+  });
+
+  test('the list behind the card adds up to the averages it shows', () => {
+    const avg = (k) => { const xs = c.sales.map((x) => x[k]).filter((v) => v != null); return xs.reduce((a, b) => a + b, 0) / xs.length; };
+    near(c.averages.week, avg('week'));
+    near(c.averages.month, avg('month'));
+    near(c.averages.quarter, avg('quarter'));
+    assert.equal(c.sales[0].close >= c.sales[c.sales.length - 1].close, true, 'newest first');
   });
 
   test('the lines sit in the one card: the week, the month, three months', () => {

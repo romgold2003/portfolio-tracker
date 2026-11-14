@@ -158,6 +158,18 @@ function waitingText(c) {
   return `We need ${n} more ${unit} before we can say anything here.${c.hint ? ` ${c.hint}` : ''}`;
 }
 
+/** Every sale and what its stock did after, with the averages under them: the card's sums, line by line. */
+function salesHtml(c) {
+  const cell = (v) => (v == null ? '<span class="ins-na">not yet</span>' : `<span style="color:${clr(v)}">${pct(v)}</span>`);
+  const avg = c.averages;
+  return `<div class="ins-table ins-sales" role="table">
+      <div class="ins-tr ins-th" role="row"><span>Stock</span><span>Sold</span><span>1 week</span><span>1 month</span><span>3 months</span></div>
+      ${c.sales.map((r) => `<div class="ins-tr" role="row"><span><b>${escapeHtml(r.ticker)}</b></span><span>${shortDate(r.close)} ${r.close.slice(0, 4)}</span>${cell(r.week)}${cell(r.month)}${cell(r.quarter)}</div>`).join('')}
+      <div class="ins-tr ins-total" role="row"><span><b>Average</b></span><span>sum ÷ sales</span>
+        <span>${pct(avg.week)} <i>÷${avg.weekCount}</i></span><span>${pct(avg.month)} <i>÷${avg.monthCount}</i></span><span>${avg.quarter != null ? `${pct(avg.quarter)} <i>÷${avg.quarterCount}</i>` : '—'}</span></div>
+    </div>`;
+}
+
 /** What we found → why it matters → your data, then the deeper layer behind a toggle. */
 function findingHtml(c) {
   if (early(c)) return `<p class="ins-wait">${escapeHtml(waitingText(c))}</p>`;
@@ -171,7 +183,8 @@ function findingHtml(c) {
     ${c.table ? monthsTable(c.table) : ''}
     ${c.cause ? `<div class="ins-cause"><span>What these trades have in common</span>${safe(c.cause)}</div>` : ''}
     <details class="ins-how"><summary>How we calculate this</summary><p>${escapeHtml(c.how ?? '')}${sure ? ` <b>${sure[0]}:</b> ${escapeHtml(sure[1].toLowerCase())}.` : ''}</p></details>
-    ${n ? `<button type="button" class="ins-more" data-ins-trades="${c.id}" aria-expanded="${more}">${more ? 'Hide' : 'See'} the ${n === 1 ? 'trade' : `${n} trades`}</button>${more ? tradesHtml(c.trades) : ''}` : ''}`;
+    ${n ? `<button type="button" class="ins-more" data-ins-trades="${c.id}" aria-expanded="${more}">${more ? 'Hide' : 'See'} the ${n === 1 ? 'trade' : `${n} trades`}</button>${more ? tradesHtml(c.trades) : ''}` : ''}
+    ${c.sales?.length ? `<button type="button" class="ins-more" data-ins-trades="${c.id}" aria-expanded="${more}">${more ? 'Hide the list' : `See every sale (${c.sales.length})`}</button>${more ? salesHtml(c) : ''}` : ''}`;
 }
 
 function chips(c) {

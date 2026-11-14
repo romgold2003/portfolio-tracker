@@ -1050,7 +1050,9 @@ export function afterSold(positions, series) {
     impact: Math.abs(left - saved),
     confidence: confidenceOne(full.map((r) => r.month)),
     bars: [['A week later', avgWeek], ['A month later', avgMonth], ...(avgQuarter != null ? [['3 months later', avgQuarter]] : [])],
-    trades: [...full].sort((a, b) => b.money - a.money).slice(0, 8).flatMap((r) => r.ids),
+    // Every sale and its moves, newest first, so the averages can be checked one by one.
+    sales: [...rows].sort((a, b) => b.close.localeCompare(a.close)).map((r) => ({ ticker: r.ticker, close: r.close, week: r.week, month: r.month, quarter: r.quarter })),
+    averages: { week: avgWeek, month: avgMonth, quarter: avgQuarter, weekCount: rows.length, monthCount: full.length, quarterCount: long.length },
   };
 }
 

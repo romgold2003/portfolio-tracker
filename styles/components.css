@@ -2182,3 +2182,8 @@ body.is-guest{padding-top:36px}
 .ins-waiting li b{font-weight:600;color:var(--text2)}
 .pf-records h3{grid-column:1/-1;font-size:14px;font-weight:600;color:var(--text);margin:0}
 .ins-data{white-space:pre-line}
+.ins-sales .ins-tr{grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr) repeat(3,minmax(0,0.9fr))}
+.ins-sales{max-height:420px;overflow-y:auto}
+.ins-na{color:var(--text3);font-size:11px}
+.ins-total{border-top:1px solid var(--border2);font-weight:600;color:var(--text)}
+.ins-total i{font-style:normal;font-weight:400;color:var(--text3);font-size:10.5px}
