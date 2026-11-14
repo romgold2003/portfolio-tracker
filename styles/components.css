@@ -2187,3 +2187,11 @@ body.is-guest{padding-top:36px}
 .ins-na{color:var(--text3);font-size:11px}
 .ins-total{border-top:1px solid var(--border2);font-weight:600;color:var(--text)}
 .ins-total i{font-style:normal;font-weight:400;color:var(--text3);font-size:10.5px}
+
+/* the S&P twin's order, chosen above its table */
+.tw-sort{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--text3)}
+.tw-sort button{font:inherit;font-size:12px;padding:4px 10px;border-radius:999px;border:0.5px solid var(--border2);background:var(--input);color:var(--text2);cursor:pointer}
+.tw-sort button[aria-pressed="true"]{border-color:var(--blue);color:var(--text);background:color-mix(in srgb,var(--blue) 14%,var(--panel))}
+.tw-table .ins-tr{grid-template-columns:minmax(0,0.8fr) minmax(0,1.3fr) repeat(3,minmax(0,0.9fr)) minmax(0,1.3fr)}
+.tw-table .ins-gap i{font-style:normal;opacity:0.75;font-size:11px}
+@media (max-width:640px){.tw-table .ins-tr{grid-template-columns:minmax(0,0.8fr) repeat(3,minmax(0,1fr))}.tw-table .ins-tr span:nth-child(2),.tw-table .ins-tr span:nth-child(3){display:none}}

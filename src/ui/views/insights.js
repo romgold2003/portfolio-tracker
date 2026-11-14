@@ -44,6 +44,33 @@ const SURE = {
 const opened = new Set();
 let period = 'year';
 let allRows = false;
+
+/**
+ * How the S&P twin's positions are ordered (November 2026), chosen above the
+ * table; the same choice again turns the order round.
+ *  - Date: newest first, positions still open on top.
+ *  - Size: the money that went in, largest first.
+ *  - Beat by %: how far each beat the S&P 500, over the money that went in.
+ *  - Beat by $: the same, in dollars.
+ */
+const TWIN_SORTS = [['date', 'Date'], ['size', 'Size'], ['pct', 'Beat by %'], ['usd', 'Beat by $']];
+let twinSort = { key: 'date', desc: true };
+const beatPct = (r) => (r.cost > 0 ? ((r.you - r.spx) / r.cost) * 100 : null);
+const SORT_VALUE = {
+  date: (r) => (r.live ? '9999-99-99' : r.close ?? '') + (r.open ?? ''),
+  size: (r) => r.cost ?? 0,
+  pct: (r) => beatPct(r) ?? -Infinity,
+  usd: (r) => r.diff,
+};
+function sortTwin(rows) {
+  const value = SORT_VALUE[twinSort.key];
+  const dir = twinSort.desc ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const x = value(a);
+    const y = value(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * dir;
+  });
+}
 let index = null;
 let market = null;
 const series = new Map();
@@ -280,7 +307,8 @@ function marketHtml(a) {
   if (!card) return '';
   const p = card.twin[period] ?? card.twin.all;
   const which = card.twin[period] ? period : 'all';
-  const rows = allRows ? p.rows : p.rows.slice(0, 8);
+  const sorted = sortTwin(p.rows);
+  const rows = allRows ? sorted : sorted.slice(0, 8);
   const acc = p.account;
   // This year: the whole account at the top, in Home's own YTD dollars; the positions in the table below.
   const top = p.whole ?? { you: p.you, twin: p.twin, series: p.series };
@@ -304,14 +332,19 @@ function marketHtml(a) {
       <div class="tw-detail">
         <div class="ins-data"><span>Your data</span>${safe(tw(`${p.whole ? `Position by position: your positions made ${usd(p.you)}, the same money in the S&P 500 ${usd(p.twin)}. ` : ''}You beat the S&P 500 on ${p.beat} of ${p.decided} positions you closed${p.open ? `, with ${p.open} still open` : ''}. Your positions made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`))}</div>
         ${p.luck?.level && p.luck.level !== 'early' ? `<p class="ins-matters">${p.luck.level === 'strong' ? 'Your edge over the market is very unlikely to be luck.' : p.luck.level === 'likely' ? 'Your edge over the market is probably real, though not yet certain.' : 'It is still too early to tell whether this is skill or luck.'}</p>` : ''}
+        <div class="tw-sort" role="group" aria-label="Sort the positions">
+          <span>Sort by</span>
+          ${TWIN_SORTS.map(([key, label]) => `<button type="button" data-twin-sort="${key}" aria-pressed="${twinSort.key === key}">${label}${twinSort.key === key ? (twinSort.desc ? ' ↓' : ' ↑') : ''}</button>`).join('')}
+        </div>
         <div class="ins-table tw-table" role="table">
-          <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>You made</span><span>S&amp;P 500</span><span>Result</span></div>
+          <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>Invested</span><span>You made</span><span>S&amp;P 500</span><span>Result</span></div>
           ${rows.map((r) => `<div class="ins-tr" role="row"><span><b>${escapeHtml(r.ticker)}</b></span>
             <span>${shortDate(r.open)} → ${r.live ? 'open' : shortDate(r.close)}</span>
+            <span>${safe(tw(dollars(r.cost ?? 0)))}</span>
             <span style="color:${clr(r.you)}">${safe(tw(usd(r.you)))}</span><span style="color:${clr(r.spx)}">${safe(tw(usd(r.spx)))}</span>
-            <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(tw(dollars(r.diff)))}</span></div>`).join('')}
+            <span class="ins-gap ${r.diff >= 0 ? 'is-up' : 'is-down'}">${r.diff >= 0 ? 'You' : 'S&amp;P'} ${safe(tw(dollars(r.diff)))}${beatPct(r) != null ? ` <i>${pct(beatPct(r))}</i>` : ''}</span></div>`).join('')}
         </div>
-        ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the largest 8' : `Show all ${p.rows.length} trades`}</button>` : ''}
+        ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the first 8' : `Show all ${p.rows.length} positions`}</button>` : ''}
         ${p.accountPnl != null ? `<p class="tw-account">${safe(tw(`Your account made ${usd(p.accountPnl)} this year; the positions above made ${usd(p.you)}. The difference (${usd(p.accountPnl - p.you)}) is dividends, interest, commissions and fees${p.unmeasured.length ? ' and the positions below that could not be measured' : ''}.`))}</p>` : ''}
         ${p.unmeasured?.length ? `<p class="tw-account">Not measured yet: ${p.unmeasured.map((u) => `<b>${escapeHtml(u.ticker)}</b> (${escapeHtml(u.why)})`).join(', ')}.</p>` : ''}
         ${acc && !p.whole ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(tw(dollars(acc.diff)))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
@@ -481,7 +514,13 @@ function bind() {
     if (e.target.closest('[data-ins-allcards]')) { openAllCards(last); return undefined; }
     const tab = e.target.closest('[data-twin-period]');
     if (tab) { period = tab.dataset.twinPeriod; allRows = false; draw(); return undefined; }
-    if (e.target.closest('[data-twin-all]')) { allRows = !allRows; draw(); }
+    if (e.target.closest('[data-twin-all]')) { allRows = !allRows; draw(); return undefined; }
+    const sort = e.target.closest('[data-twin-sort]');
+    if (sort) {
+      const key = sort.dataset.twinSort;
+      twinSort = twinSort.key === key ? { key, desc: !twinSort.desc } : { key, desc: true };
+      draw();
+    }
     return undefined;
   });
 }
