@@ -797,33 +797,51 @@ export function ledgerYear({ ledger, positions, prices, yearStart, today }) {
       if (!(startPrice > 0)) { unmeasured.push({ ticker, why: 'no price for 31 December' }); continue; }
     }
     const mine = events.filter((e) => e.key === key && e.date > yearStart);
+    /**
+     * One stock, several positions (November 2026). A position begins when
+     * the holding leaves zero and ends the moment it is back at zero: AVGO
+     * bought in January and sold in March, then bought again in October, is
+     * two positions, and the S&P side holds nothing for it in between. A
+     * purchase while the holding is open (DCA) belongs to that position, as
+     * does every partial sale until the last share goes. A trade that goes
+     * straight through zero (sold more than held) closes one and opens the
+     * next, the other way round, with what is left.
+     */
+    const EPS = 1e-6;
+    const segments = [];
+    let seg = null;
+    const openSeg = (d, qty, price, sign) => { seg = { dir: sign, buys: [{ d, qty, price }], sells: [] }; segments.push(seg); };
     let h = start;
-    const dir = (start || mine.find((e) => e.qty)?.qty || 1) < 0 ? -1 : 1;
-    const buys = Math.abs(start) > 1e-9 ? [{ d: yearStart, qty: Math.abs(start), price: startPrice }] : [];
-    const sells = [];
+    if (Math.abs(start) > EPS) openSeg(yearStart, Math.abs(start), startPrice, Math.sign(start));
     let priced = true;
     for (const e of mine) {
       const price = e.price > 0 ? e.price : seriesOn(e.date);
       if (!(price > 0)) { priced = false; break; }
-      const grows = h === 0 || Math.sign(e.qty) === Math.sign(h);
-      if (grows) buys.push({ d: e.date, qty: Math.abs(e.qty), price });
-      else {
+      if (Math.abs(h) <= EPS) {
+        openSeg(e.date, Math.abs(e.qty), price, Math.sign(e.qty));
+      } else if (Math.sign(e.qty) === Math.sign(h)) {
+        seg.buys.push({ d: e.date, qty: Math.abs(e.qty), price });
+      } else {
         const shrink = Math.min(Math.abs(e.qty), Math.abs(h));
-        sells.push({ d: e.date, qty: shrink, price });
-        if (Math.abs(e.qty) > shrink) buys.push({ d: e.date, qty: Math.abs(e.qty) - shrink, price });
+        seg.sells.push({ d: e.date, qty: shrink, price });
+        const left = Math.abs(e.qty) - shrink;
+        if (left > EPS) openSeg(e.date, left, price, Math.sign(e.qty));
       }
       h += e.qty;
+      if (Math.abs(h) <= EPS) h = 0;
     }
     if (!priced) { unmeasured.push({ ticker, why: 'a trade without a price' }); continue; }
-    const now = Math.abs(h) > 1e-9;
+    const now = Math.abs(h) > EPS;
     const nowPrice = now ? current(key)?.cur ?? seriesOn(today) : 0;
     if (now && !(nowPrice > 0)) { unmeasured.push({ ticker, why: 'no price today' }); continue; }
-    if (!buys.length) continue;
-    items.push({
-      id: p?.id ?? key, ticker,
-      life: { dir, buys, sells, held: now ? Math.abs(h) : 0, price: nowPrice },
-      close: now ? null : sells[sells.length - 1]?.d ?? null,
-      live: now,
+    segments.forEach((x, i) => {
+      const live = now && i === segments.length - 1;
+      items.push({
+        id: `${p?.id ?? key}#${i + 1}`, ticker,
+        life: { dir: x.dir, buys: x.buys, sells: x.sells, held: live ? Math.abs(h) : 0, price: live ? nowPrice : 0 },
+        close: live ? null : x.sells[x.sells.length - 1]?.d ?? null,
+        live,
+      });
     });
   }
   return { items, unmeasured };

@@ -556,3 +556,53 @@ describe('what stands out', () => {
     assert.ok(!r.standOut.some((s) => s.id === 'down'));
   });
 });
+
+describe('one stock, several positions', () => {
+  /**
+   * AVGO: bought in January, sold in March, bought again in October and still
+   * held. COIN: bought in February, added to in March (DCA), half sold in
+   * April, the rest in June. One closed position and one open for AVGO; one
+   * for COIN, its purchase and its sales all together.
+   */
+  const ledger = {
+    from: '2026-01-01', to: '2026-11-06', openingHoldings: {}, openingMarks: {},
+    events: [
+      { date: '2026-01-12', kind: 'trade', ticker: 'AVGO', qty: 10, price: 100 },
+      { date: '2026-03-05', kind: 'trade', ticker: 'AVGO', qty: -10, price: 120 },
+      { date: '2026-10-20', kind: 'trade', ticker: 'AVGO', qty: 5, price: 150 },
+      { date: '2026-02-02', kind: 'trade', ticker: 'COIN', qty: 10, price: 50 },
+      { date: '2026-03-02', kind: 'trade', ticker: 'COIN', qty: 10, price: 40 },
+      { date: '2026-04-01', kind: 'trade', ticker: 'COIN', qty: -10, price: 55 },
+      { date: '2026-06-01', kind: 'trade', ticker: 'COIN', qty: -10, price: 60 },
+    ],
+  };
+  const positions = [{ id: 'av', ticker: 'AVGO', cls: 'Stocks', dir: 'Long', status: 'Open', entry: 150, qty: 5, cur: 160, open: '2026-10-20' }];
+  const r = analyse({ positions, history: HISTORY, index: INDEX, ledger, today: TODAY });
+  const year = r.cards.find((c) => c.id === 'twin').twin.year;
+  const ix = indexLevels(INDEX);
+  const L = (d) => levelOn(ix, d);
+
+  test('a position closed and the stock bought again later are two positions', () => {
+    const avgo = year.rows.filter((x) => x.ticker === 'AVGO').sort((a, b) => a.open.localeCompare(b.open));
+    assert.equal(avgo.length, 2);
+    assert.deepEqual([avgo[0].open, avgo[0].close, avgo[0].live], ['2026-01-12', '2026-03-05', false]);
+    assert.deepEqual([avgo[1].open, avgo[1].close, avgo[1].live], ['2026-10-20', null, true]);
+    near(avgo[0].you, 10 * (120 - 100));
+    near(avgo[1].you, 5 * (160 - 150));
+  });
+
+  test('the S&P side holds nothing between them', () => {
+    const avgo = year.rows.filter((x) => x.ticker === 'AVGO').sort((a, b) => a.open.localeCompare(b.open));
+    near(avgo[0].spx, 1000 * (L('2026-03-05') / L('2026-01-12') - 1));
+    near(avgo[1].spx, 750 * (L(TODAY) / L('2026-10-20') - 1));
+  });
+
+  test('buying more while it is held (DCA) and partial sales stay one position', () => {
+    const coin = year.rows.filter((x) => x.ticker === 'COIN');
+    assert.equal(coin.length, 1);
+    near(coin[0].you, 10 * 55 + 10 * 60 - 10 * 50 - 10 * 40);
+    assert.equal(coin[0].close, '2026-06-01');
+    const units = 500 / L('2026-02-02') + 400 / L('2026-03-02');
+    near(coin[0].spx, units * 0.5 * L('2026-04-01') + units * 0.5 * L('2026-06-01') - 900);
+  });
+});
