@@ -267,27 +267,29 @@ function marketHtml(a) {
   if (!card) return '';
   const p = card.twin[period] ?? card.twin.all;
   const which = card.twin[period] ? period : 'all';
-  const ahead = p.diff >= 0;
   const rows = allRows ? p.rows : p.rows.slice(0, 8);
   const acc = p.account;
+  // This year: the whole account at the top, in Home's own YTD dollars; the positions in the table below.
+  const top = p.whole ?? { you: p.you, twin: p.twin, series: p.series };
+  const ahead = top.you >= top.twin;
   return `<h2 class="ins-group">You vs the market</h2>
     <section class="card ins-market" id="ins-twin">
       <div class="tw-head">
-        <h3>${ahead ? 'Your picks are beating the market' : 'The market is ahead of your picks'}</h3>
+        <h3>${p.whole ? (ahead ? 'Your account is beating the market' : 'The market is ahead of your account') : (ahead ? 'Your picks are beating the market' : 'The market is ahead of your picks')}</h3>
         <div class="tw-tabs" role="tablist">
           ${card.twin.year ? `<button type="button" role="tab" data-twin-period="year" aria-selected="${which === 'year'}">This year</button>` : ''}
           <button type="button" role="tab" data-twin-period="all" aria-selected="${which === 'all'}">All time</button>
         </div>
       </div>
-      <p class="tw-q">${which === 'year' ? 'If the money in each of your positions this year had been in the S&amp;P 500 instead, on the same days (what you already held on 31 December counts from that day’s value):' : 'If every trade had gone into the S&amp;P 500 instead, with the same money on the same days:'}</p>
+      <p class="tw-q">${p.whole ? 'What your account made this year (the same figure as Home, under YTD), against putting your account’s value on 31 December and every deposit since into the S&amp;P 500 on the same days:' : which === 'year' ? 'If the money in each of your positions this year had been in the S&amp;P 500 instead, on the same days (what you already held on 31 December counts from that day’s value):' : 'If every trade had gone into the S&amp;P 500 instead, with the same money on the same days:'}</p>
       <div class="tw-nums">
-        <div><span>You made</span><b style="color:${clr(p.you)}">${safe(tw(usd(p.you)))}</b></div>
-        <div><span>The S&amp;P 500 would have made</span><b style="color:${clr(p.twin)}">${safe(tw(usd(p.twin)))}</b></div>
+        <div><span>You made</span><b style="color:${clr(top.you)}">${safe(tw(usd(top.you)))}</b></div>
+        <div><span>The S&amp;P 500 would have made</span><b style="color:${clr(top.twin)}">${safe(tw(usd(top.twin)))}</b></div>
       </div>
-      ${chartSvg(p.series)}
-      <div class="tw-legend"><span><i class="tw-k-you"></i>Your trades</span><span><i class="tw-k-twin"></i>Same money in the S&amp;P 500</span></div>
+      ${chartSvg(top.series)}
+      <div class="tw-legend"><span><i class="tw-k-you"></i>${p.whole ? 'Your account' : 'Your trades'}</span><span><i class="tw-k-twin"></i>Same money in the S&amp;P 500</span></div>
       <div class="tw-detail">
-        <div class="ins-data"><span>Your data</span>${safe(tw(`You beat the S&P 500 on ${p.beat} of ${p.decided} positions you closed${p.open ? `, with ${p.open} still open` : ''}. Your positions made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`))}</div>
+        <div class="ins-data"><span>Your data</span>${safe(tw(`${p.whole ? `Position by position: your positions made ${usd(p.you)}, the same money in the S&P 500 ${usd(p.twin)}. ` : ''}You beat the S&P 500 on ${p.beat} of ${p.decided} positions you closed${p.open ? `, with ${p.open} still open` : ''}. Your positions made ${p.youPct != null ? pct(p.youPct) : '—'} on the money put in; the S&P 500 would have made ${p.twinPct != null ? pct(p.twinPct) : '—'}.${p.best ? ` Your best call: ${p.best.ticker}, ${dollars(p.best.diff)} more than the S&P 500.` : ''}${p.worst ? ` Your costliest: ${p.worst.ticker}, ${dollars(p.worst.diff)} behind it.` : ''}`))}</div>
         ${p.luck?.level && p.luck.level !== 'early' ? `<p class="ins-matters">${p.luck.level === 'strong' ? 'Your edge over the market is very unlikely to be luck.' : p.luck.level === 'likely' ? 'Your edge over the market is probably real, though not yet certain.' : 'It is still too early to tell whether this is skill or luck.'}</p>` : ''}
         <div class="ins-table tw-table" role="table">
           <div class="ins-tr ins-th" role="row"><span>Trade</span><span>Held</span><span>You made</span><span>S&amp;P 500</span><span>Result</span></div>
@@ -299,7 +301,7 @@ function marketHtml(a) {
         ${p.rows.length > 8 ? `<button type="button" class="ins-more" data-twin-all>${allRows ? 'Show the largest 8' : `Show all ${p.rows.length} trades`}</button>` : ''}
         ${p.accountPnl != null ? `<p class="tw-account">${safe(tw(`Your account made ${usd(p.accountPnl)} this year; the positions above made ${usd(p.you)}. The difference (${usd(p.accountPnl - p.you)}) is dividends, interest, commissions and fees${p.unmeasured.length ? ' and the positions below that could not be measured' : ''}.`))}</p>` : ''}
         ${p.unmeasured?.length ? `<p class="tw-account">Not measured yet: ${p.unmeasured.map((u) => `<b>${escapeHtml(u.ticker)}</b> (${escapeHtml(u.why)})`).join(', ')}.</p>` : ''}
-        ${acc ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(tw(dollars(acc.diff)))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
+        ${acc && !p.whole ? `<p class="tw-account"><b>Your whole account</b> against putting every deposit in the S&amp;P 500 and holding it, since ${shortDate(acc.from)} ${acc.from.slice(0, 4)}: <b style="color:${clr(acc.diff)}">${acc.diff >= 0 ? 'ahead' : 'behind'} by ${safe(tw(dollars(acc.diff)))}</b>. This one also counts cash left idle and time out of the market.</p>` : ''}
         <details class="ins-how"><summary>How we calculate this</summary><p>Each time you bought, the same amount buys the S&amp;P 500 (with dividends reinvested) at that day's close. Each time you sold part or all of the position, the same share of that S&amp;P 500 holding is sold that day. Open positions are valued today. The chart adds up both sides every market day. A short is matched with the same money in the S&amp;P 500, bought. "This year" covers every position you held during the year: what you already held on 31 December enters at that day's close, as if bought then, so only this year's gains and losses count, as in your year to date. "All time" follows each trade from the day you opened it.</p></details>
       </div>
     </section>`;
@@ -432,7 +434,7 @@ function draw() {
     bigDays: market?.bigDays ?? [],
     series,
     accountValue: accountTotals(state.positions, state.cash).account,
-    year: { you: homeYearToDate(), spx },
+    year: (() => { const ytd = homeYearToDate(); return { you: ytd.returnPct, spx, pnl: ytd.pnl }; })(),
     // The broker's ledger, for the year traded as it really was (one account; the combined view has none of its own).
     ledger: state.combined ? null : state.ledger,
   });

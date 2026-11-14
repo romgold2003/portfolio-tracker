@@ -781,9 +781,10 @@ function splitsAppliedByJournal() {
  * account valued day by day. Shows nothing while those values load, rather
  * than a figure that credits the year's deposits with their profit.
  */
-/** This year's return exactly as Home shows it, for the analyst's summary (null while it cannot be measured). */
+/** This year's return and gain exactly as Home shows them under YTD, for Insights (nulls while they cannot be measured). */
 export function homeYearToDate() {
-  return yearToDateReturn(accountTotals(state.positions, state.cash))?.returnPct ?? null;
+  const ytd = yearToDateReturn(accountTotals(state.positions, state.cash));
+  return { returnPct: ytd?.returnPct ?? null, pnl: Number.isFinite(ytd?.pnl) ? ytd.pnl : null };
 }
 
 function yearToDateReturn(totals) {

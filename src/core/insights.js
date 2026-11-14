@@ -818,7 +818,7 @@ function appTradeEventsAfter(positions, after) {
  * The whole-account comparison (every deposit into the S&P, held) rides along:
  * it also counts cash left idle and time out of the market.
  */
-function twin(history, ix, trades, open, today, prices, positions, ledger) {
+function twin(history, ix, trades, open, today, prices, positions, ledger, yearPnl = null) {
   const periods = {};
   const yearStart = `${Number(today.slice(0, 4)) - 1}-12-31`;
   const fromLedger = ledgerYear({ ledger, positions, prices, yearStart, today });
@@ -863,6 +863,23 @@ function twin(history, ix, trades, open, today, prices, positions, ledger) {
     const excess = closed.filter((r) => r.spxRet != null && r.ret != null).map((r) => r.ret - r.spxRet);
     const account = twinSeries(history, ix, from);
     const accEnd = account[account.length - 1];
+    /**
+     * This year at the top is the whole account, in the same dollars Home shows
+     * under YTD, beside the same deposits in the S&P 500 on the same days: both
+     * as gains, the money paid in taken out. The table below stays position by
+     * position.
+     */
+    let whole = null;
+    if (key === 'year' && yearPnl != null && account.length >= 2) {
+      const flowOn = new Map(history.map((r) => [r.date, Number(r.externalCashFlow) || 0]));
+      const first = account[0];
+      let flows = 0;
+      const series = account.map((pt, i) => {
+        if (i) flows += flowOn.get(pt.date) ?? 0;
+        return { date: pt.date, you: pt.you - first.you - flows, twin: pt.twin - first.twin - flows };
+      });
+      whole = { you: yearPnl, twin: series[series.length - 1].twin, series };
+    }
     periods[key] = {
       from: from ?? null,
       series: twinDaily(rows, ix, prices, from, today),
@@ -874,6 +891,7 @@ function twin(history, ix, trades, open, today, prices, positions, ledger) {
       beat: closed.filter((r) => r.diff > 0).length,
       decided: closed.length,
       open: rows.length - closed.length,
+      whole,
       unmeasured: key === 'year' ? unmeasured : [],
       // What the whole account made over the same span, to set the positions' total against.
       accountPnl: from && history.length ? periodReturnFromHistory(history, from, today)?.pnl ?? null : null,
@@ -994,16 +1012,19 @@ export function afterSold(positions, series) {
     const week = later(7);
     if (week == null) continue;
     const month = later(30);
-    rows.push({ ...sale, outcome: outcomeOf(sale.pnl), week, month, money: month != null ? (sale.value * month) / 100 : null });
+    const quarter = later(90);
+    rows.push({ ...sale, outcome: outcomeOf(sale.pnl), week, month, quarter, money: month != null ? (sale.value * month) / 100 : null });
   }
   const full = rows.filter((r) => r.month != null);
+  const long = rows.filter((r) => r.quarter != null);
   const base = {
     id: 'after', group: 'habits', topic: 'What happens after you sell',
-    how: 'Every position you have closed since your first trade, each sale counted once (several records for one stock sold on one day are one sale). For each, the stock’s close 7 and 30 days after the day you sold, against its close that day; for a short, a fall counts as the stock moving your way. Each average is the sum of those moves divided by the number of sales. In money: what you sold it for × the 30-day move. "Left on the table" adds up the stocks that kept moving your way; "saved" the ones that turned against you.',
+    how: 'Every position you have closed since your first trade, each sale counted once (several records for one stock sold on one day are one sale). For each, the stock’s close 7, 30 and 90 days after the day you sold, against its close that day; for a short, a fall counts as the stock moving your way. Each average is the sum of those moves divided by the number of sales. In money: what you sold it for × the 30-day move. "Left on the table" adds up the stocks that kept moving your way; "saved" the ones that turned against you.',
   };
   if (full.length < MIN_GROUP) return { ...base, tone: 'neutral', impact: 0, confidence: { level: 'early', needed: MIN_GROUP - full.length, unit: 'sales at least a month old' } };
   const avgWeek = mean(rows.map((r) => r.week));
   const avgMonth = mean(full.map((r) => r.month));
+  const avgQuarter = long.length ? mean(long.map((r) => r.quarter)) : null;
   const left = sum(full.filter((r) => r.money > 0).map((r) => r.money));
   const saved = -sum(full.filter((r) => r.money < 0).map((r) => r.money));
   const winners = full.filter((r) => r.outcome === 'win');
@@ -1021,13 +1042,14 @@ export function afterSold(positions, series) {
     data: [
       `1 week after you sold: ${pct(avgWeek)} on average, over ${plural(rows.length, 'sale')}.`,
       `1 month after you sold: ${pct(avgMonth)} on average, over ${plural(full.length, 'sale')}.`,
+      ...(avgQuarter != null ? [`3 months after you sold: ${pct(avgQuarter)} on average, over ${plural(long.length, 'sale')}.`] : []),
       ...(early ? [`The winners you sold rose a further ${plainPct(winnersRan)} on average in the month after.`] : []),
     ].join('\n'),
     more: `Over the month after: ${plain$(left)} left on the table by the stocks that kept going your way, ${plain$(saved)} saved by getting out of those that turned.${unpriced ? ` ${plural(unpriced, 'sale')} could not be measured: no price history for the stock.` : ''}`,
     tone: early || avgMonth > 2 ? 'bad' : avgMonth < -2 ? 'good' : 'neutral',
     impact: Math.abs(left - saved),
     confidence: confidenceOne(full.map((r) => r.month)),
-    bars: [['A week later', avgWeek], ['A month later', avgMonth]],
+    bars: [['A week later', avgWeek], ['A month later', avgMonth], ...(avgQuarter != null ? [['3 months later', avgQuarter]] : [])],
     trades: [...full].sort((a, b) => b.money - a.money).slice(0, 8).flatMap((r) => r.ids),
   };
 }
@@ -1671,7 +1693,7 @@ export function analyse({
   const paired = pairDays(days, ix);
   const weeks = weeksOf(paired);
 
-  const twinCard = twin(history, ix, trades, open, day, series, positions, ledger);
+  const twinCard = twin(history, ix, trades, open, day, series, positions, ledger, year?.pnl ?? null);
   const swingCard = swings(paired);
   const cards = [
     twinCard,

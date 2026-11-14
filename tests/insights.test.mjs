@@ -471,6 +471,7 @@ describe('after you sell: every sale since the beginning, averaged', () => {
     const fmt = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}%`;
     assert.equal(c.data.split('\n')[0], `1 week after you sold: ${fmt(avg(moves(7)))} on average, over 10 sales.`);
     assert.equal(c.data.split('\n')[1], `1 month after you sold: ${fmt(avg(moves(30)))} on average, over 10 sales.`);
+    assert.equal(c.data.split('\n')[2], `3 months after you sold: ${fmt(avg(moves(90)))} on average, over 10 sales.`);
   });
 
   test('two tax lots of one stock sold on one day are one sale; a position with no opening date counts', () => {
@@ -478,8 +479,30 @@ describe('after you sell: every sale since the beginning, averaged', () => {
     assert.ok(c.trades.includes('UP2026-07-06a') && c.trades.includes('UP2026-07-06b') ? true : c.trades.length <= 9);
   });
 
-  test('both lines sit in the one card, the week then the month', () => {
+  test('the lines sit in the one card: the week, the month, three months', () => {
     assert.equal(r.cards.filter((x) => x.id === 'after').length, 1);
-    assert.deepEqual(c.bars.map(([label]) => label), ['A week later', 'A month later']);
+    assert.deepEqual(c.bars.map(([label]) => label), ['A week later', 'A month later', '3 months later']);
+  });
+});
+
+describe('you against the market, this year, in Home\'s own dollars', () => {
+  const book = Array.from({ length: 3 }, (_, i) => trade(120, `2026-02-0${i + 2}`, `2026-03-0${i + 2}`));
+  const r = analyse({ positions: book, history: HISTORY, index: INDEX, today: TODAY, year: { you: 25, spx: 11, pnl: 4321.5 } });
+  const year = r.cards.find((c) => c.id === 'twin').twin.year;
+
+  test('"You made" is exactly what Home shows under YTD', () => {
+    assert.equal(year.whole.you, 4321.5);
+  });
+
+  test('the S&P side is the account on 31 December and every deposit since, in the S&P 500, as a gain', () => {
+    const s = twinSeries(HISTORY, indexLevels(INDEX), '2026-01-01');
+    const deposits = HISTORY.filter((row) => row.date > s[0].date).reduce((t, row) => t + row.externalCashFlow, 0);
+    near(year.whole.twin, s[s.length - 1].twin - s[0].twin - deposits);
+    assert.equal(year.whole.series[0].you, 0);
+    assert.equal(year.whole.series[0].twin, 0);
+  });
+
+  test('the positions stay in the table below', () => {
+    assert.equal(year.rows.length, 3);
   });
 });
