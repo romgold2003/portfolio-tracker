@@ -212,9 +212,10 @@
 
     <div id="home" class="page active">
       <!--
-        Clavis (November 2026): the balance, its chart and the holdings on the
-        left; buying power, allocation and the analyst on the right. On a phone
-        the right column folds in under the chart. Every id is as it was.
+        Clavis (November 2026): one column on the page itself, no boxes. The
+        balance on the left with buying power and the analyst's one line under
+        it; the allocation ring at the top right, as it was before; the chart
+        and its timeframes across the full width. Every id is as it was.
       -->
       <div class="topbar" id="homeTopbar">
         <div class="topbar-right">
@@ -222,12 +223,14 @@
                Filled by src/ui/views/sentimentGauges.js; hidden until it has a value. -->
           <div class="gauges" data-gauges style="display:none"></div>
           <div class="live-pill" id="livePill"><span class="live-dot"></span><span id="livePillTxt">Live prices on</span></div>
+          <!-- Money out of the broker: lowers the account, never the returns. -->
+          <button class="topbar-btn topbar-btn-warn" onclick="withdrawMoney()" title="Record money taken out of your broker">↓ Withdraw</button>
           <button class="topbar-btn topbar-newtrade" onclick="show('add')">＋ New trade</button>
         </div>
       </div>
-      <div class="home-grid">
-        <div class="home-main">
-          <div class="hero">
+      <div class="hero">
+        <div class="hero-top">
+          <div class="hero-left">
             <div class="hero-label">Account value
               <button class="eye-btn" id="hideAmounts" onclick="toggleAmounts()" title="Hide amounts" aria-label="Hide amounts" aria-pressed="false">👁</button>
             </div>
@@ -237,74 +240,67 @@
               <span class="hp-sep" aria-hidden="true">·</span>
               <span class="hero-today"><span class="hp-pill hp-today"><span id="portfolioDailyPct">—</span> · <span id="portfolioDailyAmt">—</span></span><span class="hp-lbl">today</span></span>
             </div>
-            <div class="curve-wrap">
-              <!-- Dollars, or the return since the account began: src/core/returnCurve.js. -->
-              <div class="curve-modes" role="group" aria-label="Chart in dollars or percent">
-                <button class="curve-mode active" data-mode="$" onclick="setCurveMode('$')" aria-pressed="true" title="Account value in $">$</button>
-                <button class="curve-mode" data-mode="%" onclick="setCurveMode('%')" aria-pressed="false" title="Return since the account began, in %">%</button>
-              </div>
-              <canvas id="curve" role="img" aria-label="Account value over time">Account value curve.</canvas></div>
-            <div class="tf-side">
-              <div class="tf-row" id="tfRow">
-                <div class="tf" data-tf="1W">1W</div>
-                <div class="tf" data-tf="1M">1M</div>
-                <div class="tf active" data-tf="3M">3M</div>
-                <div class="tf" data-tf="6M">6M</div>
-                <div class="tf" data-tf="YTD">YTD</div>
-                <div class="tf" data-tf="1Y">1Y</div>
-                <div class="tf" data-tf="All">All</div>
-              </div>
-              <div class="tf-extra">
-                <!-- You and the S&P 500 since 1 January. -->
-                <div class="bench">
-                  <div class="bench-row"><span class="bench-name" id="benchName">S&amp;P 500</span><span class="bench-val" id="benchVal">—</span></div>
-                  <div class="bench-row"><span class="bench-name">You</span><span class="bench-val" id="benchMine">—</span></div>
-                  <div class="bench-note" id="benchNote">Add a market data key to compare</div>
-                </div>
-                <!-- Every trading day's return, by year: src/ui/views/dailyLog.js. -->
-                <button class="dl-btn" id="dailyLogBtn" onclick="toggleDailyLog()" aria-haspopup="dialog" aria-expanded="false">
-                  <span class="dl-btn-ico" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Daily returns
-                </button>
-                <div class="dl-pop" id="dailyLog" role="dialog" aria-label="Daily returns" hidden></div>
-              </div>
+            <div class="hero-cash">
+              <span class="hero-cash-lbl">Buying power</span>
+              <b id="cashDisplay">$0</b>
+              <button class="cash-edit" onclick="editCash()" title="Set the cash in your broker">Edit</button>
+            </div>
+            <div class="hero-analyst" id="homeAnalyst" hidden>
+              <span class="hero-analyst-k">✦</span><span id="homeAnalystText"></span>
+              <button type="button" class="hero-analyst-link" onclick="show('insights')">Open Insights →</button>
             </div>
           </div>
-          <div class="kpi-row">
-            <div class="kpi"><div class="kpi-lbl">Unrealised P&L</div><div class="kpi-val" id="kUnreal">+$0</div><div class="kpi-chg" id="kUnrealSub">0 open positions</div></div>
-            <div class="kpi"><div class="kpi-lbl">Realised P&L</div><div class="kpi-val" id="kRealised">+$0</div><div class="kpi-chg" id="kRealisedSub">0 closed positions</div></div>
-            <div class="kpi"><div class="kpi-lbl"><span id="kRetLbl">3M</span> return</div><div class="kpi-val" id="kReturn">+0%</div><div class="kpi-chg">vs start of period</div></div>
-            <div class="kpi"><div class="kpi-lbl">Win rate</div><div class="kpi-val" id="kWinRate">0%</div><div class="kpi-chg" id="kWinSub">0W · 0L closed</div></div>
-            <div class="kpi kpi-monthly-link" onclick="show('monthly')" title="Monthly P&amp;L"><div class="kpi-lbl">Monthly P&amp;L</div><div class="kpi-val" style="font-size:14px;color:var(--blue)">View →</div><div class="kpi-chg">by month</div></div>
-          </div>
-          <div class="card" id="homeHoldings">
-            <div class="card-lbl home-hold-head"><span>Holdings</span><span class="green live-note">● updating live</span></div>
-            <!-- Columns chosen by the user, IBKR-style (src/ui/views/holdingColumns.js). -->
-            <div id="homeColsBar"></div>
-            <div class="hc-picker" id="hcPicker-home" hidden></div>
-            <div id="homePositions"></div>
-          </div>
-        </div>
-        <aside class="home-rail">
-          <div class="card rail-cash">
-            <div class="rail-lbl">Buying power</div>
-            <div class="rail-cash-val"><span id="cashDisplay">$0</span></div>
-            <div class="rail-btns">
-              <button class="rail-btn cash-edit" onclick="editCash()" title="Set the cash in your broker">Edit cash</button>
-              <!-- Money out of the broker: lowers the account, never the returns. -->
-              <button class="rail-btn topbar-btn-warn" onclick="withdrawMoney()" title="Record money taken out of your broker">Withdraw</button>
-            </div>
-          </div>
-          <div class="card alloc" id="allocCard" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Allocation — hover or press Enter to expand">
+          <div class="alloc" id="allocCard" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Allocation — hover or press Enter to expand">
             <div class="alloc-lbl"><span>Allocation</span><span class="alloc-by">by sector</span></div>
             <div class="alloc-chart"><canvas id="sectorChart" role="img" aria-label="Share of the account held in each sector">Sector allocation.</canvas><div class="alloc-count" id="allocCount"></div></div>
             <div class="alloc-legend" id="sectorLegend"></div>
           </div>
-          <div class="card rail-analyst" id="homeAnalyst" hidden>
-            <div class="rail-kicker">✦ Your analyst</div>
-            <p id="homeAnalystText"></p>
-            <button type="button" class="rail-link" onclick="show('insights')">Open Insights →</button>
+        </div>
+        <div class="curve-wrap">
+          <!-- Dollars, or the return since the account began: src/core/returnCurve.js. -->
+          <div class="curve-modes" role="group" aria-label="Chart in dollars or percent">
+            <button class="curve-mode active" data-mode="$" onclick="setCurveMode('$')" aria-pressed="true" title="Account value in $">$</button>
+            <button class="curve-mode" data-mode="%" onclick="setCurveMode('%')" aria-pressed="false" title="Return since the account began, in %">%</button>
           </div>
-        </aside>
+          <canvas id="curve" role="img" aria-label="Account value over time">Account value curve.</canvas></div>
+        <div class="tf-side">
+          <div class="tf-row" id="tfRow">
+            <div class="tf" data-tf="1W">1W</div>
+            <div class="tf" data-tf="1M">1M</div>
+            <div class="tf active" data-tf="3M">3M</div>
+            <div class="tf" data-tf="6M">6M</div>
+            <div class="tf" data-tf="YTD">YTD</div>
+            <div class="tf" data-tf="1Y">1Y</div>
+            <div class="tf" data-tf="All">All</div>
+          </div>
+          <div class="tf-extra">
+            <!-- You and the S&P 500 since 1 January. -->
+            <div class="bench">
+              <div class="bench-row"><span class="bench-name" id="benchName">S&amp;P 500</span><span class="bench-val" id="benchVal">—</span></div>
+              <div class="bench-row"><span class="bench-name">You</span><span class="bench-val" id="benchMine">—</span></div>
+              <div class="bench-note" id="benchNote">Add a market data key to compare</div>
+            </div>
+            <!-- Every trading day's return, by year: src/ui/views/dailyLog.js. -->
+            <button class="dl-btn" id="dailyLogBtn" onclick="toggleDailyLog()" aria-haspopup="dialog" aria-expanded="false">
+              <span class="dl-btn-ico" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Daily returns
+            </button>
+            <div class="dl-pop" id="dailyLog" role="dialog" aria-label="Daily returns" hidden></div>
+          </div>
+        </div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-lbl">Unrealised P&L</div><div class="kpi-val" id="kUnreal">+$0</div><div class="kpi-chg" id="kUnrealSub">0 open positions</div></div>
+        <div class="kpi"><div class="kpi-lbl">Realised P&L</div><div class="kpi-val" id="kRealised">+$0</div><div class="kpi-chg" id="kRealisedSub">0 closed positions</div></div>
+        <div class="kpi"><div class="kpi-lbl"><span id="kRetLbl">3M</span> return</div><div class="kpi-val" id="kReturn">+0%</div><div class="kpi-chg">vs start of period</div></div>
+        <div class="kpi"><div class="kpi-lbl">Win rate</div><div class="kpi-val" id="kWinRate">0%</div><div class="kpi-chg" id="kWinSub">0W · 0L closed</div></div>
+        <div class="kpi kpi-monthly-link" onclick="show('monthly')" title="Monthly P&amp;L"><div class="kpi-lbl">Monthly P&amp;L</div><div class="kpi-val" style="font-size:14px;color:var(--blue)">View →</div><div class="kpi-chg">by month</div></div>
+      </div>
+      <div class="card" id="homeHoldings">
+        <div class="card-lbl home-hold-head"><span>Holdings</span><span class="green live-note">● updating live</span></div>
+        <!-- Columns chosen by the user, IBKR-style (src/ui/views/holdingColumns.js). -->
+        <div id="homeColsBar"></div>
+        <div class="hc-picker" id="hcPicker-home" hidden></div>
+        <div id="homePositions"></div>
       </div>
     </div>
 

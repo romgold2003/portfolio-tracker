@@ -267,7 +267,7 @@ export function renderSectorChart(rows) {
         data: rows.map((r) => r.wedge ?? r.value),
         backgroundColor: rows.map((r) => r.colour),
         // The gap reads as separation between wedges without drawing a stroke.
-        borderColor: cssVar('--panel', '#131313'),
+        borderColor: cssVar('--bg', '#05070B'),
         borderWidth: 2,
         hoverOffset: 4,
       }],
