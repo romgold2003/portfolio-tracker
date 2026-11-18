@@ -124,7 +124,7 @@ describe('the page', () => {
 
   test('in the menu after Crypto, with its person icon; profile on top, windows over the page', () => {
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-    assert.match(html, /show\('crypto'\)[^\n]*\n\s*<button class="nl nl-desk" onclick="show\('friends'\)"><span class="nl-icon">👤<\/span> Friends<\/button>/);
+    assert.match(html, /show\('crypto'\)[^\n]*\n\s*<button class="nl nl-desk" onclick="show\('friends'\)"><span class="nl-icon"><svg[^\n]*?<\/svg><\/span> Friends<\/button>/);
     assert.match(html, /<div id="friends" class="page">[\s\S]*id="frProfile"[\s\S]*id="frAdd"[\s\S]*id="frList"[\s\S]*id="frDetail"[\s\S]*id="frChats"[\s\S]*id="frModal"/);
     assert.match(readFileSync(new URL('../src/ui/render.js', import.meta.url), 'utf8'), /if \(page === 'friends'\) renderFriends\(\);/);
     const view = readFileSync(new URL('../src/ui/views/friends.js', import.meta.url), 'utf8');

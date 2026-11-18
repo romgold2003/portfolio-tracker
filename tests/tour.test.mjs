@@ -65,7 +65,7 @@ describe('the slides', () => {
 describe('where it lives', () => {
   const html = read('index.html');
   test('Help & tutorial in the menu only, not a second button at the top', () => {
-    assert.match(html, /id="tourBtn" onclick="openTour\(\)"[^>]*>❔ Help &amp; tutorial/);
+    assert.match(html, /id="tourBtn" onclick="openTour\(\)"[^>]*><svg[^\n]*?<\/svg>Help &amp; tutorial/);
     assert.equal((html.match(/onclick="openTour\(\)"/g) ?? []).length, 1);
     assert.doesNotMatch(html, /id="helpBtn"/);
     assert.match(html, /id="tour"[^>]*hidden/);

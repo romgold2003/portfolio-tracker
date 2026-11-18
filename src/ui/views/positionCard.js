@@ -6,7 +6,7 @@
  * which resolve against the global bridge in src/app/actions.js.
  */
 import { ASSET_CLASSES, MONTHS_LONG } from '../../config/constants.js';
-import { columnCell, gridStyle } from './holdingColumns.js';
+import { columnCell, gridStyle, identHtml, sparkHtml, stackHtml } from './holdingColumns.js';
 import { cleanMind, mindLabel } from '../../core/mind.js';
 import {
   unreal, realized, pctD, costOf, marketValueOf,
@@ -353,11 +353,10 @@ export function positionCard(p, isOpen, positions = [], columns = null) {
     return `<div class="pos-card ${expanded ? 'expanded' : ''}">
     <div class="pos-head hc-row" style="${gridStyle(columns.layout)}" onclick="toggleExpand(${p.id})">
       <div class="hc-cell hc-left hc-sym">
-        <span class="chevron">▶</span>
-        <span class="pos-ticker">${escapeHtml(p.ticker)}</span>${progressBadge(p)}
-        <span class="pos-dir d-${p.dir.toLowerCase()}">${p.dir}</span>${p.extPhase ? `<span class="ext-badge" title="Traded outside regular hours">${p.extPhase === 'pre' ? 'PRE' : 'AFTER'}</span>` : ''}
+        ${identHtml(p, `${progressBadge(p)}${p.extPhase ? `<span class="ext-badge" title="Traded outside regular hours">${p.extPhase === 'pre' ? 'PRE' : 'AFTER'}</span>` : ''}`)}${sparkHtml(p)}
       </div>
       ${columns.layout.cols.map((id) => columnCell(id, p, columns.ctx)).join('')}
+      ${stackHtml(p, columns.ctx)}
     </div>${body}
   </div>`;
   }
@@ -365,9 +364,7 @@ export function positionCard(p, isOpen, positions = [], columns = null) {
   return `<div class="pos-card ${expanded ? 'expanded' : ''}">
     <div class="pos-head" onclick="toggleExpand(${p.id})">
       <div class="pos-left">
-        <span class="chevron">▶</span>
-        <span class="pos-ticker">${escapeHtml(p.ticker)}</span>${progressBadge(p)}
-        <span class="pos-dir d-${p.dir.toLowerCase()}">${p.dir}</span>
+        ${identHtml(p, progressBadge(p))}
         ${p.summary
     // A trade recorded from a statement has no share price, and the figure
     // stored in its place is the whole stake. Printing that where a price goes

@@ -9,7 +9,7 @@ import { extendedPricingAvailable, sessionPhase } from '../../services/extendedH
 import { inPlay } from '../dayReset.js';
 import { ui } from '../uiState.js';
 import {
-  headerHtml, toolbarHtml, columnCell, sortByLayout, gridStyle, listContext, setPriceSource, bindColumns,
+  headerHtml, toolbarHtml, columnCell, sortByLayout, gridStyle, listContext, setPriceSource, bindColumns, identHtml, sparkHtml, stackHtml,
 } from './holdingColumns.js';
 import { renderCurve, renderSectorChart } from '../charts.js';
 import {
@@ -115,10 +115,10 @@ function extBadge(p) {
 function homeRow(p, layout, ctx) {
   return `<div class="hc-row mini-row" style="${gridStyle(layout)}">
     <div class="hc-cell hc-left hc-sym">
-      <span class="mini-tk">${escapeHtml(p.ticker)}</span>
-      <span class="mini-dir d-${p.dir.toLowerCase()}">${p.dir}</span>${extBadge(p)}
+      ${identHtml(p, extBadge(p))}${sparkHtml(p)}
     </div>
     ${layout.cols.map((id) => columnCell(id, p, ctx)).join('')}
+    ${stackHtml(p, ctx)}
   </div>`;
 }
 
@@ -199,6 +199,10 @@ function renderAllocation() {
   const rows = sectorBreakdown(state.positions, state.cash);
   renderSectorChart(rows);
 
+  const sectors = rows.filter((r) => r.name !== 'Cash').length;
+  const count = document.getElementById('allocCount');
+  if (count) count.innerHTML = sectors ? `<b>${sectors}</b><span>sector${sectors === 1 ? '' : 's'}</span>` : '';
+
   const legend = document.getElementById('sectorLegend');
   if (!legend) return;
   legend.innerHTML = rows.map((r) => `<div class="alloc-row">
@@ -221,6 +225,29 @@ function renderAllocation() {
  * and until then yours is the honest window rather than a year you were not
  * invested for.
  */
+/**
+ * One plain sentence on Home: the year so far against the S&P 500, the same
+ * two figures shown beside the chart. The full reading is on Insights.
+ */
+export function analystSentence(mine, market) {
+  if (mine == null || market == null) return '';
+  const gap = mine - market;
+  const pair = `<b>${fp(mine)}</b> vs <b>${fp(market)}</b>`;
+  if (Math.abs(gap) < 0.5) return `You're level with the market this year: ${pair}.`;
+  return gap > 0
+    ? `You're ahead of the market this year: ${pair}.`
+    : `The market is ahead of you this year: ${pair}.`;
+}
+
+function renderHomeAnalyst(mine, market) {
+  const card = document.getElementById('homeAnalyst');
+  const text = document.getElementById('homeAnalystText');
+  if (!card || !text) return;
+  const sentence = analystSentence(mine, market);
+  text.innerHTML = sentence;
+  card.hidden = !sentence;
+}
+
 async function renderBenchmark(totals) {
   // Switched off in Customize: no fetch for the S&P 500 at all.
   if (!isShown('home.benchmark')) return;
@@ -263,6 +290,7 @@ async function renderBenchmark(totals) {
 
   valEl.textContent = fp(marketReturn);
   valEl.style.color = clr(marketReturn);
+  renderHomeAnalyst(mine.returnPct, marketReturn);
   valEl.title = `S&P 500 since 1 January ${new Date().getFullYear()}${withDividends(rows) ? ', dividends reinvested — as your own return counts the dividends you received' : ' (price only)'}`;
   clear();
 }
@@ -882,6 +910,12 @@ function trackedSpan() {
  * This follows the timeframe buttons rather than showing lifetime P&L, so
  * "1M" answers what the month did.
  */
+/** What the pill under the balance covers, in words. */
+const PERIOD_WORDS = {
+  '1W': 'this week', '1M': 'past month', '3M': 'past 3 months', '6M': 'past 6 months',
+  YTD: 'this year', '1Y': 'past year', All: 'all time',
+};
+
 function renderPeriodGain(period) {
   const pnlEl = document.getElementById('acctPnl');
   if (!pnlEl) return;
@@ -897,8 +931,10 @@ function renderPeriodGain(period) {
 
   pnlEl.innerHTML = hidden
     ? `<span style="color:var(--text3)">${MASK}</span>`
-    : `${arrow}${$s(gain)} <span style="color:${clr(returnPct)}">(${fp(returnPct)})</span>`;
+    : `${arrow}${$u(Math.abs(gain))} · ${fp(returnPct)}`;
   pnlEl.style.color = hidden ? 'var(--text3)' : clr(gain);
+  const label = document.getElementById('acctPnlLbl');
+  if (label) label.textContent = PERIOD_WORDS[ui.timeframe] ?? '';
 }
 
 /** The live/partial pill shown on both the home and positions pages. */
@@ -952,7 +988,12 @@ export function renderHome() {
   const totals = accountTotals(state.positions, state.cash);
 
   renderPrivacyToggle();
-  setText('acctValue', hidden ? MASK : $u(totals.account).replace('.00', ''));
+  // The cents a shade dimmer than the dollars, as a banking app shows a balance.
+  const valueEl = document.getElementById('acctValue');
+  if (valueEl) {
+    const [whole, cents] = $u(totals.account).split('.');
+    valueEl.innerHTML = hidden ? MASK : `${whole}<span class="hv-cents">.${cents ?? '00'}</span>`;
+  }
 
   setText('cashDisplay', hidden ? MASK : $u(state.cash));
 

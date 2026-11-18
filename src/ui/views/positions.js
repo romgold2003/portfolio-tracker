@@ -11,6 +11,19 @@ import { MONTHS_LONG } from '../../config/constants.js';
 
 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 
+/** Open, Closed or All above the lists: shows one part of the page or both. */
+function bindSegments() {
+  const seg = document.getElementById('posSeg');
+  if (!seg || seg.dataset.bound) return;
+  seg.dataset.bound = '1';
+  seg.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-pseg]');
+    if (!button) return;
+    document.getElementById('positions').dataset.show = button.dataset.pseg;
+    seg.querySelectorAll('[data-pseg]').forEach((b) => b.classList.toggle('on', b === button));
+  });
+}
+
 export function renderPositions() {
   const open = state.positions.filter((p) => p.status === 'Open');
   const closed = state.positions.filter((p) => p.status === 'Closed');
@@ -23,6 +36,7 @@ export function renderPositions() {
   if (pnlEl) pnlEl.style.color = clr(openPnl);
   setText('sOpenCount', open.length);
   setText('sDeployed', $u(deployed).replace('.00', ''));
+  bindSegments();
 
   // Each card's head shows the columns chosen for this page, sorted by the heading clicked (holdingColumns.js).
   bindColumns(document.getElementById('posColumns'), 'positions', () => renderPositions());

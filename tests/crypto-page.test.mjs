@@ -28,7 +28,7 @@ const page = (id) => {
 
 describe('the menu', () => {
   test('has Crypto straight after News', () => {
-    const items = [...html.matchAll(/onclick="show\('(\w+)'\)"><span class="nl-icon">[^<]*<\/span>(?:<span class="nl-label">)? ([^<]+)</g)]
+    const items = [...html.matchAll(/onclick="show\('(\w+)'\)"><span class="nl-icon">(?:<svg[^\n]*?<\/svg>|[^<]*)<\/span>(?:<span class="nl-label">)? ([^<]+)</g)]
       .map((m) => m[2].trim());
     assert.deepEqual(items, ['Home', 'Positions', 'New trade', 'Monthly', 'Insights', 'News', 'Crypto', 'Friends']);
   });

@@ -154,6 +154,58 @@ export function sortByLayout(list, layout, ctx) {
   });
 }
 
+/* ── The holding's face (Clavis, November 2026) ──
+   A coloured bubble with the ticker, the name of the holding with its size
+   under it, and a small line of the last three months. The bubble's colour
+   comes from the ticker, so a holding keeps the same one everywhere. */
+
+function tickerHue(ticker) {
+  let h = 0;
+  for (const ch of String(ticker)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+
+/** The round badge: the ticker on a tint of its own colour. */
+export function bubbleHtml(ticker) {
+  const t = String(ticker ?? '').toUpperCase();
+  const h = tickerHue(t);
+  const size = t.length <= 3 ? 13 : t.length === 4 ? 11.5 : 9.5;
+  return `<span class="hb" style="--hb-h:${h};font-size:${size}px" aria-hidden="true">${escapeHtml(t.slice(0, 5))}</span>`;
+}
+
+/** "32 shares", "0.05 BTC". */
+export function sizeLabel(p) {
+  if (p.summary) return 'from statement';
+  const q = escapeHtml(fmtShares(p.qty));
+  return p.cls === 'Crypto' ? `${q} ${escapeHtml(p.ticker)}` : `${q} share${Math.abs(p.qty) === 1 ? '' : 's'}`;
+}
+
+/** The last three months of closes as a line, green when up over them, red when down. Empty until the history is in. */
+export function sparkHtml(p) {
+  const since = new Date(Date.now() - 92 * DAY).toISOString().slice(0, 10);
+  const closes = (priceSource.rowsOf(p.ticker) ?? []).filter((r) => r.date >= since && r.close > 0).map((r) => r.close);
+  if (p.cur > 0 && closes.length) closes.push(p.cur);
+  if (closes.length < 5) return '<span class="hspark" aria-hidden="true"></span>';
+  const lo = Math.min(...closes);
+  const hi = Math.max(...closes);
+  const span = hi - lo || 1;
+  const pts = closes.map((c, i) => `${((i / (closes.length - 1)) * 100).toFixed(1)},${(26 - ((c - lo) / span) * 24).toFixed(1)}`).join(' ');
+  const up = (closes.at(-1) - closes[0]) * sign(p) >= 0;
+  return `<svg class="hspark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--${up ? 'green' : 'red'})" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+}
+
+/** Bubble, ticker and size: the left of every holding row. */
+export function identHtml(p, extra = '') {
+  return `${bubbleHtml(p.ticker)}<span class="hid"><span class="hid-tk">${escapeHtml(p.ticker)}${p.dir === 'Short' ? ' <span class="hid-short">Short</span>' : ''}${extra}</span><span class="hid-sub">${sizeLabel(p)}</span></span>`;
+}
+
+/** Value over its return, for the right of a phone row. */
+export function stackHtml(p, ctx) {
+  const value = columnValue('value', p, ctx);
+  const pct = columnValue('totalPct', p, ctx);
+  return `<div class="hc-stack"><b>${value == null ? dash : $u(value).replace(/\.\d\d$/, '')}</b><span style="color:${pct == null ? 'var(--text3)' : clr(pct)}">${pct == null ? '' : fp(pct)}</span></div>`;
+}
+
 /** The grid every row of a list shares: the symbol, then one track per column. */
 export function gridStyle(layout) {
   return `--hc-cols:${layout.cols.length};--hc-min:${120 + layout.cols.length * 86}px`;

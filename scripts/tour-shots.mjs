@@ -74,11 +74,11 @@ const SHOTS = [
       help: { sel: '#tourBtn' },
       settings: { sel: '#settingsBtn' },
       customize: { sel: '#customizeBtn' },
-      navPositions: { sel: '.nl', text: '◈' },
-      navMonthly: { sel: '.nl', text: '▦' },
-      navNews: { sel: '.nl', text: '◎' },
-      navCrypto: { sel: '.nl', text: '₿' },
-      navFriends: { sel: '.nl', text: '👤' },
+      navPositions: { sel: '.nl[onclick*="positions"]' },
+      navMonthly: { sel: '.nl[onclick*="monthly"]' },
+      navNews: { sel: '.nl[onclick*="news"]' },
+      navCrypto: { sel: '.nl[onclick*="crypto"]' },
+      navFriends: { sel: '.nl[onclick*="friends"]' },
     },
   },
   {
@@ -152,7 +152,7 @@ const SHOTS = [
     targets: {
       summary: { sel: '.ins-hero' },
       standout: { sel: '.ins-standout' },
-      navInsights: { sel: '.nl', text: '✦' },
+      navInsights: { sel: '.nl[onclick*="insights"]' },
     },
   },
   {
@@ -179,9 +179,9 @@ const SHOTS = [
       earnings: { sel: '#earnPane' },
       econ: { sel: '#econCard' },
       tabs: { sel: '#newsTabs' },
-      navNews: { sel: '.nl', text: '◎' },
-      navCrypto: { sel: '.nl', text: '₿' },
-      navFriends: { sel: '.nl', text: '👤' },
+      navNews: { sel: '.nl[onclick*="news"]' },
+      navCrypto: { sel: '.nl[onclick*="crypto"]' },
+      navFriends: { sel: '.nl[onclick*="friends"]' },
     },
   },
 ];

@@ -156,9 +156,9 @@ function renderSummaryTable() {
 
   body.innerHTML = keys.map((key) => {
     const m = trades[key];
-    return `<tr style="cursor:pointer" onclick="selectMonth('${key}')">
-      <td class="mo">${monthLabel(key)}</td>
-      <td style="color:${clr(m.real)};font-weight:600">${$s(m.real)}</td>
+    return `<tr class="mrow" style="cursor:pointer" onclick="selectMonth('${key}')">
+      <td class="mo"><b>${monthLabel(key)}</b><span class="mt-sub">${plural(m.closed, 'trade')} · ${m.won ?? 0} won · ${m.lost ?? 0} lost</span></td>
+      <td class="mt-pnl" style="color:${clr(m.real)};font-weight:600">${$s(m.real)}</td>
       ${avgTradeCell(m)}
       <td class="muted">${m.closed}</td>
       <td class="muted">${m.won ?? 0} · ${m.lost ?? 0}</td>
@@ -425,7 +425,13 @@ export function renderMonthly() {
     return;
   }
   const year = renderYearSelect();
-  renderMonthlyChart(yearTotals(year));
+  const totals = yearTotals(year);
+  renderMonthlyChart(totals);
+  const sub = el('monthSub');
+  if (sub) {
+    const sum = totals.reduce((a, b) => a + b, 0);
+    sub.innerHTML = `${year} · realised <span style="color:${clr(sum)}">${$s(+sum.toFixed(2))}</span>`;
+  }
   renderSummaryTable();
   renderMindStats();
   populateYearPicker();

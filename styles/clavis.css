@@ -112,7 +112,7 @@ body.is-guest{padding-top:40px}
 /* ── Home: Cash and Today as soft chips, no outlines ── */
 .hero-chip{background:var(--input);border-radius:16px;padding:9px 16px}
 .hero-chip-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
-.cash-edit{border:0!important;border-radius:999px!important;padding:3px 11px!important;font-weight:600}
+.hero-chip .cash-edit{border:0!important;border-radius:999px!important;padding:3px 11px!important;font-weight:600}
 .hero{border:0;border-radius:var(--radius)}
 
 @media (max-width:720px){
@@ -255,3 +255,253 @@ body.landing-open{overflow:hidden}
 /* New trade: soft, borderless choices; the picked one in colour. */
 .dir-opt{border-radius:14px!important;border-color:transparent!important;background:var(--input)}
 .mind-pick{border-radius:12px;border-color:transparent!important;background:var(--input)}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Clavis layouts (November 2026), drawn to the five approved mock-ups.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Sidebar: line icons, Settings at the foot, the account as a card ── */
+.nl-icon svg,.settings-btn svg,.more-links span svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nl-more .nl-icon svg circle{fill:currentColor;stroke:none}
+@media (min-width:721px){
+  .nl{font-size:14.5px;gap:12px;padding:11px 14px}
+  .nl-icon{display:inline-grid;place-items:center;width:22px}
+  .sidebar{width:248px}
+}
+.nl.active .nl-icon{color:var(--accent)}
+.nl-add .nl-icon svg{stroke-width:2.4}
+.sidebar-bot .settings-btn{display:flex;align-items:center;gap:12px;width:100%;margin:2px 0 0!important;background:none;color:var(--text2);font-size:14px;padding:10px 14px;border-radius:12px}
+.sidebar-bot .settings-btn:hover{background:var(--panel);color:var(--text)}
+.sidebar-bot .settings-btn svg{width:19px;height:19px;flex:none}
+.side-account{display:flex;align-items:center;gap:11px;background:var(--panel);border-radius:18px;padding:11px 12px;margin-top:12px}
+.acct-avatar{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--accent-grad);color:var(--accent-ink);font-weight:700;font-size:13px}
+.side-account .acct-switch{flex:1;min-width:0;margin:0}
+.side-account .acct-btn{background:none;border:0;padding:0}
+.side-account .acct-btn:hover{background:none}
+.side-account .acct-lbl{display:none}
+.side-account .acct-name{font-size:14px;font-weight:700}
+.side-account .acct-menu{top:auto;bottom:calc(100% + 10px)}
+.account-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 4px 0;font-size:12px;color:var(--text3)}
+.account-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sideStat{padding:4px 4px 0;font-size:11.5px;color:var(--text4)}
+
+/* ── Page titles ── */
+.greeting{font-size:34px;font-weight:800;letter-spacing:-0.04em;line-height:1.1}
+.page-sub{font-size:14.5px;color:var(--text3);margin-top:6px}
+.page-sub span{color:var(--text2)}
+
+/* A segmented switch: Open · Closed · All. */
+.seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;background:var(--panel);border-radius:999px;padding:4px;margin:0 0 18px;min-width:380px}
+.seg button{border:0;background:none;color:var(--text2);font:inherit;font-size:14px;font-weight:600;padding:9px 18px;border-radius:999px;cursor:pointer}
+.seg button.on{background:var(--input);color:var(--text)}
+
+/* ── Home ── */
+#homeTopbar{justify-content:flex-end;margin-bottom:6px}
+.home-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:28px;align-items:start}
+.home-main{min-width:0}
+.home-rail{display:flex;flex-direction:column;gap:18px;position:sticky;top:18px}
+.home-rail .card{margin:0;padding:22px 24px}
+#home .hero{background:none;border:0;padding:0;margin:0 0 22px}
+#home .hero-label{display:flex;align-items:center;gap:6px;font-size:15px;text-transform:none;letter-spacing:0;color:var(--text2);margin:0 0 4px}
+#home .eye-btn{font-size:14px;opacity:.6}
+#home .hero-value{font-size:68px;font-weight:800;letter-spacing:-0.05em;line-height:1.05}
+.hv-cents{color:var(--text3);font-size:.6em;letter-spacing:-0.02em}
+.hero-pills{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:14px}
+.hp-pill{display:inline-flex;align-items:center;gap:4px;margin:0;padding:6px 12px;border-radius:999px;font-size:14.5px;font-weight:700;background:color-mix(in srgb,currentColor 14%,transparent)}
+.hp-today{color:var(--text2)}
+.hp-today:has([style*="--green"]){background:color-mix(in srgb,var(--green) 14%,transparent)}
+.hp-today:has([style*="--red"]){background:color-mix(in srgb,var(--red) 14%,transparent)}
+.hp-lbl{font-size:14.5px;color:var(--text2);margin-left:4px}
+.hp-sep{color:var(--text4)}
+.hero-today{display:inline-flex;align-items:center}
+#home .curve-wrap{height:360px;margin-top:20px}
+#home .curve-modes{top:0;left:auto;right:0}
+#home .tf-side{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:16px}
+#home .tf-row{gap:6px}
+#home .tf{padding:8px 15px;font-size:13.5px;border-radius:999px}
+.tf-extra{position:relative;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+#home .bench{flex-direction:row;align-items:center;min-width:0;gap:8px}
+#home .bench-row{gap:7px;background:var(--panel);border-radius:999px;padding:8px 14px}
+#home .bench-name{min-width:0;font-size:13.5px;color:var(--text2)}
+#home .bench-val{font-size:14px}
+#home .bench-note{margin:0;font-size:11.5px}
+#home .bench-note:empty{display:none}
+.dl-btn{border:0!important;border-radius:999px!important;background:var(--panel)!important;padding:8px 15px!important;font-size:13.5px!important;font-weight:600}
+#home .kpi-row{margin:0 0 26px}
+#home .kpi{padding:16px 18px}
+
+/* Holdings: a bubble, the name and its size, a line of three months, then the figures. */
+#homeHoldings{background:none;padding:0;margin:0}
+.home-hold-head{font-size:21px;font-weight:700;text-transform:none;letter-spacing:-0.02em;color:var(--text);margin-bottom:6px}
+.live-note{font-size:12px;font-weight:500;letter-spacing:0}
+#homeHoldings .hc-scroll .hc-sym{background:var(--bg)}
+#homeHoldings .hc-table{min-width:calc(var(--hc-min) + 200px)}
+#homeHoldings .hc-row,#openPositions .hc-row{grid-template-columns:minmax(300px,2.4fr) repeat(var(--hc-cols),minmax(84px,1fr))}
+#openPositions .hc-cards{min-width:calc(var(--hc-min) + 200px)}
+.hc-header{border-bottom:1px solid var(--border)}
+.hc-head{font-size:11px;letter-spacing:0.05em}
+.mini-row.hc-row{padding:14px 0;border-bottom:1px solid var(--border)}
+.hc-cell{font-size:14px}
+.hc-sym{gap:12px}
+.hc-stack{display:none}
+.hb{width:44px;height:44px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:800;letter-spacing:-0.03em;
+  background:hsl(var(--hb-h) 50% 17%);color:hsl(var(--hb-h) 85% 72%);overflow:hidden}
+.hid{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.hid-tk{font-size:15.5px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.hid-sub{font-size:13px;color:var(--text3);font-weight:400}
+.hid-short{font-size:10.5px;font-weight:700;color:var(--red);background:var(--red-bg);padding:1px 7px;border-radius:999px}
+.hspark{width:120px;height:30px;margin-left:auto;flex:none;padding-right:12px;box-sizing:content-box}
+
+/* Positions: rows, not boxes; a picked row opens as a soft card. */
+.pos-card{background:none;border:0;border-bottom:1px solid var(--border);border-radius:0;margin:0}
+.pos-card.expanded{background:var(--panel);border-radius:22px;border-bottom:0;margin:10px 0}
+.pos-head{padding:14px 6px}
+.pos-left{display:flex;align-items:center;gap:12px;min-width:0}
+.hc-cards .hc-header{padding:0 6px 8px;margin-bottom:0}
+#positions[data-show="open"] .pos-closed-part{display:none}
+#positions[data-show="closed"] .pos-open-part{display:none}
+#positions[data-show="all"] .pos-closed-part{margin-top:28px}
+.section-title{font-size:13px;font-weight:600;letter-spacing:0.06em;color:var(--text3)}
+
+/* The right column of Home. */
+.rail-lbl{font-size:14.5px;color:var(--text2)}
+.rail-cash-val{font-size:32px;font-weight:800;letter-spacing:-0.035em;margin:6px 0 18px}
+#cashDisplay{color:var(--text)!important;font-size:inherit!important;font-weight:inherit!important}
+.rail-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rail-btn,.rail-btn.cash-edit,.rail-btn.topbar-btn-warn{border:0!important;border-radius:999px!important;background:var(--input)!important;color:var(--text)!important;
+  font:inherit;font-size:14.5px!important;font-weight:700!important;padding:12px 10px!important;cursor:pointer}
+.rail-btn:hover{filter:brightness(1.2)}
+#allocCard{display:block;margin:0;padding:22px 24px}
+#allocCard .alloc-lbl{display:flex;justify-content:space-between;align-items:baseline;font-size:19px;font-weight:700;text-transform:none;letter-spacing:-0.02em;color:var(--text)}
+.alloc-by{font-size:13px;font-weight:400;color:var(--text3);letter-spacing:0}
+#allocCard .alloc-chart{width:190px;height:190px;margin:18px auto 20px}
+.alloc-count{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none;line-height:1.2}
+.alloc-count b{font-size:26px;font-weight:800;color:var(--text)}
+.alloc-count span{font-size:11.5px;color:var(--text3)}
+#allocCard .alloc-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 18px;max-width:none}
+#allocCard .alloc-row{min-width:0}
+#allocCard .alloc-row{font-size:13px;color:var(--text2)}
+#allocCard .alloc-dot{border-radius:50%}
+#allocCard .alloc-pct{color:var(--text);font-weight:700}
+.rail-analyst{background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 17%,var(--panel)),var(--panel) 62%)!important}
+.rail-kicker{color:var(--accent2);font-weight:800;letter-spacing:0.14em;font-size:12.5px;text-transform:uppercase}
+.rail-analyst p{font-size:16px;line-height:1.55;color:var(--text);margin:12px 0 14px}
+.rail-link{background:none;border:0;padding:0;color:var(--accent2);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+
+/* ── Monthly ── */
+#monthly .month-tabs{background:var(--panel);border:0;border-radius:999px;padding:4px;max-width:520px;margin-bottom:22px}
+#monthly .month-tabs button{flex-direction:row;border-radius:999px;font-size:14px;padding:10px}
+#monthly .month-tabs button span{display:none}
+#monthly .month-tabs button.on{background:var(--input);box-shadow:none}
+#monthly .chart-card{background:none;padding:0;margin-bottom:10px}
+#monthly .chart-card .card-lbl{text-transform:none;letter-spacing:0;font-size:13px}
+#monthly .chart-wrap2{height:240px}
+#monthRealised .card:has(> table){background:none;padding:0!important}
+#monthRealised table thead{display:none}
+#monthRealised tr.mrow{display:grid;grid-template-columns:1fr auto;grid-template-areas:"mo pnl" "mo avg";align-items:center;padding:15px 4px;border-bottom:1px solid var(--border)}
+#monthRealised tr.mrow:hover{background:var(--panel)}
+#monthRealised tr.mrow td{border:0;padding:0}
+#monthRealised tr.mrow td.mo{grid-area:mo;display:flex;flex-direction:column;gap:3px}
+#monthRealised tr.mrow td.mo b{font-size:17px;font-weight:700;color:var(--text)}
+.mt-sub{font-size:13.5px;color:var(--text3)}
+#monthRealised tr.mrow td.mt-pnl{grid-area:pnl;text-align:right;font-size:17px;font-weight:700!important}
+#monthRealised tr.mrow td:nth-child(3){grid-area:avg;text-align:right;font-size:13.5px}
+#monthRealised tr.mrow td:nth-child(3)::after{content:" avg";color:var(--text3)}
+#monthRealised tr.mrow td:nth-child(n+4){display:none}
+
+/* ── Insights ── */
+.ins-hero{border:0!important;background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 16%,var(--panel)),var(--panel) 60%)!important}
+.ins-top{border-top:0!important}
+.ins-kind{align-self:flex-start;padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;text-transform:none;letter-spacing:0}
+.ins-top.is-edge .ins-kind{color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent)}
+.ins-top.is-improve .ins-kind{color:var(--amber);background:color-mix(in srgb,var(--amber) 15%,transparent)}
+.ins-top.is-pattern .ins-kind{color:#86A8FF;background:rgba(91,140,255,.15)}
+.ins-top h3{font-size:18px;font-weight:700}
+
+/* ── New trade ── */
+.form-card{max-width:760px}
+.trade-side{display:grid!important;grid-template-columns:1fr 1fr;gap:4px;background:var(--input);border-radius:999px;padding:4px;margin-bottom:22px}
+.trade-side .dir-opt{border-radius:999px!important;background:none;border:0!important;color:var(--text2);font-weight:700;font-size:14.5px;padding:12px}
+.trade-side .dir-opt.long-on{background:var(--panel);color:var(--green)}
+.trade-side .dir-opt.short-on{background:var(--panel);color:var(--red)}
+#add .fg label{text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--text2)}
+#add .btn-row .btn-blue{flex:1;min-height:54px;font-size:16px;font-weight:700}
+
+/* ── Phones ── */
+@media (max-width:720px){
+  .greeting{font-size:30px}
+  .seg{display:grid;min-width:0;width:100%}
+  /* Home: one column, in the mock-up's order. */
+  #home.page.active{display:flex;flex-direction:column;gap:18px}
+  #home .home-grid,#home .home-main,#home .home-rail{display:contents}
+  #home .hero{order:1;margin:0}
+  #home .rail-cash{order:2}
+  #home #homeTopbar{order:3;margin:0}
+  #home .kpi-row{order:4;margin:0}
+  #homeHoldings{order:5}
+  #home .rail-analyst{order:6}
+  #allocCard{order:7}
+  #home .hero-value{font-size:48px}
+  #home .curve-wrap{height:250px;margin-top:16px}
+  #home .tf-side{flex-direction:column;align-items:stretch}
+  #home .tf-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;background:var(--panel);border-radius:999px;padding:4px}
+  #home .tf{background:none;text-align:center;padding:9px 0}
+  #home .tf.active{background:var(--input);color:var(--text)}
+  .tf-extra{justify-content:space-between}
+  .rail-cash{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:12px}
+  .rail-cash-val{margin:2px 0 0;font-size:26px}
+  .rail-cash .rail-btns{grid-row:1 / span 2;grid-column:2;grid-template-columns:1fr;gap:6px}
+  .rail-btn,.rail-btn.cash-edit,.rail-btn.topbar-btn-warn{padding:9px 16px!important;font-size:13px!important}
+  /* Lists on a phone: the bubble, the name, the line, and the value over its return. */
+  #homeHoldings .hc-table,#openPositions .hc-cards{min-width:0}
+  #homeHoldings .hc-scroll{overflow:visible}
+  #homeHoldings .hc-row,#openPositions .hc-row{grid-template-columns:minmax(0,1fr) auto!important}
+  #homeHoldings .hc-header,#openPositions .hc-header,#homeHoldings .hc-bar{display:none}
+  #homeHoldings .hc-row > .hc-cell:not(.hc-sym),#openPositions .hc-row > .hc-cell:not(.hc-sym){display:none!important}
+  #homeHoldings .hc-stack,#openPositions .hc-stack{display:flex}
+  .hc-stack{flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums}
+  .hc-stack b{font-size:15.5px;font-weight:700;color:var(--text)}
+  .hc-stack span{font-size:13px;font-weight:600}
+  .hspark{width:72px;height:26px;padding-right:8px}
+  .hb{width:42px;height:42px}
+  .pos-head{padding:12px 2px}
+  #allocCard .alloc-legend{gap:8px 14px}
+  .form-card{padding:18px 16px}
+}
+@media (max-width:720px){
+  /* The figures as a row of small cards that scrolls sideways, as a banking app shows them. */
+  #home .kpi-row{display:flex;overflow-x:auto;gap:10px;scrollbar-width:none;margin:0 -14px;padding:0 14px}
+  #home .kpi-row::-webkit-scrollbar{display:none}
+  #home .kpi{flex:0 0 auto;min-width:150px;padding:13px 16px}
+  #home .kpi-val{font-size:19px}
+  #home .kpi-monthly-link{display:block}
+}
+@media (max-width:420px){
+  .hspark{width:56px}
+  .hid-tk .ext-badge{display:none}
+}
+
+/* ── Sign in on a phone: the mark, the fields, the buttons, and nothing else ── */
+.lock-safe{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:22px;font-size:13px;color:var(--text3)}
+.lock-safe svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.lock-guest-btn{color:var(--text2)!important;font-weight:600}
+@media (max-width:520px){
+  .lock-signin .lock-title,.lock-signin .lock-sub{display:none}
+  .lock-signin .lock-field label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .lock-signin .lock-field{margin-bottom:12px}
+  .lock-signin .lock-field input{min-height:56px;font-size:16px;border-radius:16px}
+  .lock-signin .lock-mark{width:112px;height:112px}
+  .lock-signin .lock-brand{font-size:42px;gap:14px;margin-top:24px}
+  .lock-signin .lock-tagline{font-size:17px;line-height:1.5;margin-bottom:30px;padding:0 10px}
+  .lock-signin .lock-submit,.lock-signin .lock-create{min-height:56px;font-size:16px}
+  .lock-signin .lock-guest p{font-size:11.5px}
+}
+
+/* A hidden button stays hidden whatever its style (Admin, for everyone but the admin). */
+.settings-btn[hidden],.sidebar-bot [hidden]{display:none!important}
+.ins-hero .hero-year{border:0!important;background:none!important}
+.ins-hero .hero-year b{font-size:44px;letter-spacing:-0.04em}
+.ins-hero .hero-year span{text-transform:none;letter-spacing:0;font-size:14px}
+
+/* Inside an opened position: soft tiles, no outlines. */
+.pos-card .dgi{border:0!important;background:var(--bg)!important;border-radius:16px!important}

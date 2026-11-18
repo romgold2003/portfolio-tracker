@@ -91,7 +91,7 @@ describe('the Customize window', () => {
 
   test('in the sidebar beside Designer mode, opened and closed like the other windows', () => {
     const html = read('index.html');
-    assert.match(html, /openDesigner\(\)[^\n]*\n[^\n]*\n\s*<button class="settings-btn" id="customizeBtn" onclick="openCustomize\(\)"[^>]*>⊞ Customize<\/button>/);
+    assert.match(html, /openDesigner\(\)[^\n]*\n[^\n]*\n\s*<button class="settings-btn" id="customizeBtn" onclick="openCustomize\(\)"[^>]*><svg[^\n]*?<\/svg>Customize<\/button>/);
     assert.match(html, /id="customizeModal"[^>]*><div class="modal cz-modal"><\/div><\/div>/);
     const actions = read('src/app/actions.js');
     assert.match(actions, /openCustomize, closeCustomize,/);

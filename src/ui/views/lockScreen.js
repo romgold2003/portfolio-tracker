@@ -110,11 +110,11 @@ function signinForm() {
     <p class="lock-sub">${signinBlurb()}</p>
     <div class="lock-field">
       <label for="lockEmail">Email</label>
-      <input type="email" id="lockEmail" autocomplete="username" placeholder="you@example.com" value="${escapeHtml(pendingEmail)}">
+      <input type="email" id="lockEmail" autocomplete="username" placeholder="Email" value="${escapeHtml(pendingEmail)}">
     </div>
     <div class="lock-field">
       <label for="lockPassword">Password</label>
-      <input type="password" id="lockPassword" autocomplete="current-password" placeholder="Your password">
+      <input type="password" id="lockPassword" autocomplete="current-password" placeholder="Password">
     </div>
     <div id="lockError" class="lock-error"></div>
     <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Sign in">Sign in</button>
@@ -123,10 +123,11 @@ function signinForm() {
       ${forgotLink(accounts.length)}
     </div>
     ${cloudMode() ? `<div class="lock-guest">
-      <button type="button" class="lock-guest-btn" id="lockGuest">Continue as a guest</button>
+      <button type="button" class="lock-guest-btn" id="lockGuest">Explore the demo first</button>
       <p>Look around with a sample portfolio. Nothing you do is saved.</p>
       <p class="lock-legal">By continuing as a guest you agree to the <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>.</p>
-    </div>` : ''}`;
+    </div>` : ''}
+    <div class="lock-safe"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Encrypted on your device</div>`;
 }
 
 /**
@@ -328,7 +329,7 @@ function render() {
   };
   const body = (screens[mode] ?? signinForm)();
 
-  container.innerHTML = `<div class="lock-card">${body}</div>`;
+  container.innerHTML = `<div class="lock-card lock-${mode}">${body}</div>`;
   container.style.display = 'flex';
   setSigninHero(true);
   wire();
@@ -405,7 +406,7 @@ async function enterAsGuest() {
     await startGuest({ ...buildDemoJournal({ prices: FALLBACK_PRICES, today }), tourSeen: false });
     await finish();
   } catch (err) {
-    if (button) { button.disabled = false; button.textContent = 'Continue as a guest'; }
+    if (button) { button.disabled = false; button.textContent = 'Explore the demo first'; }
     setError(err.message || String(err));
   }
 }

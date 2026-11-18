@@ -57,6 +57,9 @@ function showAccount() {
   label.textContent = profile.email;
   label.title = profile.email;
   row.style.display = 'flex';
+  // Two letters from the email for the round badge beside the account.
+  const avatar = document.getElementById('acctAvatar');
+  if (avatar) avatar.textContent = String(profile.email ?? '').replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase() || '·';
 }
 
 /**

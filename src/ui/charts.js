@@ -162,7 +162,15 @@ export function renderCurve(timeframe, mode = '$') {
         borderWidth: 2,
         pointRadius: 0,
         fill: pct ? { target: { value: 0 }, above: c.green + '1f', below: c.red + '1f' } : true,
-        backgroundColor: line + '14',
+        // Clavis: the area under the line fades from the line's colour to nothing.
+        backgroundColor: (ctx) => {
+          const area = ctx.chart.chartArea;
+          if (!area) return line + '14';
+          const g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+          g.addColorStop(0, line + '4d');
+          g.addColorStop(1, line + '00');
+          return g;
+        },
         tension: 0.4,
       }],
     },
@@ -217,58 +225,25 @@ export function renderCurve(timeframe, mode = '$') {
         },
       },
       scales: {
-        x: { ticks: { color: c.txt, font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: c.grid } },
+        x: { ticks: { color: c.txt, font: { size: 10 }, maxTicksLimit: 8 }, grid: { display: false }, border: { display: false } },
         y: {
+          // A phone has no room for the axis; the tooltip gives every figure.
+          display: typeof window === 'undefined' || window.innerWidth > 720,
           ticks: {
             color: c.txt,
             font: { size: 10 },
             callback: (v) => (pct ? signed(v, Math.abs(v) < 10 ? 1 : 0) : '$' + (v / 1000).toFixed(1) + 'k'),
           },
           // The window's starting line, drawn plainer than the rest.
-          grid: { color: (ctx) => (pct && ctx.tick?.value === 0 ? c.txt : c.grid) },
+          // Clavis: no lines across the chart, only the zero line in %.
+          grid: { color: (ctx) => (pct && ctx.tick?.value === 0 ? c.txt : 'transparent'), drawTicks: false },
+          border: { display: false },
         },
       },
     },
   });
   return { ...series, mode: pct ? '%' : '$' };
 }
-
-/**
- * Percentages drawn onto the wedges themselves.
- *
- * Chart.js has no built-in data labels and the usual plugin is a dependency
- * this project does not want, so this is the whole feature: about fifteen lines
- * of canvas drawing.
- *
- * Thin wedges are left unlabelled. At the size this chart is shown, anything
- * under roughly a twelfth of the circle cannot hold legible text, and a label
- * spilling over its neighbour is worse than no label — the legend carries every
- * figure anyway.
- */
-const LABEL_MIN_PCT = 8;
-
-const wedgeLabels = {
-  id: 'wedgeLabels',
-  afterDatasetsDraw(chart) {
-    const { ctx } = chart;
-    const values = chart.data.datasets[0].data;
-    const total = values.reduce((a, b) => a + b, 0);
-    if (!total) return;
-
-    ctx.save();
-    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    chart.getDatasetMeta(0).data.forEach((arc, i) => {
-      const pct = (values[i] / total) * 100;
-      if (pct < LABEL_MIN_PCT) return;
-      const point = arc.getCenterPoint();
-      ctx.fillText(`${pct.toFixed(0)}%`, point.x, point.y);
-    });
-    ctx.restore();
-  },
-};
 
 /**
  * The sector allocation doughnut.
@@ -300,7 +275,7 @@ export function renderSectorChart(rows) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '54%',
+      cutout: '76%',
       layout: { padding: 2 },
       plugins: {
         legend: { display: false },
@@ -316,7 +291,7 @@ export function renderSectorChart(rows) {
         },
       },
     },
-    plugins: [wedgeLabels],
+    // No figures on the ring: it is thin now, the legend beside it has every one.
   });
 }
 
@@ -335,8 +310,11 @@ export function renderMonthlyChart(monthlyTotals, { canvasId = 'monthChart', slo
       datasets: [{
         data: monthlyTotals,
         backgroundColor: monthlyTotals.map((v) => (v < 0 ? c.red : c.green)),
-        borderRadius: 4,
+        // Clavis: rounded pills, as the mock-up drew them.
+        borderRadius: 8,
         borderSkipped: false,
+        barPercentage: 0.62,
+        categoryPercentage: 0.9,
       }],
     },
     options: {
@@ -354,13 +332,14 @@ export function renderMonthlyChart(monthlyTotals, { canvasId = 'monthChart', slo
       scales: {
         x: { ticks: { color: c.txt, font: { size: 11 } }, grid: { display: false } },
         y: {
+          display: typeof window === 'undefined' || window.innerWidth > 720,
           ticks: {
             color: c.txt,
             font: { size: 10 },
             callback: (v) => (v === 0 ? '$0' : (v < 0 ? '-$' : '$') + Math.abs(Math.round(v)).toLocaleString()),
           },
-          grid: { color: c.grid },
-          border: { dash: [4, 4] }, // make the zero line readable
+          grid: { color: c.grid, drawTicks: false },
+          border: { display: false, dash: [4, 4] },
         },
       },
     },
