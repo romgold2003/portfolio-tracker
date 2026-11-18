@@ -21,7 +21,9 @@ const whales = readFileSync(new URL('../src/ui/views/cryptoWhales.js', import.me
 const page = (id) => {
   const start = html.indexOf(`<div id="${id}" class="page`);
   assert.ok(start >= 0, `page ${id} is missing`);
-  const next = html.indexOf('class="page', start + 20);
+  // A page's own tag, not class="page-sub" (the line under a page's title).
+  const rest = html.slice(start + 20).search(/class="page[ "]/);
+  const next = rest < 0 ? -1 : start + 20 + rest;
   const end = html.indexOf('</main>', start);
   return html.slice(start, next > 0 && next < end ? next : end);
 };

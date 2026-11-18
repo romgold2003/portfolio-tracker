@@ -671,3 +671,40 @@ body.landing-open{overflow:hidden}
 .guest-fox .fox-mark{color:inherit}
 .tour-step{display:inline-flex;align-items:center;gap:8px}
 .tour-fox .fox-mark{width:20px;height:20px;color:inherit}
+
+/* ════════════════════════════════════════════════════════════════════════
+   The Clavis page structure (November 2026): every page is built the same
+   way, so the layout itself says Clavis — a big title with one line under
+   it, the page's switch as one rounded segmented control, sections titled
+   in plain words, and the same small rounded filters inside cards.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* 1. One switch for a page's views: News, Crypto, Monthly (as Positions' Open · Closed · All). */
+#newsTabs,#cryptoTabs,#monthly .month-tabs{display:inline-grid!important;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;
+  background:var(--panel)!important;border:0!important;border-radius:999px!important;padding:4px!important;margin:0 0 20px!important;min-width:380px;max-width:560px}
+#newsTabs .subtab,#cryptoTabs .opt-tab,#monthly .month-tabs button{border:0!important;border-radius:999px!important;background:none!important;
+  color:var(--text2)!important;font:inherit;font-size:14px!important;font-weight:600!important;padding:9px 18px!important;box-shadow:none!important;text-align:center;cursor:pointer}
+#newsTabs .subtab.active,#cryptoTabs .opt-tab.active,#monthly .month-tabs button.on{background:var(--input)!important;color:var(--text)!important}
+
+/* 2. One small filter inside cards: a rounded track, the chosen option lifted. */
+.card .opt-picker:not(#cryptoTabs){display:inline-flex;gap:2px;background:var(--input);border-radius:999px;padding:3px}
+.card .opt-picker:not(#cryptoTabs) .opt-tab{border:0;border-radius:999px;background:none;color:var(--text2);padding:5px 11px;font-size:12px;font-weight:600}
+.card .opt-picker:not(#cryptoTabs) .opt-tab.active{background:var(--panel);color:var(--text)}
+
+/* 3. Sections titled in plain words, like Holdings: no small grey capitals. */
+.card-lbl{font-size:15.5px;font-weight:700;color:var(--text);text-transform:none;letter-spacing:-0.01em;margin-bottom:14px}
+.card-lbl .green,.card-lbl small,.card-lbl .mind-sub{font-size:12px;font-weight:500}
+
+@media (max-width:720px){
+  #newsTabs,#cryptoTabs,#monthly .month-tabs{display:grid!important;min-width:0;width:100%;max-width:none}
+}
+
+/* 4. Boxes inside a card are soft tiles, never thin outlines (as an opened position). */
+.cw-card{border:0!important;background:var(--panel2);border-radius:16px!important;padding:14px 16px!important}
+.cw-card-hd{font-size:13.5px!important;font-weight:700!important;color:var(--text)!important;text-transform:none!important;letter-spacing:0!important}
+/* Friends: box titles in plain words; a guest sees the note alone, not empty boxes. */
+.fr-head .fr-title{text-transform:none!important;letter-spacing:-0.01em;font-size:15.5px}
+#frBody[hidden],#frOffline[hidden]{display:none!important}
+/* The netflow periods: the same rounded filter as everywhere else. */
+.cw-nf-frame{border:0!important;border-radius:999px!important;background:var(--input)!important;color:var(--text2)!important;font-weight:600}
+.cw-nf-frame.active{background:var(--text)!important;color:var(--bg)!important}

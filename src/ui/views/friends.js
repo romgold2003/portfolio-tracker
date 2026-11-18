@@ -15,6 +15,7 @@
  * open chat is asked for new messages every few seconds while it is on screen,
  * and not at all otherwise: each check wakes the database, billed by the hour.
  */
+import { foxEmpty } from '../art/fox.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { social, setShowing, knowShowing } from '../../services/social.js';
 import { shareSummary } from '../../core/shareSummary.js';
@@ -535,9 +536,9 @@ export async function renderFriends() {
   // A guest has no account for friends to find: the page says so instead.
   const online = cloudEnabled() && !isGuest();
   const offline = el('frOffline');
-  if (offline) offline.textContent = isGuest()
+  if (offline) offline.innerHTML = foxEmpty('Friends need an account', isGuest()
     ? 'Friends need a Clavis account. Create a free account to add friends, see what they share and chat.'
-    : 'Friends need a Clavis account: sign in on the cloud version to add them.';
+    : 'Friends need a Clavis account: sign in on the cloud version to add them.');
   el('frOffline').hidden = online;
   el('frBody').hidden = !online;
   if (!online) return;
