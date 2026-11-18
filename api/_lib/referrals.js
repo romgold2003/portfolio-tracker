@@ -23,6 +23,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { query, one, driverGeneration } from './db.js';
+import { mailAvailable, sendReferralRewardEmail } from './mail.js';
 
 /** What the member who shared the code earns when the friend first pays. */
 export const REWARD_MONTHS = 1;
@@ -80,6 +81,16 @@ const TABLES = [
      PRIMARY KEY (user_id, fingerprint)
    )`,
   `CREATE INDEX IF NOT EXISTS payment_methods_fp ON payment_methods (fingerprint)`,
+  /** The congratulations waiting in the app, shown once and then marked seen. */
+  `CREATE TABLE IF NOT EXISTS referral_notices (
+     id           TEXT PRIMARY KEY,
+     user_id      TEXT NOT NULL,
+     friend_label TEXT,
+     months       INTEGER NOT NULL,
+     created_at   TEXT NOT NULL,
+     seen_at      TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS referral_notices_user ON referral_notices (user_id)`,
 ];
 
 let readyFor = -1;
@@ -232,9 +243,55 @@ export async function recordPayment(userId, { at = now(), paymentFingerprint = n
     return { rewarded: false, reason: 'same-payment' };
   }
   const given = await grant(row.referrer_id, REWARD_MONTHS, 'referral', userId, at);
-  return given
-    ? { rewarded: true, referrer: row.referrer_id, months: given }
-    : { rewarded: false, reason: 'capped' };
+  if (!given) return { rewarded: false, reason: 'capped' };
+  await congratulate(row.referrer_id, userId, given, at);
+  return { rewarded: true, referrer: row.referrer_id, months: given };
+}
+
+/**
+ * How the referrer is told who paid: the friend's first name when they gave
+ * one in their profile, otherwise the start of their email ("sasha.levi@…"
+ * becomes "Sasha"). The referrer invited them, so this tells them nothing new
+ * about who; the Privacy Policy says it is shared.
+ */
+export function friendLabelFrom(firstName, email) {
+  const clean = (text) => String(text ?? '').trim();
+  if (clean(firstName)) return clean(firstName).slice(0, 40);
+  const local = clean(email).split('@')[0].split(/[._+\-\d]/).find(Boolean) ?? '';
+  return local ? local[0].toUpperCase() + local.slice(1).toLowerCase() : '';
+}
+
+async function friendLabel(userId) {
+  const user = await one('SELECT email FROM users WHERE id = $1', [userId]);
+  let first = null;
+  try {
+    first = (await one('SELECT first_name FROM about_you WHERE user_id = $1', [userId]))?.first_name ?? null;
+  } catch { /* no profile answers yet: the table may not exist */ }
+  return friendLabelFrom(first, user?.email);
+}
+
+/**
+ * The thank-you: kept in the app until it has been seen, and sent by email
+ * when mail is set up. A failed email never undoes the reward.
+ */
+async function congratulate(referrerId, friendId, months, at) {
+  const label = await friendLabel(friendId);
+  await query(
+    'INSERT INTO referral_notices (id, user_id, friend_label, months, created_at) VALUES ($1, $2, $3, $4, $5)',
+    [newId(), referrerId, label || null, months, at],
+  );
+  if (!mailAvailable()) return;
+  const referrer = await one('SELECT email FROM users WHERE id = $1', [referrerId]);
+  if (!referrer?.email) return;
+  const site = process.env.APP_URL || process.env.PUBLIC_URL || '';
+  await sendReferralRewardEmail(referrer.email, label, months, site).catch((err) => console.error('referral email', err.message));
+}
+
+/** Mark this member's waiting congratulations as seen. */
+export async function noticesSeen(user) {
+  await ensureTables();
+  await query('UPDATE referral_notices SET seen_at = $1 WHERE user_id = $2 AND seen_at IS NULL', [now(), user.id]);
+  return { ok: true };
 }
 
 /** What the profile panel shows: the code, who joined with it, who paid, the months earned. */
@@ -247,6 +304,10 @@ export async function referralStats(user) {
   const created = Date.parse(user.created_at ?? user.createdAt ?? '');
   const canRedeem = !mine && (!Number.isFinite(created) || Date.now() - created <= REDEEM_DAYS * 86400000);
   const thisYear = await monthsThisYear(user.id);
+  const waiting = await query(
+    'SELECT friend_label, months, created_at FROM referral_notices WHERE user_id = $1 AND seen_at IS NULL ORDER BY created_at',
+    [user.id],
+  );
   return {
     code,
     joined: Number(joined?.n ?? 0),
@@ -258,6 +319,7 @@ export async function referralStats(user) {
     leftThisYear: Math.max(0, YEARLY_CAP - thisYear),
     referred: Boolean(mine),
     canRedeem,
+    notices: (waiting?.rows ?? waiting ?? []).map((n) => ({ friend: n.friend_label || null, months: Number(n.months), at: n.created_at })),
   };
 }
 
@@ -271,4 +333,5 @@ export async function forgetReferrals(userId) {
   await query('DELETE FROM referrals WHERE referred_id = $1 OR referrer_id = $1', [userId]);
   await query('DELETE FROM free_months WHERE user_id = $1', [userId]);
   await query('DELETE FROM payment_methods WHERE user_id = $1', [userId]);
+  await query('DELETE FROM referral_notices WHERE user_id = $1', [userId]);
 }

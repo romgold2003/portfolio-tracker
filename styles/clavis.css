@@ -708,3 +708,34 @@ body.landing-open{overflow:hidden}
 /* The netflow periods: the same rounded filter as everywhere else. */
 .cw-nf-frame{border:0!important;border-radius:999px!important;background:var(--input)!important;color:var(--text2)!important;font-weight:600}
 .cw-nf-frame.active{background:var(--text)!important;color:var(--bg)!important}
+
+/* ── Referral window (views/referral.js) ── */
+.ref-modal{position:fixed;inset:0;z-index:320;background:rgba(2,3,5,.6);display:grid;place-items:center;padding:16px}
+.ref-modal[hidden]{display:none}
+.ref-panel{position:relative;width:min(460px,100%);max-height:calc(100vh - 32px);overflow-y:auto;background:var(--panel);border-radius:28px;padding:22px 24px 20px;
+  box-shadow:0 30px 90px rgba(0,0,0,.6),inset 0 0 0 1px var(--border2)}
+.ref-x{position:absolute;top:14px;right:14px}
+.ref-art{display:block;width:100%;height:auto;margin:6px 0 4px;border-radius:20px;background:radial-gradient(60% 70% at 50% 40%,rgba(242,106,30,.16),transparent 70%),var(--panel2)}
+.ref-title{font-size:24px;font-weight:800;letter-spacing:-0.03em;margin:16px 0 8px;text-align:center}
+.ref-lead{font-size:15.5px;line-height:1.55;color:var(--text2);text-align:center;margin:0 0 18px}
+.ref-lead b{color:var(--text)}
+.ref-steps{list-style:none;margin:6px 0 16px;padding:0;display:flex;flex-direction:column;gap:10px}
+.ref-steps li{display:flex;gap:12px;align-items:flex-start}
+.ref-n{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--blue-bg);color:var(--accent2);font-weight:800;font-size:13px}
+.ref-steps li > span:last-child{display:flex;flex-direction:column;gap:2px}
+.ref-steps b{font-size:14.5px}
+.ref-steps li span span{font-size:13px;color:var(--text3);line-height:1.45}
+.ref-code{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:12px 14px;border-radius:16px;background:var(--input)}
+.ref-code span{font-size:12px;color:var(--text3)}
+.ref-code b{flex:1;font-size:21px;letter-spacing:.14em;color:var(--accent2)}
+.ref-share{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:12px}
+.ref-share .pf-save{margin:0}
+.ref-wa{display:grid;place-items:center;padding:0 18px;border-radius:999px;background:#1F9D55;color:#fff;font-weight:700;font-size:14px;text-decoration:none}
+.ref-redeem-t{font-size:13px;font-weight:600;color:var(--text2);margin:10px 2px 6px}
+.ref-small{font-size:12px;color:var(--text3);line-height:1.5;margin:10px 2px 0;text-align:center}
+.ref-panel .pf-save{width:100%}
+.pf-gift svg{stroke:var(--accent2)}
+@media (max-width:720px){
+  .ref-modal{place-items:end center;padding:0}
+  .ref-panel{width:100%;border-radius:26px 26px 0 0;max-height:92vh;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+}

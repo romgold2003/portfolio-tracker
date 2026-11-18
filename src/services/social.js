@@ -23,6 +23,7 @@ export const social = {
   friends: () => api('friends'),
   referral: () => api('referral'),
   redeem: (code) => api('redeem', { body: { code } }),
+  referralSeen: () => api('referral-seen', { body: {} }),
   request: (email) => api('request', { body: { email } }),
   answer: (id, accept) => api('answer', { body: { id, accept } }),
   cancel: (id) => api('cancel', { body: { id } }),

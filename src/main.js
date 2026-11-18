@@ -37,6 +37,7 @@ import { describeStorageMode } from './ui/views/settings.js';
 import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
 import { installActions, refreshPrices, setTimeframe } from './app/actions.js';
 import { paintFoxes } from './ui/art/fox.js';
+import { checkReferralNews } from './ui/views/referral.js';
 
 /** Background loops, so they can be stopped on sign out. */
 let timers = [];
@@ -105,6 +106,8 @@ async function startSession() {
   setPersistHandler(saveVault);
 
   showAccount();
+  // A friend who used this member's code has paid: the congratulations, once.
+  setTimeout(checkReferralNews, 2500);
   describeStorageMode();
   renderAll();
   // Home opens without a page change, so its dials are drawn here.

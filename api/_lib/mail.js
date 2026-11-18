@@ -1,5 +1,6 @@
 /**
- * Sending one kind of email: a password-reset link.
+ * Sending two kinds of email: a password-reset link, and the congratulations
+ * when a friend a member invited pays their first month (referrals.js).
  *
  * Over Brevo's HTTP API rather than SMTP, and with fetch rather than a client
  * library, for the same reason the rest of this codebase has almost no
@@ -74,6 +75,54 @@ export async function sendResetEmail(to, link) {
     }),
   });
 
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Mail provider refused the message (${res.status}): ${detail.slice(0, 200)}`);
+  }
+}
+
+/**
+ * The referral reward (November 2026): a friend who joined with this
+ * member's code has paid their first month, and the member gets a free month.
+ * Throws on failure; the caller carries on regardless, since the message is
+ * also waiting in the app.
+ */
+export async function sendReferralRewardEmail(to, friend, months = 1, link = '') {
+  if (!mailAvailable()) throw new Error('No mail provider is configured.');
+  const who = friend || 'A friend you invited';
+  const gift = months === 1 ? 'a free month' : `${months} free months`;
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'api-key': process.env.MAIL_API_KEY,
+      'Content-Type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { email: process.env.MAIL_FROM, name: process.env.MAIL_FROM_NAME || 'Clavis' },
+      to: [{ email: to }],
+      subject: `Congratulations: ${who} joined Clavis, you get ${gift}`,
+      textContent: [
+        'Congratulations!',
+        '',
+        `${who} joined Clavis with your referral code and has just paid for their first month.`,
+        `As a thank you, you get ${gift} of Clavis.`,
+        '',
+        'You will see it in your profile, under Invite friends.',
+        link ? `Open Clavis: ${link}` : '',
+        '',
+        'Thank you for sharing Clavis.',
+      ].join('\n'),
+      htmlContent: `
+        <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a;max-width:520px">
+          <p style="font-size:20px;font-weight:700;margin:0 0 12px">Congratulations!</p>
+          <p><b>${escapeAttribute(who)}</b> joined Clavis with your referral code and has just paid for their first month.</p>
+          <p>As a thank you, you get <b>${escapeAttribute(gift)}</b> of Clavis.</p>
+          ${link ? `<p style="margin:24px 0"><a href="${escapeAttribute(link)}" style="background:#F26A1E;color:#0B0F16;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:999px;display:inline-block">Open Clavis</a></p>` : ''}
+          <p style="color:#666;font-size:13px">You will see it in your profile, under Invite friends. Thank you for sharing Clavis.</p>
+        </div>`,
+    }),
+  });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`Mail provider refused the message (${res.status}): ${detail.slice(0, 200)}`);

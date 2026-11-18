@@ -25,6 +25,7 @@
  *   POST /api/social/marketing  {marketing}  change the marketing-email choice
  *   GET  /api/social/referral               this member's referral code and what it has earned (_lib/referrals.js)
  *   POST /api/social/redeem     {code}      link a new account to the friend who shared the code
+ *   POST /api/social/referral-seen {}       the congratulations for a friend who paid have been shown
  *
  * One function for all of them, as with auth and the News panels: a Hobby
  * deployment allows twelve, and this is the eighth.
@@ -37,7 +38,7 @@ import * as social from '../_lib/social.js';
 import { saveAbout } from '../_lib/about.js';
 import { isAdmin, adminStats, recordActivity } from '../_lib/admin.js';
 import { recordConsent, setMarketing, consentOf } from '../_lib/consent.js';
-import { referralStats, redeem, ReferralError } from '../_lib/referrals.js';
+import { referralStats, redeem, noticesSeen, ReferralError } from '../_lib/referrals.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -77,6 +78,7 @@ const POSTS = {
   marketing: { limit: [30, 60], run: (user, b) => setMarketing(user, b) },
   // Few tries an hour: a code is short, and guessing them should not pay.
   redeem: { limit: [10, 60], run: (user, b) => redeem(user, b.code) },
+  'referral-seen': { limit: [60, 60], run: (user) => noticesSeen(user) },
 };
 
 function actionFrom(url) {

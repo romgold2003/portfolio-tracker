@@ -13,7 +13,7 @@ import { makeClient } from './support/http.mjs';
 import signup from '../api/_auth/signup.js';
 import social from '../api/social/[action].js';
 import {
-  recordPayment, redeem, ReferralError, newCode, normalizeCode, sameIdentity, REWARD_MONTHS, WELCOME_MONTHS, YEARLY_CAP, REDEEM_DAYS,
+  recordPayment, redeem, ReferralError, newCode, normalizeCode, sameIdentity, friendLabelFrom, REWARD_MONTHS, WELCOME_MONTHS, YEARLY_CAP, REDEEM_DAYS,
 } from '../api/_lib/referrals.js';
 import {
   generateDataKey, wrapDataKey, encryptJson, generateRecoveryKey, normalizeRecoveryKey,
@@ -166,11 +166,61 @@ describe('in the app', () => {
     assert.match(lock, /social\.redeem\(referral\)\.then\(forgetReferral\)/);
     assert.match(read('src/ui/views/landing.js'), /url\.searchParams\.get\('ref'\)/);
   });
-  test('the profile panel has the code, the invite link, and give a month, get a month', () => {
-    assert.match(read('index.html'), /Invite friends<\/div>\s*<div id="profileInvite">/);
-    const view = read('src/ui/views/profileMenu.js');
-    assert.match(view, /data-copy-code/);
+  test('a Referral button in the profile and in Settings opens one window that explains it all', () => {
+    const html = read('index.html');
+    assert.match(html, /class="pf-item pf-gift" type="button" onclick="closeProfile\(\);openReferral\(\)"/);
+    assert.match(html, /onclick="closeSettings\(\);openReferral\(\)">Open my referral<\/button>/);
+    assert.match(html, /<div class="ref-modal" id="referralModal"/);
+    const view = read('src/ui/views/referral.js');
+    assert.match(view, /Your friend gets 2 months free/);
+    assert.match(view, /You get a free month/);
+    assert.match(view, /data-ref-copy/);
+    assert.match(view, /https:\/\/wa\.me\/\?text=/);
     assert.match(view, /\?ref=\$\{encodeURIComponent\(code\)\}/);
-    assert.match(view, /Give a month, get a month\./);
+    assert.match(read('src/app/actions.js'), /openReferral, closeReferral,/);
+  });
+});
+
+describe('the congratulations when a friend pays', () => {
+  test('the friend is named by first name, or by the start of the email', () => {
+    assert.equal(friendLabelFrom('Sasha', 'x@gmail.com'), 'Sasha');
+    assert.equal(friendLabelFrom(null, 'sasha.levi@gmail.com'), 'Sasha');
+    assert.equal(friendLabelFrom('', 'DAN_2@gmail.com'), 'Dan');
+  });
+
+  test('kept in the app until seen, and emailed to the member who invited them', async () => {
+    process.env.MAIL_API_KEY = 'test-key';
+    process.env.MAIL_FROM = 'noreply@clavis.test';
+    const sent = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, options) => { sent.push({ url, body: JSON.parse(options.body) }); return { ok: true, status: 201, text: async () => '' }; };
+    try {
+      const samuel = await person('samuel@gmail.com');
+      const { code } = (await samuel.call('referral')).body;
+      const sasha = await person('sasha.levi@gmail.com');
+      await sasha.call('redeem', { code });
+      assert.equal(sent.length, 0, 'nothing is sent when the friend only joins');
+      await recordPayment(sasha.id, { paymentFingerprint: 'card-sasha' });
+
+      assert.equal(sent.length, 1);
+      assert.deepEqual(sent[0].body.to, [{ email: 'samuel@gmail.com' }]);
+      assert.match(sent[0].body.subject, /Congratulations: Sasha joined Clavis, you get a free month/);
+      assert.match(sent[0].body.textContent, /Sasha joined Clavis with your referral code and has just paid for their first month/);
+
+      const waiting = (await samuel.call('referral')).body.notices;
+      assert.deepEqual(waiting.map((n) => [n.friend, n.months]), [['Sasha', 1]]);
+      assert.equal((await samuel.call('referral-seen', {})).status, 200);
+      assert.deepEqual((await samuel.call('referral')).body.notices, []);
+    } finally {
+      globalThis.fetch = realFetch;
+      delete process.env.MAIL_API_KEY;
+      delete process.env.MAIL_FROM;
+    }
+  });
+
+  test('two friends pay: two months, and both names in the window', async () => {
+    const { congratsHtml } = await import('../src/ui/views/referral.js');
+    const html = congratsHtml([{ friend: 'Sasha', months: 1 }, { friend: 'Dan', months: 1 }]);
+    assert.match(html, /<b>Sasha and Dan<\/b> have just paid for their first month with your code\. You get <b>2 free months<\/b>/);
   });
 });

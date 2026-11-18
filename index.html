@@ -200,6 +200,15 @@
       <div id="sideStat">✓ Encrypted</div>
     </div>
   </aside>
+  <!-- Referral, opened from the profile and from Settings (views/referral.js); also the congratulations when a friend pays. -->
+  <div class="ref-modal" id="referralModal" role="dialog" aria-modal="true" aria-label="Referral" hidden>
+    <div class="ref-panel">
+      <button class="pf-x ref-x" type="button" data-ref-close aria-label="Close">×</button>
+      <div id="refBody"></div>
+      <div class="pf-msg" id="refNote"></div>
+    </div>
+  </div>
+
   <!-- The profile panel, opened from the button at the bottom of the menu. -->
   <div class="profile-pop" id="profilePop" role="dialog" aria-modal="true" aria-label="Your profile" hidden>
     <div class="pf-panel">
@@ -224,10 +233,9 @@
       <div id="profileShare"></div>
       <div class="pf-msg" id="pfShareNote"></div>
 
-      <!-- One referral code per member, for life (api/_lib/referrals.js). -->
+      <!-- Referrals open in a window of their own (views/referral.js). -->
       <div class="pf-sec">Invite friends</div>
-      <div id="profileInvite"></div>
-      <div class="pf-msg" id="pfInviteNote"></div>
+      <button class="pf-item pf-gift" type="button" onclick="closeProfile();openReferral()"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M3 7h18v3H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1.2C7 7 9.5 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 14.5 7 12 7z"/></svg><span><b>Referral: give a month, get a month</b><span>Your code, your invite link and what you have earned</span></span></button>
 
       <div id="pfSecurity">
         <div class="pf-sec">Security</div>
@@ -866,6 +874,12 @@
         <div class="set-sub" id="importStatus">Your trades, positions and cash, from the file your broker gives you.</div>
       </div>
       <button class="btn btn-blue" id="importBrokerBtn" onclick="openYearsPanel()">Import my broker file</button>
+    </section>
+
+    <section class="set-card">
+      <div class="set-title">Referral</div>
+      <div class="set-sub">Give a month, get a month: a friend who joins with your code gets 2 months free instead of 1, and you get a free month when they pay their first month.</div>
+      <button class="btn btn-blue" type="button" onclick="closeSettings();openReferral()">Open my referral</button>
     </section>
 
     <section class="set-card">
