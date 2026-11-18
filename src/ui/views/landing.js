@@ -201,7 +201,7 @@ const FAQ = [
   ['Which brokers work?', 'Interactive Brokers, Robinhood, Schwab, Fidelity, eToro, Trading 212, DEGIRO, Revolut, Israeli banks and more, plus any CSV or Excel file.'],
   ['How do I keep it up to date?', 'Import your broker’s newest file whenever you like, or add and edit trades by hand. Prices update on their own.'],
   ['Is this investment advice?', 'No. Clavis shows information about your own trades. It never tells you what to buy or sell.'],
-  ['Can I invite friends?', 'Yes. Every member has a referral code for life, in their profile. When a friend joins with your code and pays for their first month, you get two months free.'],
+  ['Can I invite friends?', 'Yes: give a month, get a month. Every member has a referral code for life, in their profile. A friend who joins with it gets a free month, and you get one when they pay their first month, up to six free months a year.'],
   ['Does it work on my phone?', 'Yes, in your phone’s browser on iPhone and Android.'],
 ];
 

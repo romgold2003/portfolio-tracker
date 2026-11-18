@@ -50,14 +50,14 @@ const inviteLink = (code) => `${window.location.origin}/?ref=${encodeURIComponen
 export function inviteHtml(r, guest = false) {
   if (guest) return '<p class="pf-note">Create a free account to get your own referral code.</p>';
   if (!r) return '<p class="pf-note">Loading…</p>';
-  const months = r.rewardMonths ?? 2;
-  return `<p class="pf-note">When a friend joins with your code and pays for their first month, you get <b>${months} months free</b>. Your code is yours for life.</p>
+  return `<p class="pf-note"><b>Give a month, get a month.</b> A friend who joins with your code gets a free month. You get one when they pay their first month, up to ${r.yearlyCap ?? 6} free months a year. Your code is yours for life.</p>
     <div class="pf-code"><span>Your code</span><b>${escapeHtml(r.code)}</b><button type="button" class="pf-mini" data-copy-code>Copy</button></div>
     <button type="button" class="pf-save pf-share" data-share-link>Share my invite link</button>
     <div class="pf-stats">
       <div><b>${r.joined}</b><span>joined</span></div>
       <div><b>${r.paid}</b><span>subscribed</span></div>
       <div><b>${r.freeMonths}</b><span>free month${r.freeMonths === 1 ? '' : 's'} earned</span></div>
+      <div><b>${r.leftThisYear ?? '—'}</b><span>left this year</span></div>
     </div>
     ${r.canRedeem ? `<div class="pf-redeem"><input type="text" id="pfRedeem" maxlength="16" autocomplete="off" placeholder="Got a code from a friend?"><button type="button" class="pf-mini" data-redeem>Apply</button></div>`
     : r.referred ? '<p class="pf-note">A friend’s code is linked to your account.</p>' : ''}`;
@@ -104,7 +104,7 @@ async function inviteClick(e) {
     if (!code) return note('pfInviteNote', 'Type the code first.', true);
     try {
       await social.redeem(code);
-      note('pfInviteNote', 'Code linked. Thank your friend!');
+      note('pfInviteNote', 'Code linked: you have a free month. Thank your friend!');
       referral = await social.referral();
       drawInvite();
     } catch (err) {

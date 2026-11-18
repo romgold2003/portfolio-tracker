@@ -618,9 +618,20 @@ body.landing-open{overflow:hidden}
 .pf-code b{flex:1;font-size:20px;letter-spacing:.14em;font-variant-numeric:tabular-nums;color:var(--accent2)}
 .pf-mini{border:0;border-radius:999px;background:var(--panel2);color:var(--text);font:inherit;font-size:12.5px;font-weight:700;padding:7px 13px;cursor:pointer}
 .pf-share{width:100%;margin-bottom:10px}
-.pf-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+.pf-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
 .pf-stats div{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px;border-radius:14px;background:var(--input)}
 .pf-stats b{font-size:18px}
 .pf-stats span{font-size:11px;color:var(--text3);text-align:center}
 .pf-redeem{display:flex;gap:8px;margin:6px 0 4px}
 .pf-redeem input{flex:1;min-width:0;text-transform:uppercase;letter-spacing:.06em}
+
+/* The balance in the font it had before the Clavis redesign (Romy, November
+   2026): the system face, bold, 42px, cents in the same style. */
+#home .hero-value{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:42px;font-weight:700;letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums}
+#home .hv-cents{font-family:inherit;font-size:1em;font-weight:inherit;color:inherit;letter-spacing:inherit}
+@media (max-width:720px){ #home .hero-value{font-size:38px} }
+
+/* "Clavis Insights" in the menu; the phone tab keeps the short "Insights". */
+@media (max-width:720px){ .nav-links .nl-pre{display:none} }
+.nav-links .nl-pre{display:contents}
+@media (max-width:720px){ .nav-links .nl-pre{display:none} }

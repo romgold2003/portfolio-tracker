@@ -106,7 +106,7 @@ export const SLIDES = [
     marks: [
       ['summary', 'In short', 'How your year compares with the market, what you do well, and what is worth watching.'],
       ['standout', 'What stands out', 'The three findings that matter most right now. Show details opens the numbers behind each.'],
-      ['navInsights', 'Insights', 'Below it: you against the market, your habits, and deeper statistics, each a tap away.'],
+      ['navInsights', 'Clavis Insights', 'Below it: you against the market, your habits, and deeper statistics, each a tap away.'],
     ],
   },
   {
