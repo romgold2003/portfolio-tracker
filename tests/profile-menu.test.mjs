@@ -10,9 +10,10 @@ const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const html = read('index.html');
 const panel = html.slice(html.indexOf('id="profilePop"'), html.indexOf('<main class="main">'));
 
-test('the button sits at the foot of the menu and opens the panel', () => {
+test('the button sits top left, under the logo, and opens the panel', () => {
+  const top = html.slice(html.indexOf('<div class="logo-area">'), html.indexOf('<nav class="nav-links">'));
+  assert.match(top, /<button class="profile-btn" id="profileBtn" type="button" onclick="openProfile\(\)"/);
   const side = html.slice(html.indexOf('id="sidebarBot"'), html.indexOf('</aside>'));
-  assert.match(side, /<button class="profile-btn" id="profileBtn" type="button" onclick="openProfile\(\)"/);
   assert.doesNotMatch(side, /id="settingsBtn"/, 'Settings moved into the panel');
   assert.match(read('src/app/actions.js'), /openProfile, closeProfile, profileGo,/);
 });

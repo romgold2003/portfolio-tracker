@@ -802,3 +802,14 @@ body.landing-open{overflow:hidden}
 .legal-check{color:var(--text)!important}
 .legal-check input{accent-color:var(--accent)!important}
 .about-chip:focus-visible,.about-crow:focus-visible,.about-select:focus-visible,.about-primary:focus-visible,.about-secondary:focus-visible,.about-link:focus-visible{outline:2px solid var(--accent2)!important;outline-offset:3px}
+
+/* The profile, top left under the logo (November 2026); its panel opens from the top. */
+.logo-area .profile-btn{margin-top:16px}
+.pf-panel{top:16px;bottom:auto}
+@media (max-width:720px){
+  /* Phones: the round initials in the header, beside the logo. */
+  .logo-area .profile-btn{order:2;width:auto;margin:0 0 0 auto;padding:0;background:none}
+  .logo-area .profile-btn .profile-who,.logo-area .profile-btn .profile-caret{display:none}
+  .logo-area .profile-btn .acct-avatar{width:36px;height:36px;font-size:12.5px}
+  .pf-panel{top:auto;bottom:0}
+}

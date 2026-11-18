@@ -159,6 +159,12 @@
     <div class="logo-area">
       <button type="button" class="brand" onclick="openLanding()" title="About Clavis" aria-label="Clavis: open the home page"><svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="brandGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#F26A1E"/><stop offset="1" stop-color="#F59E0B"/></linearGradient></defs><path d="M78 22 A38 38 0 1 0 78 78" fill="none" stroke="currentColor" stroke-width="15"/><path d="M58 50 L83 25 A36 36 0 0 1 83 75 Z" fill="url(#brandGrad)"/><circle cx="58" cy="50" r="9.5" fill="url(#brandGrad)"/><circle cx="58" cy="50" r="4.6" fill="var(--bg)"/><path d="M61 47.6 L76 44 L76 56 L61 52.4 Z" fill="var(--bg)"/></svg><span class="logo-name">Clavis</span></button>
       <div class="logo-tag">Trading journal</div>
+      <!-- Top left, under the logo (November 2026). The profile (views/profileMenu.js): the account, imports and settings, friends, password. -->
+      <button class="profile-btn" id="profileBtn" type="button" onclick="openProfile()" aria-haspopup="dialog" aria-expanded="false" aria-controls="profilePop">
+        <span class="acct-avatar" id="acctAvatar" aria-hidden="true">·</span>
+        <span class="profile-who"><b id="profileName">My profile</b><span>Profile, import &amp; settings</span></span>
+        <span class="profile-caret" aria-hidden="true">›</span>
+      </button>
       <!-- Phones only: live-price settings, designer, customize and sign-out sit
            behind this instead of taking a third of the screen. -->
       <button class="tools-btn" id="toolsBtn" type="button" onclick="toggleTools()"
@@ -191,12 +197,6 @@
       <!-- Shown only once the server says this account is admin. -->
       <button class="settings-btn admin-btn" id="adminBtn" onclick="show('admin')" hidden><svg viewBox="0 0 24 24"><path d="M12 3.5l7 2.8v5.2c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6.3z"/></svg>Admin</button>
       <!-- The account: initials, the sub-account switcher, and signing out. -->
-      <!-- The profile (views/profileMenu.js): the account, imports and settings, friends, password. -->
-      <button class="profile-btn" id="profileBtn" type="button" onclick="openProfile()" aria-haspopup="dialog" aria-expanded="false" aria-controls="profilePop">
-        <span class="acct-avatar" id="acctAvatar" aria-hidden="true">·</span>
-        <span class="profile-who"><b id="profileName">My profile</b><span>Profile, import &amp; settings</span></span>
-        <span class="profile-caret" aria-hidden="true">›</span>
-      </button>
       <div id="sideStat">✓ Encrypted</div>
     </div>
   </aside>
