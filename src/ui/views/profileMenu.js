@@ -41,6 +41,78 @@ function drawShare() {
   if (host) host.innerHTML = shareHtml();
 }
 
+/* ── Invite friends: the member's referral code, for life ── */
+
+let referral = null;
+
+const inviteLink = (code) => `${window.location.origin}/?ref=${encodeURIComponent(code)}`;
+
+export function inviteHtml(r, guest = false) {
+  if (guest) return '<p class="pf-note">Create a free account to get your own referral code.</p>';
+  if (!r) return '<p class="pf-note">Loading…</p>';
+  const months = r.rewardMonths ?? 2;
+  return `<p class="pf-note">When a friend joins with your code and pays for their first month, you get <b>${months} months free</b>. Your code is yours for life.</p>
+    <div class="pf-code"><span>Your code</span><b>${escapeHtml(r.code)}</b><button type="button" class="pf-mini" data-copy-code>Copy</button></div>
+    <button type="button" class="pf-save pf-share" data-share-link>Share my invite link</button>
+    <div class="pf-stats">
+      <div><b>${r.joined}</b><span>joined</span></div>
+      <div><b>${r.paid}</b><span>subscribed</span></div>
+      <div><b>${r.freeMonths}</b><span>free month${r.freeMonths === 1 ? '' : 's'} earned</span></div>
+    </div>
+    ${r.canRedeem ? `<div class="pf-redeem"><input type="text" id="pfRedeem" maxlength="16" autocomplete="off" placeholder="Got a code from a friend?"><button type="button" class="pf-mini" data-redeem>Apply</button></div>`
+    : r.referred ? '<p class="pf-note">A friend’s code is linked to your account.</p>' : ''}`;
+}
+
+function drawInvite() {
+  const host = el('profileInvite');
+  if (host) host.innerHTML = inviteHtml(referral, !online());
+}
+
+async function loadInvite() {
+  drawInvite();
+  if (!online()) return;
+  try {
+    referral = await social.referral();
+  } catch (err) {
+    const host = el('profileInvite');
+    if (host) host.innerHTML = '';
+    note('pfInviteNote', err.message || 'Could not load your code just now.', true);
+    return;
+  }
+  drawInvite();
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+
+async function inviteClick(e) {
+  if (!referral) return;
+  if (e.target.closest('[data-copy-code]')) {
+    note('pfInviteNote', await copy(referral.code) ? 'Code copied.' : referral.code);
+  }
+  if (e.target.closest('[data-share-link]')) {
+    const url = inviteLink(referral.code);
+    const text = 'I track my investments with Clavis. Join with my code and get your first month free.';
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Clavis', text, url }); return; } catch { /* closed: fall back to copying */ }
+    }
+    note('pfInviteNote', await copy(url) ? 'Invite link copied.' : url);
+  }
+  if (e.target.closest('[data-redeem]')) {
+    const code = el('pfRedeem')?.value.trim();
+    if (!code) return note('pfInviteNote', 'Type the code first.', true);
+    try {
+      await social.redeem(code);
+      note('pfInviteNote', 'Code linked. Thank your friend!');
+      referral = await social.referral();
+      drawInvite();
+    } catch (err) {
+      note('pfInviteNote', err.message || String(err), true);
+    }
+  }
+}
+
 async function loadShare() {
   if (!online()) return drawShare();
   drawShare();
@@ -87,6 +159,7 @@ function bind() {
   const pop = el('profilePop');
   pop.addEventListener('click', (e) => {
     if (e.target === pop) closeProfile();
+    if (e.target.closest('#profileInvite')) inviteClick(e);
   });
   pop.addEventListener('change', async (e) => {
     if (e.target.name !== 'pfShare') return;
@@ -129,10 +202,12 @@ export function openProfile() {
   el('pfPassForm').hidden = true;
   note('pfPassNote', '');
   note('pfShareNote', '');
+  note('pfInviteNote', '');
   pop.hidden = false;
   document.body.classList.add('profile-open');
   el('profileBtn')?.setAttribute('aria-expanded', 'true');
   loadShare();
+  loadInvite();
 }
 
 export function closeProfile() {

@@ -133,6 +133,8 @@ const ROUTES = {
   '/api/social/consent': '../api/social/[action].js',
   '/api/social/accept': '../api/social/[action].js',
   '/api/social/marketing': '../api/social/[action].js',
+  '/api/social/referral': '../api/social/[action].js',
+  '/api/social/redeem': '../api/social/[action].js',
 };
 
 const handlers = new Map();

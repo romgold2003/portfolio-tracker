@@ -21,6 +21,8 @@ async function api(action, { body, query = '' } = {}) {
 
 export const social = {
   friends: () => api('friends'),
+  referral: () => api('referral'),
+  redeem: (code) => api('redeem', { body: { code } }),
   request: (email) => api('request', { body: { email } }),
   answer: (id, accept) => api('answer', { body: { id, accept } }),
   cancel: (id) => api('cancel', { body: { id } }),

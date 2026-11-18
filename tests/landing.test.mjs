@@ -21,7 +21,8 @@ test('seen once a real account has signed in on this device, under the pt_ prefi
 
 test('the lock screen shows it in cloud mode on sign-in only, and marks it on a real sign-in, not a guest', () => {
   const lock = read('src/ui/views/lockScreen.js');
-  assert.match(lock, /if \(cloudMode\(\) && mode === 'signin' && !landingSeen\(\)\)/);
+  // On sign-in, or for a visitor who came through a friend's invite link.
+  assert.match(lock, /if \(cloudMode\(\) && \(mode === 'signin' \|\| invited\) && !landingSeen\(\)\)/);
   assert.match(lock, /if \(!isGuest\(\)\) markLandingSeen\(\);/);
   assert.match(lock, /choice === 'demo'\) \{ enterAsGuest\(\)/);
 });

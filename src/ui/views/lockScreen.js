@@ -20,7 +20,7 @@ import { cryptoAvailable } from '../../core/crypto.js';
 import { emailResetEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
 import { setSigninHero } from '../../features/signinHero.js';
-import { showLanding, hideLanding, landingSeen, markLandingSeen } from './landing.js';
+import { showLanding, hideLanding, landingSeen, markLandingSeen, storedReferral, forgetReferral, rememberReferral } from './landing.js';
 
 const HOST_ID = 'lockScreen';
 
@@ -220,6 +220,10 @@ export function createForm() {
       <label for="lockPassword2">Confirm password</label>
       <input type="password" id="lockPassword2" autocomplete="new-password" placeholder="Type it again">
     </div>
+    ${cloudMode() ? `<div class="lock-field">
+      <label for="lockRef">Referral code <span class="lock-opt">optional</span></label>
+      <input type="text" id="lockRef" autocomplete="off" autocapitalize="characters" maxlength="16" placeholder="From a friend, if you have one" value="${escapeHtml(storedReferral())}">
+    </div>` : ''}
     <!-- Agreement: required, never pre-ticked. News emails: optional, separate, never pre-ticked. -->
     <label class="lock-agree"><input type="checkbox" id="lockAgree">
       <span>I am 18 or older and I agree to the <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and the <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
@@ -451,6 +455,9 @@ async function doCreate() {
   pendingEmail = email;
   // The proof, on the server: this version, now, and the marketing choice. Never blocks the sign-up.
   if (cloudMode()) social.accept(LEGAL_VERSION, marketing).catch(() => {});
+  // A friend's code, linked now the account exists. Never blocks the sign-up.
+  const referral = el('lockRef')?.value.trim();
+  if (cloudMode() && referral) social.redeem(referral).then(forgetReferral).catch(() => {});
 
   /**
    * The recovery-key screen only earns its place when it is the only way back.
@@ -553,6 +560,8 @@ async function finish() {
 /** Show the lock screen. Called at boot and again after signing out. */
 export function showLockScreen({ onUnlock, legacy } = {}) {
   if (onUnlock) onUnlocked = onUnlock;
+  // An invite link (?ref=CODE): kept for the sign-up form, and an invited visitor starts on sign-up.
+  const invited = rememberReferral();
   legacyJournal = legacy ?? null;
   /**
    * No accounts yet, or a journal waiting to be adopted: start on sign-up.
@@ -581,11 +590,13 @@ export function showLockScreen({ onUnlock, legacy } = {}) {
   issuedRecoveryKey = null;
   render();
 
+  if (invited && cloudMode() && mode === 'signin') { mode = 'create'; render(); }
   // A first-time visitor to the website meets Clavis before the form.
-  if (cloudMode() && mode === 'signin' && !landingSeen()) {
+  if (cloudMode() && (mode === 'signin' || invited) && !landingSeen()) {
     showLanding((choice) => {
       if (choice === 'demo') { enterAsGuest(); return; }
       if (choice === 'create') { mode = 'create'; render(); }
+      if (choice === 'signin' && mode !== 'signin') { mode = 'signin'; render(); }
       el('lockEmail')?.focus();
     });
   }

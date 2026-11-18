@@ -18,6 +18,29 @@ export function landingSeen() {
   try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; }
 }
 
+const REF_KEY = 'pt_ref';
+
+/** A code from an invite link (?ref=CODE), kept until the sign-up uses it; the link is tidied. True when one arrived now. */
+export function rememberReferral() {
+  try {
+    const url = new URL(window.location.href);
+    const code = (url.searchParams.get('ref') ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
+    if (!code) return false;
+    localStorage.setItem(REF_KEY, code);
+    url.searchParams.delete('ref');
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    return true;
+  } catch { return false; }
+}
+
+export function storedReferral() {
+  try { return localStorage.getItem(REF_KEY) ?? ''; } catch { return ''; }
+}
+
+export function forgetReferral() {
+  try { localStorage.removeItem(REF_KEY); } catch { /* nothing kept */ }
+}
+
 export function markLandingSeen() {
   try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* private window: shown again, which is harmless */ }
 }
@@ -178,6 +201,7 @@ const FAQ = [
   ['Which brokers work?', 'Interactive Brokers, Robinhood, Schwab, Fidelity, eToro, Trading 212, DEGIRO, Revolut, Israeli banks and more, plus any CSV or Excel file.'],
   ['How do I keep it up to date?', 'Import your broker’s newest file whenever you like, or add and edit trades by hand. Prices update on their own.'],
   ['Is this investment advice?', 'No. Clavis shows information about your own trades. It never tells you what to buy or sell.'],
+  ['Can I invite friends?', 'Yes. Every member has a referral code for life, in their profile. When a friend joins with your code and pays for their first month, you get two months free.'],
   ['Does it work on my phone?', 'Yes, in your phone’s browser on iPhone and Android.'],
 ];
 
