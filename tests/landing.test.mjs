@@ -26,9 +26,23 @@ test('the lock screen shows it in cloud mode on sign-in only, and marks it on a 
   assert.match(lock, /choice === 'demo'\) \{ enterAsGuest\(\)/);
 });
 
-test('every button leads somewhere: sign in, start free, the demo', () => {
+test('every button leads somewhere: sign in, start free, the demo, and back to the account from inside', () => {
   const page = read('src/ui/views/landing.js');
   const actions = new Set([...page.matchAll(/data-ld="(\w+)"/g)].map((m) => m[1]));
-  assert.deepEqual([...actions].sort(), ['create', 'demo', 'signin']);
+  assert.deepEqual([...actions].sort(), ['back', 'create', 'demo', 'signin']);
   assert.match(page, /not investment advice/);
+});
+
+test('the logo in the app opens it, and the video frame waits empty at the top', () => {
+  assert.match(read('index.html'), /<button type="button" class="brand" onclick="openLanding\(\)"/);
+  assert.match(read('src/app/actions.js'), /show, toggleTools, openLanding,/);
+  const page = read('src/ui/views/landing.js');
+  assert.match(page, /<div class="lp-video" aria-label="Video coming soon"><\/div>/);
+});
+
+test('the fox is never beside pricing or security (the brand brief)', () => {
+  const page = read('src/ui/views/landing.js');
+  const safe = page.slice(page.indexOf('class="lp-safe"'), page.indexOf('Simple pricing'));
+  const price = page.slice(page.indexOf('Simple pricing'), page.indexOf('class="lp-faq"'));
+  assert.doesNotMatch(safe + price, /fox\(|scene\(/);
 });
