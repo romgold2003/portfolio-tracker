@@ -17,6 +17,13 @@ export function openSettings() {
   if (input) input.value = state.apiKey;
   const bench = document.getElementById('benchKeyInput');
   if (bench) bench.value = benchmarkKey();
+  // The website prices everything itself; a key there is only for those who want their own.
+  const sub = document.getElementById('pricesSub');
+  const keys = document.getElementById('priceKeys');
+  if (cloudEnabled()) {
+    if (sub) sub.textContent = 'Stocks, ETFs, crypto and the S&P 500 update by themselves, from Clavis. Nothing to set up.';
+    if (keys) keys.open = Boolean(state.apiKey || benchmarkKey());
+  }
   describeStorage();
   describeImport();
   describeReturns();

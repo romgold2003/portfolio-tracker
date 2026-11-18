@@ -870,15 +870,19 @@
 
     <section class="set-card">
       <div class="set-title">Live prices</div>
-      <div class="set-sub">Crypto updates by itself. For stocks and ETFs, paste a free Finnhub key — it stays on this device and goes only to Finnhub.</div>
-      <div class="modal-field">
-        <label for="apiKeyInput">Finnhub key — stocks and ETFs</label>
-        <input type="text" id="apiKeyInput" placeholder="Paste your key here" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="modal-field" style="margin-bottom:0">
-        <label for="benchKeyInput">Alpha Vantage key — the S&amp;P 500 comparison (optional)</label>
-        <input type="text" id="benchKeyInput" placeholder="Free at alphavantage.co" autocomplete="off" spellcheck="false">
-      </div>
+      <div class="set-sub" id="pricesSub">Crypto updates by itself. For stocks and ETFs, paste a free Finnhub key — it stays on this device and goes only to Finnhub.</div>
+      <!-- On the website prices come from Clavis's own server: the keys are optional and folded away (views/settings.js). -->
+      <details class="set-keys" id="priceKeys" open>
+        <summary>Your own data keys (optional)</summary>
+        <div class="modal-field">
+          <label for="apiKeyInput">Finnhub key — stocks and ETFs</label>
+          <input type="text" id="apiKeyInput" placeholder="Paste your key here" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="modal-field" style="margin-bottom:0">
+          <label for="benchKeyInput">Alpha Vantage key — the S&amp;P 500 comparison (optional)</label>
+          <input type="text" id="benchKeyInput" placeholder="Free at alphavantage.co" autocomplete="off" spellcheck="false">
+        </div>
+      </details>
     </section>
 
     <!-- Time- or money-weighted, as the person's broker measures it (config/brokers.js). -->

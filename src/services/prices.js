@@ -10,6 +10,7 @@
  */
 import { CG_IDS, API } from '../config/constants.js';
 import { state, currentApiKey } from '../core/store.js';
+import { cloudEnabled } from './cloud.js';
 import { logPrice, seedPrevClose, getWeekChg } from './priceLog.js';
 import { extendedQuotes, applyExtendedQuotes, tradingDayOver, batchedQuote, sessionPhase } from './extendedHours.js';
 import { weekStartCloses } from './weekStart.js';
@@ -276,7 +277,9 @@ async function applyWeekToDate(open) {
 export function priceIsLive(p) {
   if (p.status !== 'Open') return false;
   if (p.cls === 'Crypto') return true;
-  if (!state.apiKey) return false;
+  // The website prices stocks from its own server, so no key is needed there;
+  // only the offline file, which has no server, relies on the person's own key.
+  if (!state.apiKey && !cloudEnabled()) return false;
   /**
    * A key means the app CAN fetch a price; it does not mean this one is moving.
    *

@@ -1,5 +1,6 @@
 /** The overview page: account value, today's move, KPIs and a compact watchlist. */
 import { state, isShown, returnMethod } from '../../core/store.js';
+import { cloudEnabled } from '../../services/cloud.js';
 import { RETURN_METHODS } from '../../config/brokers.js';
 import {
   accountTotals, dailyPortfolioMove,
@@ -276,7 +277,7 @@ async function renderBenchmark(totals) {
     // The note carries failures only. Saying what actually went wrong beats
     // "unavailable" for anyone who has just pasted a key and is wondering
     // whether they typed it wrong or spent the day's quota.
-    noteEl.textContent = benchmarkKey()
+    noteEl.textContent = benchmarkKey() || cloudEnabled()
       ? (benchmarkFailure() || 'Market data unavailable right now')
       : 'Add a market data key in settings to compare';
     noteEl.title = noteEl.textContent;
@@ -961,7 +962,8 @@ function renderPeriodGain(period) {
 function priceStatus() {
   const openStocks = state.positions.filter((p) => p.status === 'Open' && p.cls !== 'Crypto');
 
-  if (openStocks.length && !state.apiKey) {
+  // Only the offline file needs a key for stocks: the website has its own feed.
+  if (openStocks.length && !state.apiKey && !cloudEnabled()) {
     return { label: 'Crypto live · stocks manual', short: 'Partial', off: true };
   }
 

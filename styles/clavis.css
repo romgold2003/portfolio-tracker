@@ -635,3 +635,6 @@ body.landing-open{overflow:hidden}
 @media (max-width:720px){ .nav-links .nl-pre{display:none} }
 .nav-links .nl-pre{display:contents}
 @media (max-width:720px){ .nav-links .nl-pre{display:none} }
+
+/* Settings: your own data keys, folded away on the website */
+.set-keys summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);margin:6px 0 10px}
