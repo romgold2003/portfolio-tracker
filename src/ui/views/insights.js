@@ -254,6 +254,34 @@ function summaryHtml(a) {
     </section>`;
 }
 
+/* ── 1b. your feedback: keep doing, work on, lessons ── */
+
+const FEEDBACK_COLS = [
+  ['keep', 'Keep doing', 'What is working: stay with it.', 'is-keep'],
+  ['work', 'Work on', 'Where your results are leaking.', 'is-work'],
+  ['lessons', 'Lessons from your data', 'What your trades teach so far.', 'is-lesson'],
+];
+
+function feedbackHtml(a) {
+  const f = a.feedback ?? { keep: [], work: [], lessons: [] };
+  const total = f.keep.length + f.work.length + f.lessons.length;
+  const item = (x) => `<li class="fb-item">
+      <b>${safe(x.headline)}</b>
+      <p>${escapeHtml(x.meaning)}</p>
+      ${x.habit ? `<p class="fb-habit"><span>Try this</span>${escapeHtml(x.habit)}</p>` : ''}
+    </li>`;
+  const col = ([key, title, sub, cls]) => `<div class="fb-col ${cls}">
+      <div class="fb-head"><span class="fb-dot"></span><h3>${title}</h3><span class="fb-n">${f[key].length}</span></div>
+      <p class="fb-sub">${sub}</p>
+      ${f[key].length ? `<ul>${f[key].map(item).join('')}</ul>` : '<p class="fb-empty">Nothing here yet. More trades will fill it in.</p>'}
+    </div>`;
+  return `<section class="ins-feedback">
+      <h2 class="ins-group">Your feedback</h2>
+      <p class="fb-lead">Facts from your own trades: what is working, what to work on, and what the data teaches. It describes your process; it never says what to buy or sell.</p>
+      ${total ? `<div class="fb-cols" style="--fb-n:${FEEDBACK_COLS.filter(([k]) => f[k].length).length}">${FEEDBACK_COLS.filter(([k]) => f[k].length).map(col).join('')}</div>` : '<p class="fb-empty">Your feedback appears once you have a few closed trades and some history.</p>'}
+    </section>`;
+}
+
 /* ── 2. what stands out ── */
 
 function standOutHtml(a) {
@@ -488,6 +516,7 @@ function draw() {
   const habits = a.cards.filter((c) => c.group === 'habits');
   const deeper = a.cards.filter((c) => c.group === 'deeper');
   body.innerHTML = `${summaryHtml(a)}
+    ${feedbackHtml(a)}
     ${standOutHtml(a)}
     <div class="ins-cols is-market">
       <div class="ins-col">${marketHtml(a)}</div>

@@ -264,6 +264,10 @@
       <div class="hero">
         <div class="hero-top">
           <div class="hero-left">
+            <div class="hero-analyst" id="homeAnalyst" hidden>
+              <span class="hero-analyst-k">✦</span><span id="homeAnalystText"></span>
+              <button type="button" class="hero-analyst-link" onclick="show('insights')">Open Insights →</button>
+            </div>
             <div class="hero-label">Account value
               <button class="eye-btn" id="hideAmounts" onclick="toggleAmounts()" title="Hide amounts" aria-label="Hide amounts" aria-pressed="false">👁</button>
             </div>
@@ -277,10 +281,6 @@
               <span class="hero-cash-lbl">Buying power</span>
               <b id="cashDisplay">$0</b>
               <button class="cash-edit" onclick="editCash()" title="Set the cash in your broker">Edit</button>
-            </div>
-            <div class="hero-analyst" id="homeAnalyst" hidden>
-              <span class="hero-analyst-k">✦</span><span id="homeAnalystText"></span>
-              <button type="button" class="hero-analyst-link" onclick="show('insights')">Open Insights →</button>
             </div>
           </div>
           <div class="alloc" id="allocCard" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Allocation — hover or press Enter to expand">

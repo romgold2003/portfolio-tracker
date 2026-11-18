@@ -480,6 +480,90 @@ export function whyOf(group, rest, skip = []) {
   return best;
 }
 
+/* ── feedback ──
+ *
+ * Romy (November 2026): Insights should above all help the user become a
+ * better investor. So every finding is also read as feedback: what it means,
+ * and a habit to try. It is never advice on what to buy or sell: only facts
+ * about the person's own trades and the process behind them.
+ *
+ * Keyed by card id, then by tone: 'good' is something to keep doing, 'bad'
+ * something to work on, 'neutral' a lesson. A finding with no entry for its
+ * tone is left out of the feedback (it still has its card below).
+ */
+export const FEEDBACK = {
+  twin: {
+    good: ['Your picks, taken together, did better than the same money in the S&P 500 on the same days.', 'Note why you bought each winner. Over time it shows which of your reasons actually work.'],
+    bad: ['Over this period, an S&P 500 index fund would have done better with the same money on the same days.', 'Before a new trade, write one line on why you expect it to beat simply holding the index, and check it when you sell.'],
+  },
+  months: {
+    good: ['Beating the market in most months points to a steady process rather than one lucky trade.', 'Look at the months you lagged: did they share a cause, like a sector or a news event?'],
+    neutral: ['Beating the market some months and not others is normal; what counts is the total over a year.', 'Check whether your weaker months have something in common.'],
+  },
+  down: {
+    good: ['Your mix cushions the drops: it holds up better than the index when prices fall.', 'When you add a position, check it does not undo that cushion.'],
+    bad: ['The account holds more of what drops most when prices fall, so the falls hit it harder.', 'Look at how much of the account sits in the most volatile holdings, and whether that matches the risk you want to carry.'],
+    neutral: ['On red days your account behaves much like the index.', null],
+  },
+  after: {
+    good: ['Your exits have protected your money: you tend to sell before a fall.', 'Write down the rules you sell by, so they stay the same when markets get noisy.'],
+    bad: ['Part of the gain was left on the table: the stocks kept rising after you sold.', 'Before selling a winner, write the reason down. Later, check whether the reason held or it was nerves.'],
+    neutral: ['Your exits have neither cost nor saved much so far.', null],
+  },
+  mood: {
+    good: ['Buying when others are fearful has worked for you, a pattern long-term investors often describe.', 'Keep a short list of what you would buy on fearful days, so the decision is planned rather than rushed.'],
+    neutral: ['The market\'s mood when you buy has not changed your results much.', null],
+  },
+  emotion: {
+    good: ['Your process works best when you are calm and sure of the plan.', 'Rate your state of mind honestly before each trade. When it is low, waiting a day costs little.'],
+    neutral: ['So far your emotional trades have won as often as the calm ones.', 'Keep rating your state of mind: the pattern gets clearer with every trade.'],
+  },
+  holding: {
+    good: ['That is the discipline most investors find hardest.', 'Keep the same rule on every new position.'],
+    bad: ['Losses get time to grow while gains are taken early. It is one of the most common habits in investing.', 'Decide when you open a trade what would make you close it, and review any loser that has been open longer than your typical winner.'],
+    neutral: ['No sign of the most common habit in investing: holding on to losers.', null],
+  },
+  drawdown: {
+    bad: ['The account carries more risk than the index: its deepest drop was larger than the market\'s.', 'Ask yourself whether you could sit through that drop again. If not, the mix may hold more risk than you want.'],
+    neutral: ['Your biggest drop was in line with the market\'s.', null],
+  },
+  swings: {
+    good: ['So far the extra movement has come with a higher return.', 'Keep an eye on that trade-off: movement without the extra return is only risk.'],
+    bad: ['The extra movement has not come with a higher return.', 'See which holdings move the most, and whether each one earns its place.'],
+    neutral: ['Your risk is about the market\'s.', null],
+  },
+  news: {
+    good: ['Your holdings are less sensitive to jobs, inflation and Fed days.', null],
+    bad: ['Your holdings react strongly on jobs, inflation and Fed days.', 'Check the economic calendar in News before the big days, so the move does not catch you by surprise.'],
+    neutral: ['On big news days your account moves like the index.', null],
+  },
+  'account-weekday': {
+    bad: ['Losing on a day the market does not can point to rushed trades on that day.', 'Look at what you trade on that day: are those trades planned, or made in a hurry?'],
+    neutral: ['The differences between weekdays are small and often chance: a curiosity, not a rule.', null],
+  },
+};
+
+const KIND = { good: 'keep', bad: 'work', neutral: 'lesson' };
+
+/**
+ * The findings as feedback, in three lists: keep doing, work on, lessons.
+ * Only findings with enough data (a headline) are used; the biggest in money
+ * comes first within each list.
+ */
+export function feedbackFor(cards) {
+  const out = { keep: [], work: [], lessons: [] };
+  for (const c of cards) {
+    if (!c?.headline) continue;
+    const entry = FEEDBACK[c.id]?.[c.tone ?? 'neutral'];
+    if (!entry) continue;
+    const kind = KIND[c.tone ?? 'neutral'];
+    const list = kind === 'keep' ? out.keep : kind === 'work' ? out.work : out.lessons;
+    list.push({ id: c.id, headline: c.headline, meaning: entry[0], habit: entry[1], impact: c.impact ?? 0 });
+  }
+  for (const list of Object.values(out)) list.sort((a, b) => b.impact - a.impact);
+  return out;
+}
+
 /* ── the cards ──
  *
  * Every card: { id, group, topic, headline, matters, data, cause, how, tone,
@@ -1798,6 +1882,7 @@ export function analyse({
     year: year ?? { you: null, spx: null },
     summary: summaryOf({ year, twinCard, cards, picks, trades: trades.length, days: days.length }),
     standOut: picks,
+    feedback: feedbackFor(cards),
     // One main title: the level earned by collecting, and the style from how you trade.
     profile: { title, level: collection.level, collection, records: records(days, history, trades, weeks) },
     cards,

@@ -573,3 +573,38 @@ body.landing-open{overflow:hidden}
   .pf-panel{left:0;right:0;bottom:0;width:auto;max-height:88vh;border-radius:26px 26px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
   .sidebar.tools-open .profile-btn{background:var(--input)}
 }
+
+/* Home, November 2026: the year against the market leads, above the balance;
+   the balance itself in a lighter, smaller figure. */
+#home .hero-analyst{margin:0 0 22px;font-size:20px;line-height:1.45;color:var(--text);max-width:720px}
+#home .hero-analyst b{font-weight:700}
+#home .hero-analyst-k{font-size:18px}
+#home .hero-analyst-link{font-size:15px}
+#home .hero-value{font-size:54px;font-weight:500;letter-spacing:-0.03em}
+#home .hv-cents{font-weight:400}
+@media (max-width:720px){
+  #home .hero-analyst{font-size:17px;margin-bottom:16px}
+  #home .hero-value{font-size:42px}
+}
+
+/* ── Insights: your feedback, in three columns ── */
+.ins-feedback{margin:6px 0 26px}
+.fb-lead{font-size:15px;color:var(--text2);line-height:1.55;margin:-4px 0 16px;max-width:760px}
+.fb-cols{display:grid;grid-template-columns:repeat(var(--fb-n,3),minmax(0,1fr));gap:16px}
+.fb-col{background:var(--panel);border-radius:var(--radius);padding:20px 20px 10px;--fb:var(--text3)}
+.fb-col.is-keep{--fb:var(--green)}
+.fb-col.is-work{--fb:var(--amber)}
+.fb-col.is-lesson{--fb:#86A8FF}
+.fb-head{display:flex;align-items:center;gap:10px}
+.fb-head h3{margin:0;font-size:18px;letter-spacing:-0.02em}
+.fb-dot{width:10px;height:10px;border-radius:50%;background:var(--fb);box-shadow:0 0 0 4px color-mix(in srgb,var(--fb) 20%,transparent)}
+.fb-n{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--fb);background:color-mix(in srgb,var(--fb) 14%,transparent);border-radius:999px;padding:3px 10px}
+.fb-sub{font-size:13px;color:var(--text3);margin:6px 0 12px}
+.fb-col ul{list-style:none;margin:0;padding:0}
+.fb-item{padding:14px 0;border-top:1px solid var(--border)}
+.fb-item b{display:block;font-size:15px;line-height:1.4;color:var(--text)}
+.fb-item p{margin:6px 0 0;font-size:14px;line-height:1.55;color:var(--text2)}
+.fb-habit{display:flex;flex-direction:column;gap:3px;margin-top:10px!important;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--fb) 9%,var(--panel2))}
+.fb-habit span{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--fb)}
+.fb-empty{font-size:13.5px;color:var(--text3);margin:4px 0 14px}
+@media (max-width:1000px){ .fb-cols{grid-template-columns:1fr} }
