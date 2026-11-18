@@ -36,6 +36,7 @@ import { initParticleWave } from './features/particleWave.js';
 import { describeStorageMode } from './ui/views/settings.js';
 import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/recoveryBanner.js';
 import { installActions, refreshPrices, setTimeframe } from './app/actions.js';
+import { paintFoxes } from './ui/art/fox.js';
 
 /** Background loops, so they can be stopped on sign out. */
 let timers = [];
@@ -151,6 +152,8 @@ function pollPrices() {
 
 async function boot() {
   initTheme();
+  // The fox wherever the page asks for it (data-fox), drawn once from one source.
+  paintFoxes();
 
   installActions({ signOut });
   setPageEnterHandler(renderOnPageEnter);

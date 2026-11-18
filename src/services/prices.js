@@ -96,7 +96,9 @@ async function serverQuote(ticker) {
 
 async function finnhubQuote(ticker) {
   const key = currentApiKey();
-  if (!key) return null;
+  // On the website every price comes from Clavis's own server, the same for every
+  // member; a key saved before that is no longer used there.
+  if (!key || cloudEnabled()) return null;
   try {
     const res = await fetch(`${API.finnhubQuote}?symbol=${ticker}&token=${key}`);
     if (!res.ok) return null;

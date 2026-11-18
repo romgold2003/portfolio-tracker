@@ -8,6 +8,7 @@
  * The pictures are assets/tour-*.webp and where their buttons sit is
  * tourShots.js, both written by scripts/tour-shots.mjs from the same screens.
  */
+import { foxSvg } from '../art/fox.js';
 import { state, setTourSeen, aboutDue, legalDue, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
@@ -207,7 +208,7 @@ export function slideHtml(i) {
   const s = SLIDES[i];
   const last = i === SLIDES.length - 1;
   return `<div class="tour-head">
-      <span class="tour-step">${i + 1} of ${SLIDES.length}</span>
+      <span class="tour-step"><span class="tour-fox">${foxSvg(22)}</span>${i + 1} of ${SLIDES.length}</span>
       <button class="tour-skip" data-tour-close>${last ? 'Close' : 'Skip tutorial'}</button>
     </div>
     <div class="tour-stage" data-tour-stage>

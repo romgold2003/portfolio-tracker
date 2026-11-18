@@ -389,7 +389,7 @@ body.landing-open{overflow:hidden}
 #allocCard .alloc-pct{margin-left:auto;color:var(--text);font-weight:700}
 @media (max-width:720px){
   #allocCard{width:100%;margin-top:6px}
-  #allocCard .alloc-chart{width:150px;height:150px}
+  #allocCard .alloc-chart{width:118px;height:118px}
 }
 
 /* ── Monthly ── */
@@ -438,7 +438,7 @@ body.landing-open{overflow:hidden}
   /* Home: one column, in the mock-up's order. */
   #home.page.active{display:flex;flex-direction:column;gap:18px}
   #home .hero{order:1;margin:0}
-  #home #homeTopbar{order:2;margin:0}
+  #home #homeTopbar{order:0;margin:0}
   #home .kpi-row{order:3;margin:0}
   #homeHoldings{order:4}
   #home .hero-value{font-size:48px}
@@ -638,3 +638,36 @@ body.landing-open{overflow:hidden}
 
 /* Settings: your own data keys, folded away on the website */
 .set-keys summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);margin:6px 0 10px}
+
+/* Phones: fear & greed sits at the top of Home, as on Positions, and smaller;
+   the allocation ring is smaller too. */
+@media (max-width:720px){
+  #homeTopbar{display:flex!important;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  #homeTopbar .topbar-right{display:flex!important;width:100%;align-items:center;justify-content:space-between;gap:8px}
+  #homeTopbar .gauges{order:0;gap:4px}
+  #homeTopbar .live-pill{order:1;margin-left:auto}
+  #homeTopbar .topbar-btn-warn{order:2}
+  .gauges .gauge{width:70px;height:38px}
+  .gauges .gauge-mood{font-size:10.5px}
+  .gauges .gauge-name{font-size:8.5px}
+  #allocCard .alloc-count b{font-size:12.5px}
+  #allocCard .alloc-count span{font-size:10px}
+  #allocCard .alloc-legend{font-size:11.5px}
+}
+
+/* ── Clavis the fox, the guide inside the app (ui/art/fox.js) ── */
+.fox-mark{display:block;color:var(--text);flex:none}
+.hero-mark.hero-fox{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);margin-right:4px}
+.hero-mark.hero-fox .fox-mark{width:22px;height:22px}
+.fb-title{display:flex;align-items:center;gap:10px}
+.fox-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:34px 16px}
+.fox-empty .fox-mark{color:var(--text2);margin-bottom:6px}
+.fox-empty-t{font-size:16px;font-weight:700;color:var(--text)}
+.fox-empty-s{font-size:13.5px;color:var(--text3);max-width:320px;line-height:1.5}
+.fox-empty .pos-empty-cta{margin-top:12px}
+.mind-ask{display:flex!important;align-items:center;gap:10px}
+.mind-fox .fox-mark{color:var(--text2)}
+.guest-fox{display:inline-grid;margin-right:8px;color:var(--a-text,var(--text))}
+.guest-fox .fox-mark{color:inherit}
+.tour-step{display:inline-flex;align-items:center;gap:8px}
+.tour-fox .fox-mark{width:20px;height:20px;color:inherit}

@@ -32,6 +32,7 @@ import { splitEvents } from '../../core/splits.js';
 import { appTradeEvents } from '../../core/appTrades.js';
 import { dayBreakdown } from '../../core/dayBreakdown.js';
 import { renderDailyLog } from './dailyLog.js';
+import { foxEmpty } from '../art/fox.js';
 import { allSplits, historyGaps, gapInWindow, openingMarksByYear } from '../../features/statementLibrary.js';
 import { onJournalLoaded, combinedJournals, handEnteredFlows } from '../../core/store.js';
 import { chainedBrokerReturn } from '../../features/statementLibrary.js';
@@ -1025,7 +1026,7 @@ export function renderHome() {
   if (list) {
     list.innerHTML = totals.open.length
       ? holdingsList(totals.open)
-      : '<div class="empty">No open positions</div>';
+      : foxEmpty('No holdings yet', 'Add a trade with the orange + button, or import the file from your broker.');
   }
   bindColumns(document.getElementById('homeHoldings'), 'home', () => renderHome());
   const bar = document.getElementById('homeColsBar');

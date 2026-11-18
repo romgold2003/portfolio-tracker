@@ -22,7 +22,8 @@ export function openSettings() {
   const keys = document.getElementById('priceKeys');
   if (cloudEnabled()) {
     if (sub) sub.textContent = 'Stocks, ETFs, crypto and the S&P 500 update by themselves, from Clavis. Nothing to set up.';
-    if (keys) keys.open = Boolean(state.apiKey || benchmarkKey());
+    // Not needed here: every price comes from Clavis, the same for everyone.
+    if (keys) keys.hidden = true;
   }
   describeStorage();
   describeImport();

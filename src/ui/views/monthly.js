@@ -6,6 +6,7 @@
  * stay out until their last exit, which is what keeps the monthly totals equal
  * to money actually taken off the table.
  */
+import { foxEmpty } from '../art/fox.js';
 import { state } from '../../core/store.js';
 import { realized, costOf, pctD, avgTradeReturn, outcomeOf } from '../../core/portfolio.js';
 import { monthlyReturns } from '../../core/portfolioHistory.js';
@@ -150,7 +151,7 @@ function renderSummaryTable() {
   const keys = Object.keys(trades).sort().reverse();
 
   if (!keys.length) {
-    body.innerHTML = '<tr><td colspan="5"><div class="empty">No closed trades yet</div></td></tr>';
+    body.innerHTML = `<tr><td colspan="5">${foxEmpty('No closed trades yet', 'Each month you sell something, it appears here with what it made.')}</td></tr>`;
     return;
   }
 

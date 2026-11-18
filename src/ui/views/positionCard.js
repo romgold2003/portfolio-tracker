@@ -67,7 +67,7 @@ function pnlSplit(p, unrealised, positions) {
       <div class="dgi-v" style="color:${muted ? 'var(--text3)' : clr(banked)}">${muted ? '$0.00' : $s(+banked.toFixed(2))}</div>
       <div style="font-size:10px;color:var(--text3);margin-top:3px">${muted ? 'nothing sold yet' : 'on shares already sold'}</div></div>
     <div class="dgi"><div class="dgi-k">Unrealised P&L</div>
-      <div class="dgi-v" style="color:${clr(unrealised)}">${$s(+unrealised.toFixed(2))}</div>
+      <div class="dgi-v" style="color:${clr(unrealised)}">${$s(+unrealised.toFixed(2))}${costOf(p) ? ` <span class="dgi-pct">${fp(pctD(unrealised, costOf(p)))}</span>` : ''}</div>
       <div style="font-size:10px;color:var(--text3);margin-top:3px">on the ${held} still held</div></div>`;
 }
 

@@ -14,6 +14,7 @@
 import { state } from '../../core/store.js';
 import { analyse, MIN_GROUP, MIN_TRADES, FAMILIES as FAMILY_LIST, TITLES, TITLE_RULES, LEVELS } from '../../core/insights.js';
 import { art } from '../art/cards.js';
+import { foxSvg } from '../art/fox.js';
 import { accountTotals } from '../../core/portfolio.js';
 import { authoritativeHistory, portfolioHistory } from '../../core/snapshots.js';
 import { benchmarkSeries, benchmarkSpot, benchmarkYearToDate } from '../../services/benchmark.js';
@@ -247,7 +248,7 @@ function summaryHtml(a) {
     : '';
   return `<section class="card ins-hero${year ? ' has-year' : ''}">
       <div class="hero-main">
-        <div class="hero-head"><span class="hero-mark">✦</span><span>Your analyst</span></div>
+        <div class="hero-head"><span class="hero-mark hero-fox">${foxSvg(26)}</span><span>Clavis · your analyst</span></div>
         <p class="hero-text">${safe(a.summary)}</p>
       </div>
       ${year}
@@ -276,9 +277,9 @@ function feedbackHtml(a) {
       ${f[key].length ? `<ul>${f[key].map(item).join('')}</ul>` : '<p class="fb-empty">Nothing here yet. More trades will fill it in.</p>'}
     </div>`;
   return `<section class="ins-feedback">
-      <h2 class="ins-group">Your feedback</h2>
+      <h2 class="ins-group fb-title">${foxSvg(30)}<span>Your feedback</span></h2>
       <p class="fb-lead">Facts from your own trades: what is working, what to work on, and what the data teaches. It describes your process; it never says what to buy or sell.</p>
-      ${total ? `<div class="fb-cols" style="--fb-n:${FEEDBACK_COLS.filter(([k]) => f[k].length).length}">${FEEDBACK_COLS.filter(([k]) => f[k].length).map(col).join('')}</div>` : '<p class="fb-empty">Your feedback appears once you have a few closed trades and some history.</p>'}
+      ${total ? `<div class="fb-cols" style="--fb-n:${FEEDBACK_COLS.filter(([k]) => f[k].length).length}">${FEEDBACK_COLS.filter(([k]) => f[k].length).map(col).join('')}</div>` : `<div class="fox-empty">${foxSvg(56)}<div class="fox-empty-t">Your feedback is on its way</div><div class="fox-empty-s">It appears once you have a few closed trades and some history.</div></div>`}
     </section>`;
 }
 

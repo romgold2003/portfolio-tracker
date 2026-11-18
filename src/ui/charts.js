@@ -256,6 +256,9 @@ export function renderSectorChart(rows) {
   const canvas = document.getElementById('sectorChart');
   if (!canvas) return;
 
+  // Redrawn on every price refresh: only the first drawing spins in, or the
+  // ring would restart its animation every few seconds and look half drawn.
+  const first = !charts.sector;
   charts.sector?.destroy();
   if (!rows.length) return;
 
@@ -276,6 +279,7 @@ export function renderSectorChart(rows) {
       responsive: true,
       maintainAspectRatio: false,
       cutout: '76%',
+      animation: first ? undefined : false,
       layout: { padding: 2 },
       plugins: {
         legend: { display: false },

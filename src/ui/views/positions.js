@@ -1,4 +1,5 @@
 /** The Positions page: summary tiles, then open and closed position cards. */
+import { foxEmpty } from '../art/fox.js';
 import { state } from '../../core/store.js';
 import { unreal, costOf, realized } from '../../core/portfolio.js';
 import {
@@ -49,7 +50,7 @@ export function renderPositions() {
     keepOpenPanels(openEl, () => {
       openEl.innerHTML = open.length
         ? `<div class="hc-cards" style="${gridStyle(layout)}">${headerHtml('positions', layout)}${sortByLayout(open, layout, ctx).map((p) => positionCard(p, true, state.positions, { layout, ctx })).join('')}</div>`
-        : '<div class="pos-empty-state"><div class="pos-empty-title">No open positions yet</div><div class="pos-empty-sub">Log a trade to start tracking your portfolio</div><button class="btn btn-blue pos-empty-cta" onclick="show(\'add\')">+ Log your first trade</button></div>';
+        : foxEmpty('No open positions yet', 'Log your first trade, or import the file from your broker.', '<button class="btn btn-blue pos-empty-cta" onclick="show(\'add\')">+ Log your first trade</button>');
     });
   }
 
@@ -58,7 +59,7 @@ export function renderPositions() {
     keepOpenPanels(closedEl, () => {
       closedEl.innerHTML = closed.length
         ? closedByMonth(closed, new Set(open.map((p) => p.ticker))).map(monthGroup).join('')
-        : '<div class="empty">No closed trades</div>';
+        : foxEmpty('No closed trades yet', 'When you sell, the trade lands here with what it made.');
     });
   }
 }
