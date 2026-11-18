@@ -60,6 +60,8 @@ function showAccount() {
   // Two letters from the email for the round badge beside the account.
   const avatar = document.getElementById('acctAvatar');
   if (avatar) avatar.textContent = String(profile.email ?? '').replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase() || '·';
+  const name = document.getElementById('profileName');
+  if (name) name.textContent = String(profile.email ?? '').split('@')[0] || 'My profile';
 }
 
 /**

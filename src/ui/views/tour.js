@@ -33,7 +33,7 @@ export const SLIDES = [
     title: 'Import from your broker',
     text: 'The fastest way to start: bring in the statement your broker gives you. Every trade, position and deposit comes with it.',
     marks: [
-      ['settings', 'Settings & import', 'Open it from the menu on the left.'],
+      ['settings', 'Your profile', 'Press your profile at the bottom left, then Import files.'],
       ['importButton', 'Import my broker file', 'Press it, then pick your broker.'],
     ],
   },

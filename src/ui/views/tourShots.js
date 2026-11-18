@@ -17,7 +17,7 @@ export const SHOTS = {
       "today": [
         556,
         239,
-        143,
+        114,
         32
       ],
       "graph": [
@@ -64,19 +64,19 @@ export const SHOTS = {
       ],
       "help": [
         16,
-        620,
+        644,
         215,
         39
       ],
       "settings": [
         16,
-        497,
+        695,
         215,
-        39
+        68
       ],
       "customize": [
         16,
-        579,
+        603,
         215,
         39
       ],
@@ -124,9 +124,9 @@ export const SHOTS = {
       ],
       "settings": [
         16,
-        497,
+        695,
         215,
-        39
+        68
       ]
     }
   },

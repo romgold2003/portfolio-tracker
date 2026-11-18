@@ -77,6 +77,7 @@ import {
 } from '../ui/views/addTrade.js';
 import { show, toggleTools } from '../ui/router.js';
 import { openLanding } from '../ui/views/landing.js';
+import { openProfile, closeProfile, profileGo } from '../ui/views/profileMenu.js';
 import { ui } from '../ui/uiState.js';
 import {
   toggleTheme, openDesigner, closeDesigner, setThemeBase, resetDesign,
@@ -770,7 +771,7 @@ export function installActions(extra = {}) {
     // sub-accounts
     toggleAccountMenu, selectAccount, addAccount, renameAccount, removeAccount,
     // navigation & chrome
-    show, toggleTools, openLanding, toggleTheme, toggleAmounts, toggleDailyLog, setCurveMode,
+    show, toggleTools, openLanding, openProfile, closeProfile, profileGo, toggleTheme, toggleAmounts, toggleDailyLog, setCurveMode,
     openDesigner, closeDesigner, setThemeBase, resetDesign,
     openCustomize, closeCustomize, openTour, closeTour,
     shareDesign, copyDesignCode, toggleDesignPaste, applyDesignCode,

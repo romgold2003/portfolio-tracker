@@ -199,9 +199,15 @@ function renderAllocation() {
   const rows = sectorBreakdown(state.positions, state.cash);
   renderSectorChart(rows);
 
+  // In the middle of the ring, small: how many positions are open, across how many sectors.
   const sectors = rows.filter((r) => r.name !== 'Cash').length;
+  const open = state.positions.filter((p) => p.status === 'Open').length;
   const count = document.getElementById('allocCount');
-  if (count) count.innerHTML = sectors ? `<b>${sectors}</b><span>sector${sectors === 1 ? '' : 's'}</span>` : '';
+  if (count) {
+    count.innerHTML = sectors
+      ? `<span><b>${open}</b> position${open === 1 ? '' : 's'}</span><span><b>${sectors}</b> sector${sectors === 1 ? '' : 's'}</span>`
+      : '';
+  }
 
   const legend = document.getElementById('sectorLegend');
   if (!legend) return;

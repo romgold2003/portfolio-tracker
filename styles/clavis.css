@@ -380,8 +380,9 @@ body.landing-open{overflow:hidden}
 .alloc-by{font-size:12px;font-weight:400;color:var(--text3)}
 #allocCard .alloc-chart{width:156px;height:156px;margin:10px auto 14px}
 .alloc-count{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none;line-height:1.2}
-.alloc-count b{font-size:22px;font-weight:800;color:var(--text)}
-.alloc-count span{font-size:10.5px;color:var(--text3)}
+.alloc-count{gap:2px}
+.alloc-count span{font-size:11.5px;color:var(--text3);white-space:nowrap}
+.alloc-count b{font-size:15px;font-weight:800;color:var(--text);margin-right:2px}
 #allocCard .alloc-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 16px;max-width:none;width:100%}
 #allocCard .alloc-row{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;color:var(--text2)}
 #allocCard .alloc-dot{border-radius:50%}
@@ -526,3 +527,49 @@ body.landing-open{overflow:hidden}
 /* A chart not yet drawn is 300px wide by default; inside the ring it must never push a phone page sideways. */
 #allocCard .alloc-chart{overflow:hidden}
 #allocCard .alloc-chart canvas{max-width:100%;max-height:100%}
+
+/* ── The profile button and its panel (views/profileMenu.js) ── */
+.profile-btn{display:flex;align-items:center;gap:11px;width:100%;margin-top:12px;padding:10px 12px;border:0;border-radius:18px;background:var(--panel);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.profile-btn:hover{background:var(--hover2)}
+.profile-who{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.profile-who b{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-who span{font-size:11.5px;color:var(--text3)}
+.profile-caret{color:var(--text3);font-size:20px;line-height:1}
+.profile-pop{position:fixed;inset:0;z-index:300;background:rgba(2,3,5,.5)}
+.profile-pop[hidden]{display:none}
+.pf-panel{position:absolute;left:16px;bottom:16px;width:390px;max-height:calc(100vh - 32px);overflow-y:auto;background:var(--panel);border-radius:26px;padding:18px 18px 16px;
+  box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 0 0 1px var(--border2)}
+.pf-head{display:flex;align-items:center;gap:12px}
+.pf-avatar{width:50px;height:50px;font-size:16px}
+.pf-id{flex:1;min-width:0}
+.pf-id b{display:block;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#profilePop .acct-switch{margin-top:6px}
+#profilePop .acct-btn{width:auto;display:inline-flex;gap:6px;border:0;border-radius:999px;background:var(--input);padding:5px 12px}
+#profilePop .acct-menu{min-width:240px}
+.pf-x{align-self:flex-start;width:34px;height:34px;border:0;border-radius:50%;background:var(--input);color:var(--text2);font-size:20px;line-height:1;cursor:pointer}
+.pf-sec{font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin:20px 4px 8px}
+.pf-item{display:flex;align-items:center;gap:13px;width:100%;margin-bottom:8px;padding:12px 14px;border:0;border-radius:16px;background:var(--input);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.pf-item:hover{filter:brightness(1.15)}
+.pf-item svg{width:21px;height:21px;flex:none;fill:none;stroke:var(--accent2);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.pf-item > span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pf-item b{font-size:14.5px}
+.pf-item > span > span{font-size:12px;color:var(--text3)}
+.pf-choice{display:flex;align-items:flex-start;gap:10px;margin-bottom:6px;padding:11px 13px;border-radius:14px;background:var(--input);cursor:pointer}
+.pf-choice.on{box-shadow:inset 0 0 0 1.5px var(--accent2)}
+.pf-choice input{margin-top:3px;accent-color:var(--accent);-webkit-appearance:auto;appearance:auto}
+.pf-choice > span{display:flex;flex-direction:column;gap:2px}
+.pf-choice b{font-size:14px}
+.pf-choice > span > span{font-size:12px;color:var(--text3);line-height:1.4}
+.pf-note{margin:0 4px;font-size:13px;color:var(--text3);line-height:1.5}
+.pf-msg{margin:2px 4px 0;font-size:12.5px;color:var(--green)}
+.pf-msg.bad{color:var(--red)}
+.pf-msg:empty{display:none}
+.pf-pass{display:flex;flex-direction:column;gap:8px;margin:0 0 8px}
+.pf-pass input{min-height:46px}
+.pf-save{border:0;border-radius:999px;background:var(--accent-grad);color:var(--accent-ink);font:inherit;font-weight:700;padding:12px;cursor:pointer}
+.pf-save:disabled{opacity:.6;cursor:wait}
+#profilePop .account-row{margin-top:16px;padding:12px 4px 0;border-top:1px solid var(--border)}
+@media (max-width:720px){
+  .pf-panel{left:0;right:0;bottom:0;width:auto;max-height:88vh;border-radius:26px 26px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+  .sidebar.tools-open .profile-btn{background:var(--input)}
+}

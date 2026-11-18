@@ -72,7 +72,7 @@ const SHOTS = [
       withdraw: { sel: '.topbar-btn-warn' },
       newTrade: { sel: '.topbar-newtrade' },
       help: { sel: '#tourBtn' },
-      settings: { sel: '#settingsBtn' },
+      settings: { sel: '#profileBtn' },
       customize: { sel: '#customizeBtn' },
       navPositions: { sel: '.nl[onclick*="positions"]' },
       navMonthly: { sel: '.nl[onclick*="monthly"]' },
@@ -84,7 +84,7 @@ const SHOTS = [
   {
     name: 'settings',
     setup: () => { window.show('home'); window.openSettings(); },
-    targets: { importButton: { sel: '#importBrokerBtn' }, settings: { sel: '#settingsBtn' } },
+    targets: { importButton: { sel: '#importBrokerBtn' }, settings: { sel: '#profileBtn' } },
   },
   {
     name: 'import',
