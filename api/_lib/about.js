@@ -1,6 +1,6 @@
 /**
  * "About you" — the questions asked once after sign-up (November 2026), so
- * Romy can see who uses Riskbook: sex, age, goal, experience, style, country,
+ * Romy can see who uses Clavis: sex, age, goal, experience, style, country,
  * how they heard of it, and what they do.
  *
  * Kept in a table of its own, apart from the vault: the journal is encrypted
@@ -16,7 +16,7 @@ import { query, driverGeneration } from './db.js';
 /** The accepted answers; the same ids as src/config/aboutYou.js (the tests keep them in step). */
 export const ABOUT_CHOICES = {
   sex: ['male', 'female', 'other', 'na'],
-  // Riskbook is 18+ (Terms, section 2), so there is no "Under 18".
+  // Clavis is 18+ (Terms, section 2), so there is no "Under 18".
   age: ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'],
   goal: ['wealth', 'trading', 'retire', 'learn', 'track'],
   experience: ['lt1', '1-3', '3-10', '10+'],

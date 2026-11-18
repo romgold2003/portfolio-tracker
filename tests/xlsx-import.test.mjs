@@ -12,7 +12,7 @@ import { deflateRawSync } from 'node:zlib';
 
 import { readWorkbook, isZip, isOldExcel, readZipEntries } from '../src/features/xlsx.js';
 import {
-  tableFromSheets, readableMapping, readTransactions, detectFormats, missingFields, isRiskbookExport,
+  tableFromSheets, readableMapping, readTransactions, detectFormats, missingFields, isClavisExport,
 } from '../src/features/genericCsv.js';
 
 /** A zip archive of text files, compressed as Excel does. */
@@ -135,13 +135,13 @@ describe('a zip that is not a workbook', () => {
   });
 });
 
-describe("riskbook's own portfolio export", () => {
+describe("Clavis's own portfolio export", () => {
   test('is recognised, so it is not read as trades', () => {
-    assert.equal(isRiskbookExport(['Ticker', 'Asset class', 'Direction', 'Status', 'Open date', 'Close date', 'Quantity',
+    assert.equal(isClavisExport(['Ticker', 'Asset class', 'Direction', 'Status', 'Open date', 'Close date', 'Quantity',
       'Entry price', 'Current or exit price', 'Cost', 'Market value', 'Unrealised P&L', 'Realised P&L', 'Return %']), true);
   });
 
   test('while a broker history is not', () => {
-    assert.equal(isRiskbookExport(['Date', 'Action', 'Symbol', 'Quantity', 'Price', 'Amount', 'Fees', 'Currency']), false);
+    assert.equal(isClavisExport(['Date', 'Action', 'Symbol', 'Quantity', 'Price', 'Amount', 'Fees', 'Currency']), false);
   });
 });

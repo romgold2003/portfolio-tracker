@@ -92,7 +92,7 @@ address, which matters: most providers require a domain you control, and
 |---|---|
 | `MAIL_API_KEY` | the Brevo API key |
 | `MAIL_FROM` | the sender address you verified |
-| `MAIL_FROM_NAME` | optional, defaults to `Riskbook` |
+| `MAIL_FROM_NAME` | optional, defaults to `Clavis` |
 | `ESCROW_SECRET` | a long random string — see below |
 
 Generate the escrow secret with:

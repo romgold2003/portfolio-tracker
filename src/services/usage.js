@@ -1,5 +1,5 @@
 /**
- * Counting how Riskbook is used (November 2026), for the Admin page: that the
+ * Counting how Clavis is used (November 2026), for the Admin page: that the
  * app was opened today, which pages were opened how often, and which broker a
  * file was imported from. Counts only — nothing about what is in anyone's
  * journal, which stays encrypted.

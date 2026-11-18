@@ -203,7 +203,7 @@ export function exportPortfolioCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `riskbook-portfolio-${todayStr()}.csv`;
+  link.download = `clavis-portfolio-${todayStr()}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }

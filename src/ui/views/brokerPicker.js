@@ -44,7 +44,7 @@ export function brokerGuideHtml(b) {
     <div class="imp-step-title"><span class="imp-num">1</span>Get your file from ${escapeHtml(b.name)}</div>
     <ol class="imp-steps">${b.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
     ${b.tip ? `<p class="imp-tip">${escapeHtml(b.tip)}</p>` : ''}
-    <div class="imp-step-title"><span class="imp-num">2</span>Add it to Riskbook</div>
+    <div class="imp-step-title"><span class="imp-num">2</span>Add it to Clavis</div>
     <p class="imp-lead">${b.perYear
     ? 'Click the year your file covers. Add earlier years the same way for your full history.'
     : 'One file with everything? Press <b>One file with my whole history</b>. A file for a single year goes on that year.'}</p>`;

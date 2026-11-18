@@ -1,5 +1,5 @@
 /**
- * Customize (November 2026): choose what Riskbook shows. A switch per page and
+ * Customize (November 2026): choose what Clavis shows. A switch per page and
  * per panel, three ready-made layouts, and Reset. What is switched off is gone
  * completely — out of the menu, off the page, no grey space — until switched
  * back on. The list itself is core/layout.js; it is saved with the sign-in.
@@ -17,14 +17,16 @@ const el = (id) => document.getElementById(id);
 const qs = (sel) => document.querySelector(sel);
 const all = (sel) => [...document.querySelectorAll(sel)];
 const navButton = (page) => qs(`.nl[onclick="show('${page}')"]`);
+/** The same page in the phone's More sheet. */
+const moreButton = (page) => qs(`.more-links [data-page="${page}"]`);
 
 /** Which elements each switch removes. */
 const TARGETS = {
-  'page.monthly': () => [navButton('monthly')],
+  'page.monthly': () => [navButton('monthly'), moreButton('monthly')],
   'page.insights': () => [navButton('insights'), document.querySelector('.month-insights')],
-  'page.news': () => [navButton('news')],
-  'page.crypto': () => [navButton('crypto')],
-  'page.friends': () => [navButton('friends')],
+  'page.news': () => [navButton('news'), moreButton('news')],
+  'page.crypto': () => [navButton('crypto'), moreButton('crypto')],
+  'page.friends': () => [navButton('friends'), moreButton('friends')],
   gauges: () => all('[data-gauges]'),
   'home.benchmark': () => [qs('#home .bench')],
   'home.today': () => [el('portfolioDailyPct')?.parentElement],
@@ -109,7 +111,7 @@ export function customizeHtml(hidden = state.layoutHidden) {
       </label>`).join('')}
     </section>`;
   }).join('');
-  return `<div class="years-head"><h3>Customize Riskbook</h3>
+  return `<div class="years-head"><h3>Customize Clavis</h3>
       <button class="btn years-close" data-cz-close aria-label="Close">×</button></div>
     <p>Choose what you see. Anything switched off disappears completely — switch it back on whenever you like. Saved with your account, on every device.</p>
     <div class="cz-label">Start from</div>

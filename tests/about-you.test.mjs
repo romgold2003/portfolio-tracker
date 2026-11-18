@@ -1,7 +1,7 @@
 /**
  * "About you" (November 2026): nine optional questions on three pages a new account is
  * asked once after sign-up, kept on the server apart from the encrypted
- * journal so Romy can see who uses Riskbook. Against SQLite in memory.
+ * journal so Romy can see who uses Clavis. Against SQLite in memory.
  */
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -100,7 +100,7 @@ describe('the questions', () => {
   });
 
   // Romy, November 2026: eleven steps were too many.
-  test('three pages: about you, your investing, how they heard of Riskbook', () => {
+  test('three pages: about you, your investing, how they heard of Clavis', () => {
     assert.deepEqual(ABOUT_PAGES.map((p) => p.ids), [
       ['name', 'sex', 'age', 'country'],
       ['experience', 'style', 'goal', 'occupation'],

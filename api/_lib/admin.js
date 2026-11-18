@@ -1,5 +1,5 @@
 /**
- * The Admin page's server side (November 2026): who uses Riskbook, how, and
+ * The Admin page's server side (November 2026): who uses Clavis, how, and
  * how often — for Romy alone.
  *
  * Who is admin is a deployment setting, ADMIN_EMAILS (comma-separated), never

@@ -1,5 +1,5 @@
 /**
- * The tutorial's pictures: real screens of Riskbook, taken from a demo account
+ * The tutorial's pictures: real screens of Clavis, taken from a demo account
  * (made-up money, never a real book), and where each button sits on them, so
  * the red circles and arrows in src/ui/views/tour.js land exactly on it.
  *
@@ -37,7 +37,7 @@ const journal = {
 };
 await page.evaluate(async (j) => {
   const profiles = await import('/src/core/profiles.js');
-  await profiles.createProfile(`tour-${Date.now()}@riskbook.test`, crypto.randomUUID(), j);
+  await profiles.createProfile(`tour-${Date.now()}@clavis.test`, crypto.randomUUID(), j);
 }, journal);
 await page.reload({ waitUntil: 'load' });
 await settle(3000);

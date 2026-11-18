@@ -24,16 +24,16 @@ const el = (id) => document.getElementById(id);
 
 /** The screen. Exported for the tests. */
 export function legalGateHtml() {
-  return `<div class="guest-head"><span class="about-mark">RISKBOOK</span><span class="about-sec">Terms and privacy</span></div>
+  return `<div class="guest-head"><span class="about-mark">CLAVIS</span><span class="about-sec">Terms and privacy</span></div>
     <h3 class="guest-title" id="legalTitle">Our Terms of Service and Privacy Policy</h3>
-    <p class="guest-text">To keep using Riskbook, please read and accept our <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>. In short:</p>
+    <p class="guest-text">To keep using Clavis, please read and accept our <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>. In short:</p>
     <ul class="legal-points">
-      <li>Riskbook is a <b>tracking and journal tool</b>. It is not a broker or adviser, and nothing in it is investment advice.</li>
+      <li>Clavis is a <b>tracking and journal tool</b>. It is not a broker or adviser, and nothing in it is investment advice.</li>
       <li>Your journal stays <b>encrypted</b>: we cannot read it. We never sell your information.</li>
-      <li>Riskbook is for people <b>18 and over</b>.</li>
+      <li>Clavis is for people <b>18 and over</b>.</li>
     </ul>
     <label class="legal-check"><input type="checkbox" id="legalAgree"><span>I am 18 or older and I agree to the <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and the <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
-    <label class="legal-check legal-opt"><input type="checkbox" id="legalMarketing"><span>Email me news and tips about Riskbook (optional — unsubscribe any time).</span></label>
+    <label class="legal-check legal-opt"><input type="checkbox" id="legalMarketing"><span>Email me news and tips about Clavis (optional — unsubscribe any time).</span></label>
     <div class="about-err" id="legalErr" role="alert"></div>
     <div class="guest-actions">
       <button type="button" class="about-primary" data-legal-accept disabled>Accept and continue</button>

@@ -5,7 +5,7 @@
  * is calculated, for anyone who wants to check.
  *
  * Observations about the past, never advice about what to buy or sell (the
- * Terms are explicit that nothing in Riskbook is advice). Worked out here, on
+ * Terms are explicit that nothing in Clavis is advice). Worked out here, on
  * the device; nothing about the person is sent anywhere. The market side
  * (S&P 500 total return, Fear & Greed, big-news days, each stock's closes) is
  * the same public data for everyone.

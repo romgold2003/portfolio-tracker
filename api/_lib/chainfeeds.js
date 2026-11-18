@@ -184,7 +184,7 @@ const json = async (url, options) => {
   const res = await fetch(url, {
     ...options,
     signal: options?.signal,
-    headers: { Accept: 'application/json', 'User-Agent': 'riskbook', ...(options?.headers ?? {}) },
+    headers: { Accept: 'application/json', 'User-Agent': 'clavis', ...(options?.headers ?? {}) },
   });
   if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
   return res.json();

@@ -1,0 +1,257 @@
+/* ───────────────────────── Clavis · Midnight Pro (November 2026) ─────────────────────────
+   The rebrand, laid over the existing stylesheets and loaded last, so every page
+   takes it without its own rules being rewritten: the colours come from
+   tokens.css; this gives the shapes. Fewer boxes and borders, rounder corners,
+   pill buttons, the logo's orange on the main action only, big numbers in the
+   device's own premium face (SF Pro on Apple, Roboto on Android, Segoe UI on
+   Windows, Inter where installed) with figures that line up in columns. */
+
+*{font-family:Inter,-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable','Segoe UI',Roboto,'Helvetica Neue',sans-serif}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:'tnum' 1,'cv11' 1;letter-spacing:-0.005em}
+
+/* ── Surfaces: borderless, rounder, softly raised ── */
+.card,.kpi,.sum{border:0;border-radius:var(--radius);background:var(--panel)}
+.card{padding:20px 22px}
+.modal{border:0;border-radius:24px;box-shadow:0 30px 80px -20px rgba(0,0,0,.7)}
+.modal-bg{background:rgba(2,3,5,.72);backdrop-filter:blur(6px)}
+table th{color:var(--text3);font-weight:600;letter-spacing:0.06em}
+
+/* ── Controls: pills ── */
+.btn,.pbtn,.tf,.topbar-btn,.settings-btn,.lock-guest-btn{border-radius:999px}
+.btn{font-weight:600;padding:11px 22px}
+.btn-blue,.lock-submit{background:var(--accent-grad);border:0;color:var(--accent-ink);font-weight:700}
+.btn-blue:hover,.lock-submit:hover{filter:brightness(1.06)}
+.tf{border:0;background:var(--input);font-weight:600;padding:6px 13px;font-size:12px}
+.tf.active,.tf.on,.tf[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+.topbar-btn{border:0;font-weight:600;padding:8px 16px;font-size:12.5px}
+/* The one main action on a screen. */
+.topbar-newtrade{background:var(--accent-grad);color:var(--accent-ink);box-shadow:0 8px 24px -10px rgba(242,106,30,.65)}
+.topbar-newtrade:hover{background:var(--accent-grad);filter:brightness(1.06)}
+.pbtn{border:0;background:var(--input);font-weight:600}
+input,select,textarea{border:0;border-radius:var(--radius-sm);background:var(--input);padding:11px 13px}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+
+/* ── Big numbers ── */
+.hero-value{font-weight:700;letter-spacing:-0.035em}
+.kpi-val,.sum-val{font-weight:700;letter-spacing:-0.025em}
+.greeting{font-size:24px;font-weight:700;letter-spacing:-0.03em}
+
+/* ── The sidebar: the page itself, no panel, the active page lit in orange ── */
+.sidebar{background:var(--bg);border-right:1px solid var(--border);width:228px}
+.logo-area{border-bottom:0;padding:24px 18px 14px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:30px;height:30px;flex:none;display:block}
+.logo-name{font-size:19px;font-weight:700;letter-spacing:-0.02em}
+.logo-tag{display:none}
+.acct-btn{border:0;background:var(--panel);border-radius:14px;padding:9px 12px}
+.acct-menu{border:0;border-radius:16px;box-shadow:0 20px 50px -10px rgba(0,0,0,.6)}
+.nav-links{padding:8px 12px}
+.nl{border-radius:12px;padding:10px 12px;font-size:14px;font-weight:500;gap:12px;margin-bottom:3px}
+.nl:hover{background:var(--panel);color:var(--text)}
+.nl.active{background:var(--panel);color:var(--text)}
+.nl.active .nl-icon{color:var(--accent)}
+.nl-more{display:none}
+.more-links{display:none}
+.sidebar-bot{border-top:0;padding:14px 16px 18px}
+.settings-btn{border:0;background:var(--panel);color:var(--text2);font-size:12.5px;font-weight:500;padding:9px 12px;text-align:left}
+.settings-btn:hover{background:var(--hover2);color:var(--text)}
+
+/* ── Phones: Home · Positions · + · Insights · More, the + in orange ── */
+@media (max-width:720px){
+  /* No backdrop-filter here: it would make the sidebar the box its fixed tab bar and sheet sit in. */
+  .sidebar{width:auto;border-right:0;border-bottom:1px solid var(--border);background:var(--bg)}
+  .logo-area{padding:8px 14px 10px}
+  .brand-mark{width:26px;height:26px}
+  .logo-name{font-size:17px}
+  .tools-btn{display:none}
+  /* Monthly, News, Crypto and Friends live under More; Insights earns its tab. */
+  .nav-links .nl-desk{display:none}
+  .nav-links .nl-insights{display:flex}
+  .nav-links .nl-more{display:flex}
+  .nav-links{background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(18px);border-top:1px solid var(--border);
+    grid-template-columns:repeat(var(--nav-n,5),minmax(0,1fr));padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+  .nl{font-size:10.5px;font-weight:500;color:var(--text3);background:none!important;border-radius:0}
+  .nl.active{color:var(--text)}
+  .nl-icon{font-size:20px}
+  /* The middle action: a raised orange circle. */
+  .nl-add{color:var(--text)!important}
+  .nl-add .nl-icon{width:46px;height:46px;border-radius:50%;background:var(--accent-grad);color:var(--accent-ink)!important;
+    display:grid;place-items:center;font-size:22px;font-weight:700;margin-top:-14px;box-shadow:0 10px 26px -8px rgba(242,106,30,.75)}
+  .nl-add .nl-label{display:none}
+
+  /* More: a sheet that slides up over the tab bar, with the other pages and the tools. */
+  .sidebar.tools-open::before{content:'';position:fixed;inset:0;background:rgba(2,3,5,.6);z-index:55}
+  .sidebar.tools-open .sidebar-bot{display:flex;flex-direction:column;align-items:stretch;gap:6px;position:fixed;left:0;right:0;
+    bottom:calc(68px + env(safe-area-inset-bottom));z-index:58;background:var(--panel);border-radius:26px 26px 0 0;
+    padding:10px 16px 18px;max-height:72vh;overflow-y:auto;box-shadow:0 -24px 60px rgba(0,0,0,.55)}
+  .sidebar.tools-open .sidebar-bot::before{content:'';width:40px;height:5px;border-radius:3px;background:var(--hover2);margin:0 auto 10px}
+  .more-links{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}
+  .more-links button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 4px;border:0;border-radius:16px;
+    background:var(--input);color:var(--text);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+  .more-links button span{font-size:20px}
+  .sidebar.tools-open .settings-btn{width:100%!important;min-height:46px;font-size:14px;border-radius:14px;padding:12px 14px}
+  .greeting{font-size:28px}
+  .main{padding-top:16px}
+}
+.brand-mark{color:var(--text)}
+
+/* ── Guest mode: a slim dark strip, one line on every screen ── */
+.guest-bar{flex-wrap:nowrap;gap:12px;height:40px;padding:0 14px;font-size:12.5px;color:var(--text2);
+  background:color-mix(in srgb,var(--blue-bg) 85%,var(--bg));border-bottom:1px solid var(--border-blue);box-shadow:none}
+.guest-bar b{color:var(--accent2)}
+.guest-bar-btn{flex:none;border:0;border-radius:999px;padding:6px 14px;background:var(--accent-grad);color:var(--accent-ink)}
+.guest-bar-btn:hover{background:var(--accent-grad);filter:brightness(1.08)}
+body.is-guest{padding-top:40px}
+@media (max-width:640px){
+  body.is-guest{padding-top:40px}
+  .guest-bar-more{display:none}
+}
+@media (max-width:720px){body.is-guest .sidebar{top:40px}}
+
+/* ── Home: Cash and Today as soft chips, no outlines ── */
+.hero-chip{background:var(--input);border-radius:16px;padding:9px 16px}
+.hero-chip-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
+.cash-edit{border:0!important;border-radius:999px!important;padding:3px 11px!important;font-weight:600}
+.hero{border:0;border-radius:var(--radius)}
+
+@media (max-width:720px){
+  /* The top strip: You vs the S&P on the left, the two gauges beside it. */
+  .topbar{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px 10px;margin-bottom:14px}
+  .bench{min-width:0}
+  .bench-name{min-width:52px;font-size:12px}
+  .bench-val{font-size:18px}
+  .topbar-right{display:contents}
+  .gauges{justify-self:end}
+  .gauge{width:84px;height:46px}
+  .live-pill,.topbar-btn-warn{grid-column:auto}
+  .topbar-right > .live-pill{justify-self:start}
+  .topbar-right > *{justify-self:end}
+  /* The account card: the balance first and large, the chips side by side under it. */
+  .hero{padding:20px 18px}
+  .hero-value{font-size:40px}
+  .hero-value{flex:1 1 calc(100% - 60px)}
+  .hero-chip{flex:1 1 40%;min-width:0;padding:10px 14px}
+}
+
+/* More sheet rows: visible on the sheet, not panel-on-panel. */
+@media (max-width:720px){
+  .sidebar.tools-open .settings-btn{background:var(--input);color:var(--text)}
+}
+
+/* ── Sign in: an orange glow on black, the key mark on top ── */
+.signin-hero{border-radius:0!important;background:
+  radial-gradient(60% 45% at 50% 0%,rgba(242,106,30,.34),transparent 70%),
+  radial-gradient(50% 40% at 85% 100%,rgba(245,158,11,.14),transparent 70%),var(--bg)}
+.signin-hero::before,.signin-hero-fade{display:none}
+.signin-hero-noise{opacity:.25}
+@media(min-width:1200px){.lock-screen{justify-content:center;padding-right:0}}
+.lock-card{background:color-mix(in srgb,var(--panel) 72%,transparent)!important;border:1px solid var(--border)!important;
+  border-radius:28px!important;box-shadow:0 40px 120px -40px rgba(0,0,0,.8)}
+.lock-brand{display:flex;flex-direction:column;align-items:center;gap:10px;margin:4px 0 14px;color:var(--text);
+  font-size:26px;font-weight:700;letter-spacing:-0.03em}
+.lock-mark{width:64px;height:64px;color:var(--text);filter:drop-shadow(0 10px 30px rgba(242,106,30,.45))}
+.lock-tagline{text-align:center;font-size:15px;font-weight:500;color:var(--text2);border-bottom:0;margin:0 0 22px;padding:0}
+.lock-title{font-size:20px}
+.lock-field label{letter-spacing:0.06em}
+.lock-field input{min-height:48px}
+.lock-submit{min-height:50px;font-size:15px;font-weight:700;box-shadow:0 14px 36px -14px rgba(242,106,30,.8)}
+.lock-create{display:block;width:100%;margin-top:10px;min-height:48px;border-radius:999px;border:1px solid var(--border2);
+  background:transparent;color:var(--text);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.lock-create:hover{background:var(--input)}
+.lock-links{margin-top:10px}
+.lock-guest{border-top:0;margin-top:8px;padding-top:4px}
+.lock-guest-btn{border:0!important;background:none!important;color:var(--accent2)!important;font-size:14px;padding:10px}
+.lock-guest-btn::after{content:' →'}
+
+/* ── Landing (views/landing.js): in front of the sign-in card, first visit only ── */
+body.landing-open{overflow:hidden}
+.landing{position:fixed;inset:0;z-index:700;overflow-y:auto;overflow-x:hidden;color:var(--text);
+  background:radial-gradient(55% 40% at 70% 8%,rgba(242,106,30,.22),transparent 70%),
+    radial-gradient(40% 30% at 0% 60%,rgba(245,158,11,.07),transparent 70%),var(--bg)}
+.landing[hidden]{display:none}
+.ld-mark{width:30px;height:30px;color:var(--text)}
+.ld-nav{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:20px;
+  padding:16px max(24px,calc((100% - 1132px) / 2));background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(16px)}
+.ld-brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;letter-spacing:-0.03em}
+.ld-links{display:flex;gap:26px;margin-left:24px;flex:1}
+.ld-links a{color:var(--text2);text-decoration:none;font-size:14px;font-weight:500}
+.ld-links a:hover{color:var(--text)}
+.ld-actions{display:flex;gap:10px;margin-left:auto}
+.ld-btn{font:inherit;font-size:14px;font-weight:600;border-radius:999px;padding:10px 20px;cursor:pointer;border:0;white-space:nowrap}
+.ld-primary{background:var(--accent-grad);color:var(--accent-ink);box-shadow:0 12px 32px -12px rgba(242,106,30,.8)}
+.ld-primary:hover{filter:brightness(1.07)}
+.ld-ghost{background:transparent;color:var(--text);border:1px solid var(--border2)}
+.ld-ghost:hover{background:var(--input)}
+.ld-big{padding:15px 28px;font-size:15.5px}
+.ld-link{background:none;border:0;color:var(--accent2);font:inherit;font-size:14.5px;font-weight:600;cursor:pointer;margin-top:14px}
+
+.ld-hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center;max-width:1180px;margin:0 auto;padding:56px 24px 72px}
+.ld-pill{display:inline-block;font-size:12.5px;font-weight:600;color:var(--accent2);background:var(--blue-bg);
+  border:1px solid var(--border-blue);border-radius:999px;padding:6px 14px}
+.ld-hero h1{font-size:clamp(38px,5.6vw,68px);line-height:1.02;letter-spacing:-0.045em;font-weight:800;margin:22px 0 20px}
+.ld-grad{background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ld-lead{font-size:18px;line-height:1.55;color:var(--text2);max-width:560px;margin:0 0 30px}
+.ld-cta{display:flex;gap:12px;flex-wrap:wrap}
+.ld-trust{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:28px;font-size:13px;color:var(--text3)}
+
+.ld-phone{justify-self:center;width:300px;padding:10px;border-radius:46px;background:#0E1219;
+  box-shadow:0 0 0 1px #1E2633,0 60px 120px -40px rgba(242,106,30,.45),0 40px 80px -30px rgba(0,0,0,.9)}
+.ld-screen{border-radius:38px;background:var(--bg);padding:34px 18px 22px;overflow:hidden}
+.ld-p-lbl{font-size:12px;color:var(--text3)}
+.ld-p-val{font-size:36px;font-weight:700;letter-spacing:-0.04em;margin-top:4px}
+.ld-p-val span{color:var(--text3);font-size:24px}
+.ld-p-chg{font-size:13px;font-weight:600;margin-top:4px}
+.ld-spark{display:block;width:100%;height:90px;margin:14px 0 10px}
+.ld-vs{display:flex;justify-content:space-between;font-size:12px;color:var(--text3);background:var(--panel);border-radius:14px;padding:10px 12px;margin-bottom:10px}
+.ld-vs b{color:var(--text);margin-left:4px}
+.ld-row{display:flex;align-items:center;gap:10px;padding:9px 2px}
+.ld-tk{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--input);font-weight:700;font-size:13px;color:var(--accent2)}
+.ld-nm{flex:1;display:flex;flex-direction:column;font-size:13px}
+.ld-nm i{font-style:normal;font-size:11.5px;color:var(--text3)}
+.ld-ch{font-size:13px;font-weight:600}
+.landing .up{color:var(--green)}.landing .dn{color:var(--red)}
+
+.ld-sec{max-width:1180px;margin:0 auto;padding:64px 24px}
+.ld-kicker{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent2);margin-bottom:12px}
+.ld-sec h2{font-size:clamp(28px,3.6vw,44px);letter-spacing:-0.035em;line-height:1.08;font-weight:800;margin:0 0 30px;max-width:720px}
+.ld-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.ld-card{background:var(--panel);border-radius:24px;padding:28px}
+.ld-ic{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:var(--blue-bg);font-size:22px}
+.ld-card h3{font-size:19px;letter-spacing:-0.02em;margin:18px 0 8px}
+.ld-card p{font-size:14.5px;line-height:1.55;color:var(--text2);margin:0}
+.ld-safe{display:flex;align-items:center;gap:48px}
+.ld-safe .ld-mark{width:clamp(120px,18vw,200px);height:auto;filter:drop-shadow(0 20px 60px rgba(242,106,30,.45))}
+.ld-safe p{font-size:17px;line-height:1.6;color:var(--text2);max-width:580px;margin:-14px 0 0}
+.ld-final{text-align:center;display:flex;flex-direction:column;align-items:center}
+.ld-final h2{margin-bottom:24px}
+.ld-foot{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;max-width:1180px;margin:0 auto;padding:28px 24px 40px;
+  border-top:1px solid var(--border);font-size:12.5px;color:var(--text3)}
+.ld-foot a{color:var(--text2)}
+.ld-note{margin-left:auto}
+
+@media (max-width:860px){
+  .ld-hero{grid-template-columns:1fr;padding-top:28px;gap:44px}
+  .ld-cards{grid-template-columns:1fr}
+  .ld-links{display:none}
+  .ld-safe{flex-direction:column;align-items:flex-start;gap:20px}
+}
+@media (max-width:520px){
+  .ld-nav{padding:12px 16px;gap:10px}
+  .ld-brand{font-size:18px}
+  .ld-actions .ld-ghost{padding:9px 14px}
+  .ld-actions .ld-primary{padding:9px 16px}
+  .ld-hero,.ld-sec{padding-left:16px;padding-right:16px}
+  .ld-lead{font-size:16px}
+  .ld-cta .ld-btn{flex:1}
+  .ld-phone{width:min(300px,86vw)}
+  .ld-note{margin-left:0}
+}
+/* On a phone the card is the screen: no frame around it. */
+@media (max-width:520px){
+  .lock-card{background:transparent!important;border:0!important;box-shadow:none;backdrop-filter:none}
+}
+
+/* New trade: soft, borderless choices; the picked one in colour. */
+.dir-opt{border-radius:14px!important;border-color:transparent!important;background:var(--input)}
+.mind-pick{border-radius:12px;border-color:transparent!important;background:var(--input)}

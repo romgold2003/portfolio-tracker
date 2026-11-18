@@ -1,5 +1,5 @@
 /**
- * What each person chooses to see in Riskbook (November 2026, after the way
+ * What each person chooses to see in Clavis (November 2026, after the way
  * Binance lets its users choose their home screen).
  *
  * Every page beyond the essentials, and every panel on them, can be switched
@@ -9,7 +9,7 @@
  * be changed. The choice is kept with the sign-in (core/store.js), so it is the
  * same on every device. Drawing it is ui/views/customize.js.
  *
- * Stored as the list of what is hidden, so anything added to Riskbook later
+ * Stored as the list of what is hidden, so anything added to Clavis later
  * shows up for everyone until they choose to hide it.
  */
 
@@ -79,7 +79,7 @@ export const PRESETS = [
   {
     key: 'trader',
     title: 'Everything',
-    text: 'Every page and panel — the full Riskbook.',
+    text: 'Every page and panel — the full Clavis.',
     hidden: [],
   },
   {

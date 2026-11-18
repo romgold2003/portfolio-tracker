@@ -1,5 +1,5 @@
 /**
- * Is every outside source Riskbook reads still answering, and in the shape it
+ * Is every outside source Clavis reads still answering, and in the shape it
  * reads? (November 2026.)
  *
  * Asked for after Polymarket retired its v1 trades feed and Prediction Markets

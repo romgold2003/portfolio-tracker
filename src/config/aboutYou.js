@@ -1,12 +1,12 @@
 /**
  * The investor-profile questions (November 2026), so Romy can see who uses
- * Riskbook. Every one is optional. The answers are kept on the server apart
+ * Clavis. Every one is optional. The answers are kept on the server apart
  * from the journal (api/_lib/about.js) — the journal stays encrypted and
  * unreadable to anyone but its owner; these are not.
  *
  * Worded and laid out the way a broker's own account questionnaire is: plain,
  * formal, on three pages (ABOUT_PAGES). Four take several answers (`multi`): goals,
- * approach, how they heard of Riskbook, and employment.
+ * approach, how they heard of Clavis, and employment.
  *
  * The option ids are what is stored; the server accepts exactly these
  * (tests/about-you.test.mjs keeps the two lists the same). A multiple answer
@@ -56,7 +56,7 @@ export const ABOUT_QUESTIONS = [
     id: 'country', title: 'Country of residence', ask: 'Country of residence', hint: 'Where do you currently live?', country: true,
   },
   {
-    id: 'heard', title: 'How did you hear about Riskbook?', ask: 'How did you hear about Riskbook?', hint: 'Select all that apply.', multi: true,
+    id: 'heard', title: 'How did you hear about Clavis?', ask: 'How did you hear about Clavis?', hint: 'Select all that apply.', multi: true,
     options: [['friend', 'Friend or family'], ['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['youtube', 'YouTube'], ['google', 'Google search'], ['university', 'University'], ['other', 'Other']],
   },
   {
@@ -67,11 +67,11 @@ export const ABOUT_QUESTIONS = [
 
 /**
  * The questions on three pages (Romy, November 2026: eleven steps were too
- * many): who you are, how you invest, and how you found Riskbook.
+ * many): who you are, how you invest, and how you found Clavis.
  */
 export const ABOUT_PAGES = [
   { title: 'About you', lead: 'Every question is optional. Your answers are confidential and never sold.', ids: ['name', 'sex', 'age', 'country'] },
-  { title: 'Your investing', lead: 'This helps us tailor Riskbook to how you invest.', ids: ['experience', 'style', 'goal', 'occupation'] },
+  { title: 'Your investing', lead: 'This helps us tailor Clavis to how you invest.', ids: ['experience', 'style', 'goal', 'occupation'] },
   { title: 'One last question', lead: 'Then you are ready to start.', ids: ['heard'] },
 ];
 
@@ -86,7 +86,7 @@ export const COUNTRY_CODES = (
   + 'UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'
 ).split(' ');
 
-/** Shown first among the countries: where most people using Riskbook are. */
+/** Shown first among the countries: where most people using Clavis are. */
 export const COMMON_COUNTRIES = ['IL', 'US', 'GB', 'FR', 'DE', 'CA'];
 
 let names = null;

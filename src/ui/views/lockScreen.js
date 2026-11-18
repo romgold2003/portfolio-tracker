@@ -11,7 +11,7 @@
 import {
   listProfiles, findByEmail, createProfile, unlockWithPassword,
   unlockWithRecoveryKey, setPassword, looksLikeEmail, cloudMode,
-  requestPasswordReset, completePasswordReset, resetTokenInUrl, startGuest, emptyJournal,
+  requestPasswordReset, completePasswordReset, resetTokenInUrl, startGuest, emptyJournal, isGuest,
 } from '../../core/profiles.js';
 import { LEGAL_VERSION, TERMS_URL, PRIVACY_URL } from '../../config/legal.js';
 import { social } from '../../services/social.js';
@@ -20,6 +20,7 @@ import { cryptoAvailable } from '../../core/crypto.js';
 import { emailResetEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
 import { setSigninHero } from '../../features/signinHero.js';
+import { showLanding, hideLanding, landingSeen, markLandingSeen } from './landing.js';
 
 const HOST_ID = 'lockScreen';
 
@@ -79,10 +80,22 @@ function signinBlurb() {
 }
 
 /**
- * What Riskbook is, before anyone is asked to sign in (November 2026): one
+ * What Clavis is, before anyone is asked to sign in (November 2026): one
  * sentence. Tracking and information only — never advice, as the Terms say.
  */
 export const TAGLINE = 'Your money. The market. Your journal. All in one place, always at your fingertips.';
+
+/** The Clavis key mark and name, on top of the sign-in card. */
+const LOCK_MARK = `<svg class="lock-mark" viewBox="0 0 100 100" aria-hidden="true">
+  <defs><linearGradient id="lockGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F26A1E"/><stop offset="1" stop-color="#F59E0B"/></linearGradient></defs>
+  <path d="M78 22 A38 38 0 1 0 78 78" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round"/>
+  <path d="M58 50 L83 25 A36 36 0 0 1 83 75 Z" fill="url(#lockGrad)"/>
+  <circle cx="58" cy="50" r="9.5" fill="url(#lockGrad)"/><circle cx="58" cy="50" r="4.6" fill="var(--bg)"/>
+  <path d="M61 47.6 L76 44 L76 56 L61 52.4 Z" fill="var(--bg)"/></svg>`;
+
+function brandHtml() {
+  return `<div class="lock-brand">${LOCK_MARK}<span>Clavis</span></div>`;
+}
 
 function pitchHtml() {
   return `<p class="lock-tagline">${TAGLINE}</p>`;
@@ -91,7 +104,7 @@ function pitchHtml() {
 function signinForm() {
   const accounts = listProfiles();
   return `
-    <div class="lock-brand">Riskbook</div>
+    ${brandHtml()}
     ${pitchHtml()}
     <h1 class="lock-title">Sign in</h1>
     <p class="lock-sub">${signinBlurb()}</p>
@@ -105,8 +118,8 @@ function signinForm() {
     </div>
     <div id="lockError" class="lock-error"></div>
     <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Sign in">Sign in</button>
+    <button type="button" class="lock-create" data-mode="create">Create a free account</button>
     <div class="lock-links">
-      <button class="lock-link" data-mode="create">Create an account</button>
       ${forgotLink(accounts.length)}
     </div>
     ${cloudMode() ? `<div class="lock-guest">
@@ -210,7 +223,7 @@ export function createForm() {
     <label class="lock-agree"><input type="checkbox" id="lockAgree">
       <span>I am 18 or older and I agree to the <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and the <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
     <label class="lock-agree lock-agree-opt"><input type="checkbox" id="lockMarketing">
-      <span>Email me news and tips about Riskbook (optional — unsubscribe any time).</span></label>
+      <span>Email me news and tips about Clavis (optional — unsubscribe any time).</span></label>
     <div id="lockError" class="lock-error"></div>
     <button class="btn btn-blue lock-submit" id="lockSubmit" data-label="Create account">Create account</button>
     <div class="lock-links">
@@ -322,7 +335,7 @@ function render() {
 }
 
 function wire() {
-  host().querySelectorAll('.lock-link[data-mode]').forEach((button) => {
+  host().querySelectorAll('.lock-link[data-mode], .lock-create[data-mode]').forEach((button) => {
     button.addEventListener('click', () => {
       pendingEmail = el('lockEmail')?.value ?? pendingEmail;
       mode = button.dataset.mode;
@@ -352,7 +365,7 @@ function copyKey() {
 }
 
 function downloadKey() {
-  const text = `Riskbook recovery key\nAccount: ${pendingEmail}\nKey: ${issuedRecoveryKey}\n\n`
+  const text = `Clavis recovery key\nAccount: ${pendingEmail}\nKey: ${issuedRecoveryKey}\n\n`
     + 'Keep this somewhere safe. Without it, a forgotten password cannot be recovered.\n';
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
   const link = document.createElement('a');
@@ -529,6 +542,9 @@ async function finish() {
   // Torn down rather than merely hidden: an animation loop behind an opaque
   // app is spent battery, and this runs on phones.
   setSigninHero(false);
+  hideLanding();
+  // A real account on this device: next time, straight to the sign-in card.
+  if (!isGuest()) markLandingSeen();
   mode = 'signin';
   await onUnlocked();
 }
@@ -563,4 +579,13 @@ export function showLockScreen({ onUnlock, legacy } = {}) {
 
   issuedRecoveryKey = null;
   render();
+
+  // A first-time visitor to the website meets Clavis before the form.
+  if (cloudMode() && mode === 'signin' && !landingSeen()) {
+    showLanding((choice) => {
+      if (choice === 'demo') { enterAsGuest(); return; }
+      if (choice === 'create') { mode = 'create'; render(); }
+      el('lockEmail')?.focus();
+    });
+  }
 }

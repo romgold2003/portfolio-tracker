@@ -231,13 +231,13 @@ export function guessMapping(headers) {
 }
 
 /**
- * Whether a table is riskbook's own portfolio export rather than a broker's file.
+ * Whether a table is Clavis's own portfolio export rather than a broker's file.
  *
  * It has a ticker, dates and amounts, so the automatic reader would take its
  * rows for trades — one position per row, invented purchases and sales across
  * every year it covers. It is a summary of a journal, not a history of one.
  */
-export function isRiskbookExport(headers) {
+export function isClavisExport(headers) {
   const set = new Set((headers ?? []).map((h) => String(h).trim().toLowerCase()));
   return ['ticker', 'status', 'open date', 'entry price', 'current or exit price'].every((h) => set.has(h));
 }

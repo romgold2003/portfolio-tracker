@@ -1,7 +1,7 @@
 /**
  * Proof of agreement (November 2026): which version of the Terms of Service
  * and Privacy Policy each account accepted, and when, and whether it asked for
- * marketing emails — so Riskbook can show who agreed to what.
+ * marketing emails — so Clavis can show who agreed to what.
  *
  * One row per account, updated when a newer version is accepted or the
  * marketing choice changes. Deleted with the account. The table is made on

@@ -1,5 +1,5 @@
 /**
- * Guests (November 2026): someone can look around Riskbook without an account.
+ * Guests (November 2026): someone can look around Clavis without an account.
  *
  * A guest gets a pass — a cookie the server signed, good for twelve hours —
  * that opens the market data any visitor would see (prices, history, the News

@@ -50,7 +50,7 @@ async function person(email, password = 'correct horse battery') {
 beforeEach(() => { useDriver(sqliteDriver()); });
 
 describe('what the documents say', () => {
-  test('who runs Riskbook, under which law, and the version', () => {
+  test('who runs Clavis, under which law, and the version', () => {
     for (const doc of [terms, privacy]) {
       assert.match(doc, /Rom Goldberg/);
       assert.match(doc, /Raanana, Israel/);
@@ -64,7 +64,7 @@ describe('what the documents say', () => {
     assert.match(terms, /tracking and journal tool/);
     assert.match(terms, /not a financial service/);
     assert.match(terms, /not a broker, exchange, bank, investment adviser/);
-    assert.match(terms, /Nothing in Riskbook is advice/);
+    assert.match(terms, /Nothing in Clavis is advice/);
     assert.match(terms, /Israel Securities Authority/);
     assert.match(terms, /broker's statements and records are the official ones/);
   });

@@ -1,5 +1,5 @@
 /**
- * The tutorial (November 2026): slides of real Riskbook screens with red
+ * The tutorial (November 2026): slides of real Clavis screens with red
  * circles and arrows on the buttons that matter. It opens by itself once, at
  * the first sign-in, and from ❔ Help & tutorial in the menu any time after. It replaced the welcome
  * banner.

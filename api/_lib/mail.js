@@ -42,14 +42,14 @@ export async function sendResetEmail(to, link) {
     body: JSON.stringify({
       sender: {
         email: process.env.MAIL_FROM,
-        name: process.env.MAIL_FROM_NAME || 'Riskbook',
+        name: process.env.MAIL_FROM_NAME || 'Clavis',
       },
       to: [{ email: to }],
-      subject: 'Reset your Riskbook password',
+      subject: 'Reset your Clavis password',
       // Both parts, because a text/plain alternative is one of the cheapest
       // things that keeps a message out of a spam folder.
       textContent: [
-        'Someone asked to reset the password on your Riskbook account.',
+        'Someone asked to reset the password on your Clavis account.',
         '',
         'Open this link to choose a new one:',
         link,
@@ -59,7 +59,7 @@ export async function sendResetEmail(to, link) {
       ].join('\n'),
       htmlContent: `
         <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a">
-          <p>Someone asked to reset the password on your Riskbook account.</p>
+          <p>Someone asked to reset the password on your Clavis account.</p>
           <p style="margin:24px 0">
             <a href="${escapeAttribute(link)}"
                style="background:#2563eb;color:#fff;text-decoration:none;padding:11px 20px;border-radius:7px;display:inline-block">

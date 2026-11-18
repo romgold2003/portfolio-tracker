@@ -52,7 +52,7 @@ export async function fetchCoverage({ now = Date.now(), fetcher = fetch } = {}) 
   if (coverageCache.value && now - coverageCache.at < COVERAGE_TTL_MS) return coverageCache.value;
 
   const res = await fetcher(STATUS_URL, {
-    headers: { Accept: 'application/json', 'User-Agent': 'riskbook' },
+    headers: { Accept: 'application/json', 'User-Agent': 'clavis' },
   });
   if (!res.ok) throw new Error(`Whale Alert status answered ${res.status}`);
   const chains = await res.json();
@@ -171,7 +171,7 @@ export async function fetchTransfers({
     if (cursor) url.searchParams.set('cursor', cursor);
 
     const res = await fetcher(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'riskbook' },
+      headers: { Accept: 'application/json', 'User-Agent': 'clavis' },
     });
 
     if (res.status === 401 || res.status === 403) {

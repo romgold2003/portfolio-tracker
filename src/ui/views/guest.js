@@ -16,9 +16,9 @@ const el = (id) => document.getElementById(id);
 
 /** The notice on the way in. Exported for the tests. */
 export function guestNoticeHtml() {
-  return `<div class="guest-head"><span class="about-mark">RISKBOOK</span><span class="about-sec">Guest visit</span></div>
+  return `<div class="guest-head"><span class="about-mark">CLAVIS</span><span class="about-sec">Guest visit</span></div>
     <h3 class="guest-title" id="guestTitle">You are exploring as a guest</h3>
-    <p class="guest-text">This is a sample portfolio, so you can see how Riskbook works. Try anything: add a trade, import a file, change the settings.</p>
+    <p class="guest-text">This is a sample portfolio, so you can see how Clavis works. Try anything: add a trade, import a file, change the settings.</p>
     <div class="guest-warn" role="note"><b>Nothing is saved.</b> When you leave or reload the page, everything you did here is gone.</div>
     <p class="guest-text">To keep your own journal, create a free account — it takes a minute.</p>
     <div class="guest-actions">
@@ -27,7 +27,7 @@ export function guestNoticeHtml() {
     </div>`;
 }
 
-const barHtml = () => `<span><b>Guest mode</b> — nothing you do is saved.</span>
+const barHtml = () => `<span><b>Guest mode</b><span class="guest-bar-more"> — nothing you do is saved.</span></span>
   <button type="button" class="guest-bar-btn" data-guest-create>Create a free account</button>`;
 
 /** Leave the guest visit and open "Create an account". */

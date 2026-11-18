@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="description" content="A local-first trading journal: positions, partial exits, live prices and monthly P&amp;L.">
-<title>Riskbook</title>
+<meta name="description" content="Clavis: your trading journal and personal analyst. Every position, every broker, compared with the S&amp;P 500, encrypted on your device.">
+<meta name="theme-color" content="#05070B">
+<link rel="icon" type="image/svg+xml" href="assets/clavis-icon.svg">
+<link rel="apple-touch-icon" href="assets/clavis-icon-180.png">
+<title>Clavis</title>
 
 <!--
   Say what broke, before anything else can break.
@@ -96,11 +99,12 @@
 <!-- Charting. Pinned to an exact version so a CDN release can never change the app. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" defer></script>
 
-<!-- Stylesheets are ordered by specificity: tokens, then base, layout, components. -->
+<!-- Stylesheets are ordered by specificity: tokens, then base, layout, components, and the Clavis look last. -->
 <link rel="stylesheet" href="styles/tokens.css">
 <link rel="stylesheet" href="styles/base.css">
 <link rel="stylesheet" href="styles/layout.css">
 <link rel="stylesheet" href="styles/components.css">
+<link rel="stylesheet" href="styles/clavis.css">
 </head>
 <body>
 <!--
@@ -122,9 +126,8 @@
     including the signed-in ones who never see this screen. The file is named
     in signinHero.js and only when the backdrop is actually shown.
   -->
-  <video class="signin-hero-video" id="signinHeroVideo"
-         loop muted playsinline preload="none"
-         data-src="assets/signin-hero.mp4"></video>
+  <!-- Clavis (November 2026): the video gave way to a still orange glow, drawn
+       in styles/clavis.css. Nothing is downloaded for it. -->
   <div class="signin-hero-noise"></div>
   <div class="signin-hero-fade"></div>
 </div>
@@ -154,7 +157,7 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="logo-area">
-      <div class="logo-name">Riskbook</div>
+      <div class="brand"><svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="brandGrad" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#F26A1E"/><stop offset="1" stop-color="#F59E0B"/></linearGradient></defs><path d="M78 22 A38 38 0 1 0 78 78" fill="none" stroke="currentColor" stroke-width="15"/><path d="M58 50 L83 25 A36 36 0 0 1 83 75 Z" fill="url(#brandGrad)"/><circle cx="58" cy="50" r="9.5" fill="url(#brandGrad)"/><circle cx="58" cy="50" r="4.6" fill="var(--bg)"/><path d="M61 47.6 L76 44 L76 56 L61 52.4 Z" fill="var(--bg)"/></svg><div class="logo-name">Clavis</div></div>
       <div class="logo-tag">Trading journal</div>
       <div class="acct-switch" id="acctSwitch">
         <button class="acct-btn" id="acctBtn" type="button" onclick="toggleAccountMenu()" aria-haspopup="menu" aria-expanded="false" title="Switch sub-account">
@@ -170,14 +173,22 @@
     <nav class="nav-links">
       <button class="nl active" onclick="show('home')"><span class="nl-icon">⌂</span> Home</button>
       <button class="nl" onclick="show('positions')"><span class="nl-icon">◈</span> Positions</button>
-      <button class="nl" onclick="show('add')"><span class="nl-icon">＋</span> New trade</button>
-      <button class="nl nl-monthly" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
+      <button class="nl nl-add" onclick="show('add')"><span class="nl-icon">＋</span><span class="nl-label"> New trade</span></button>
+      <button class="nl nl-monthly nl-desk" onclick="show('monthly')"><span class="nl-icon">▦</span> Monthly</button>
       <button class="nl nl-monthly nl-insights" onclick="show('insights')"><span class="nl-icon">✦</span> Insights</button>
-      <button class="nl" onclick="show('news')"><span class="nl-icon">◎</span> News</button>
-      <button class="nl" onclick="show('crypto')"><span class="nl-icon">₿</span> Crypto</button>
-      <button class="nl" onclick="show('friends')"><span class="nl-icon">👤</span> Friends</button>
+      <button class="nl nl-desk" onclick="show('news')"><span class="nl-icon">◎</span> News</button>
+      <button class="nl nl-desk" onclick="show('crypto')"><span class="nl-icon">₿</span> Crypto</button>
+      <button class="nl nl-desk" onclick="show('friends')"><span class="nl-icon">👤</span> Friends</button>
+      <!-- Phones: the other pages and the tools, in a sheet. -->
+      <button class="nl nl-more" type="button" onclick="toggleTools()" aria-controls="sidebarBot"><span class="nl-icon">⋯</span> More</button>
     </nav>
     <div class="sidebar-bot" id="sidebarBot">
+      <div class="more-links">
+        <button type="button" data-page="monthly" onclick="toggleTools(false);show('monthly')"><span>▦</span>Monthly</button>
+        <button type="button" data-page="news" onclick="toggleTools(false);show('news')"><span>◎</span>News</button>
+        <button type="button" data-page="crypto" onclick="toggleTools(false);show('crypto')"><span>₿</span>Crypto</button>
+        <button type="button" data-page="friends" onclick="toggleTools(false);show('friends')"><span>👤</span>Friends</button>
+      </div>
       <button class="settings-btn" id="settingsBtn" onclick="openSettings()">⚙ Settings &amp; import</button>
       <button class="settings-btn" id="themeBtn" onclick="openDesigner()" style="margin-top:6px">🎨 Designer mode</button>
       <!-- Choose the pages and panels shown: src/ui/views/customize.js. -->
@@ -219,15 +230,15 @@
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
               <button class="eye-btn" id="hideAmounts" onclick="toggleAmounts()" title="Hide amounts" aria-label="Hide amounts" aria-pressed="false">👁</button>
               <div class="hero-value" id="acctValue">$0</div>
-              <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">
-                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Cash</div>
+              <div class="hero-chip">
+                <div class="hero-chip-lbl">Cash</div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <span id="cashDisplay" style="font-size:16px;font-weight:600;color:var(--text)">$0</span>
                   <button class="cash-edit" onclick="editCash()" style="background:var(--blue-bg);border:0.5px solid var(--border-blue);border-radius:5px;padding:3px 9px;font-size:11px;color:var(--blue);cursor:pointer;font-family:inherit">Edit</button>
                 </div>
               </div>
-              <div style="background:var(--input);border:0.5px solid var(--border2);border-radius:8px;padding:8px 14px">
-                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Today</div>
+              <div class="hero-chip">
+                <div class="hero-chip-lbl">Today</div>
                 <div style="font-size:16px;font-weight:600" id="portfolioDailyPct">—</div>
                 <div style="font-size:12px;margin-top:2px" id="portfolioDailyAmt">—</div>
               </div>
@@ -682,7 +693,7 @@
         <div class="greeting">Friends</div>
         <div class="topbar-right"><div class="gauges" data-gauges style="display:none"></div></div>
       </div>
-      <div class="fr-empty fr-offline" id="frOffline" hidden>Friends need a Riskbook account: sign in on the cloud version to add them.</div>
+      <div class="fr-empty fr-offline" id="frOffline" hidden>Friends need a Clavis account: sign in on the cloud version to add them.</div>
       <div class="fr-grid" id="frBody">
         <!-- You: what friends see of your investments is chosen in Profile. -->
         <div class="card fr-profile" id="frProfile"></div>
@@ -694,7 +705,7 @@
                  Mac took an email box in a form for a sign-in form, and a friend there was sent
                  back to the sign-in screen (November 2026). The address is checked on the server. -->
             <form class="fr-add" id="frAdd" onsubmit="return false" autocomplete="off" data-lpignore="true">
-              <input class="fr-input" id="frEmail" type="text" inputmode="email" placeholder="Their Riskbook email" aria-label="Their Riskbook email"
+              <input class="fr-input" id="frEmail" type="text" inputmode="email" placeholder="Their Clavis email" aria-label="Their Clavis email"
                      autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true">
               <button class="fr-btn fr-ok" type="submit">Add</button>
             </form>
@@ -732,10 +743,10 @@
 <!-- About you: asked once after sign-up, before the tutorial (src/ui/views/aboutYou.js). -->
 <div class="tour about" id="aboutYou" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" hidden><div class="tour-card about-card" id="aboutCard"></div></div>
 
-<div class="tour" id="tour" role="dialog" aria-modal="true" aria-label="How Riskbook works" hidden><div class="tour-card" id="tourCard"></div></div>
+<div class="tour" id="tour" role="dialog" aria-modal="true" aria-label="How Clavis works" hidden><div class="tour-card" id="tourCard"></div></div>
 
-<!-- Customize: what Riskbook shows (src/ui/views/customize.js). -->
-<div class="modal-bg" id="customizeModal" role="dialog" aria-modal="true" aria-label="Customize Riskbook"><div class="modal cz-modal"></div></div>
+<!-- Customize: what Clavis shows (src/ui/views/customize.js). -->
+<div class="modal-bg" id="customizeModal" role="dialog" aria-modal="true" aria-label="Customize Clavis"><div class="modal cz-modal"></div></div>
 
 <div class="modal-bg" id="designerModal" onclick="if(event.target===this)closeDesigner()">
   <div class="modal designer-modal">
@@ -838,8 +849,8 @@
     <!-- Terms, privacy and the news-email choice (src/ui/views/settings.js, api/_lib/consent.js). -->
     <section class="set-card">
       <div class="set-title">Terms, privacy and emails</div>
-      <div class="set-sub" id="legalStatus">Riskbook's <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</div>
-      <label class="legal-check set-marketing" id="marketingRow" hidden><input type="checkbox" id="marketingBox" onchange="chooseMarketing(this.checked)"><span>Email me news and tips about Riskbook</span></label>
+      <div class="set-sub" id="legalStatus">Clavis's <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</div>
+      <label class="legal-check set-marketing" id="marketingRow" hidden><input type="checkbox" id="marketingBox" onchange="chooseMarketing(this.checked)"><span>Email me news and tips about Clavis</span></label>
     </section>
 
     <!-- Folded, so deleting is never one stray click away. -->
@@ -889,7 +900,7 @@
     <div class="hint years-account" id="yearsAccount"></div>
 
     <div id="importPick">
-      <p class="imp-lead">Where do you invest? Pick your broker, and Riskbook shows you exactly how to get your file.</p>
+      <p class="imp-lead">Where do you invest? Pick your broker, and Clavis shows you exactly how to get your file.</p>
       <input type="search" class="imp-search" id="brokerSearch" placeholder="Search — Robinhood, eToro, לאומי…" autocomplete="off" spellcheck="false" aria-label="Search brokers" oninput="filterBrokers(this.value)">
       <div id="brokerList"></div>
     </div>

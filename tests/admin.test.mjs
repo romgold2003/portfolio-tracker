@@ -1,6 +1,6 @@
 /**
  * The Admin page (November 2026): Romy alone sees how many people use
- * Riskbook, who they are and what they use. Who is admin is a deployment
+ * Clavis, who they are and what they use. Who is admin is a deployment
  * setting (ADMIN_EMAILS), checked on the server. Against SQLite in memory.
  */
 import { test, beforeEach, afterEach, describe } from 'node:test';

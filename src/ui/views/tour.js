@@ -1,5 +1,5 @@
 /**
- * The tutorial (November 2026): a few slides, each a real screen of Riskbook
+ * The tutorial (November 2026): a few slides, each a real screen of Clavis
  * with red circles and arrows on the buttons that matter, and a line or two on
  * what they do. It opens by itself the first time someone signs in, and from
  * ❔ Help & tutorial in the menu any time after. Swipe, the arrows or the
@@ -19,7 +19,7 @@ import { escapeHtml } from '../format.js';
 export const SLIDES = [
   {
     shot: 'home',
-    title: 'Welcome to Riskbook',
+    title: 'Welcome to Clavis',
     text: 'Your whole portfolio on one screen.',
     marks: [
       ['account', 'Account value', 'What everything is worth right now, cash included.'],
@@ -44,7 +44,7 @@ export const SLIDES = [
     note: 'Not in the list? Choose Another broker: any CSV or Excel file works, in any language.',
     marks: [
       ['search', 'Find it', 'Type its name, in English or Hebrew.'],
-      ['brokerTile', 'Pick it', 'Riskbook shows the exact steps to get your file.'],
+      ['brokerTile', 'Pick it', 'Clavis shows the exact steps to get your file.'],
     ],
   },
   {

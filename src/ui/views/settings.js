@@ -27,7 +27,7 @@ export function openSettings() {
 
 /**
  * Which way returns are measured, and why: by default the broker's own way, so
- * Riskbook's % moves with the broker's app; either can be chosen by hand.
+ * Clavis's % moves with the broker's app; either can be chosen by hand.
  */
 export function describeReturns() {
   const method = returnMethod();
@@ -60,7 +60,7 @@ async function describeLegal() {
   const row = document.getElementById('marketingRow');
   const box = document.getElementById('marketingBox');
   const links = `<a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>`;
-  if (status) status.innerHTML = `Riskbook's ${links}.`;
+  if (status) status.innerHTML = `Clavis's ${links}.`;
   if (row) row.hidden = true;
   if (!cloudEnabled() || isGuest()) return;
   try {

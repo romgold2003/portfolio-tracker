@@ -64,7 +64,7 @@ import {
 import {
   readWorkbook, isZip, isOldExcel, readZipEntries,
 } from '../features/xlsx.js';
-import { isRiskbookExport } from '../features/genericCsv.js';
+import { isClavisExport } from '../features/genericCsv.js';
 import { importPlan, journalWithoutYear, historyGaps, emptyJournal } from '../features/statementLibrary.js';
 import { transactionRecords, transactionWarnings, transactionSummary } from '../features/transactionBook.js';
 import { reconcileStatement, reconciliationLines } from '../features/reconcile.js';
@@ -1247,8 +1247,8 @@ export async function readIbkrFile() {
      */
     if (table || !isIbkrStatement(text)) {
       table ??= parseCsvTable(text);
-      if (isRiskbookExport(table.headers)) {
-        problems.push(`${file.name}: this is riskbook's own portfolio export, not a broker's file, so it cannot be read as trades. `
+      if (isClavisExport(table.headers)) {
+        problems.push(`${file.name}: this is Clavis's own portfolio export, not a broker's file, so it cannot be read as trades. `
           + 'To bring back a whole journal, use Import backup with the backup file.');
         continue;
       }

@@ -168,11 +168,11 @@ export const OTHER_BROKER = {
     'Choose the dates, from your first trade to today.',
     'Export as CSV or Excel.',
   ],
-  tip: 'Riskbook finds the columns by itself, in any language, and asks only about what it cannot tell.',
+  tip: 'Clavis finds the columns by itself, in any language, and asks only about what it cannot tell.',
 };
 
 /**
- * How each broker measures an account's return, so Riskbook's % reads like the
+ * How each broker measures an account's return, so Clavis's % reads like the
  * broker's own app (core/moneyWeighted.js).
  *
  *   time-weighted    each day's return compounded; deposits and withdrawals

@@ -51,7 +51,7 @@ export function answerLabel(field, value) {
 const SERIES = {
   online: { label: 'Online now', sub: 'active in the last 15 minutes', title: 'Users active each hour · last 48 hours', value: (d) => d.totals.online ?? 0,
     points: (d) => (d.hourly ?? []).map((h) => ({ label: hourLabel(h.hour), value: h.active })) },
-  today: { label: 'Today', sub: 'users who opened Riskbook', title: 'Users active each day · last 60 days', value: (d) => d.totals.dau,
+  today: { label: 'Today', sub: 'users who opened Clavis', title: 'Users active each day · last 60 days', value: (d) => d.totals.dau,
     points: (d) => d.days.map((x) => ({ label: day(x.day), value: x.active })) },
   week: { label: 'This week', sub: 'users in the last 7 days', title: 'Users active each week · last 12 weeks', value: (d) => d.totals.wau,
     points: (d) => (d.weeks ?? []).map((w) => ({ label: `${shortDay(w.start)} – ${shortDay(w.end)}`, value: w.active })) },
@@ -296,7 +296,7 @@ function bind(page) {
     }
     const preview = e.target.closest('[data-adm-preview]');
     if (preview) { openPreview(preview.dataset.admPreview); return; }
-    if (e.target.closest('[data-adm-csv]') && data) download(`riskbook-users-${new Date().toISOString().slice(0, 10)}.csv`, usersCsv(data));
+    if (e.target.closest('[data-adm-csv]') && data) download(`clavis-users-${new Date().toISOString().slice(0, 10)}.csv`, usersCsv(data));
     if (e.target.closest('[data-adm-refresh]')) renderAdmin();
   });
 }

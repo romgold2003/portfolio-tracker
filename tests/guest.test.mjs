@@ -1,5 +1,5 @@
 /**
- * Guest visits (November 2026): look around Riskbook without an account. A
+ * Guest visits (November 2026): look around Clavis without an account. A
  * guest gets a signed pass for the market data and a sample portfolio held in
  * memory — no account, no vault, nothing saved — and is told so on the way in.
  */
@@ -94,7 +94,7 @@ describe('in the app', () => {
     assert.match(notice, /You are exploring as a guest/);
     assert.match(notice, /Nothing is saved\./);
     assert.match(notice, /data-guest-create/);
-    assert.match(read('src/ui/views/guest.js'), /Guest mode<\/b> — nothing you do is saved/);
+    assert.match(read('src/ui/views/guest.js'), /Guest mode<\/b><span class="guest-bar-more"> — nothing you do is saved/);
   });
 
   test('a guest is never counted, asked the questions, offered Admin, or shown to friends', () => {

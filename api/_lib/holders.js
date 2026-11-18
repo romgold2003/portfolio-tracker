@@ -103,7 +103,7 @@ export async function fetchHolders({
 
   const res = await fetcher(`https://${host}/api/v2/tokens/${token}/holders`, {
     signal,
-    headers: { Accept: 'application/json', 'User-Agent': 'riskbook' },
+    headers: { Accept: 'application/json', 'User-Agent': 'clavis' },
   });
   if (!res.ok) throw new Error(`${host} answered ${res.status} for holders`);
   const body = await res.json();
@@ -158,10 +158,10 @@ export async function fetchTokenInfo({ host, token, signal, fetcher = fetch }) {
 
   const [meta, address] = await Promise.allSettled([
     fetcher(`https://${host}/api/v2/tokens/${token}`, {
-      signal, headers: { Accept: 'application/json', 'User-Agent': 'riskbook' },
+      signal, headers: { Accept: 'application/json', 'User-Agent': 'clavis' },
     }).then((r) => (r.ok ? r.json() : null)),
     fetcher(`https://${host}/api/v2/addresses/${token}`, {
-      signal, headers: { Accept: 'application/json', 'User-Agent': 'riskbook' },
+      signal, headers: { Accept: 'application/json', 'User-Agent': 'clavis' },
     }).then((r) => (r.ok ? r.json() : null)),
   ]);
 
@@ -194,7 +194,7 @@ export async function fetchCreator({ host, token, signal, fetcher = fetch }) {
   try {
     const res = await fetcher(`https://${host}/api/v2/addresses/${token}`, {
       signal,
-      headers: { Accept: 'application/json', 'User-Agent': 'riskbook' },
+      headers: { Accept: 'application/json', 'User-Agent': 'clavis' },
     });
     if (!res.ok) throw new Error(String(res.status));
     const body = await res.json();

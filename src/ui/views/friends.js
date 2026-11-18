@@ -146,7 +146,7 @@ function profileHtml(d) {
 }
 
 function friendsListHtml(d) {
-  if (!d.friends.length) return '<div class="fr-empty">No friends yet. Add one by the email they use for Riskbook.</div>';
+  if (!d.friends.length) return '<div class="fr-empty">No friends yet. Add one by the email they use for Clavis.</div>';
   return d.friends.map((f) => `<div class="fr-row${view.friend?.id === f.id ? ' active' : ''}" data-friend="${escapeHtml(f.id)}" role="button" tabindex="0">
       <span class="fr-ava">${initial(f.email)}</span>
       <span class="fr-who"><span class="fr-name">${escapeHtml(nameOf(f.email))}</span><span class="fr-mail">${escapeHtml(f.email)}</span></span>
@@ -468,7 +468,7 @@ function bind() {
       await load();
       view.note = out.status === 'friends'
         ? `You and ${email} are friends.`
-        : `Request sent to ${email}. If they don't use Riskbook yet, it waits for them when they join.`;
+        : `Request sent to ${email}. If they don't use Clavis yet, it waits for them when they join.`;
       el('frNote').textContent = view.note;
     });
   });
@@ -536,8 +536,8 @@ export async function renderFriends() {
   const online = cloudEnabled() && !isGuest();
   const offline = el('frOffline');
   if (offline) offline.textContent = isGuest()
-    ? 'Friends need a Riskbook account. Create a free account to add friends, see what they share and chat.'
-    : 'Friends need a Riskbook account: sign in on the cloud version to add them.';
+    ? 'Friends need a Clavis account. Create a free account to add friends, see what they share and chat.'
+    : 'Friends need a Clavis account: sign in on the cloud version to add them.';
   el('frOffline').hidden = online;
   el('frBody').hidden = !online;
   if (!online) return;

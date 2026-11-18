@@ -1,5 +1,5 @@
 /**
- * Customize (November 2026): each person chooses what Riskbook shows, the way
+ * Customize (November 2026): each person chooses what Clavis shows, the way
  * Binance lets its users choose their home screen. Switched off means gone —
  * out of the menu or off the page with no grey space, and its data no longer
  * fetched — until switched back on. Kept with the sign-in.
@@ -74,7 +74,7 @@ describe('the Customize window', () => {
   test('a switch per item, on or off; the matching ready-made layout marked', async () => {
     const { customizeHtml } = await import('../src/ui/views/customize.js');
     const html = customizeHtml(['gauges']);
-    assert.match(html, /<h3>Customize Riskbook<\/h3>/);
+    assert.match(html, /<h3>Customize Clavis<\/h3>/);
     assert.match(html, /data-item="gauges" aria-label/, 'switched off: unticked');
     assert.match(html, /data-item="page.news" checked/);
     assert.doesNotMatch(html, /cz-preset on/, 'a hand-made layout');

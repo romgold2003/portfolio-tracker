@@ -69,7 +69,7 @@ export async function loadExchanges({ now = Date.now(), fetcher = fetch, signal 
 
   const res = await fetcher(SOURCE, {
     signal,
-    headers: { Accept: 'application/json', 'User-Agent': 'riskbook' },
+    headers: { Accept: 'application/json', 'User-Agent': 'clavis' },
   });
   if (!res.ok) throw new Error(`Label set answered ${res.status}`);
   const raw = await res.json();

@@ -1,6 +1,6 @@
 /**
  * "About you" (November 2026): nine quick questions — name, gender, age,
- * objectives, experience, approach, country, how they heard of Riskbook, and
+ * objectives, experience, approach, country, how they heard of Clavis, and
  * employment — so Romy can see who uses it. Every account is asked once: a
  * new one right after signing up, one never asked at its next sign-in. One
  * that answered or skipped any earlier round is not asked again
@@ -10,7 +10,7 @@
  * Laid out like a broker's own investor profile, on three pages
  * (ABOUT_PAGES): About you (name, gender, age, country), Your investing
  * (experience, approach, objectives, employment) and how they heard of
- * Riskbook. Answers are compact chips, a radio where one applies and a
+ * Clavis. Answers are compact chips, a radio where one applies and a
  * checkbox where several do; the country opens a searchable list in place.
  * Every question is optional, and "Not now" leaves without answering.
  *
@@ -87,7 +87,7 @@ export function slideHtml(i, given = answers) {
   const page = ABOUT_PAGES[i];
   const n = ABOUT_PAGES.length;
   return `<div class="about-top">
-      <span class="about-mark">RISKBOOK</span>
+      <span class="about-mark">CLAVIS</span>
       <span class="about-step">Step ${i + 1} of ${n}</span>
       <button type="button" class="about-link" data-about-skipall>Not now</button>
     </div>

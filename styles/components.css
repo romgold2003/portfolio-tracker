@@ -444,7 +444,7 @@ body:has(.recovery-banner) .shell{padding-top:74px}
 .pos-empty-sub{font-size:13px;color:var(--text3);margin-bottom:20px}
 .pos-empty-cta{font-size:14px;padding:12px 28px}
 .lock-title{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px}
-/* What Riskbook is, above the sign-in (views/lockScreen.js, TAGLINE). */
+/* What Clavis is, above the sign-in (views/lockScreen.js, TAGLINE). */
 .lock-tagline{font-size:19px;font-weight:600;line-height:1.35;letter-spacing:-0.015em;color:var(--text);margin:-6px 0 22px;padding-bottom:18px;border-bottom:0.5px solid var(--border2)}
 .lock-sub{font-size:13px;color:var(--text3);line-height:1.5;margin-bottom:22px}
 .lock-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}

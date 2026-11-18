@@ -1,7 +1,7 @@
 /**
  * Friends, what friends share, and group chats (October 2026).
  *
- * Asked for as the start of a social side to Riskbook: add a friend by the
+ * Asked for as the start of a social side to Clavis: add a friend by the
  * email they signed up with, see the list, open a friend to see what they
  * chose to show of their investments — amounts, percentages, or nothing —
  * and talk one-to-one or in groups. Messages are permanent.
@@ -9,7 +9,7 @@
  * Three rules shape it.
  *
  * A request is kept against the email typed, not against an account. So
- * adding someone says the same thing whether or not they use Riskbook — this
+ * adding someone says the same thing whether or not they use Clavis — this
  * cannot be used to find out who has an account — and a request to someone
  * who joins later is waiting for them when they do.
  *

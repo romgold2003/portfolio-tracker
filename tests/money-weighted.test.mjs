@@ -3,7 +3,7 @@
  *
  * Interactive Brokers reports time-weighted returns; Fidelity, Vanguard and
  * Trading 212 report money-weighted ones. The two agree whenever no money
- * moved, and part when it did — so Riskbook measures each person's return the
+ * moved, and part when it did — so Clavis measures each person's return the
  * way their own broker does.
  */
 import { test, describe } from 'node:test';

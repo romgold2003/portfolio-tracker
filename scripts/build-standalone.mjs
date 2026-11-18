@@ -66,9 +66,9 @@ async function bundleApp() {
   return code;
 }
 
-/** Everything the four stylesheets hold, in the order the page links them. */
+/** Everything the stylesheets hold, in the order the page links them. */
 async function inlineStyles() {
-  const sheets = ['tokens', 'base', 'layout', 'components'];
+  const sheets = ['tokens', 'base', 'layout', 'components', 'clavis'];
   const parts = await Promise.all(sheets.map((name) => read(`styles/${name}.css`)));
   return parts.join('\n');
 }
@@ -94,9 +94,9 @@ async function build() {
    * put straight back where the app should have gone.
    */
   let out = html
-    // The four <link> tags become one inline stylesheet.
+    // The <link> tags become one inline stylesheet, the Clavis look last.
     .replace(
-      /<!-- Stylesheets[\s\S]*?<link rel="stylesheet" href="styles\/components\.css">/,
+      /<!-- Stylesheets[\s\S]*?<link rel="stylesheet" href="styles\/clavis\.css">/,
       () => `<style>\n${css}\n</style>`,
     )
     // The CDN script tag becomes the library itself.
