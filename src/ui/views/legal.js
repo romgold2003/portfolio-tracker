@@ -10,6 +10,7 @@
  * account is not asked again. The investor-profile questions and the tutorial
  * wait for it.
  */
+import { brandChip } from '../art/logo.js';
 import {
   state, onJournalLoaded, legalDue, setLegalAccepted, aboutDue,
 } from '../../core/store.js';
@@ -24,7 +25,7 @@ const el = (id) => document.getElementById(id);
 
 /** The screen. Exported for the tests. */
 export function legalGateHtml() {
-  return `<div class="guest-head"><span class="about-mark">CLAVIS</span><span class="about-sec">Terms and privacy</span></div>
+  return `<div class="guest-head">${brandChip()}<span class="about-sec">Terms and privacy</span></div>
     <h3 class="guest-title" id="legalTitle">Our Terms of Service and Privacy Policy</h3>
     <p class="guest-text">To keep using Clavis, please read and accept our <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>. In short:</p>
     <ul class="legal-points">

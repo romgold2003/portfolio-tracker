@@ -17,6 +17,7 @@
  * The answers go to the server on their own (api/_lib/about.js), never into
  * the encrypted journal, and never to anyone but Romy.
  */
+import { foxSvg } from '../art/fox.js';
 import { state, setAboutDone, aboutDue, legalDue, onJournalLoaded } from '../../core/store.js';
 import { isUnlocked, isGuest } from '../../core/profiles.js';
 import { cloudEnabled } from '../../services/cloud.js';
@@ -87,7 +88,7 @@ export function slideHtml(i, given = answers) {
   const page = ABOUT_PAGES[i];
   const n = ABOUT_PAGES.length;
   return `<div class="about-top">
-      <span class="about-mark">CLAVIS</span>
+      <span class="about-guide">${foxSvg(28)}<b>Clavis</b></span>
       <span class="about-step">Step ${i + 1} of ${n}</span>
       <button type="button" class="about-link" data-about-skipall>Not now</button>
     </div>

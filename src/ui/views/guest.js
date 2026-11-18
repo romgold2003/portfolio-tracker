@@ -17,7 +17,7 @@ const el = (id) => document.getElementById(id);
 
 /** The notice on the way in. Exported for the tests. */
 export function guestNoticeHtml() {
-  return `<div class="guest-head"><span class="guest-fox">${foxSvg(40)}</span><span class="about-mark">CLAVIS</span><span class="about-sec">Guest visit</span></div>
+  return `<div class="guest-head"><span class="guest-fox">${foxSvg(40)}</span><span class="about-guide-name">Clavis</span><span class="about-sec">Guest visit</span></div>
     <h3 class="guest-title" id="guestTitle">You are exploring as a guest</h3>
     <p class="guest-text">This is a sample portfolio, so you can see how Clavis works. Try anything: add a trade, import a file, change the settings.</p>
     <div class="guest-warn" role="note"><b>Nothing is saved.</b> When you leave or reload the page, everything you did here is gone.</div>

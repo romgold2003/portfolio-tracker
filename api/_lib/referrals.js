@@ -10,7 +10,8 @@
  * working; the payment system, when it exists, calls recordPayment(userId,
  * { paymentFingerprint }) from its "payment succeeded" webhook, and the
  * reward follows. Free months are written to free_months for that same system
- * to honour.
+ * to honour, one per billing month (useFreeMonth), so months earned together
+ * follow one another.
  *
  * Rules that keep it fair (Romy, November 2026):
  *   - at most YEARLY_CAP free months from referrals in any 365 days, so one
@@ -91,6 +92,16 @@ const TABLES = [
      seen_at      TEXT
    )`,
   `CREATE INDEX IF NOT EXISTS referral_notices_user ON referral_notices (user_id)`,
+  /**
+   * Each billing month a free month was used for: one row per member per
+   * month, so two months earned together are spent one after the other.
+   */
+  `CREATE TABLE IF NOT EXISTS free_month_uses (
+     user_id TEXT NOT NULL,
+     cycle   TEXT NOT NULL,
+     used_at TEXT NOT NULL,
+     PRIMARY KEY (user_id, cycle)
+   )`,
 ];
 
 let readyFor = -1;
@@ -287,6 +298,44 @@ async function congratulate(referrerId, friendId, months, at) {
   await sendReferralRewardEmail(referrer.email, label, months, site).catch((err) => console.error('referral email', err.message));
 }
 
+/* ── Spending free months: one per billing month, in order ── */
+
+/** Free months this member has, all sources together. */
+async function monthsOwned(userId) {
+  const row = await one('SELECT COALESCE(SUM(months), 0) AS n FROM free_months WHERE user_id = $1', [userId]);
+  return Number(row?.n ?? 0);
+}
+
+async function monthsUsed(userId) {
+  const row = await one('SELECT COUNT(*) AS n FROM free_month_uses WHERE user_id = $1', [userId]);
+  return Number(row?.n ?? 0);
+}
+
+/** Free months earned and not yet used. */
+export async function freeMonthsLeft(userId) {
+  await ensureTables();
+  return Math.max(0, await monthsOwned(userId) - await monthsUsed(userId));
+}
+
+/**
+ * The hook for billing, once a month per member, before charging: is this
+ * month free? `cycle` names the billing month (say "2027-03"). At most one free
+ * month is used per cycle, so two earned in the same month cover this month
+ * and the next, never both at once. Asking again for the same cycle gives the
+ * same answer and uses nothing more.
+ */
+export async function useFreeMonth(userId, cycle) {
+  await ensureTables();
+  const key = String(cycle ?? '').slice(0, 20);
+  if (!key) throw new ReferralError(400, 'A billing month is needed.');
+  if (await one('SELECT 1 AS used FROM free_month_uses WHERE user_id = $1 AND cycle = $2', [userId, key])) {
+    return { free: true, left: await freeMonthsLeft(userId) };
+  }
+  if (await freeMonthsLeft(userId) < 1) return { free: false, left: 0 };
+  await query('INSERT INTO free_month_uses (user_id, cycle, used_at) VALUES ($1, $2, $3)', [userId, key, now()]);
+  return { free: true, left: await freeMonthsLeft(userId) };
+}
+
 /** Mark this member's waiting congratulations as seen. */
 export async function noticesSeen(user) {
   await ensureTables();
@@ -320,6 +369,8 @@ export async function referralStats(user) {
     referred: Boolean(mine),
     canRedeem,
     notices: (waiting?.rows ?? waiting ?? []).map((n) => ({ friend: n.friend_label || null, months: Number(n.months), at: n.created_at })),
+    // Earned and not yet used: billing spends one per month (useFreeMonth).
+    freeMonthsLeft: Math.max(0, Number(months?.n ?? 0) - await monthsUsed(user.id)),
   };
 }
 
@@ -334,4 +385,5 @@ export async function forgetReferrals(userId) {
   await query('DELETE FROM free_months WHERE user_id = $1', [userId]);
   await query('DELETE FROM payment_methods WHERE user_id = $1', [userId]);
   await query('DELETE FROM referral_notices WHERE user_id = $1', [userId]);
+  await query('DELETE FROM free_month_uses WHERE user_id = $1', [userId]);
 }

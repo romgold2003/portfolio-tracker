@@ -739,3 +739,66 @@ body.landing-open{overflow:hidden}
   .ref-modal{place-items:end center;padding:0}
   .ref-panel{width:100%;border-radius:26px 26px 0 0;max-height:92vh;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
 }
+.ref-waiting{font-size:13px;color:var(--text2);text-align:center;margin:4px 2px 8px}
+.ref-waiting b{color:var(--green)}
+
+/* ════════════════════════════════════════════════════════════════════════
+   The Terms window, the investor profile and the guest welcome in the
+   Clavis look (November 2026): they were a white "paper" form with navy
+   buttons and a serif title. Now the dark panel, the orange, pill buttons,
+   the app's own font — the logo on the Terms, the fox on the profile.
+   ════════════════════════════════════════════════════════════════════════ */
+.tour-card.about-card{
+  --a-bg:var(--panel);--a-text:var(--text);--a-sub:var(--text2);--a-line:var(--border);--a-soft:var(--input);
+  --a-navy:var(--accent);--a-navy-h:var(--accent2);--a-sel:var(--blue-bg);
+  background:var(--panel)!important;color:var(--text);border:0!important;border-radius:28px!important;
+  box-shadow:0 40px 120px rgba(0,0,0,.7),inset 0 0 0 1px var(--border2)!important;color-scheme:dark}
+.tour.about,.legal-gate{background:rgba(2,3,5,.72)!important;backdrop-filter:blur(8px)}
+
+/* Headers: the logo (Terms) or the fox guide (profile, guest). */
+.brand-chip,.about-guide{display:inline-flex;align-items:center;gap:8px;color:var(--text)}
+.brand-chip b,.about-guide b,.about-guide-name{font-size:16px;font-weight:800;letter-spacing:-0.02em;color:var(--text)}
+.brand-chip .logo-mark{color:var(--text)}
+.about-guide .fox-mark{color:var(--text)}
+.guest-head{align-items:center!important;border-bottom:1px solid var(--border)!important}
+.about-sec,.about-step{color:var(--text3)!important;letter-spacing:.04em}
+.about-bar{height:4px!important;border-radius:999px;background:var(--input)!important}
+.about-bar span{background:var(--accent-grad)!important;border-radius:999px}
+
+/* Titles in the app's font, not a serif. */
+.about-ask,.guest-title{font-family:inherit!important;font-weight:800!important;letter-spacing:-0.03em!important;color:var(--text)!important}
+.about-lead,.guest-text,.legal-points{color:var(--text2)!important}
+.legal-points b,.guest-text b{color:var(--text)}
+.guest-text a,.legal-check a,.legal-gate .guest-text a{color:var(--accent2)!important}
+
+/* Buttons: the gradient pill and the quiet pill. */
+.about-primary{background:var(--accent-grad)!important;color:var(--accent-ink)!important;border:0!important;border-radius:999px!important;font-weight:700!important;
+  box-shadow:0 12px 30px -12px rgba(242,106,30,.8)}
+.about-primary:hover{filter:brightness(1.07)}
+.about-primary[disabled]{opacity:.45!important;box-shadow:none}
+.about-secondary{background:transparent!important;color:var(--text)!important;border:1px solid var(--border2)!important;border-radius:999px!important}
+.about-secondary:hover{background:var(--input)!important}
+.about-link{color:var(--text3)!important;text-decoration:none!important}
+.about-link:hover{color:var(--text)!important}
+
+/* Choices and fields: soft rounded tiles; the chosen one in Clavis orange. */
+.about-chip{background:var(--input)!important;color:var(--text)!important;border:0!important;border-radius:999px!important}
+.about-chip:hover{background:var(--hover2)!important}
+.about-chip.on{background:var(--accent-grad)!important;color:var(--accent-ink)!important;font-weight:700}
+.about-input,.about-search,.about-select{background:var(--input)!important;color:var(--text)!important;border:0!important;border-radius:14px!important}
+.about-input:focus,.about-search:focus{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent)!important}
+.about-ph,.about-search::placeholder{color:var(--text3)!important}
+.about-clist{border:0!important;border-radius:14px!important;background:var(--input)}
+.about-crow{background:transparent!important;color:var(--text)!important;border-bottom:1px solid var(--border)!important}
+.about-crow:hover{background:var(--hover2)!important}
+.about-crow.on{background:var(--blue-bg)!important}
+.about-crow.on .about-tick::after{color:var(--accent2)!important}
+.about-qblock,.about-foot{border-top:1px solid var(--border)!important}
+.about-err{color:var(--red)!important}
+
+/* The guest warning and the Terms ticks. */
+.guest-warn{background:color-mix(in srgb,var(--amber) 10%,var(--panel2))!important;border:0!important;border-left:4px solid var(--amber)!important;border-radius:14px!important;color:var(--text2)!important}
+.guest-warn b{color:var(--amber)!important}
+.legal-check{color:var(--text)!important}
+.legal-check input{accent-color:var(--accent)!important}
+.about-chip:focus-visible,.about-crow:focus-visible,.about-select:focus-visible,.about-primary:focus-visible,.about-secondary:focus-visible,.about-link:focus-visible{outline:2px solid var(--accent2)!important;outline-offset:3px}

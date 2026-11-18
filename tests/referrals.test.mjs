@@ -13,7 +13,7 @@ import { makeClient } from './support/http.mjs';
 import signup from '../api/_auth/signup.js';
 import social from '../api/social/[action].js';
 import {
-  recordPayment, redeem, ReferralError, newCode, normalizeCode, sameIdentity, friendLabelFrom, REWARD_MONTHS, WELCOME_MONTHS, YEARLY_CAP, REDEEM_DAYS,
+  recordPayment, redeem, ReferralError, newCode, normalizeCode, sameIdentity, friendLabelFrom, useFreeMonth, freeMonthsLeft, REWARD_MONTHS, WELCOME_MONTHS, YEARLY_CAP, REDEEM_DAYS,
 } from '../api/_lib/referrals.js';
 import {
   generateDataKey, wrapDataKey, encryptJson, generateRecoveryKey, normalizeRecoveryKey,
@@ -222,5 +222,23 @@ describe('the congratulations when a friend pays', () => {
     const { congratsHtml } = await import('../src/ui/views/referral.js');
     const html = congratsHtml([{ friend: 'Sasha', months: 1 }, { friend: 'Dan', months: 1 }]);
     assert.match(html, /<b>Sasha and Dan<\/b> have just paid for their first month with your code\. You get <b>2 free months<\/b>/);
+  });
+});
+
+describe('spending free months: one per billing month', () => {
+  test('two friends pay in the same month: one free month now, the other the month after', async () => {
+    const samuel = await person('samuel@gmail.com');
+    const { code } = (await samuel.call('referral')).body;
+    for (const email of ['sasha@gmail.com', 'dan@gmail.com']) {
+      const friend = await person(email);
+      await friend.call('redeem', { code });
+      await recordPayment(friend.id, { paymentFingerprint: `card-${email}` });
+    }
+    assert.equal(await freeMonthsLeft(samuel.id), 2);
+    assert.deepEqual(await useFreeMonth(samuel.id, '2027-03'), { free: true, left: 1 });
+    assert.deepEqual(await useFreeMonth(samuel.id, '2027-03'), { free: true, left: 1 }, 'asking twice for March uses nothing more');
+    assert.deepEqual(await useFreeMonth(samuel.id, '2027-04'), { free: true, left: 0 });
+    assert.deepEqual(await useFreeMonth(samuel.id, '2027-05'), { free: false, left: 0 }, 'May is paid as usual');
+    assert.equal((await samuel.call('referral')).body.freeMonthsLeft, 0);
   });
 });

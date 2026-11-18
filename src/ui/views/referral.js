@@ -68,6 +68,7 @@ export function referralHtml(r) {
       <div><b>${r.freeMonths}</b><span>free month${r.freeMonths === 1 ? '' : 's'} earned</span></div>
       <div><b>${r.leftThisYear ?? '—'}</b><span>left this year</span></div>
     </div>
+    ${r.freeMonthsLeft > 0 ? `<p class="ref-waiting"><b>${r.freeMonthsLeft} free month${r.freeMonthsLeft === 1 ? '' : 's'} waiting.</b> One is used each month, in a row, so none is ever lost.</p>` : ''}
     ${r.canRedeem ? `<div class="ref-redeem-t">Got a code from a friend?</div><div class="pf-redeem"><input type="text" id="refRedeem" maxlength="16" autocomplete="off" placeholder="Their code"><button type="button" class="pf-mini" data-ref-redeem>Apply</button></div>`
     : r.referred ? '<p class="ref-small">A friend’s code is linked to your account.</p>' : ''}
     <p class="ref-small">One free month for each friend who subscribes, up to ${r.yearlyCap ?? 6} a year. Your own code, or a second account of yours, does not count. Free months apply once paid plans start.</p>`;
