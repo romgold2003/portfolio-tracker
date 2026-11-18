@@ -32,6 +32,12 @@ function logo(size = 30) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#F26A1E"/><stop offset="1" stop-color="#F59E0B"/></linearGradient></defs><path d="M78 22 A38 38 0 1 0 78 78" fill="none" stroke="#fff" stroke-width="15"/><path d="M58 50 L83 25 A36 36 0 0 1 83 75 Z" fill="url(#${id})"/><circle cx="58" cy="50" r="9.5" fill="url(#${id})"/><circle cx="58" cy="50" r="4.6" fill="#05070B"/><path d="M61 47.6 L76 44 L76 56 L61 52.4 Z" fill="#05070B"/></svg>`;
 }
 
+/** The C-keyhole's shapes on a 100 grid, for drawing it inside a picture. */
+function logoPaths() {
+  const id = `lpm${uid++}`;
+  return `<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#F26A1E"/><stop offset="1" stop-color="#F59E0B"/></linearGradient></defs><path d="M78 22 A38 38 0 1 0 78 78" fill="none" stroke="#fff" stroke-width="15"/><path d="M58 50 L83 25 A36 36 0 0 1 83 75 Z" fill="url(#${id})"/><circle cx="58" cy="50" r="9.5" fill="url(#${id})"/><circle cx="58" cy="50" r="4.6" fill="#0B0F16"/><path d="M61 47.6 L76 44 L76 56 L61 52.4 Z" fill="#0B0F16"/>`;
+}
+
 /** The fox's head on a 200 grid, placed at (x, y) and scaled: one white line, the keyhole in orange. */
 function fox(x, y, s = 0.5, { line = '#F5F7FA', eyes = line } = {}) {
   const id = `lpf${uid++}`;
@@ -48,46 +54,86 @@ function fox(x, y, s = 0.5, { line = '#F5F7FA', eyes = line } = {}) {
 
 const spark = (x, y, r = 7, c = '#F59E0B') => `<path d="M${x} ${y - r} L${x + r * 0.28} ${y - r * 0.28} L${x + r} ${y} L${x + r * 0.28} ${y + r * 0.28} L${x} ${y + r} L${x - r * 0.28} ${y + r * 0.28} L${x - r} ${y} L${x - r * 0.28} ${y - r * 0.28} Z" fill="${c}"/>`;
 
+const FONT = 'font-family="Inter,Segoe UI,sans-serif"';
+const pill = (x, y, w, text, fg, bg, size = 12) => `<rect x="${x}" y="${y}" width="${w}" height="26" rx="13" fill="${bg}"/><text x="${x + w / 2}" y="${y + 17.5}" text-anchor="middle" font-size="${size}" font-weight="800" fill="${fg}" ${FONT}>${text}</text>`;
+
 /** Each scene is 320 × 200. */
 const SCENES = {
-  add: () => `
-    <rect x="186" y="44" width="78" height="100" rx="10" fill="#0E131C" stroke="#2A3242" stroke-width="2"/>
-    <path d="M200 70 H250 M200 86 H250 M200 102 H236" stroke="#3A4456" stroke-width="5" stroke-linecap="round"/>
-    <rect x="200" y="116" width="40" height="18" rx="6" fill="#F26A1E"/><text x="220" y="129" text-anchor="middle" font-size="11" font-weight="800" fill="#0B0F16" font-family="Inter,Segoe UI,sans-serif">CSV</text>
-    <path d="M262 150 L292 120 L300 128 L270 158 L258 162 Z" fill="#F59E0B"/>
-    ${fox(56, 26, 0.72)}${spark(282, 52, 8)}`,
-  market: () => `
-    <path d="M150 156 H300" stroke="#1E2633" stroke-width="2"/>
-    <path d="M154 146 C 180 140 196 134 214 122 S 252 108 296 100" fill="none" stroke="#6B7584" stroke-width="5" stroke-linecap="round"/>
-    <path d="M154 146 C 178 132 194 120 214 96 S 256 62 296 44" fill="none" stroke="#2BD576" stroke-width="6" stroke-linecap="round"/>
-    <circle cx="296" cy="44" r="7" fill="#2BD576"/>
-    <rect x="236" y="112" width="54" height="22" rx="11" fill="#1A1F2A"/><text x="263" y="127" text-anchor="middle" font-size="11" font-weight="700" fill="#A3ACB9" font-family="Inter,Segoe UI,sans-serif">S&amp;P</text>
-    <rect x="228" y="16" width="56" height="22" rx="11" fill="rgba(43,213,118,.16)"/><text x="256" y="31" text-anchor="middle" font-size="11" font-weight="800" fill="#2BD576" font-family="Inter,Segoe UI,sans-serif">You</text>
-    ${fox(20, 30, 0.7)}`,
+  /* Broker → file → Clavis: the way in. */
+  flow: () => `
+    <defs><linearGradient id="lpfl" x1="0" x2="1"><stop offset="0" stop-color="#3A4456"/><stop offset="1" stop-color="#F26A1E"/></linearGradient></defs>
+    <g transform="translate(22 52)">
+      <rect width="84" height="96" rx="16" fill="#0E131C" stroke="#2A3242" stroke-width="2"/>
+      <path d="M18 40 L42 24 L66 40 Z" fill="#3A4456"/><rect x="20" y="44" width="44" height="5" rx="2" fill="#3A4456"/>
+      <path d="M26 52 V70 M37 52 V70 M48 52 V70 M59 52 V70" stroke="#3A4456" stroke-width="5" stroke-linecap="round"/>
+      <rect x="18" y="74" width="48" height="6" rx="2" fill="#3A4456"/>
+    </g>
+    <text x="64" y="170" text-anchor="middle" font-size="12" font-weight="700" fill="#6B7584" ${FONT}>Your broker</text>
+    <path d="M114 100 C 140 84 178 84 204 100" fill="none" stroke="url(#lpfl)" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>
+    <path d="M198 92 L208 101 L196 106" fill="none" stroke="#F26A1E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <g transform="translate(142 58) rotate(-8)">
+      <rect width="36" height="44" rx="6" fill="#E9ECF1"/><path d="M8 12 H28 M8 20 H28 M8 28 H22" stroke="#8A93A3" stroke-width="3" stroke-linecap="round"/>
+      <rect x="4" y="32" width="28" height="10" rx="3" fill="#F26A1E"/><text x="18" y="40" text-anchor="middle" font-size="7.5" font-weight="800" fill="#0B0F16" ${FONT}>CSV</text>
+    </g>
+    <g transform="translate(214 52)">
+      <rect width="96" height="96" rx="24" fill="#0B0F16" stroke="#5A3214" stroke-width="2"/>
+      <g transform="translate(14 14) scale(.68)">${logoPaths()}</g>
+    </g>
+    <text x="262" y="170" text-anchor="middle" font-size="12" font-weight="700" fill="#F59E0B" ${FONT}>Clavis</text>`,
+  /* You against the S&P 500: two lines, yours above. */
+  compare: () => `
+    <defs>
+      <linearGradient id="lpyou" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2BD576" stop-opacity=".32"/><stop offset="1" stop-color="#2BD576" stop-opacity="0"/></linearGradient>
+    </defs>
+    <path d="M24 60 H296 M24 100 H296 M24 140 H296" stroke="#141A24" stroke-width="1"/>
+    <path d="M24 162 C 64 156 90 150 120 140 S 180 118 220 100 S 270 70 296 52 L296 176 L24 176 Z" fill="url(#lpyou)"/>
+    <path d="M24 164 C 70 160 100 156 130 150 S 200 138 240 130 S 280 124 296 120" fill="none" stroke="#7D8696" stroke-width="3" stroke-dasharray="1 7" stroke-linecap="round"/>
+    <path d="M24 162 C 64 156 90 150 120 140 S 180 118 220 100 S 270 70 296 52" fill="none" stroke="#2BD576" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="296" cy="52" r="6" fill="#2BD576"/><circle cx="296" cy="52" r="12" fill="#2BD576" opacity=".18"/>
+    <circle cx="296" cy="120" r="5" fill="#7D8696"/>
+    ${pill(206, 18, 78, 'You +27.1%', '#2BD576', 'rgba(43,213,118,.15)')}
+    ${pill(206, 132, 78, 'S&amp;P +8.3%', '#A3ACB9', '#1A1F2A')}`,
+  /* The analyst: the fox among the things it reads. */
   learn: () => `
-    <rect x="176" y="36" width="128" height="88" rx="18" fill="#0E131C" stroke="#2A3242" stroke-width="2"/>
-    <path d="M176 92 L158 110 L184 104 Z" fill="#0E131C" stroke="#2A3242" stroke-width="2" stroke-linejoin="round"/>
-    <circle cx="198" cy="62" r="8" fill="rgba(43,213,118,.18)"/><path d="M194 62 L197 65 L203 58" stroke="#2BD576" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M214 62 H284" stroke="#3A4456" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="198" cy="94" r="8" fill="rgba(245,165,36,.18)"/><path d="M198 89 V95 M198 99 V99.5" stroke="#F5A524" stroke-width="3" stroke-linecap="round"/>
-    <path d="M214 94 H268" stroke="#3A4456" stroke-width="5" stroke-linecap="round"/>
-    ${fox(22, 40, 0.7)}${spark(300, 150, 7)}`,
+    ${pill(150, 22, 104, 'Hold time · 18d', '#A3ACB9', '#1A1F2A', 11)}
+    ${pill(176, 58, 116, 'Exits well timed ✓', '#2BD576', 'rgba(43,213,118,.15)', 11)}
+    ${pill(160, 94, 110, 'State of mind · 8', '#F59E0B', 'rgba(245,158,11,.14)', 11)}
+    ${pill(184, 130, 98, 'Best day · Tue', '#A3ACB9', '#1A1F2A', 11)}
+    ${pill(150, 166, 128, 'After you sold −3.5%', '#A3ACB9', '#1A1F2A', 11)}
+    ${fox(14, 40, 0.68)}`,
   crypto: () => `
-    <g><circle cx="70" cy="58" r="30" fill="#F7931A"/><text x="70" y="70" text-anchor="middle" font-size="34" font-weight="800" fill="#fff" font-family="Inter,Segoe UI,sans-serif">₿</text></g>
-    <g><circle cx="256" cy="54" r="28" fill="#262B45"/><path d="M256 34 L268 55 L256 62 L244 55 Z" fill="#B7C3FF"/><path d="M256 65 L268 58 L256 75 L244 58 Z" fill="#8C9EFF"/></g>
-    <g><circle cx="262" cy="142" r="26" fill="#121521"/><defs><linearGradient id="lpsol" x1="0" x2="1"><stop offset="0" stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient></defs>
-      <path d="M248 132 H274 L268 137 H242 Z M242 140 H268 L274 145 H248 Z M248 148 H274 L268 153 H242 Z" fill="url(#lpsol)"/></g>
-    ${fox(102, 38, 0.72)}${spark(40, 140, 7)}${spark(300, 96, 6, '#F5F7FA')}`,
+    <defs><linearGradient id="lpsol" x1="0" x2="1"><stop offset="0" stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient></defs>
+    <g><circle cx="96" cy="62" r="34" fill="#F7931A"/><text x="96" y="75" text-anchor="middle" font-size="38" font-weight="800" fill="#fff" ${FONT}>₿</text></g>
+    <g><circle cx="224" cy="62" r="34" fill="#262B45"/><path d="M224 38 L238 63 L224 71 L210 63 Z" fill="#B7C3FF"/><path d="M224 75 L238 67 L224 88 L210 67 Z" fill="#8C9EFF"/></g>
+    <g><circle cx="96" cy="146" r="34" fill="#121521"/><path d="M78 133 H110 L103 139 H71 Z M71 143 H103 L110 149 H78 Z M78 153 H110 L103 159 H71 Z" fill="url(#lpsol)"/></g>
+    <g><circle cx="224" cy="146" r="34" fill="#23292F"/><path d="M206 128 L216 128 L224 137 L232 128 L242 128 L229 141 Q224 146 219 141 Z M206 164 L216 164 L224 155 L232 164 L242 164 L229 151 Q224 146 219 151 Z" fill="#E9ECF1"/></g>
+    ${spark(160, 104, 9)}${spark(296, 30, 6, '#F5F7FA')}`,
   news: () => `
-    <g><rect x="34" y="70" width="58" height="80" rx="10" fill="#1E2633"/><rect x="34" y="88" width="58" height="7" fill="#F26A1E"/><rect x="34" y="126" width="58" height="7" fill="#F26A1E"/>
-      <path d="M63 103 C 57 111 57 117 63 119 C 69 117 69 111 63 103 Z" fill="#05070B"/></g>
-    <defs><linearGradient id="lpgold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE29A"/><stop offset="1" stop-color="#E0A526"/></linearGradient></defs>
-    <path d="M232 148 L240 128 H288 L296 148 Z" fill="url(#lpgold)"/><path d="M252 128 L260 108 H300 L306 128 Z" fill="url(#lpgold)" opacity=".85"/><path d="M212 148 L220 128 H236 L228 148 Z" fill="url(#lpgold)" opacity=".7"/>
-    <rect x="236" y="34" width="66" height="54" rx="8" fill="#E9ECF1"/><path d="M246 48 H292 M246 60 H292 M246 72 H276" stroke="#8A93A3" stroke-width="5" stroke-linecap="round"/>
-    ${fox(104, 30, 0.7)}`,
+    <g transform="translate(16 18)">
+      <rect width="150" height="78" rx="16" fill="#0E131C" stroke="#1F3A8A" stroke-width="2"/>
+      <rect x="12" y="12" width="22" height="22" rx="6" fill="#2E5CFF"/><path d="M18 18 H28 V28 L18 23 Z" fill="#fff"/>
+      <text x="42" y="28" font-size="12" font-weight="800" fill="#F5F7FA" ${FONT}>Polymarket</text>
+      <circle cx="136" cy="23" r="4" fill="#2BD576"/>
+      <text x="12" y="56" font-size="10.5" fill="#A3ACB9" ${FONT}>Fed cuts in December?</text>
+      <rect x="12" y="62" width="126" height="6" rx="3" fill="#1A1F2A"/><rect x="12" y="62" width="78" height="6" rx="3" fill="#2E5CFF"/>
+    </g>
+    <g transform="translate(16 110)">
+      <rect width="120" height="72" rx="16" fill="#0E131C" stroke="#2A3242" stroke-width="2"/>
+      <text x="14" y="26" font-size="11" font-weight="700" fill="#A3ACB9" ${FONT}>Interest rate</text>
+      <text x="14" y="56" font-size="26" font-weight="800" fill="#F5F7FA" ${FONT}>%</text>
+      <path d="M48 52 L66 40 L82 46 L104 28" fill="none" stroke="#F59E0B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(182 18)">
+      <rect width="122" height="164" rx="16" fill="#0E131C" stroke="#2A3242" stroke-width="2"/>
+      <text x="14" y="26" font-size="11" font-weight="700" fill="#A3ACB9" ${FONT}>Earnings</text>
+      <rect x="20" y="66" width="20" height="72" rx="5" fill="#2A3242"/><rect x="44" y="52" width="20" height="86" rx="5" fill="#2BD576"/>
+      <rect x="74" y="88" width="20" height="50" rx="5" fill="#2A3242"/><rect x="98" y="78" width="12" height="60" rx="4" fill="#2BD576"/>
+      <text x="42" y="154" text-anchor="middle" font-size="10" font-weight="700" fill="#6B7584" ${FONT}>Revenue</text>
+      <text x="92" y="154" text-anchor="middle" font-size="10" font-weight="700" fill="#6B7584" ${FONT}>EPS</text>
+    </g>`,
   friends: () => `
-    <rect x="128" y="20" width="74" height="34" rx="17" fill="#0E131C" stroke="#2A3242" stroke-width="2"/><text x="165" y="42" text-anchor="middle" font-size="13" font-weight="800" fill="#2BD576" font-family="Inter,Segoe UI,sans-serif">+12%</text>
-    <rect x="200" y="62" width="58" height="30" rx="15" fill="#2A170A"/><text x="229" y="82" text-anchor="middle" font-size="13" font-weight="800" fill="#F59E0B" font-family="Inter,Segoe UI,sans-serif">👋</text>
+    <rect x="128" y="20" width="74" height="34" rx="17" fill="#0E131C" stroke="#2A3242" stroke-width="2"/><text x="165" y="42" text-anchor="middle" font-size="13" font-weight="800" fill="#2BD576" ${FONT}>+12%</text>
+    <rect x="200" y="62" width="58" height="30" rx="15" fill="#2A170A"/><text x="229" y="82" text-anchor="middle" font-size="13" font-weight="800" fill="#F59E0B" ${FONT}>👋</text>
     ${fox(36, 52, 0.62)}${fox(196, 84, 0.52, { line: '#F59E0B' })}`,
   card: () => `
     <rect x="178" y="30" width="104" height="140" rx="16" fill="#140D07" stroke="#5A3214" stroke-width="2"/>
@@ -102,27 +148,43 @@ const scene = (name) => `<svg class="lp-art" viewBox="0 0 320 200" aria-hidden="
 /* ── The page ──────────────────────────────────────────────────────────── */
 
 const STEPS = [
-  ['add', 'Add your investments', 'Type a trade, or drop in the file from your broker.'],
-  ['market', 'See if you beat the market', 'Every trade next to the same money in the S&amp;P 500.'],
-  ['learn', 'Clavis explains it', 'What you do well, and what to improve. In plain words.'],
+  ['flow', 'Bring your investments in, the easy way', [
+    'Add your positions by hand in a few seconds, or import the file your broker gives you: a CSV or Excel export from Interactive Brokers, Robinhood, eToro, Schwab and 20+ others.',
+    'When something changes, import the new file again or edit the position by hand. We never ask for your broker password.',
+  ]],
+  ['compare', 'See if you are beating the market', [
+    'Clavis puts your account next to the S&amp;P 500, the benchmark most investors are measured against, with the same money on the same days.',
+    'You see in % and in $ whether your choices are paying off, or whether an index fund would have done better.',
+  ]],
+  ['learn', 'Get feedback on how you invest', [
+    'Clavis analyses your trades from every angle: how long you hold, when you sell and what the stock did afterwards, how you felt when you bought, which days work best.',
+    'Then it tells you in plain words what you do well and what is worth a second look.',
+  ]],
 ];
 
 const MORE = [
-  ['crypto', 'Crypto', 'Whale moves, ETF flows and your crypto journal.'],
-  ['news', 'Markets &amp; news', 'Oil, gold, the Fed and earnings, in one place.'],
-  ['friends', 'Friends', 'Share in % or $, or nothing at all. Chat and compare.'],
-  ['card', 'Trader card', 'Collect achievements. Just for fun, no ranking.'],
+  ['crypto', 'Crypto', 'Bitcoin, Ethereum, Solana, XRP and more, priced live. Follow the big whale moves and the ETF flows, and keep your crypto next to your stocks.'],
+  ['news', 'Markets &amp; news', 'Live prediction odds from Polymarket, the Fed’s next interest-rate decision, company earnings with revenue and EPS against forecasts, and the economic calendar.'],
+  ['friends', 'Friends', 'Add friends, chat and make groups. See how they invest in % or in $, and choose exactly what you share, or share nothing.'],
+  ['card', 'Trader card', 'Earn a title for your style and collect about thirty achievements as you go. Just for fun: no ranking, no competition.'],
 ];
+
+const NUMBERS = ['Return in %', 'Gain in $', 'Every month', 'Every position', 'Every day', 'vs the S&amp;P 500'];
 
 const FAQ = [
   ['Is it free?', 'Your first month is free, with everything included and no credit card. After that it is $3.50 a month, or $35 a year.'],
   ['Can you see my money or trades?', 'No. Your journal is encrypted on your device with a key made from your password. We cannot read it.'],
   ['Do you need my broker password?', 'Never. You type your trades, or import a file you download from your broker yourself.'],
   ['Which brokers work?', 'Interactive Brokers, Robinhood, Schwab, Fidelity, eToro, Trading 212, DEGIRO, Revolut, Israeli banks and more, plus any CSV or Excel file.'],
+  ['How do I keep it up to date?', 'Import your broker’s newest file whenever you like, or add and edit trades by hand. Prices update on their own.'],
   ['Is this investment advice?', 'No. Clavis shows information about your own trades. It never tells you what to buy or sell.'],
   ['Does it work on my phone?', 'Yes, in your phone’s browser on iPhone and Android.'],
 ];
 
+const step = ([art, title, lines], i) => `<div class="lp-row${i % 2 ? ' lp-flip' : ''}">
+    ${scene(art)}
+    <div class="lp-row-txt"><span class="lp-num">${i + 1}</span><h3>${title}</h3>${lines.map((l) => `<p>${l}</p>`).join('')}</div>
+  </div>`;
 const card = ([art, title, line]) => `<div class="lp-card">${scene(art)}<h3>${title}</h3><p>${line}</p></div>`;
 
 function landingHtml(inApp) {
@@ -141,31 +203,35 @@ function landingHtml(inApp) {
   <header class="lp-hero" id="lpHero">
     <div class="lp-glow" aria-hidden="true"></div>
     <div class="lp-in lp-hero-in">
-      <h1>Your investments,<br><span class="lp-grad">finally explained.</span></h1>
-      <p class="lp-lead">Track everything. Compare with the market. Learn from your own trades.</p>
+      <h1>All your investments in one place.<br><span class="lp-grad">Every number you need.</span></h1>
+      <p class="lp-lead">Your return in % and in $, month by month and position by position, and at a glance whether you are beating the S&amp;P 500. No spreadsheets, no guessing.</p>
       <div class="lp-cta">${heroCta}</div>
-      ${inApp ? '' : '<div class="lp-fine">1 month free · No credit card</div>'}
+      ${inApp ? '' : '<div class="lp-fine">1 month free · No credit card · Cancel anytime</div>'}
       <!-- The video goes here once it is made; the frame stays empty until then. -->
       <div class="lp-video" aria-label="Video coming soon"></div>
+      <div class="lp-numbers">${NUMBERS.map((n) => `<span>${n}</span>`).join('')}</div>
     </div>
   </header>
 
   <section class="lp-sec"><div class="lp-in">
     <h2>How it works</h2>
-    <div class="lp-grid lp-three">${STEPS.map(card).join('')}</div>
+    <p class="lp-sub">Three steps, a few minutes, and your whole portfolio finally makes sense.</p>
+    <div class="lp-rows">${STEPS.map(step).join('')}</div>
   </div></section>
 
   <section class="lp-sec"><div class="lp-in">
     <h2>Everything in one place</h2>
+    <p class="lp-sub">Your portfolio, the markets and your friends, in one app.</p>
     <div class="lp-grid lp-four">${MORE.map(card).join('')}</div>
   </div></section>
 
   <section class="lp-sec"><div class="lp-in">
-    <div class="lp-safe">${logo(72)}<div><h2>Only you hold the key.</h2><p>Your data is encrypted on your device. We can't see it, and we never ask for your broker login.</p></div></div>
+    <div class="lp-safe">${logo(72)}<div><h2>Only you hold the key.</h2><p>Your journal is encrypted on your device with a key made from your password. We store it, but we cannot read it. We never ask for your broker login, and we never sell your information.</p></div></div>
   </div></section>
 
   ${inApp ? '' : `<section class="lp-sec"><div class="lp-in lp-center">
     <h2>Simple pricing</h2>
+    <p class="lp-sub">Everything included. Try it for a month before you decide.</p>
     <div class="lp-price">
       <div class="lp-free">First month free · No credit card</div>
       <div class="lp-plans"><div><b>$3.50</b><span>per month</span></div><div class="lp-or">or</div><div><b>$35</b><span>per year · save $7</span></div></div>

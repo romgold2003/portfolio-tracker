@@ -500,3 +500,29 @@ body.landing-open{overflow:hidden}
 
 /* Inside an opened position: soft tiles, no outlines. */
 .pos-card .dgi{border:0!important;background:var(--bg)!important;border-radius:16px!important}
+
+/* Landing, second pass: more words, steps as rows with a picture each. */
+.lp-sec h2{margin-bottom:10px}
+.lp-sub{font-size:17px;color:var(--text2);margin:0 0 30px;max-width:620px;line-height:1.5}
+.lp-center .lp-sub{margin-left:auto;margin-right:auto}
+.lp-numbers{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:22px}
+.lp-numbers span{font-size:13.5px;font-weight:600;color:var(--text2);background:var(--panel);border-radius:999px;padding:8px 14px}
+.lp-rows{display:flex;flex-direction:column;gap:20px}
+.lp-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;align-items:center;background:var(--panel);border-radius:30px;padding:24px 36px 24px 24px}
+.lp-row .lp-art{margin:0}
+.lp-row.lp-flip{padding:24px 24px 24px 36px}
+.lp-row.lp-flip .lp-art{order:2}
+.lp-num{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--blue-bg);color:var(--accent2);font-weight:800;font-size:14px;margin-bottom:12px}
+.lp-row h3{font-size:24px;letter-spacing:-0.03em;margin:0 0 12px;line-height:1.2}
+.lp-row p{font-size:16px;line-height:1.6;color:var(--text2);margin:0 0 10px}
+.lp-card p{font-size:14.5px}
+@media (max-width:820px){
+  .lp-row,.lp-row.lp-flip{grid-template-columns:1fr;gap:18px;padding:16px 16px 22px}
+  .lp-row.lp-flip .lp-art{order:0}
+  .lp-row h3{font-size:21px}
+  .lp-row p{font-size:15px}
+}
+
+/* A chart not yet drawn is 300px wide by default; inside the ring it must never push a phone page sideways. */
+#allocCard .alloc-chart{overflow:hidden}
+#allocCard .alloc-chart canvas{max-width:100%;max-height:100%}
