@@ -200,6 +200,32 @@ export function authoritativeHistory() { return forward; }
 export function portfolioHistory() { return history; }
 
 /**
+ * Today's point follows the live account (November 2026).
+ *
+ * The history is rebuilt only when the trades, the cash or the last close
+ * change; price refreshes do not rebuild it. Its last point, today, kept the
+ * value from when the app was opened, so every window measured on it (1W, 1M,
+ * 3M…) missed whatever the market did since, pre-market included, while year
+ * to date, which reads the live value, was right. Called with the live value
+ * on every draw of Home. Returns true when it changed anything.
+ */
+export function refreshToday(liveValue, cash, today) {
+  if (!(liveValue > 0) || !history.length) return false;
+  const last = history[history.length - 1];
+  if (last.date !== today) return false;
+  const value = Math.round(liveValue * 100) / 100;
+  if (last.totalAccountValue === value) return false;
+  last.totalAccountValue = value;
+  if (Number.isFinite(cash)) {
+    last.cashValue = Math.round(cash * 100) / 100;
+    last.positionsValue = Math.round((liveValue - cash) * 100) / 100;
+  }
+  const point = backfill[backfill.length - 1];
+  if (point?.date === today) point.value = value;
+  return true;
+}
+
+/**
  * Money paid in or taken out, by day, for marking on the chart.
  *
  * Two sources, and the second is the one that matters. The daily history knows

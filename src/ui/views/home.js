@@ -21,7 +21,7 @@ import {
   pricesOn, dailySeries, historySymbol, closeOnOrBefore as closeAtOrBefore,
 } from '../../services/history.js';
 import {
-  periodStart, cutoffFor, setBackfill, authoritativeHistory, portfolioHistory, windowEnd,
+  periodStart, cutoffFor, setBackfill, authoritativeHistory, portfolioHistory, windowEnd, refreshToday,
 } from '../../core/snapshots.js';
 import {
   yearToDateReturn as measuredYearToDate, asTradedClose, allTimeFromDeposits,
@@ -1041,6 +1041,9 @@ export function renderHome() {
   // which counts money paid in as though it had been earned — it reported 2,450
   // of funding as profit on this book, and disagreed with realised plus
   // unrealised by exactly that. Every number here is counted from the trades.
+  // Today's point first moves to the live value, so the chart and every window
+  // (1W, 1M, 3M…) include what prices did since the history was built.
+  refreshToday(totals.account, state.cash, todayStr());
   drawCurve();
 
   // Kicked off after the draw, so the chart appears immediately and lengthens
