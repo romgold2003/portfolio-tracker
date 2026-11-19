@@ -87,13 +87,11 @@ describe('the other timeframes follow the calendar, from the last market close',
     for (const [tf, date] of Object.entries(expected)) {
       assert.equal(iso(cutoffFor(tf, now)), date, tf);
     }
-    assert.equal(windowEnd('3M', now), '2026-09-11');
   });
 
   test('once the market has closed, the window ends today', () => {
     // Five in the afternoon in New York: Monday's session is over.
     const now = new Date('2026-09-14T21:00:00Z');
-    assert.equal(windowEnd('3M', now), '2026-09-14');
     assert.equal(iso(cutoffFor('3M', now)), '2026-06-14');
   });
 
@@ -105,23 +103,17 @@ describe('the other timeframes follow the calendar, from the last market close',
     assert.equal(iso(cutoffFor('6M', now)), '2025-09-30');
   });
 
-  test('over a holiday the window ends on the last day that traded', () => {
-    // Saturday 26 December 2026: Christmas was a Friday, the 24th closed early.
-    assert.equal(windowEnd('1M', new Date('2026-12-26T15:00:00Z')), '2026-12-24');
+  // Romy, 19 November 2026: match IBKR's app — 1W is the last seven days, every window runs to now.
+  test('1W is the last seven days, from the close a week ago, to this moment', () => {
+    const at = (when) => iso(cutoffFor('1W', new Date(when)));
+    assert.equal(at('2026-11-19T15:00:00Z'), '2026-11-13', 'Thursday: from the close last Thursday');
+    assert.equal(at('2026-11-16T13:00:00Z'), '2026-11-10', 'Monday before the open');
+    // New York's day: 1 am Monday in Israel is still Sunday there.
+    assert.equal(at('2026-11-08T23:00:00Z'), '2026-11-02');
   });
 
-  // Romy, November 2026: the week is this calendar week — on a Thursday, Monday to now; on a Monday, Monday alone.
-  test('1W is this week so far, from Monday, to this moment', () => {
-    const at = (when) => iso(cutoffFor('1W', new Date(when)));
-    assert.equal(at('2026-11-05T15:00:00Z'), '2026-11-02', 'Thursday: since Monday');
-    assert.equal(at('2026-11-02T15:00:00Z'), '2026-11-02', 'Monday: Monday alone');
-    assert.equal(at('2026-11-02T13:00:00Z'), '2026-11-02', 'Monday before the open');
-    assert.equal(at('2026-11-07T15:00:00Z'), '2026-11-02', 'Saturday: the week just finished');
-    assert.equal(at('2026-11-08T15:00:00Z'), '2026-11-02', 'Sunday too');
-    assert.equal(at('2026-11-09T15:00:00Z'), '2026-11-09', 'the next Monday starts again');
-    // New York's Monday: 1 am Monday in Israel is still Sunday there.
-    assert.equal(at('2026-11-08T23:00:00Z'), '2026-11-02');
-    assert.equal(windowEnd('1W', new Date('2026-11-05T15:00:00Z')), null, 'runs to now, with the move today included');
+  test('every window runs to now, today and the pre-market included', () => {
+    for (const tf of ['1W', '1M', '3M', '6M', '1Y']) assert.equal(windowEnd(tf, new Date('2026-11-19T13:00:00Z')), null, tf);
   });
 
   test('year to date and all time are not windows of this kind', () => {

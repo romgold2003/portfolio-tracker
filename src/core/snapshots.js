@@ -74,7 +74,7 @@ export function cutoffFor(timeframe, now = new Date()) {
   if (timeframe === 'YTD') {
     return new Date(Date.UTC(now.getFullYear(), 0, 1));
   }
-  if (timeframe === '1W') return new Date(`${weekStart(now)}T00:00:00Z`);
+  if (timeframe === '1W') return new Date(`${lastSevenDays(now)}T00:00:00Z`);
   const span = WINDOW_SPANS[timeframe];
   if (span) return new Date(`${spanStart(span, lastClosedSession(now))}T00:00:00Z`);
   const cutoff = new Date(now);
@@ -97,22 +97,6 @@ const WINDOW_SPANS = {
   '1Y': { months: 12 },
 };
 
-/**
- * The week so far (Romy, November 2026): 1W is this calendar week, not the
- * last seven days. It starts on this week's Monday, measured from the close
- * before it — on a Thursday, Monday to now; on a Monday, Monday alone. On
- * Saturday and Sunday it is the week just finished. The Monday is New York's,
- * the market's own calendar, and the window runs to this moment like year to
- * date (windowEnd).
- */
-export function weekStart(now = new Date()) {
-  const [y, m, d] = newYorkNow(now).date.split('-').map(Number);
-  const day = new Date(Date.UTC(y, m - 1, d));
-  const sinceMonday = (day.getUTCDay() + 6) % 7;
-  day.setUTCDate(day.getUTCDate() - sinceMonday);
-  return day.toISOString().slice(0, 10);
-}
-
 /** The first day of a window ending on `anchor`. The 31st of a short month clamps to its last day. */
 function spanStart(span, anchor) {
   const [y, m, d] = anchor.split('-').map(Number);
@@ -126,11 +110,24 @@ function spanStart(span, anchor) {
 }
 
 /**
- * The day a window's figures run to: the last market close for 1M to 1Y, or
- * null for a window that runs to this moment (this week, year to date, all time).
+ * The day a window's figures run to. Every window now runs to this moment,
+ * pre-market and after-hours included, as IBKR's app does (Romy, 19 November
+ * 2026): stopping 1M-1Y at the last close left today's move out. The start
+ * dates are unchanged, counted back from the last close, which matched IBKR's
+ * 1M -4.31% and 3M +6.49% to the cent.
  */
-export function windowEnd(timeframe, now = new Date()) {
-  return WINDOW_SPANS[timeframe] ? lastClosedSession(now) : null;
+export function windowEnd() {
+  return null;
+}
+
+/**
+ * The first day of a rolling seven-day week (Romy, 19 November 2026, to match
+ * IBKR's app): measured from the close seven days ago, so on a Thursday it
+ * runs from last Thursday's close to now. Checked against IBKR's -5.56%.
+ */
+export function lastSevenDays(now = new Date()) {
+  const [y, m, d] = newYorkNow(now).date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 6)).toISOString().slice(0, 10);
 }
 
 /**

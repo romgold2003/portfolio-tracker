@@ -31,6 +31,13 @@ const inTime = (promise, fallback) => Promise.race([
 ]);
 
 const SESSION_COOKIE = 'pt_session';
+
+/**
+ * Figures this instance has already found, by release and day. A printed
+ * figure does not change, and Nasdaq is asked again every twenty seconds while
+ * another release is awaited — one slow answer must not blank the rest.
+ */
+const printed = new Map();
 const FEED = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
 
 export default async function handler(req, res) {
@@ -86,6 +93,12 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Release figures unavailable:', err);
   }
+  releases = releases.map((r) => {
+    const key = `${r.id}|${r.date}`;
+    if (r.actual) { printed.set(key, { actual: r.actual, source: r.source }); return r; }
+    const kept = printed.get(key);
+    return kept ? { ...r, ...kept } : r;
+  });
 
   /**
    * Two minutes.

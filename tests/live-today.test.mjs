@@ -32,3 +32,13 @@ test('Home moves today’s point to the live value before drawing', () => {
   const home = readFileSync(new URL('../src/ui/views/home.js', import.meta.url), 'utf8');
   assert.match(home, /refreshToday\(totals\.account, state\.cash, todayStr\(\)\);\s*drawCurve\(\);/);
 });
+
+import { keepPrinted } from '../src/services/econ.js';
+test('a printed figure is not dropped by a later answer that lacks it', () => {
+  const before = [{ id: 'retail-m', date: '2026-11-17', actual: '0.2%', source: 'nasdaq' }, { id: 'claims', date: '2026-11-19', actual: null }];
+  const after = [{ id: 'retail-m', date: '2026-11-17', actual: null }, { id: 'claims', date: '2026-11-19', actual: '205K', source: 'nasdaq' }];
+  const out = keepPrinted(before, after);
+  assert.equal(out[0].actual, '0.2%');
+  assert.equal(out[1].actual, '205K');
+  assert.equal(keepPrinted(before, [{ id: 'retail-m', date: '2026-12-15', actual: null }])[0].actual, null, 'another month is another release');
+});

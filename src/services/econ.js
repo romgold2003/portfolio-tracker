@@ -35,6 +35,20 @@ export function awaitingRelease(releases, now = Date.now()) {
 let cache = { at: 0, week: null };
 
 /**
+ * A figure, once printed, stays printed (Romy, 19 November 2026: Tuesday's
+ * retail sales vanished while the panel waited for Thursday's claims). Each
+ * re-ask goes back to Nasdaq, and one slow answer came back without them. An
+ * answer that lacks a figure this browser has already shown keeps the old one.
+ */
+export function keepPrinted(previous, next) {
+  const seen = new Map((previous ?? []).filter((r) => r?.actual).map((r) => [`${r.id}|${r.date}`, r]));
+  return (next ?? []).map((r) => {
+    const old = !r?.actual && seen.get(`${r?.id}|${r?.date}`);
+    return old ? { ...r, actual: old.actual, source: old.source ?? r.source } : r;
+  });
+}
+
+/**
  * This week's watched releases, as `{ week, releases }`, or null if they cannot
  * be had. Never throws.
  *
@@ -51,7 +65,8 @@ export async function econReleases() {
     if (!res.ok) return cache.week;
     const body = await res.json();
     if (!Array.isArray(body?.releases)) return cache.week;
-    cache = { at: Date.now(), week: { week: body.week ?? null, releases: body.releases } };
+    const releases = keepPrinted(cache.week?.releases, body.releases);
+    cache = { at: Date.now(), week: { week: body.week ?? null, releases } };
     return cache.week;
   } catch {
     return cache.week;
