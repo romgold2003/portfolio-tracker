@@ -87,7 +87,7 @@ describe('in the app', () => {
   test('the way in: a button on the sign-in screen, the sample portfolio, and the notice', async () => {
     const lock = read('src/ui/views/lockScreen.js');
     assert.match(lock, /id="lockGuest">Explore the demo first</);
-    assert.match(lock, /Nothing you do is saved\./);
+    assert.match(lock, /Guest sessions aren’t saved\./);
     assert.match(lock, /startGuest\(\{ \.\.\.buildDemoJournal/);
     const { guestNoticeHtml } = await import('../src/ui/views/guest.js');
     const notice = guestNoticeHtml();

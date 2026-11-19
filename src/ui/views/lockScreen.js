@@ -75,8 +75,8 @@ function migrationNotice() {
 function signinBlurb() {
   if (!cloudMode()) return 'Your journal is encrypted on this computer.';
   return emailResetEnabled()
-    ? 'Sign in from any device. Your journal is encrypted, and your password never leaves this one.'
-    : 'Sign in from any device. Your journal is encrypted before it leaves this one.';
+    ? 'Use Clavis on any device. Your journal is stored encrypted, and we never see your password.'
+    : 'Use Clavis on any device. Your journal is encrypted on your device before it is sent.';
 }
 
 /**
@@ -124,7 +124,7 @@ function signinForm() {
     </div>
     ${cloudMode() ? `<div class="lock-guest">
       <button type="button" class="lock-guest-btn" id="lockGuest">Explore the demo first</button>
-      <p>Look around with a sample portfolio. Nothing you do is saved.</p>
+      <p>Try Clavis with a sample portfolio. Guest sessions aren’t saved.</p>
       <p class="lock-legal">By continuing as a guest you agree to the <a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a> and <a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a>.</p>
     </div>` : ''}
     <div class="lock-safe"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Encrypted on your device</div>`;
