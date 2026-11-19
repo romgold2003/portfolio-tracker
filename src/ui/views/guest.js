@@ -28,7 +28,7 @@ export function guestNoticeHtml() {
     </div>`;
 }
 
-const barHtml = () => `<span><b>Guest mode</b><span class="guest-bar-more"> — nothing you do is saved.</span></span>
+const barHtml = () => `<span><b>Guest mode</b><span class="guest-bar-more"> — guest sessions aren’t saved.</span></span>
   <button type="button" class="guest-bar-btn" data-guest-create>Create a free account</button>`;
 
 /** Leave the guest visit and open "Create an account". */

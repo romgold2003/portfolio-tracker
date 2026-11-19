@@ -314,9 +314,13 @@ body.landing-open{overflow:hidden}
 .hp-lbl{font-size:14.5px;color:var(--text2);margin-left:4px}
 .hp-sep{color:var(--text4)}
 .hero-today{display:inline-flex;align-items:center}
-#home .curve-wrap{height:360px;margin-top:20px}
-#home .curve-modes{top:0;left:auto;right:0}
-#home .tf-side{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:16px}
+#home .curve-wrap{height:360px;margin-top:14px}
+/* Above the chart (Romy, 19 Nov 2026): timeframes and $/% top left, S&P · You · Daily returns on the right. */
+#home .tf-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+#home .curve-modes{position:static;gap:6px}
+#home .curve-mode{width:auto;height:auto;min-width:38px;padding:8px 13px;border-radius:999px;font-size:13.5px;border:0;background:var(--panel);color:var(--text2)}
+#home .curve-mode.active{background:var(--blue-bg);color:var(--blue)}
+#home .tf-side{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:22px}
 #home .tf-row{gap:6px}
 #home .tf{padding:8px 15px;font-size:13.5px;border-radius:999px}
 .tf-extra{position:relative;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
@@ -442,7 +446,17 @@ body.landing-open{overflow:hidden}
   #home .kpi-row{order:3;margin:0}
   #homeHoldings{order:4}
   #home .hero-value{font-size:48px}
-  #home .curve-wrap{height:250px;margin-top:16px}
+  #home .curve-wrap{height:250px;margin-top:12px}
+  #home .tf-left{flex-wrap:nowrap;gap:6px}
+  #home .tf-left .tf-row{flex:1;min-width:0}
+  #home .tf-left .tf{padding:9px 0;font-size:12.5px}
+  #home .curve-mode{min-width:34px;padding:9px 10px;font-size:12.5px}
+  #home .tf-extra{flex-wrap:nowrap;gap:6px}
+  #home .bench{gap:6px}
+  #home .bench-row{padding:7px 10px;gap:5px}
+  #home .bench-name,#home .bench-val{font-size:12.5px}
+  #home .dl-btn{padding:7px 11px!important;font-size:12.5px!important;white-space:nowrap}
+  #home .dl-more{display:none}
   #home .tf-side{flex-direction:column;align-items:stretch}
   #home .tf-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;background:var(--panel);border-radius:999px;padding:4px}
   #home .tf{background:none;text-align:center;padding:9px 0}

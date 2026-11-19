@@ -94,7 +94,7 @@ describe('in the app', () => {
     assert.match(notice, /You are exploring as a guest/);
     assert.match(notice, /Nothing is saved\./);
     assert.match(notice, /data-guest-create/);
-    assert.match(read('src/ui/views/guest.js'), /Guest mode<\/b><span class="guest-bar-more"> — nothing you do is saved/);
+    assert.match(read('src/ui/views/guest.js'), /Guest mode<\/b><span class="guest-bar-more"> — guest sessions aren’t saved/);
   });
 
   test('a guest is never counted, asked the questions, offered Admin, or shown to friends', () => {
