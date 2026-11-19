@@ -903,3 +903,36 @@ body.plan-free #dailyLogBtn::after{content:'PRO';margin-left:6px;font-size:9.5px
   .logo-area .plan-btn{display:none}
   body.plan-free .nav-links .nl::after{display:none}
 }
+
+/* ── Earnings & revenue (views/earnings.js, November 2026) ── */
+.er-tabs{display:grid!important;grid-auto-flow:column;grid-auto-columns:1fr;min-width:0;width:100%;margin:2px 0 14px}
+.er-tabs button span{font-size:11.5px;color:var(--accent2);margin-left:4px}
+.er-day{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:12px 2px 8px}
+.er-day:first-child{margin-top:0}
+.er-card{background:var(--panel2);border-radius:18px;padding:14px 16px;margin-bottom:10px}
+.er-top{display:flex;align-items:center;gap:12px}
+.er-top .hb{width:40px;height:40px}
+.er-id{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.3}
+.er-id b{font-size:15px}
+.er-id span{font-size:12.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.er-own{font-size:11px;font-weight:700;color:var(--accent2);background:var(--blue-bg);border-radius:999px;padding:3px 9px;white-space:nowrap}
+.er-when{display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1.3}
+.er-when b{font-size:14px}
+.er-when span{font-size:12px;color:var(--text3)}
+.er-exp{font-size:13px;color:var(--text2);margin-top:10px}
+.er-exp b{color:var(--text)}
+.er-verdict{font-size:12.5px;font-weight:800;border-radius:999px;padding:5px 12px;white-space:nowrap}
+.er-verdict.is-beat{color:var(--green);background:color-mix(in srgb,var(--green) 15%,transparent)}
+.er-verdict.is-missed{color:var(--red);background:color-mix(in srgb,var(--red) 15%,transparent)}
+.er-verdict.is-mixed{color:var(--amber);background:color-mix(in srgb,var(--amber) 15%,transparent)}
+.er-verdict.is-inline{color:var(--text2);background:var(--input)}
+.er-meta{font-size:12px;color:var(--text3);margin-top:8px}
+.er-say{font-size:14.5px;color:var(--text);margin:4px 0 0;line-height:1.45}
+.er-move{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:13px;color:var(--text2)}
+.er-move b.is-up{color:var(--green)}.er-move b.is-down{color:var(--red)}
+.er-more{margin-top:10px}
+.er-more summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text3)}
+.er-table{width:auto;margin-top:8px;font-size:13px}
+.er-table th,.er-table td{padding:5px 14px 5px 0;border:0;text-align:left}
+.er-next{font-size:12.5px;color:var(--text3);margin-top:6px}
+.er-empty{font-size:13.5px;color:var(--text3);line-height:1.5;padding:14px 4px}

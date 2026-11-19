@@ -14,6 +14,9 @@ import { state, setEarningsWatch, EARNINGS_WATCH_MAX } from '../../core/store.js
 import { earningsFor, companyList, earningsProblem } from '../../services/earnings.js';
 import { cloudEnabled } from '../../services/cloud.js';
 import { escapeHtml } from '../format.js';
+import { bubbleHtml } from './holdingColumns.js';
+import { sectorOf } from '../../config/sectors.js';
+import { dailySeries, historySymbol } from '../../services/history.js';
 
 const el = (id) => document.getElementById(id);
 const DAY = 86400000;
@@ -184,29 +187,206 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-/** Draw the list for the companies chosen. */
+/* ═══════════════════ the panel, November 2026 ═══════════════════
+ * Romy: start from what you own, say plainly whether a company beat or missed,
+ * and what the report did to the stock and to your money. Two tabs: Upcoming
+ * (who reports when) and Results (the reports of the last month, newest
+ * first). The companies are your stock holdings, by themselves, plus any added
+ * with "+ Add companies" as a watchlist. */
+
+/** How long a report stays under Results. */
+const RESULT_DAYS = 30;
+/** How far ahead Upcoming looks: a quarter and a little, so every company's next report shows. */
+const AHEAD_DAYS = 100;
+/** Within this, a figure is "in line" rather than a beat or a miss. */
+const IN_LINE_PCT = 1;
+
+/** Upcoming or Results; until picked, Results while a report is under a week old. */
+let tab = null;
+
+/** The stocks held now (ETFs and index funds have no earnings), the ones you follow after them. */
+export function followedSymbols(positions = state.positions, watch = state.earningsWatch ?? []) {
+  const held = [];
+  for (const p of positions ?? []) {
+    if (p.status !== 'Open' || p.cls !== 'Stocks' || p.qty <= 0) continue;
+    if (sectorOf(p) === 'Broad market') continue;
+    const s = String(p.ticker ?? '').toUpperCase();
+    if (s && !held.includes(s)) held.push(s);
+  }
+  const all = [...held];
+  for (const s of watch) if (!all.includes(s)) all.push(s);
+  return { held, all: all.slice(0, EARNINGS_WATCH_MAX) };
+}
+
+const surprise = (actual, forecast) => (actual != null && forecast ? ((actual - forecast) / Math.abs(forecast)) * 100 : null);
+const word = (pct) => (pct == null ? null : pct > IN_LINE_PCT ? 'beat' : pct < -IN_LINE_PCT ? 'missed' : 'in line');
+
+/**
+ * Beat, missed, in line or mixed, and one sentence: "Revenue beat by 3.1%,
+ * EPS beat by 8.0%". From the forecast at the report (EPS) and the one kept
+ * before it (revenue). Exported for the tests.
+ */
+export function verdictOf(v) {
+  const rev = surprise(v.revenue.actual, v.revenue.forecast);
+  const eps = surprise(v.eps.actual, v.eps.forecast);
+  const words = [word(rev), word(eps)].filter(Boolean);
+  const kind = !words.length ? null
+    : words.every((w) => w === 'beat') ? 'beat'
+      : words.every((w) => w === 'missed') ? 'missed'
+        : words.every((w) => w === 'in line') ? 'inline'
+          : words.includes('beat') && words.includes('missed') ? 'mixed'
+            : words.includes('beat') ? 'beat' : words.includes('missed') ? 'missed' : 'inline';
+  const part = (label, pct) => {
+    const w = word(pct);
+    if (!w) return null;
+    return w === 'in line' ? `${label} in line` : `${label} ${w} by ${Math.abs(pct).toFixed(1)}%`;
+  };
+  const sentence = [part('Revenue', rev), part('EPS', eps)].filter(Boolean).join(', ');
+  return { kind, sentence, rev, eps };
+}
+
+const KIND_LABEL = { beat: 'Beat', missed: 'Missed', inline: 'In line', mixed: 'Mixed' };
+
+/** The stock's move around the report: the close before it to the close of the day after. */
+export function reactionOf(rows, reportDate) {
+  if (!Array.isArray(rows) || !reportDate) return null;
+  let before = null;
+  let after = null;
+  for (const r of rows) {
+    if (r.date < reportDate) before = r;
+  }
+  const following = rows.filter((r) => r.date > reportDate);
+  after = following[0] ?? null;
+  if (!before || !after || !(before.close > 0)) return null;
+  return { from: before.close, to: after.close, pct: ((after.close - before.close) / before.close) * 100, day: after.date };
+}
+
+const relDay = (date, today) => {
+  const d = daysBetween(today, date);
+  return d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d < 7 ? WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()] : longDay(date).replace(/ \d{4}$/, '');
+};
+const inDays = (date, today) => {
+  const d = daysBetween(today, date);
+  return d <= 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`;
+};
+const SESSION = { BMO: 'before the open', AMC: 'after the close', bmo: 'before the open', amc: 'after the close' };
+const sessionText = (s) => SESSION[s] ?? (s ? String(s).toLowerCase() : '');
+
+/** The holding of a symbol, if any: its shares and its direction. */
+function holdingOf(symbol) {
+  const lots = (state.positions ?? []).filter((p) => p.status === 'Open' && String(p.ticker).toUpperCase() === symbol);
+  if (!lots.length) return null;
+  const qty = lots.reduce((s, p) => s + (p.dir === 'Short' ? -1 : 1) * Math.abs(p.qty), 0);
+  return qty ? { qty } : null;
+}
+
+function face(c) {
+  const own = holdingOf(c.symbol);
+  return `${bubbleHtml(c.symbol)}<span class="er-id"><b>${escapeHtml(c.symbol)}</b><span>${escapeHtml(c.name ?? '')}</span></span>
+    ${own ? `<span class="er-own">You own ${escapeHtml(String(+Math.abs(own.qty).toFixed(4)))}</span>` : ''}`;
+}
+
+/** One company coming up: its day, before or after the market, and what is expected. */
+export function upcomingCardHtml(c, today) {
+  const n = c.next;
+  const cur = c.currency ?? 'USD';
+  return `<div class="er-card">
+      <div class="er-top">${face(c)}<span class="er-when"><b>${escapeHtml(inDays(n.date, today))}</b>${n.session ? `<span>${escapeHtml(sessionText(n.session))}</span>` : ''}</span></div>
+      <div class="er-exp">Expected: revenue <b>${money(n.revenueEst, cur)}</b> · EPS <b>${perShare(n.epsEst, cur)}</b>${n.estimated ? ' <span class="earn-muted">· date not confirmed yet</span>' : ''}</div>
+    </div>`;
+}
+
+/** One report from the last month: the verdict, the sentence, the reaction, and the figures behind a tap. */
+export function resultCardHtml(c, today, forecasts = {}, rows = null) {
+  const cur = c.currency ?? 'USD';
+  const last = c.last;
+  const kept = forecasts[`${c.symbol}|${last.periodEnd}`];
+  const v = {
+    revenue: { forecast: kept?.rev ?? null, actual: last.revenue },
+    eps: { forecast: last.epsEst ?? kept?.eps ?? null, actual: last.eps },
+  };
+  const verdict = verdictOf(v);
+  const move = reactionOf(rows, last.reported);
+  const own = holdingOf(c.symbol);
+  const mine = move && own ? own.qty * (move.to - move.from) : null;
+  const cell = (label, { forecast, actual }, fmt) => `<tr><td>${label}</td><td>${fmt(forecast, cur)}</td><td><b>${actual == null ? '—' : fmt(actual, cur)}</b></td></tr>`;
+  return `<div class="er-card">
+      <div class="er-top">${face(c)}${verdict.kind ? `<span class="er-verdict is-${verdict.kind}">${KIND_LABEL[verdict.kind]}</span>` : ''}</div>
+      <div class="er-meta">${escapeHtml(dayLabel(last.reported))}${last.quarter ? ` · ${escapeHtml(last.quarter)}` : ''}</div>
+      ${verdict.sentence ? `<p class="er-say">${escapeHtml(verdict.sentence)}.</p>` : '<p class="er-say earn-muted">The figures are still coming in.</p>'}
+      ${move ? `<div class="er-move"><span>Stock <b class="${tone(move.pct)}">${pctText(move.pct)}</b> after the report</span>${mine != null ? `<span>On your position <b class="${tone(mine)}">${sign(mine)}$${Math.abs(Math.round(mine)).toLocaleString('en-US')}</b></span>` : ''}</div>` : ''}
+      <details class="er-more"><summary>Forecast vs actual</summary>
+        <table class="er-table"><thead><tr><th></th><th>Forecast</th><th>Actual</th></tr></thead><tbody>
+          ${cell('Revenue', v.revenue, money)}${cell('EPS', v.eps, perShare)}
+        </tbody></table>
+        ${c.next?.date ? `<div class="er-next">Next report: <b>${escapeHtml(longDay(c.next.date))}</b>${c.next.session ? ` · ${escapeHtml(sessionText(c.next.session))}` : ''}</div>` : ''}
+      </details>
+    </div>`;
+}
+
+/** Upcoming: the companies by the day they report, soonest first. */
+export function upcomingHtml(companies, today) {
+  const soon = companies.filter((c) => c.next?.date && daysBetween(today, c.next.date) >= 0 && daysBetween(today, c.next.date) <= AHEAD_DAYS)
+    .sort((a, b) => a.next.date.localeCompare(b.next.date) || a.symbol.localeCompare(b.symbol));
+  if (!soon.length) return '<div class="er-empty">No report dates announced yet for your companies.</div>';
+  let day = '';
+  return soon.map((c) => {
+    const head = c.next.date !== day ? `<div class="er-day">${escapeHtml(relDay(c.next.date, today))}</div>` : '';
+    day = c.next.date;
+    return head + upcomingCardHtml(c, today);
+  }).join('');
+}
+
+/** Results: the reports of the last month, newest first. */
+export function resultsOf(companies, today) {
+  return companies.filter((c) => c.last?.reported && daysBetween(c.last.reported, today) >= 0 && daysBetween(c.last.reported, today) <= RESULT_DAYS)
+    .sort((a, b) => b.last.reported.localeCompare(a.last.reported) || a.symbol.localeCompare(b.symbol));
+}
+
+async function seriesOf(symbol) {
+  try { return await dailySeries(historySymbol(symbol, 'Stocks')); } catch { return null; }
+}
+
+function drawTabs(results, upcoming) {
+  const seg = el('earnTabs');
+  if (!seg) return;
+  seg.innerHTML = `<button type="button" class="${tab === 'upcoming' ? 'on' : ''}" data-er-tab="upcoming">Upcoming${upcoming ? ` <span>${upcoming}</span>` : ''}</button>
+    <button type="button" class="${tab === 'results' ? 'on' : ''}" data-er-tab="results">Results${results ? ` <span>${results}</span>` : ''}</button>`;
+}
+
+/** Draw the panel: your holdings and the companies you follow, Upcoming or Results. */
 export async function renderEarnings() {
   const pane = el('earnPane');
   if (!pane) return;
   pane.hidden = !cloudEnabled();
   if (pane.hidden) return;
   bind();
-  const chosen = state.earningsWatch ?? [];
-  el('earnCount').textContent = chosen.length ? `· ${chosen.length}` : '';
+  const { all } = followedSymbols();
+  const watch = state.earningsWatch ?? [];
+  el('earnCount').textContent = watch.length ? `· ${watch.length}` : '';
   const host = el('earnList');
-  if (!chosen.length) {
-    host.innerHTML = '<div class="earn-empty">Choose the companies to follow with <b>Companies</b>. Each report shows here as soon as it is out.</div>';
+  if (!all.length) {
+    drawTabs(0, 0);
+    host.innerHTML = '<div class="er-empty">Your stock holdings show here by themselves, with their next report and results. Add other companies with <b>+ Add companies</b>.</div>';
     return;
   }
-  if (!host.children.length || host.querySelector('.earn-empty')) host.innerHTML = '<div class="earn-muted earn-none">Loading earnings…</div>';
-  const companies = await earningsFor(chosen);
+  if (!host.children.length || host.querySelector('.er-empty')) host.innerHTML = '<div class="earn-muted earn-none">Loading earnings…</div>';
+  const companies = await earningsFor(all);
   if (!companies) { host.innerHTML = unavailable('Earnings are unavailable right now'); return; }
-  // Only the companies still chosen: one could have been unticked while this loaded.
-  const now = state.earningsWatch ?? [];
   const today = todayIso();
   const kept = state.earningsForecasts ?? {};
-  host.innerHTML = orderCompanies(companies.filter((c) => now.includes(c.symbol)), today, kept)
-    .map((c) => companyHtml(c, today, kept)).join('');
+  const found = companies.filter((c) => !c.missing && followedSymbols().all.includes(c.symbol));
+  const results = resultsOf(found, today);
+  const upcomingCount = found.filter((c) => c.next?.date && daysBetween(today, c.next.date) >= 0 && daysBetween(today, c.next.date) <= AHEAD_DAYS).length;
+  if (!tab) tab = results.some((c) => daysBetween(c.last.reported, today) <= 7) ? 'results' : 'upcoming';
+  drawTabs(results.length, upcomingCount);
+  if (tab === 'upcoming') { host.innerHTML = upcomingHtml(found, today); return; }
+  if (!results.length) { host.innerHTML = '<div class="er-empty">None of your companies reported in the last month.</div>'; return; }
+  // The cards first, then each one's reaction once its prices are in.
+  host.innerHTML = results.map((c) => resultCardHtml(c, today, kept)).join('');
+  const series = await Promise.all(results.map((c) => seriesOf(c.symbol)));
+  if (tab !== 'results') return;
+  host.innerHTML = results.map((c, i) => resultCardHtml(c, today, kept, series[i])).join('');
 }
 
 /** A failure, with the reason the server gave, so it can be acted on rather than guessed at. */
@@ -295,6 +475,12 @@ function bind() {
   if (pane.dataset.bound === '1') return;
   pane.dataset.bound = '1';
   el('earnPickBtn').addEventListener('click', () => (el('earnPicker').hidden ? openPicker() : closePicker()));
+  el('earnTabs')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-er-tab]');
+    if (!b || b.dataset.erTab === tab) return;
+    tab = b.dataset.erTab;
+    renderEarnings();
+  });
   // Drawn once typing pauses, not on every key.
   el('earnSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => drawOptions(), 120); });
   el('earnOptions').addEventListener('scroll', (e) => {

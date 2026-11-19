@@ -572,8 +572,10 @@
         <div class="earn-pane" id="earnPane" hidden>
           <div class="card-lbl">
             <span>Earnings &amp; revenue</span>
-            <button class="earn-pick-btn" id="earnPickBtn" aria-haspopup="dialog" aria-expanded="false">Companies <span id="earnCount"></span></button>
+            <button class="earn-pick-btn" id="earnPickBtn" aria-haspopup="dialog" aria-expanded="false">+ Add companies <span id="earnCount"></span></button>
           </div>
+          <!-- Your holdings by themselves, plus the companies added: Upcoming or Results. -->
+          <div class="seg er-tabs" id="earnTabs" role="group" aria-label="Earnings view"></div>
           <div class="earn-list" id="earnList"></div>
           <div class="earn-picker" id="earnPicker" role="dialog" aria-label="Choose the companies to follow" hidden>
             <input type="search" class="earn-search" id="earnSearch" placeholder="Search Nasdaq &amp; NYSE — name or ticker" autocomplete="off" spellcheck="false">

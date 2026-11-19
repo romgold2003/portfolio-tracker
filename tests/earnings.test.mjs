@@ -277,7 +277,34 @@ describe('the panel', () => {
   test('it sits in the Fed card, where the space beside the odds was', () => {
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
     const card = html.slice(html.indexOf('id="fedCard"'), html.indexOf('id="econCard"'));
-    assert.match(card, /id="fedMain"[\s\S]*id="earnPane"[\s\S]*id="earnPickBtn"[^>]*>Companies/);
+    assert.match(card, /id="fedMain"[\s\S]*id="earnPane"[\s\S]*id="earnPickBtn"[^>]*>\+ Add companies/);
+    assert.match(card, /id="earnTabs"/);
+  });
+
+  test('November 2026: your stock holdings by themselves (no ETFs, no crypto), then the companies added', async () => {
+    const { followedSymbols } = await import('../src/ui/views/earnings.js');
+    const pos = (ticker, cls = 'Stocks', over = {}) => ({ ticker, cls, status: 'Open', qty: 5, dir: 'Long', ...over });
+    const out = followedSymbols([pos('NVDA'), pos('SPY'), pos('BTC', 'Crypto'), pos('AVGO', 'Stocks', { status: 'Closed' }), pos('NVDA')], ['AAPL', 'NVDA']);
+    assert.deepEqual(out.held, ['NVDA']);
+    assert.deepEqual(out.all, ['NVDA', 'AAPL']);
+  });
+
+  test('a verdict in words: beat, missed, mixed or in line, by how much', async () => {
+    const { verdictOf } = await import('../src/ui/views/earnings.js');
+    const v = (rf, ra, ef, ea) => verdictOf({ revenue: { forecast: rf, actual: ra }, eps: { forecast: ef, actual: ea } });
+    assert.deepEqual([v(100, 103, 1, 1.08).kind, v(100, 103, 1, 1.08).sentence], ['beat', 'Revenue beat by 3.0%, EPS beat by 8.0%']);
+    assert.equal(v(100, 95, 1, 0.9).kind, 'missed');
+    assert.equal(v(100, 105, 1, 0.9).kind, 'mixed');
+    assert.equal(v(100, 100.4, 1, 1.005).kind, 'inline');
+    assert.deepEqual([v(null, 103, 1, 1.08).kind, v(null, 103, 1, 1.08).sentence], ['beat', 'EPS beat by 8.0%']);
+  });
+
+  test('the stock’s move around the report: the close before to the close of the day after', async () => {
+    const { reactionOf } = await import('../src/ui/views/earnings.js');
+    const rows = [{ date: '2026-11-17', close: 100 }, { date: '2026-11-18', close: 101 }, { date: '2026-11-19', close: 106 }];
+    const r = reactionOf(rows, '2026-11-18');
+    assert.deepEqual([r.from, r.to, +r.pct.toFixed(1)], [100, 106, 6]);
+    assert.equal(reactionOf(rows, '2026-11-19'), null, 'no day after yet');
   });
 
   test('served by the News function, so the deployment stays within its twelve', () => {
