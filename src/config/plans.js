@@ -30,4 +30,7 @@ export const PRO_PAGES = {
   crypto: ['Crypto', 'Where the big money moves: whale trades, exchange flows and the ETFs.'],
 };
 
+/** What paying yearly saves against twelve months, in whole percent: 17. */
+export const YEARLY_SAVING = Math.round((1 - PRICES.yearly / (PRICES.monthly * 12)) * 100);
+
 export const money = (n) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;

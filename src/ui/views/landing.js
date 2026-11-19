@@ -12,7 +12,7 @@
  * real sign-in this browser goes straight to the card. From inside the app it
  * opens on request and closes back to the account.
  */
-import { FEATURES, PRICES, money } from '../../config/plans.js';
+import { FEATURES, PRICES, YEARLY_SAVING, money } from '../../config/plans.js';
 
 const SEEN_KEY = 'pt_landing_seen';
 
@@ -214,7 +214,7 @@ function plansTableHtml() {
   return `<div class="lp-plans-wrap"><table class="cmp lp-cmp">
       <thead><tr><th></th>
         <th><div class="cmp-name">Free</div><div class="cmp-price">$0</div><div class="cmp-per">forever</div></th>
-        <th class="cmp-pro"><div class="cmp-name">Pro</div><div class="cmp-price">${money(PRICES.monthly)}</div><div class="cmp-per">a month, or ${money(PRICES.yearly)} a year</div></th></tr></thead>
+        <th class="cmp-pro"><div class="cmp-name">Pro</div><div class="cmp-price">${money(PRICES.monthly)}</div><div class="cmp-per">a month, or ${money(PRICES.yearly)} a year (save ${YEARLY_SAVING}%)</div></th></tr></thead>
       <tbody>${FEATURES.map(([t, free, pro]) => `<tr><td>${t.replace('&', '&amp;')}</td><td>${tick(free)}</td><td class="cmp-pro">${tick(pro)}</td></tr>`).join('')}</tbody>
     </table></div>`;
 }
@@ -267,12 +267,14 @@ function landingHtml(inApp) {
     <div class="lp-safe">${logo(72)}<div><h2>Only you hold the key.</h2><p>Your journal is encrypted on your device with a key made from your password. We store it, but we cannot read it. We never ask for your broker login, and we never sell your information.</p></div></div>
   </div></section>
 
-  ${inApp ? '' : `<section class="lp-sec"><div class="lp-in lp-center">
+  <section class="lp-sec"><div class="lp-in lp-center">
     <h2>Free, or Pro</h2>
     <p class="lp-sub">Clavis is free to use. Pro adds your analyst and the markets. Every new account starts with a month of Pro, free, no credit card.</p>
     ${plansTableHtml()}
-    <button type="button" class="lp-btn lp-pri lp-big" data-ld="create">Start free, with a month of Pro</button>
-  </div></section>`}
+    ${inApp
+    ? '<button type="button" class="lp-btn lp-pri lp-big" data-ld="plans">See my plan</button>'
+    : '<button type="button" class="lp-btn lp-pri lp-big" data-ld="create">Start free, with a month of Pro</button>'}
+  </div></section>
 
   <section class="lp-sec"><div class="lp-in lp-narrow">
     <h2 class="lp-center">Questions</h2>
@@ -339,5 +341,5 @@ export function hideLanding() {
 
 /** The logo in the app's corner: the landing page, with the way back to the account. */
 export function openLanding() {
-  showLanding(() => {}, { inApp: true });
+  showLanding((choice) => { if (choice === 'plans') window.openPlans?.(); }, { inApp: true });
 }

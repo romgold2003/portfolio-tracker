@@ -14,7 +14,7 @@
  */
 import { social } from '../../services/social.js';
 import { cloudMode, isGuest } from '../../core/profiles.js';
-import { FEATURES, PRO_PAGES, PRICES, money } from '../../config/plans.js';
+import { FEATURES, PRO_PAGES, PRICES, YEARLY_SAVING, money } from '../../config/plans.js';
 import { logoSvg } from '../art/logo.js';
 import { escapeHtml } from '../format.js';
 
@@ -78,7 +78,7 @@ export function paywallHtml(page) {
       <p>${escapeHtml(what)}</p>
       <ul>${FEATURES.filter(([, free, pro]) => pro && !free).slice(0, 4).map(([t]) => `<li>${escapeHtml(t)}</li>`).join('')}</ul>
       <button type="button" class="pf-save" onclick="openPlans()">Unlock with Pro · ${money(PRICES.monthly)} a month</button>
-      <div class="paywall-small">or ${money(PRICES.yearly)} a year. Cancel anytime.</div>
+      <div class="paywall-small">or ${money(PRICES.yearly)} a year, save ${YEARLY_SAVING}%. Cancel anytime.</div>
     </div>`;
 }
 
@@ -129,7 +129,7 @@ function plansHtml() {
         ${sub.cancelAtPeriodEnd ? '<button type="button" class="pf-save" data-pl-resume>Keep my subscription</button>' : '<button type="button" class="pl-link" data-pl-ask>Cancel subscription</button>'}</div>`
     : `<div class="pl-cad" role="radiogroup" aria-label="How often to pay">
         <button type="button" class="${cadence === 'monthly' ? 'on' : ''}" data-pl-cad="monthly"><b>${money(PRICES.monthly)}</b><span>per month</span></button>
-        <button type="button" class="${cadence === 'yearly' ? 'on' : ''}" data-pl-cad="yearly"><em>Save ${money(PRICES.monthly * 12 - PRICES.yearly)}</em><b>${money(PRICES.yearly)}</b><span>per year</span></button>
+        <button type="button" class="${cadence === 'yearly' ? 'on' : ''}" data-pl-cad="yearly"><em>Save ${YEARLY_SAVING}%</em><b>${money(PRICES.yearly)}</b><span>per year</span></button>
       </div>
       <button type="button" class="pf-save pl-up" data-pl-upgrade>${p?.plan === 'pro' ? 'Choose Pro for after my free period' : 'Upgrade to Pro'}</button>
       <p class="pl-small">Cancel anytime: you keep Pro until the end of the period you paid for.</p>`;
