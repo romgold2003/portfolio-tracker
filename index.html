@@ -165,6 +165,8 @@
         <span class="profile-who"><b id="profileName">My profile</b><span>Profile, import &amp; settings</span></span>
         <span class="profile-caret" aria-hidden="true">›</span>
       </button>
+      <!-- The plan, under the profile (views/plans.js): Upgrade on Free, the plan's state on Pro. -->
+      <button class="plan-btn" id="planBtn" type="button" onclick="openPlans()" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/></svg><span class="plan-txt"><b>Upgrade to Pro</b><span></span></span></button>
       <!-- Phones only: live-price settings, designer, customize and sign-out sit
            behind this instead of taking a third of the screen. -->
       <button class="tools-btn" id="toolsBtn" type="button" onclick="toggleTools()"
@@ -200,6 +202,15 @@
       <div id="sideStat">✓ Encrypted</div>
     </div>
   </aside>
+  <!-- Your plan: Free or Pro, upgrade, cancel or resume (views/plans.js). -->
+  <div class="ref-modal plans-modal" id="plansModal" role="dialog" aria-modal="true" aria-label="Your plan" hidden>
+    <div class="ref-panel plans-panel">
+      <button class="pf-x ref-x" type="button" data-pl-close aria-label="Close">×</button>
+      <div id="plansBody"></div>
+      <div class="pf-msg" id="plansNote"></div>
+    </div>
+  </div>
+
   <!-- Referral, opened from the profile and from Settings (views/referral.js); also the congratulations when a friend pays. -->
   <div class="ref-modal" id="referralModal" role="dialog" aria-modal="true" aria-label="Referral" hidden>
     <div class="ref-panel">
@@ -224,6 +235,9 @@
         </div>
         <button class="pf-x" type="button" onclick="closeProfile()" aria-label="Close">×</button>
       </div>
+
+      <div class="pf-sec">Your plan</div>
+      <button class="pf-item" type="button" onclick="openPlans()"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/></svg><span><b>Plan and subscription</b><span id="pfPlanLine">Free or Pro, upgrade or cancel</span></span></button>
 
       <div class="pf-sec">Your data</div>
       <button class="pf-item" type="button" onclick="profileGo('import')"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg><span><b>Import files</b><span>Your broker's CSV or Excel file, or a newer one to update</span></span></button>

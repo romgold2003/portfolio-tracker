@@ -38,6 +38,7 @@ import { checkForRecoveredJournal, setRecoveryImportHandler } from './features/r
 import { installActions, refreshPrices, setTimeframe } from './app/actions.js';
 import { paintFoxes } from './ui/art/fox.js';
 import { checkReferralNews } from './ui/views/referral.js';
+import { loadPlan, installPaywalls } from './ui/views/plans.js';
 
 /** Background loops, so they can be stopped on sign out. */
 let timers = [];
@@ -80,7 +81,8 @@ export async function signOut() {
   document.getElementById('accountRow')?.style.setProperty('display', 'none');
   // A guest visit's bar goes with it.
   document.getElementById('guestBar')?.setAttribute('hidden', '');
-  document.body.classList.remove('is-guest');
+  document.body.classList.remove('is-guest', 'plan-free');
+  loadPlan();
   show('home');
   showLockScreen({ onUnlock: startSession });
 }
@@ -106,6 +108,8 @@ async function startSession() {
   setPersistHandler(saveVault);
 
   showAccount();
+  // Free or Pro: what the menu locks and the button under the profile says.
+  loadPlan();
   // A friend who used this member's code has paid: the congratulations, once.
   setTimeout(checkReferralNews, 2500);
   describeStorageMode();
@@ -157,6 +161,7 @@ async function boot() {
   initTheme();
   // The fox wherever the page asks for it (data-fox), drawn once from one source.
   paintFoxes();
+  installPaywalls();
 
   installActions({ signOut });
   setPageEnterHandler(renderOnPageEnter);

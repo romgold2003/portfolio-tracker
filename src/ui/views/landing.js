@@ -12,6 +12,8 @@
  * real sign-in this browser goes straight to the card. From inside the app it
  * opens on request and closes back to the account.
  */
+import { FEATURES, PRICES, money } from '../../config/plans.js';
+
 const SEEN_KEY = 'pt_landing_seen';
 
 export function landingSeen() {
@@ -195,7 +197,8 @@ const MORE = [
 const NUMBERS = ['Return in %', 'Gain in $', 'Every month', 'Every position', 'Every day', 'vs the S&amp;P 500'];
 
 const FAQ = [
-  ['Is it free?', 'Your first month is free, with everything included and no credit card. After that it is $3.50 a month, or $35 a year.'],
+  ['Is it free?', 'Yes. Clavis Free keeps your Home, positions, new trades, imports and friends, for free, for good. Clavis Pro adds Insights, Monthly, daily returns, News and Crypto for $3.50 a month or $35 a year. Every new account gets its first month of Pro free, with no credit card.'],
+  ['Can I cancel Pro?', 'Anytime, in your profile under Plan and subscription. You keep Pro until the end of the period you paid for, then move to Free. Nothing you added is deleted.'],
   ['Can you see my money or trades?', 'No. Your journal is encrypted on your device with a key made from your password. We cannot read it.'],
   ['Do you need my broker password?', 'Never. You type your trades, or import a file you download from your broker yourself.'],
   ['Which brokers work?', 'Interactive Brokers, Robinhood, Schwab, Fidelity, eToro, Trading 212, DEGIRO, Revolut, Israeli banks and more, plus any CSV or Excel file.'],
@@ -204,6 +207,17 @@ const FAQ = [
   ['Can I invite friends?', 'Yes: give a month, get a month. Every member has a referral code for life, in their profile. A friend who joins with it gets 2 months free instead of 1, and you get a free month when they pay their first month, up to six free months a year.'],
   ['Does it work on my phone?', 'Yes, in your phone’s browser on iPhone and Android.'],
 ];
+
+/** The Free and Pro table, with the price on top of each column. */
+function plansTableHtml() {
+  const tick = (on) => (on ? '<span class="cmp-yes" aria-label="Included">✓</span>' : '<span class="cmp-no" aria-label="Not included">—</span>');
+  return `<div class="lp-plans-wrap"><table class="cmp lp-cmp">
+      <thead><tr><th></th>
+        <th><div class="cmp-name">Free</div><div class="cmp-price">$0</div><div class="cmp-per">forever</div></th>
+        <th class="cmp-pro"><div class="cmp-name">Pro</div><div class="cmp-price">${money(PRICES.monthly)}</div><div class="cmp-per">a month, or ${money(PRICES.yearly)} a year</div></th></tr></thead>
+      <tbody>${FEATURES.map(([t, free, pro]) => `<tr><td>${t.replace('&', '&amp;')}</td><td>${tick(free)}</td><td class="cmp-pro">${tick(pro)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
 
 const step = ([art, title, lines], i) => `<div class="lp-row${i % 2 ? ' lp-flip' : ''}">
     ${scene(art)}
@@ -254,13 +268,10 @@ function landingHtml(inApp) {
   </div></section>
 
   ${inApp ? '' : `<section class="lp-sec"><div class="lp-in lp-center">
-    <h2>Simple pricing</h2>
-    <p class="lp-sub">Everything included. Try it for a month before you decide.</p>
-    <div class="lp-price">
-      <div class="lp-free">First month free · No credit card</div>
-      <div class="lp-plans"><div><b>$3.50</b><span>per month</span></div><div class="lp-or">or</div><div><b>$35</b><span>per year · save $7</span></div></div>
-      <button type="button" class="lp-btn lp-pri lp-big" data-ld="create">Start your free month</button>
-    </div>
+    <h2>Free, or Pro</h2>
+    <p class="lp-sub">Clavis is free to use. Pro adds your analyst and the markets. Every new account starts with a month of Pro, free, no credit card.</p>
+    ${plansTableHtml()}
+    <button type="button" class="lp-btn lp-pri lp-big" data-ld="create">Start free, with a month of Pro</button>
   </div></section>`}
 
   <section class="lp-sec"><div class="lp-in lp-narrow">

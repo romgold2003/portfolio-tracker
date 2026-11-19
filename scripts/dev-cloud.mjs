@@ -136,6 +136,10 @@ const ROUTES = {
   '/api/social/referral': '../api/social/[action].js',
   '/api/social/redeem': '../api/social/[action].js',
   '/api/social/referral-seen': '../api/social/[action].js',
+  '/api/social/plan': '../api/social/[action].js',
+  '/api/social/checkout': '../api/social/[action].js',
+  '/api/social/cancel-plan': '../api/social/[action].js',
+  '/api/social/resume-plan': '../api/social/[action].js',
 };
 
 const handlers = new Map();

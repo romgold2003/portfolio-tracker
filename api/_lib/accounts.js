@@ -297,6 +297,8 @@ export async function deleteUser(userId) {
   await forgetConsent(userId);
   const { forgetReferrals } = await import('./referrals.js');
   await forgetReferrals(userId);
+  const { forgetBilling } = await import('./billing.js');
+  await forgetBilling(userId);
   forgetAllSessions();
   await query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   await query('DELETE FROM resets WHERE user_id = $1', [userId]);

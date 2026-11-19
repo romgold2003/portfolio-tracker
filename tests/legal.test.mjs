@@ -69,10 +69,12 @@ describe('what the documents say', () => {
     assert.match(terms, /broker's statements and records are the official ones/);
   });
 
-  test('18 and over, free today, zero liability with a fallback the law allows', () => {
+  test('18 and over, a free plan and a cancellable Pro, zero liability with a fallback the law allows', () => {
     assert.match(terms, /at least <b>18 years old<\/b>/);
     assert.match(privacy, /<b>18 and over<\/b>/);
-    assert.match(terms, /currently <b>free<\/b>/);
+    assert.match(terms, /<b>Clavis Free<\/b> costs nothing/);
+    assert.match(terms, /You can cancel at any time in your profile/);
+    assert.match(terms, /Your statutory rights/);
     assert.match(terms, /Our total liability is limited to zero/);
     assert.match(terms, /limited to the lowest amount the applicable law permits/);
     assert.match(terms, /cannot be excluded or limited by law/);

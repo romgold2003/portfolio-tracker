@@ -26,6 +26,10 @@
  *   GET  /api/social/referral               this member's referral code and what it has earned (_lib/referrals.js)
  *   POST /api/social/redeem     {code}      link a new account to the friend who shared the code
  *   POST /api/social/referral-seen {}       the congratulations for a friend who paid have been shown
+ *   GET  /api/social/plan                   Free or Pro, and why (_lib/billing.js)
+ *   POST /api/social/checkout   {cadence}   the payment page for Pro, once payments are open
+ *   POST /api/social/cancel-plan {}          cancel: Pro to the end of the period, then Free
+ *   POST /api/social/resume-plan {}          keep a cancelled subscription going
  *
  * One function for all of them, as with auth and the News panels: a Hobby
  * deployment allows twelve, and this is the eighth.
@@ -39,6 +43,7 @@ import { saveAbout } from '../_lib/about.js';
 import { isAdmin, adminStats, recordActivity } from '../_lib/admin.js';
 import { recordConsent, setMarketing, consentOf } from '../_lib/consent.js';
 import { referralStats, redeem, noticesSeen, ReferralError } from '../_lib/referrals.js';
+import { planOf, startCheckout, cancelSubscription, resumeSubscription, BillingError } from '../_lib/billing.js';
 
 const SESSION_COOKIE = 'pt_session';
 
@@ -50,6 +55,7 @@ const GETS = {
   role: (user) => ({ admin: isAdmin(user) }),
   consent: (user) => consentOf(user),
   referral: (user) => referralStats(user),
+  plan: (user) => planOf(user),
   // Checked here, on the server: the page's button is only a convenience.
   admin: (user) => {
     if (!isAdmin(user)) throw new social.SocialError(403, 'Not allowed.');
@@ -79,6 +85,9 @@ const POSTS = {
   // Few tries an hour: a code is short, and guessing them should not pay.
   redeem: { limit: [10, 60], run: (user, b) => redeem(user, b.code) },
   'referral-seen': { limit: [60, 60], run: (user) => noticesSeen(user) },
+  checkout: { limit: [20, 60], run: (user, b) => startCheckout(user, b.cadence) },
+  'cancel-plan': { limit: [10, 60], run: (user) => cancelSubscription(user) },
+  'resume-plan': { limit: [10, 60], run: (user) => resumeSubscription(user) },
 };
 
 function actionFrom(url) {
@@ -110,7 +119,7 @@ export default async function handler(req, res) {
     if (!body || typeof body !== 'object') return fail(res, 400, 'Expected a JSON body.');
     return send(res, 200, await post.run(user, body));
   } catch (err) {
-    if (err instanceof social.SocialError || err instanceof ReferralError) return fail(res, err.status, err.message);
+    if (err instanceof social.SocialError || err instanceof ReferralError || err instanceof BillingError) return fail(res, err.status, err.message);
     console.error('social', action, err);
     return fail(res, 500, 'Something went wrong. Try again.');
   }

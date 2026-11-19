@@ -813,3 +813,93 @@ body.landing-open{overflow:hidden}
   .logo-area .profile-btn .acct-avatar{width:36px;height:36px;font-size:12.5px}
   .pf-panel{top:auto;bottom:0}
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Clavis Free and Pro (views/plans.js, config/plans.js)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Under the profile: Upgrade on Free, the plan's state on Pro. */
+.plan-btn{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px;padding:10px 12px;border:0;border-radius:16px;
+  background:color-mix(in srgb,var(--accent) 10%,var(--panel));color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.plan-btn[hidden]{display:none}
+.plan-btn svg{width:20px;height:20px;flex:none;fill:none;stroke:var(--accent2);stroke-width:1.8;stroke-linejoin:round}
+.plan-txt{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.plan-txt b{font-size:13.5px}
+.plan-txt span{font-size:11.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-btn.is-free{background:var(--accent-grad);color:var(--accent-ink)}
+.plan-btn.is-free svg{stroke:var(--accent-ink)}
+.plan-btn.is-free .plan-txt span{color:color-mix(in srgb,var(--accent-ink) 70%,transparent)}
+
+/* The plan window. */
+.plans-panel{width:min(560px,100%)}
+.pl-head{display:flex;align-items:center;gap:12px;margin:2px 40px 18px 0}
+.pl-head .logo-mark{color:var(--text)}
+.pl-title{font-size:20px;font-weight:800;letter-spacing:-0.02em}
+.pl-now{font-size:13.5px;color:var(--accent2);font-weight:600}
+.pl-cad{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.pl-cad button{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 10px;border:0;border-radius:18px;background:var(--input);color:var(--text);font:inherit;cursor:pointer}
+.pl-cad button.on{box-shadow:inset 0 0 0 2px var(--accent2);background:var(--blue-bg)}
+.pl-cad b{font-size:26px;letter-spacing:-0.03em}
+.pl-cad span{font-size:12.5px;color:var(--text3)}
+.pl-cad em{position:absolute;top:-10px;right:12px;font-style:normal;font-size:11px;font-weight:800;background:var(--accent-grad);color:var(--accent-ink);border-radius:999px;padding:3px 9px}
+.pl-up{width:100%;margin-bottom:6px}
+.pl-small{font-size:12px;color:var(--text3);text-align:center;margin:4px 0 16px}
+.pl-sub{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px;border-radius:18px;background:var(--input);margin-bottom:16px}
+.pl-sub > div{display:flex;flex-direction:column;gap:3px}
+.pl-sub span{font-size:12.5px;color:var(--text3)}
+.pl-sub .pf-save{width:auto;padding:10px 16px}
+.pl-link{background:none;border:0;color:var(--text3);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:6px 0}
+.pl-link:hover{color:var(--red)}
+.pl-q{font-size:19px;font-weight:800;margin:0 0 8px}
+.pl-p{font-size:14.5px;line-height:1.55;color:var(--text2);margin:0 0 16px}
+.pl-p b{color:var(--text)}
+.pl-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pl-ghost,.pl-danger{border-radius:999px;font:inherit;font-weight:700;font-size:14px;padding:13px;cursor:pointer}
+.pl-ghost{background:var(--accent-grad);color:var(--accent-ink);border:0}
+.pl-danger{background:transparent;color:var(--red);border:1px solid color-mix(in srgb,var(--red) 50%,transparent)}
+
+/* The Free / Pro table: in the plan window and on the landing page. */
+.cmp{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px}
+.cmp th,.cmp td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:center;white-space:normal;color:var(--text2)}
+.cmp th:first-child,.cmp td:first-child{text-align:left;color:var(--text)}
+.cmp thead th{font-size:13px;font-weight:700;color:var(--text);text-transform:none;letter-spacing:0;border-bottom:1px solid var(--border2)}
+.cmp .cmp-pro{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.cmp thead .cmp-pro{border-radius:14px 14px 0 0;color:var(--accent2)}
+.cmp tbody tr:last-child .cmp-pro{border-radius:0 0 14px 14px}
+.cmp-yes{color:var(--green);font-weight:800}
+.cmp-no{color:var(--text4)}
+.lp-plans-wrap{max-width:760px;margin:0 auto 24px;background:var(--panel);border-radius:28px;padding:18px 20px 8px;overflow-x:auto}
+.lp-cmp{font-size:14.5px;min-width:480px}
+.lp-cmp th,.lp-cmp td{padding:12px 10px}
+.cmp-name{font-size:15px;font-weight:800}
+.cmp-price{font-size:30px;font-weight:800;letter-spacing:-0.03em;color:var(--text);margin-top:4px}
+.cmp-per{font-size:12px;font-weight:500;color:var(--text3)}
+
+/* Free: the Pro pages show their lock screen instead of their content. */
+.paywall{display:none}
+body.plan-free .pro-page > :not(.topbar):not(.paywall){display:none!important}
+body.plan-free .pro-page .paywall{display:block}
+.paywall-card{max-width:560px;margin:20px auto;text-align:center;background:var(--panel);border-radius:28px;padding:32px 28px;
+  background-image:radial-gradient(60% 60% at 50% 0%,rgba(242,106,30,.14),transparent 70%)}
+.paywall-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;letter-spacing:.12em;color:var(--accent2);background:var(--blue-bg);border-radius:999px;padding:6px 12px}
+.paywall-badge .logo-mark{color:var(--text)}
+.paywall-card h2{font-size:24px;font-weight:800;letter-spacing:-0.03em;margin:16px 0 8px}
+.paywall-card p{font-size:15px;line-height:1.55;color:var(--text2);margin:0 0 16px}
+.paywall-card ul{list-style:none;padding:0;margin:0 auto 20px;max-width:380px;text-align:left;display:flex;flex-direction:column;gap:8px}
+.paywall-card li{font-size:14px;color:var(--text2);padding-left:24px;position:relative}
+.paywall-card li::before{content:'✓';position:absolute;left:0;color:var(--accent2);font-weight:800}
+.paywall-card .pf-save{width:100%}
+.paywall-small{font-size:12.5px;color:var(--text3);margin-top:8px}
+
+/* Free: the menu marks Pro pages; Pro-only extras are hidden. */
+body.plan-free .nl[onclick*="'insights'"]::after,body.plan-free .nl[onclick*="'monthly'"]::after,
+body.plan-free .nl[onclick*="'news'"]::after,body.plan-free .nl[onclick*="'crypto'"]::after,
+body.plan-free .more-links [data-page="monthly"]::after,body.plan-free .more-links [data-page="news"]::after,body.plan-free .more-links [data-page="crypto"]::after{
+  content:'PRO';margin-left:auto;font-size:9.5px;font-weight:800;letter-spacing:.08em;color:var(--accent2);background:var(--blue-bg);border-radius:999px;padding:2px 7px}
+body.plan-free [data-gauges],body.plan-free .acct-add{display:none!important}
+body.plan-free #dailyLogBtn{opacity:.7}
+body.plan-free #dailyLogBtn::after{content:'PRO';margin-left:6px;font-size:9.5px;font-weight:800;color:var(--accent2)}
+@media (max-width:720px){
+  .logo-area .plan-btn{display:none}
+  body.plan-free .nav-links .nl::after{display:none}
+}
