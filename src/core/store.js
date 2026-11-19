@@ -143,7 +143,8 @@ export function setBroker(id) {
 
 /** How returns are measured right now: 'twr' or 'mwr'. */
 export function returnMethod() {
-  return returnMethodOf(state.returnMethod, state.broker);
+  // Always the broker's own way (Romy, 19 November 2026): the Settings choice was removed, and an old choice is ignored.
+  return returnMethodOf(null, state.broker);
 }
 
 /** Measure returns time- or money-weighted; null to follow the broker. */
