@@ -29,7 +29,20 @@ export const FRAMES = [
   { id: '7d', label: '7D', days: 7 },
   { id: '30d', label: '30D', days: 30 },
   { id: '90d', label: '90D', days: 90 },
+  // Every day recorded, from the first reading (Romy, November 2026).
+  { id: 'all', label: 'All', days: null },
 ];
+
+/** How many days back "All" reaches: from the first day ever recorded to today. */
+export function daysSinceFirst(history, now = Date.now()) {
+  let first = Infinity;
+  for (const r of history ?? []) {
+    const at = Date.parse(r?.at);
+    if (Number.isFinite(at) && at < first) first = at;
+  }
+  if (!Number.isFinite(first)) return 1;
+  return Math.floor(now / DAY) - Math.floor(first / DAY) + 1;
+}
 
 const DAY = 86_400_000;
 
@@ -123,10 +136,14 @@ export function xTickIndices(xs, { want = 8, minGap = 70 } = {}) {
   if (!n) return [];
   const stride = Math.max(1, Math.ceil(n / want));
   const picked = [];
-  for (let i = 0; i < n; i += stride) picked.push(i);
+  // By spacing on screen, not only by count: under All the days are placed by
+  // date, so a run of close days would print their labels on top of each other.
+  for (let i = 0; i < n; i += stride) {
+    if (!picked.length || xs[i] - xs[picked[picked.length - 1]] >= minGap) picked.push(i);
+  }
   if (picked[picked.length - 1] !== n - 1) {
-    // The last date always shows; the one before it gives way if they crowd.
-    if (xs[n - 1] - xs[picked[picked.length - 1]] < minGap) picked.pop();
+    // The last date always shows; the ones before it give way if they crowd.
+    while (picked.length && xs[n - 1] - xs[picked[picked.length - 1]] < minGap) picked.pop();
     picked.push(n - 1);
   }
   return picked;
@@ -298,8 +315,12 @@ export function renderExposureHistory(profile) {
     };
   }
 
-  const { days } = FRAMES.find((f) => f.id === frame) ?? FRAMES[2];
+  const chosen = FRAMES.find((f) => f.id === frame) ?? FRAMES[2];
+  const days = chosen.days ?? daysSinceFirst(profile.history);
   const points = dailyPoints(profile.history, days);
+  // Under All, say from when: the record starts the day collecting began.
+  const since = document.getElementById('xhSince');
+  if (since) since.textContent = chosen.days == null && points.length ? `since ${new Date(`${points[0].day}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}` : '';
   const dexHost = document.getElementById('xhDex');
   const gexHost = document.getElementById('xhGex');
   if (!dexHost || !gexHost) return;

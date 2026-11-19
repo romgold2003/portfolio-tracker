@@ -16,8 +16,8 @@ import {
 } from '../src/ui/views/exposureHistory.js';
 
 describe('the switch', () => {
-  test('offers 7D, 30D and 90D — the windows in the reference, and only those', () => {
-    assert.deepEqual(FRAMES.map((f) => [f.label, f.days]), [['7D', 7], ['30D', 30], ['90D', 90]]);
+  test('offers 7D, 30D, 90D and All (since the first day recorded)', () => {
+    assert.deepEqual(FRAMES.map((f) => [f.label, f.days]), [['7D', 7], ['30D', 30], ['90D', 90], ['All', null]]);
   });
 
   test('opens on 90D, as the reference does', () => {
@@ -135,4 +135,17 @@ describe('where it sits', () => {
   test('and the old one-or-the-other switch is gone', () => {
     assert.doesNotMatch(html, /id="optGrain"/);
   });
+});
+
+test('All reaches back to the first day recorded (November 2026)', async () => {
+  const { daysSinceFirst, dailyPoints } = await import('../src/ui/views/exposureHistory.js');
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  const history = [
+    { at: '2026-08-03T10:00:00Z', netGex: 1, netDex: 2 },
+    { at: '2026-11-18T10:00:00Z', netGex: 3, netDex: 4 },
+  ];
+  const days = daysSinceFirst(history, now);
+  assert.equal(days, 109);
+  assert.equal(dailyPoints(history, days, now).length, 2);
+  assert.equal(daysSinceFirst([], now), 1);
 });

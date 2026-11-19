@@ -936,3 +936,4 @@ body.plan-free #dailyLogBtn::after{content:'PRO';margin-left:6px;font-size:9.5px
 .er-table th,.er-table td{padding:5px 14px 5px 0;border:0;text-align:left}
 .er-next{font-size:12.5px;color:var(--text3);margin-top:6px}
 .er-empty{font-size:13.5px;color:var(--text3);line-height:1.5;padding:14px 4px}
+.xh-since{font-size:12px;font-weight:500;color:var(--text3);margin-left:4px}
