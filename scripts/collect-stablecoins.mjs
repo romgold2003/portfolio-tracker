@@ -7,7 +7,7 @@
  * the point — CoinGecko's free tier is generous but not unlimited, and a job
  * with twenty-five minutes has all the time it needs to be polite.
  *
- *   node scripts/collect-stablecoins.mjs https://riskbook.vercel.app <key>
+ *   node scripts/collect-stablecoins.mjs https://myclavis.vercel.app <key>
  */
 import {
   fetchStableHistory, fetchTotalHistory, fetchTrueTotal, combine,

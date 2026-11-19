@@ -10,7 +10,7 @@
  * What it sends back is tiny: one row per exchange per day, holding what
  * arrived and what left, with the price effect already removed.
  *
- *   node scripts/collect-cex-flow.mjs https://riskbook.vercel.app <key>
+ *   node scripts/collect-cex-flow.mjs https://myclavis.vercel.app <key>
  */
 import {
   listExchanges, fetchSeries, dailyFlows,

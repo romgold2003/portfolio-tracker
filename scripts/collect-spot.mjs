@@ -1,7 +1,7 @@
 /**
  * Spot whale trades, read from GeckoTerminal on the GitHub runner.
  *
- *   node scripts/collect-spot.mjs https://riskbook.vercel.app <key>
+ *   node scripts/collect-spot.mjs https://myclavis.vercel.app <key>
  *
  * Here rather than on the server because GeckoTerminal refused the server:
  * its limit is counted per IP, a serverless function shares its outgoing

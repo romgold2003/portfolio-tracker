@@ -31,7 +31,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
   args.set(process.argv[i].replace(/^--/, ''), process.argv[i + 1]);
 }
 
-const BASE = (args.get('base') ?? 'https://riskbook.vercel.app').replace(/\/$/, '');
+const BASE = (args.get('base') ?? 'https://myclavis.vercel.app').replace(/\/$/, '');
 const EMAIL = args.get('email') ?? 'demo@riskbook.app';
 const PASSWORD = args.get('password') ?? '12345678';
 

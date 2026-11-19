@@ -38,7 +38,7 @@ jobs:
 
       - name: Fetch the balance history and post the daily flows
         env:
-          BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
+          BASE: ${{ vars.RISKBOOK_URL || 'https://myclavis.vercel.app' }}
           KEY: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$KEY" ]; then
@@ -51,7 +51,7 @@ jobs:
 
       - name: Build the stablecoin dominance history
         env:
-          BASE: ${{ vars.RISKBOOK_URL || 'https://riskbook.vercel.app' }}
+          BASE: ${{ vars.RISKBOOK_URL || 'https://myclavis.vercel.app' }}
           KEY: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$KEY" ]; then exit 0; fi
